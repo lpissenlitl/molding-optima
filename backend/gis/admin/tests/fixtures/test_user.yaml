@@ -1,0 +1,43 @@
+# 用户数据
+- model: admin.user
+  pk: 1
+  fields:
+    name: platform001
+    password: $2b$12$U2TK8u4Smdmzan20xT9Ocu3tcEamTHHZ4RNaS9BOwZUsMwvghmq2i
+    is_super: 0
+    enable: 1
+    deleted: 0
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.user
+  pk: 2
+  fields:
+    name: platform002
+    password: $2b$12$U2TK8u4Smdmzan20xT9Ocu3tcEamTHHZ4RNaS9BOwZUsMwvghmq2i
+    is_super: 0
+    enable: 0
+    deleted: 0
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+    roles:
+      - 1
+      - 2
+# 角色数据
+- model: admin.role
+  pk: 1
+  fields:
+    name: role1
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.role
+  pk: 2
+  fields:
+    name: role2
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.role
+  pk: 3
+  fields:
+    name: role3
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z

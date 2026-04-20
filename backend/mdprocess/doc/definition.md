@@ -1,0 +1,73 @@
+#  重要文档:公式中用到的字母缩写含义
+#  最大段数
+HSZ_SPA_MAX_NUM_TEMP = 7
+HSZ_SPA_MAX_NUM_INJECT = 4
+HSZ_SPA_MAX_NUM_PACK = 3
+HSZ_SPA_MAX_NUM_METER = 2
+
+#  注射工艺参数变量编号
+HSZ_SPA_NOZZLE_TEMP = "NT"  # //!< 喷嘴温度
+HSZ_SPA_BARREL_TEMP = "BT"  # //!< 料筒温度
+HSZ_SPA_MOLD_TEMP = "MT"  # //!< 模具温度
+HSZ_SPA_INJECT_TIME = "IT"  # //!< 注射时间
+HSZ_SPA_COOL_TIME = "CT"  # //!< 冷却时间
+
+#  注射
+HSZ_SPA_INJECT_PRESSURE0 = "IP0"  # //!< 注射压力
+HSZ_SPA_INJECT_PRESSURE1 = "IP1"  # //!< 注射压力
+HSZ_SPA_INJECT_PRESSURE2 = "IP2"  # //!< 注射压力
+HSZ_SPA_INJECT_PRESSURE3 = "IP3"  # //!< 注射压力
+
+HSZ_SPA_INJECT_VELOCITY0 = "IV0"  # //!< 注射速度
+HSZ_SPA_INJECT_VELOCITY1 = "IV1"  # //!< 注射速度
+HSZ_SPA_INJECT_VELOCITY2 = "IV2"  # //!< 注射速度
+HSZ_SPA_INJECT_VELOCITY3 = "IV3"  # //!< 注射速度
+
+HSZ_SPA_INJECT_LOCATION0 = "IL0"  # //!< 注射位置
+HSZ_SPA_INJECT_LOCATION1 = "IL1"  # //!< 注射位置
+HSZ_SPA_INJECT_LOCATION2 = "IL2"  # //!< 注射位置
+HSZ_SPA_INJECT_LOCATION3 = "IL3"  # //!< 注射位置
+
+#  VP 切换
+HSZ_SPA_VP_TRANSFER_METHOD = "VPTM"  # //!< VP切换方式
+HSZ_SPA_VP_TRANSFER_LOCATION = "VPTL"  # //!< VP切换位置
+HSZ_SPA_VP_TRANSFER_PRESSURE = "VPTP"  # //!< VP切换压力
+HSZ_SPA_VP_TRANSFER_TIME = "VPTT"  # //!< VP切换时间
+
+#  保压
+HSZ_SPA_PACK_PRESSURE0 = "PP0"  # //!< 保压压力
+HSZ_SPA_PACK_PRESSURE1 = "PP1"  # //!< 保压压力
+HSZ_SPA_PACK_PRESSURE2 = "PP2"  # //!< 保压压力
+
+HSZ_SPA_PACK_TIME0 = "PT0"  # //!< 保压时间
+HSZ_SPA_PACK_TIME1 = "PT1"  # //!< 保压时间
+HSZ_SPA_PACK_TIME2 = "PT2"  # //!< 保压时间
+
+HSZ_SPA_PACK_VELOCITY0 = "PV0"  # //!< 保压速度
+HSZ_SPA_PACK_VELOCITY1 = "PV1"  # //!< 保压速度
+HSZ_SPA_PACK_VELOCITY2 = "PV2"  # //!< 保压速度
+
+#  储料
+HSZ_SPA_METER_SCREW_ROTATION0 = "MSR0"  # //!< 储料螺杆转速
+HSZ_SPA_METER_SCREW_ROTATION1 = "MSR1"  # //!< 储料螺杆转速
+
+HSZ_SPA_METER_BACK_PRESSURE0 = "MBP0"  # //!< 储料背压
+HSZ_SPA_METER_BACK_PRESSURE1 = "MBP1"  # //!< 储料背压
+
+HSZ_SPA_METER_LOCATION0 = "ML0"  # //!< 储料位置
+HSZ_SPA_METER_LOCATION1 = "ML1"  # //!< 储料位置
+
+# HSZ_SPA_METER_PRESSURE0 = 110  # //!< 储料压力
+# HSZ_SPA_METER_PRESSURE1 = 111  # //!< 储料压力
+
+HSZ_SPA_METER_END_LOCATION = "MEL"  # //!< 计量终止位置
+
+HSZ_SPA_DECOMP_VELOCITY_BEFORE_METER = "DVBM"  # //!< 计量前减压速度
+HSZ_SPA_DECOMP_DISTANCE_BEFORE_METER = "DDBM"  # //!< 计量前减压距离
+HSZ_SPA_DECOMP_VELOCITY_AFTER_METER = "DVAM"  # //!< 计量后减压速度
+HSZ_SPA_DECOMP_DISTANCE_AFTER_METER = "DDAM"  # //!< 计量后减压距离
+
+HSZ_SPA_NUM_TEMP = "NUMT"  # //!< 温度段数
+HSZ_SPA_NUM_INJECT = "NUMI"  # //!< 注射段数
+HSZ_SPA_NUM_PACK = "NUMP"  # //!< 保压段数
+HSZ_SPA_NUM_METER = "NUMM"  # //!< 塑化段数

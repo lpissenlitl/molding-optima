@@ -1,0 +1,126 @@
+# 用户数据
+- model: admin.user
+  pk: 1
+  fields:
+    name: platform001
+    password: $2b$12$U2TK8u4Smdmzan20xT9Ocu3tcEamTHHZ4RNaS9BOwZUsMwvghmq2i
+    is_super: 0
+    enable: 1
+    deleted: 0
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+    roles:
+      - 1
+# 角色数据
+- model: admin.role
+  pk: 1
+  fields:
+    name: role1
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.role
+  pk: 2
+  fields:
+    name: role2
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.role
+  pk: 3
+  fields:
+    name: role3
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+# 权限数据
+- model: admin.permission
+  pk: 1
+  fields:
+    name: per_1
+    code: admin_group
+    sort_index: 1
+    full_path: 1/
+    is_leaf: 0
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.permission
+  pk: 2
+  fields:
+    parent: 1
+    name: per_1_2
+    code: admin_user_group
+    sort_index: 1
+    full_path: 1/2/
+    is_leaf: 0
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.permission
+  pk: 3
+  fields:
+    parent: 2
+    name: per_1_2_3
+    code: admin_user_add
+    sort_index: 2
+    full_path: 1/2/3/
+    is_leaf: 1
+    fields: a|b|c
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.permission
+  pk: 4
+  fields:
+    parent: 2
+    name: per_1_2_4
+    code: admin_user_update
+    sort_index: 3
+    full_path: 1/2/4/
+    is_leaf: 1
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.permission
+  pk: 50
+  fields:
+    parent: 1
+    name: per_1_50
+    code: admin_role_group
+    sort_index: 2
+    full_path: 1/50/
+    is_leaf: 0
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.permission
+  pk: 51
+  fields:
+    parent: 50
+    name: per_1_50_51
+    code: admin_role_add
+    sort_index: 1
+    full_path: 1/50/51/
+    is_leaf: 1
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.permission
+  pk: 52
+  fields:
+    parent: 50
+    name: per_1_50_52
+    code: admin_role_update
+    sort_index: 2
+    full_path: 1/50/52/
+    is_leaf: 1
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+# 角色，权限绑定
+- model: admin.rolepermissionrel
+  pk: 1
+  fields:
+    role: 1
+    permission: 3
+    include_fields: a|b
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z
+- model: admin.rolepermissionrel
+  pk: 2
+  fields:
+    role: 1
+    permission: 52
+    created_at: 2018-01-01T00:00:00Z
+    updated_at: 2018-01-01T00:00:00Z

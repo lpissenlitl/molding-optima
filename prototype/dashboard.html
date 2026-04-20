@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注塑工艺优化系统 - 专业版</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Element Plus CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    
+    <!-- Vue 3 & Element Plus -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+
+    <style>
+        /* 全局字体优化 */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+
+        /* Element Menu 定制 */
+        .el-menu { border-right: none !important; background-color: #1e293b !important; }
+        .el-sub-menu__title { color: #94a3b8 !important; }
+        .el-sub-menu__title:hover { background-color: #334155 !important; color: #fff !important; }
+        .el-menu-item { color: #94a3b8 !important; height: 50px !important; line-height: 50px !important; margin: 4px 8px !important; border-radius: 6px !important; padding-left: 15px !important; }
+        .el-menu-item:hover { background-color: #334155 !important; color: #fff !important; }
+        .el-menu-item.is-active { background-color: #3b82f6 !important; color: #fff !important; }
+        
+        /* 侧边栏折叠时的样式修正 */
+        .el-menu--collapse .el-menu-item { padding-left: 20px !important; }
+        
+        /* 卡片悬停效果 */
+        .hover-card { transition: all 0.3s ease; }
+        .hover-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div id="app" class="flex h-screen overflow-hidden">
+        
+        <!-- 1. 侧边栏 (Sidebar) -->
+        <aside class="w-64 bg-slate-800 flex flex-col shadow-xl z-20 transition-all duration-300" :class="{ 'w-20': isCollapse }">
+            <!-- Logo -->
+            <div class="h-16 flex items-center justify-center bg-slate-900 border-b border-slate-700">
+                <el-icon class="text-blue-500 text-2xl"><Platform /></el-icon>
+                <span v-if="!isCollapse" class="ml-3 text-white font-bold text-lg tracking-wider whitespace-nowrap">MoldingOptima</span>
+            </div>
+
+            <!-- Menu -->
+            <el-menu
+                :default-active="activeMenu"
+                :collapse="isCollapse"
+                :collapse-transition="false"
+                class="flex-1 overflow-y-auto py-2"
+                @select="handleMenuSelect"
+            >
+                <el-menu-item index="/dashboard">
+                    <el-icon><Odometer /></el-icon>
+                    <template #title>工作台</template>
+                </el-menu-item>
+
+                <el-sub-menu index="mold">
+                    <template #title>
+                        <el-icon><Tools /></el-icon>
+                        <span>模具管理</span>
+                    </template>
+                    <el-menu-item index="/mold/list">模具列表</el-menu-item>
+                    <el-menu-item index="/mold/data">模流数据</el-menu-item>
+                    <el-menu-item index="/mold/create">新增模具</el-menu-item>
+                </el-sub-menu>
+
+                <el-sub-menu index="process">
+                    <template #title>
+                        <el-icon><Setting /></el-icon>
+                        <span>工艺管理</span>
+                    </template>
+                    <el-menu-item index="/process/record-list">工艺记录</el-menu-item>
+                    <el-menu-item index="/process/optimize-list">优化任务</el-menu-item>
+                    <el-menu-item index="/process/expert">专家调优</el-menu-item>
+                </el-sub-menu>
+
+                <el-sub-menu index="machine">
+                    <template #title>
+                        <el-icon><Monitor /></el-icon>
+                        <span>机器管理</span>
+                    </template>
+                    <el-menu-item index="/machine/list">机器列表</el-menu-item>
+                </el-sub-menu>
+
+                <el-sub-menu index="polymer">
+                    <template #title>
+                        <el-icon><Goods /></el-icon>
+                        <span>材料管理</span>
+                    </template>
+                    <el-menu-item index="/polymer/list">材料列表</el-menu-item>
+                </el-sub-menu>
+                
+                <el-menu-item index="/auth/user">
+                    <el-icon><User /></el-icon>
+                    <template #title>用户管理</template>
+                </el-menu-item>
+            </el-menu>
+        </aside>
+
+        <!-- 2. 主体区域 -->
+        <div class="flex-1 flex flex-col min-w-0">
+            
+            <!-- Header -->
+            <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10">
+                <div class="flex items-center">
+                    <el-button circle text @click="toggleSidebar" class="mr-4 text-slate-500 hover:bg-slate-100">
+                        <el-icon size="20"><Fold v-if="!isCollapse"/><Expand v-else/></el-icon>
+                    </el-button>
+                    <el-breadcrumb separator="/">
+                        <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+                        <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
+                    </el-breadcrumb>
+                </div>
+
+                <div class="flex items-center space-x-6">
+                    <el-tooltip content="通知" placement="bottom">
+                        <el-badge is-dot class="item">
+                            <el-button text circle class="text-slate-500 hover:text-blue-600"><el-icon><Bell /></el-icon></el-button>
+                        </el-badge>
+                    </el-tooltip>
+                    
+                    <el-dropdown trigger="click">
+                        <div class="flex items-center cursor-pointer outline-none">
+                            <el-avatar :size="32" class="bg-blue-500">A</el-avatar>
+                            <span class="ml-2 text-sm font-medium text-slate-700">Admin</span>
+                            <el-icon class="ml-1 text-slate-400"><ArrowDown /></el-icon>
+                        </div>
+                        <template #dropdown>
+                            <el-dropdown-menu>
+                                <el-dropdown-item><el-icon class="mr-2"><User /></el-icon>个人中心</el-dropdown-item>
+                                <el-dropdown-item><el-icon class="mr-2"><Setting /></el-icon>系统设置</el-dropdown-item>
+                                <el-dropdown-item divided><el-icon class="mr-2"><SwitchButton /></el-icon>退出登录</el-dropdown-item>
+                            </el-dropdown-menu>
+                        </template>
+                    </el-dropdown>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main class="flex-1 overflow-y-auto p-6 bg-slate-50">
+                
+                <!-- Dashboard Content -->
+                <div v-if="activeMenu === '/dashboard'" class="space-y-6 max-w-7xl mx-auto">
+                    
+                    <!-- Welcome Banner -->
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg flex justify-between items-center">
+                        <div>
+                            <h2 class="text-2xl font-bold mb-2">早上好，管理员 👋</h2>
+                            <p class="text-blue-100 text-sm">今日系统运行正常，共有 3 个优化任务待处理。</p>
+                        </div>
+                        <el-button type="primary" plain class="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                            查看日报
+                        </el-button>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Card 1 -->
+                        <el-card shadow="never" class="hover-card border-none rounded-xl">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="p-2 bg-blue-50 rounded-lg text-blue-600"><el-icon size="24"><Tools /></el-icon></div>
+                                <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">+12%</span>
+                            </div>
+                            <div class="text-2xl font-bold text-slate-800">128</div>
+                            <div class="text-sm text-slate-500 mt-1">模具总数</div>
+                        </el-card>
+
+                        <!-- Card 2 -->
+                        <el-card shadow="never" class="hover-card border-none rounded-xl">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="p-2 bg-green-50 rounded-lg text-green-600"><el-icon size="24"><Monitor /></el-icon></div>
+                                <span class="text-xs font-medium text-slate-500">实时</span>
+                            </div>
+                            <div class="text-2xl font-bold text-slate-800">42/50</div>
+                            <div class="text-sm text-slate-500 mt-1">在线机台</div>
+                        </el-card>
+
+                        <!-- Card 3 -->
+                        <el-card shadow="never" class="hover-card border-none rounded-xl">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="p-2 bg-orange-50 rounded-lg text-orange-600"><el-icon size="24"><TrendCharts /></el-icon></div>
+                                <span class="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-full">待处理</span>
+                            </div>
+                            <div class="text-2xl font-bold text-slate-800">15</div>
+                            <div class="text-sm text-slate-500 mt-1">待优化工艺</div>
+                        </el-card>
+
+                        <!-- Card 4 -->
+                        <el-card shadow="never" class="hover-card border-none rounded-xl">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="p-2 bg-red-50 rounded-lg text-red-600"><el-icon size="24"><Warning /></el-icon></div>
+                                <span class="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full">紧急</span>
+                            </div>
+                            <div class="text-2xl font-bold text-slate-800">3</div>
+                            <div class="text-sm text-slate-500 mt-1">异常报警</div>
+                        </el-card>
+                    </div>
+
+                    <!-- Charts & Tables Section -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <!-- Left: Recent Activities (Table) -->
+                        <el-card class="col-span-1 lg:col-span-2 border-none rounded-xl shadow-sm">
+                            <template #header>
+                                <div class="flex justify-between items-center">
+                                    <span class="font-bold text-slate-700">最近工艺优化记录</span>
+                                    <el-button type="primary" link>查看全部</el-button>
+                                </div>
+                            </template>
+                            <el-table :data="recentActivities" style="width: 100%" :show-header="true" header-cell-class-name="bg-slate-50 text-slate-500 font-medium">
+                                <el-table-column prop="time" label="时间" width="180"></el-table-column>
+                                <el-table-column prop="mold" label="模具编号">
+                                    <template #default="scope">
+                                        <span class="font-medium text-blue-600 cursor-pointer">{{ scope.row.mold }}</span>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="action" label="操作类型"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="100">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.statusType" size="small" effect="light" round>{{ scope.row.status }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </el-card>
+
+                        <!-- Right: Quick Actions & Status -->
+                        <div class="space-y-6">
+                            <!-- Quick Actions -->
+                            <el-card class="border-none rounded-xl shadow-sm">
+                                <template #header>
+                                    <span class="font-bold text-slate-700">快捷入口</span>
+                                </template>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button @click="handleMenuSelect('/mold/create')" class="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors group">
+                                        <el-icon class="text-2xl mb-2 text-slate-400 group-hover:text-blue-600"><Plus /></el-icon>
+                                        <span class="text-sm font-medium">新增模具</span>
+                                    </button>
+                                    <button @click="handleMenuSelect('/process/create')" class="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-lg hover:bg-green-50 hover:text-green-600 transition-colors group">
+                                        <el-icon class="text-2xl mb-2 text-slate-400 group-hover:text-green-600"><DocumentAdd /></el-icon>
+                                        <span class="text-sm font-medium">工艺录入</span>
+                                    </button>
+                                    <button @click="handleMenuSelect('/process/optimize')" class="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors group">
+                                        <el-icon class="text-2xl mb-2 text-slate-400 group-hover:text-orange-600"><MagicStick /></el-icon>
+                                        <span class="text-sm font-medium">开始优化</span>
+                                    </button>
+                                    <button @click="handleMenuSelect('/machine/list')" class="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-colors group">
+                                        <el-icon class="text-2xl mb-2 text-slate-400 group-hover:text-indigo-600"><Search /></el-icon>
+                                        <span class="text-sm font-medium">查找机台</span>
+                                    </button>
+                                </div>
+                            </el-card>
+
+                            <!-- System Status -->
+                            <el-card class="border-none rounded-xl shadow-sm">
+                                <template #header>
+                                    <span class="font-bold text-slate-700">系统状态</span>
+                                </template>
+                                <div class="space-y-4">
+                                    <div>
+                                        <div class="flex justify-between text-sm mb-1">
+                                            <span class="text-slate-500">服务器负载</span>
+                                            <span class="font-medium text-slate-700">45%</span>
+                                        </div>
+                                        <el-progress :percentage="45" :stroke-width="6" :show-text="false" color="#3b82f6"></el-progress>
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between text-sm mb-1">
+                                            <span class="text-slate-500">数据库存储</span>
+                                            <span class="font-medium text-slate-700">72%</span>
+                                        </div>
+                                        <el-progress :percentage="72" :stroke-width="6" :show-text="false" color="#10b981"></el-progress>
+                                    </div>
+                                </div>
+                            </el-card>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Placeholder for other pages -->
+                <div v-else class="flex flex-col items-center justify-center h-[60vh] text-slate-400">
+                    <div class="bg-slate-100 p-6 rounded-full mb-4">
+                        <el-icon class="text-4xl"><Files /></el-icon>
+                    </div>
+                    <h3 class="text-lg font-medium text-slate-600">{{ currentTitle }}</h3>
+                    <p class="text-sm mt-2">该模块正在开发中...</p>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+        const icons = ElementPlusIconsVue;
+
+        const app = createApp({
+            setup() {
+                const isCollapse = ref(false);
+                const activeMenu = ref('/dashboard');
+
+                const recentActivities = ref([
+                    { time: '2023-10-24 10:30', mold: 'MOLD-2023-001', action: '参数自动优化', status: '成功', statusType: 'success' },
+                    { time: '2023-10-24 09:15', mold: 'MOLD-2023-005', action: '工艺移植', status: '进行中', statusType: 'warning' },
+                    { time: '2023-10-23 16:45', mold: 'MOLD-2023-002', action: '模流数据分析', status: '失败', statusType: 'danger' },
+                    { time: '2023-10-23 14:20', mold: 'MOLD-2023-008', action: '新增模具录入', status: '成功', statusType: 'success' },
+                    { time: '2023-10-22 11:00', mold: 'MOLD-2023-012', action: '机器适配检测', status: '成功', statusType: 'success' },
+                ]);
+
+                const toggleSidebar = () => {
+                    isCollapse.value = !isCollapse.value;
+                };
+
+                const handleMenuSelect = (index) => {
+                    activeMenu.value = index;
+                };
+
+                const currentTitle = computed(() => {
+                    const map = {
+                        '/dashboard': '工作台',
+                        '/mold/list': '模具列表',
+                        '/mold/create': '新增模具',
+                        '/process/record-list': '工艺记录',
+                        '/process/optimize-list': '优化任务',
+                        '/machine/list': '机器列表',
+                        '/polymer/list': '材料列表',
+                        '/auth/user': '用户管理'
+                    };
+                    return map[activeMenu.value] || '详情页面';
+                });
+
+                return {
+                    isCollapse,
+                    activeMenu,
+                    recentActivities,
+                    toggleSidebar,
+                    handleMenuSelect,
+                    currentTitle
+                };
+            }
+        });
+
+        app.use(ElementPlus);
+        for (const [key, component] of Object.entries(icons)) {
+            app.component(key, component)
+        }
+        app.mount('#app');
+    </script>
+</body>
+</html>

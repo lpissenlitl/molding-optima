@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能工艺 - 模具列表 (Element UI 优化版)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica Neue, Helvetica, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif;
+            background: #f5f7fa;
+            color: #303133;
+        }
+
+        /* 布局容器 */
+        .app-wrapper {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 侧边栏 - Element UI Admin 风格 */
+        .sidebar {
+            width: 200px;
+            background: #304156;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.28s;
+        }
+
+        .sidebar-header {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar-logo {
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        .menu-item {
+            padding: 14px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #bfcbd9;
+            transition: all 0.3s;
+        }
+
+        .menu-item:hover {
+            background: #263445;
+            color: white;
+        }
+
+        .menu-item.active {
+            background: #409eff;
+            color: white;
+        }
+
+        .menu-icon {
+            font-size: 16px;
+            width: 18px;
+            text-align: center;
+        }
+
+        .submenu {
+            background: #1f2d3d;
+        }
+
+        .submenu-item {
+            padding: 10px 20px 10px 48px;
+            cursor: pointer;
+            color: #bfcbd9;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .submenu-item:hover {
+            color: white;
+        }
+
+        .submenu-item.active {
+            color: #409eff;
+        }
+
+        /* 主内容区 */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 顶部导航栏 */
+        .navbar {
+            height: 50px;
+            background: white;
+            border-bottom: 1px solid #e4e7ed;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #97a8be;
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .breadcrumb-item:hover {
+            color: #409eff;
+        }
+
+        .breadcrumb-separator {
+            color: #c0c4cc;
+        }
+
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .user-info:hover {
+            background: #f5f7fa;
+        }
+
+        .user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #409eff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .user-name {
+            font-size: 14px;
+            color: #606266;
+        }
+
+        /* 内容区域 */
+        .app-main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: white;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .card-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #303133;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ebeef5;
+        }
+
+        /* 查询表单 */
+        .search-form {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .form-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-label {
+            font-size: 14px;
+            color: #606266;
+            font-weight: 500;
+        }
+
+        .form-input {
+            padding: 10px 12px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            color: #606266;
+            font-size: 14px;
+            transition: all 0.3s;
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: #409eff;
+        }
+
+        .form-input::placeholder {
+            color: #c0c4cc;
+        }
+
+        select.form-input {
+            cursor: pointer;
+        }
+
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #ebeef5;
+        }
+
+        /* 按钮样式 - Element UI 风格 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #409eff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #66b1ff;
+        }
+
+        .btn-success {
+            background: #67c23a;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #85ce61;
+        }
+
+        .btn-danger {
+            background: #f56c6c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #f78989;
+        }
+
+        .btn-default {
+            background: white;
+            border: 1px solid #dcdfe6;
+            color: #606266;
+        }
+
+        .btn-default:hover {
+            color: #409eff;
+            border-color: #c6e2ff;
+            background-color: #ecf5ff;
+        }
+
+        .btn-warning {
+            background: #e6a23c;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #ebb563;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 工具栏 */
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .toolbar-left {
+            display: flex;
+            gap: 8px;
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 8px;
+        }
+
+        .size-btn {
+            padding: 8px 15px;
+            background: white;
+            border: 1px solid #dcdfe6;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .size-btn:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        .size-btn:last-child {
+            border-radius: 0 4px 4px 0;
+        }
+
+        .size-btn.active {
+            background: #409eff;
+            color: white;
+            border-color: #409eff;
+        }
+
+        /* 表格容器 */
+        .table-container {
+            background: white;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table thead {
+            background: #fafafa;
+        }
+
+        .data-table th {
+            padding: 14px 12px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #909399;
+            border-bottom: 1px solid #ebeef5;
+        }
+
+        .data-table td {
+            padding: 12px;
+            font-size: 14px;
+            color: #606266;
+            border-bottom: 1px solid #ebeef5;
+            text-align: center;
+        }
+
+        .data-table tbody tr {
+            transition: background 0.3s;
+        }
+
+        .data-table tbody tr:hover {
+            background: #f5f7fa;
+        }
+
+        .data-table tbody tr.selected {
+            background: #ecf5ff;
+        }
+
+        .checkbox-cell {
+            width: 40px;
+        }
+
+        .index-cell {
+            width: 60px;
+        }
+
+        .id-cell {
+            width: 80px;
+        }
+
+        /* 状态标签 - Element UI 风格 */
+        .status-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #f0f9ff;
+            color: #67c23a;
+        }
+
+        .status-inactive {
+            background: #fef0f0;
+            color: #f56c6c;
+        }
+
+        .status-pending {
+            background: #fdf6ec;
+            color: #e6a23c;
+        }
+
+        /* 操作按钮 - Element UI 文字按钮风格 */
+        .action-btns {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .action-btn {
+            padding: 5px 10px;
+            background: transparent;
+            border: none;
+            color: #409eff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .action-btn:hover {
+            color: #66b1ff;
+        }
+
+        .action-btn.danger {
+            color: #f56c6c;
+        }
+
+        .action-btn.danger:hover {
+            color: #f78989;
+        }
+
+        /* 分页 - Element UI 风格 */
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 15px 20px;
+            gap: 8px;
+        }
+
+        .pagination-info {
+            font-size: 14px;
+            color: #606266;
+            margin-right: auto;
+        }
+
+        .page-btn {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            color: #606266;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            color: #409eff;
+            border-color: #c6e2ff;
+        }
+
+        .page-btn.active {
+            background: #409eff;
+            border-color: #409eff;
+            color: white;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* 复选框样式 */
+        input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c0c4cc;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #909399;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .search-form {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .toolbar-left,
+            .toolbar-right {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">智能工艺</div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <div class="menu-item active">
+                    <span class="menu-icon">📦</span>
+                    <span>模具管理</span>
+                </div>
+                <div class="submenu">
+                    <div class="submenu-item active">模具列表</div>
+                    <div class="submenu-item">新增模具</div>
+                </div>
+                
+                <div class="menu-item">
+                    <span class="menu-icon">⚙️</span>
+                    <span>工艺管理</span>
+                </div>
+                
+                <div class="menu-item">
+                    <span class="menu-icon">🏭</span>
+                    <span>机器管理</span>
+                </div>
+                
+                <div class="menu-item">
+                    <span class="menu-icon">🧪</span>
+                    <span>材料管理</span>
+                </div>
+                
+                <div class="menu-item">
+                    <span class="menu-icon">🔒</span>
+                    <span>权限管理</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <div class="main-container">
+            <!-- 顶部导航 -->
+            <header class="navbar">
+                <div class="breadcrumb">
+                    <span class="breadcrumb-item">模具管理</span>
+                    <span class="breadcrumb-separator">/</span>
+                    <span style="color: #303133;">模具列表</span>
+                </div>
+                
+                <div class="navbar-right">
+                    <div class="user-info">
+                        <div class="user-avatar">A</div>
+                        <span class="user-name">inovance</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 内容区域 -->
+            <main class="app-main">
+                <!-- 查询区域卡片 -->
+                <div class="card">
+                    <div class="card-header">查询条件</div>
+                    <div class="search-form">
+                        <div class="form-item">
+                            <label class="form-label">模具编号</label>
+                            <input type="text" class="form-input" placeholder="请输入模具编号">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">模具类别</label>
+                            <input type="text" class="form-input" placeholder="请输入模具类别">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">模具名称</label>
+                            <input type="text" class="form-input" placeholder="请输入模具名称">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">制品类别</label>
+                            <input type="text" class="form-input" placeholder="请输入制品类别">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">制品名称</label>
+                            <input type="text" class="form-input" placeholder="请输入制品名称">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">客户</label>
+                            <input type="text" class="form-input" placeholder="请输入客户">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">项目工程师</label>
+                            <input type="text" class="form-input" placeholder="请输入项目工程师">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">设计工程师</label>
+                            <input type="text" class="form-input" placeholder="请输入设计工程师">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">制作工程师</label>
+                            <input type="text" class="form-input" placeholder="请输入制作工程师">
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label">落单日期</label>
+                            <input type="text" class="form-input" placeholder="选择日期">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-default">🔄 重置</button>
+                        <button class="btn btn-primary">🔍 搜索</button>
+                    </div>
+                </div>
+
+                <!-- 表格卡片 -->
+                <div class="card">
+                    <!-- 工具栏 -->
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <button class="size-btn">small</button>
+                            <button class="size-btn active">normal</button>
+                            <button class="size-btn">large</button>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary">➕ 新增模具</button>
+                            <button class="btn btn-primary">📋 复制模具</button>
+                            <button class="btn btn-primary">📁 导入模具</button>
+                            <button class="btn btn-success">📊 导出模具</button>
+                            <button class="btn btn-danger">🗑️ 删除模具</button>
+                            <button class="btn btn-success">📥 导出列表</button>
+                            <button class="btn btn-warning">⚙️ 配置表格</button>
+                        </div>
+                    </div>
+
+                    <!-- 表格 -->
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th class="checkbox-cell">
+                                    <input type="checkbox">
+                                </th>
+                                <th class="index-cell">序号</th>
+                                <th class="id-cell">ID</th>
+                                <th>模具编号</th>
+                                <th>模具类别</th>
+                                <th>模具名称</th>
+                                <th>制品类别</th>
+                                <th>模流数据</th>
+                                <th>注塑机适配</th>
+                                <th>落单日期</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">1</td>
+                                <td class="id-cell">2283</td>
+                                <td style="color: #409eff; cursor: pointer;">XHY25-04</td>
+                                <td>两板模|单色模</td>
+                                <td>20塑盖注塑模具</td>
+                                <td>消毒柜</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2026-04-18</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">2</td>
+                                <td class="id-cell">2280</td>
+                                <td style="color: #409eff; cursor: pointer;">TZZ003</td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">3</td>
+                                <td class="id-cell">2259</td>
+                                <td style="color: #409eff; cursor: pointer;">S120</td>
+                                <td>两板模|单色模</td>
+                                <td>水箱盖</td>
+                                <td>工具</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2024-11-20</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">4</td>
+                                <td class="id-cell">2282</td>
+                                <td style="color: #409eff; cursor: pointer;">RL2312006</td>
+                                <td>两板模|单色模</td>
+                                <td>48腔DIN导轨扣</td>
+                                <td>照明设备</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2026-04-18</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">5</td>
+                                <td class="id-cell">2284</td>
+                                <td style="color: #409eff; cursor: pointer;">LY128-566</td>
+                                <td></td>
+                                <td></td>
+                                <td>消毒柜</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2026-04-18</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">6</td>
+                                <td class="id-cell">2285</td>
+                                <td style="color: #409eff; cursor: pointer;">HY-179</td>
+                                <td>两板模|单色模</td>
+                                <td>9050奶茶杯</td>
+                                <td>家居用品</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2026-04-19</td>
+                            </tr>
+                            <tr class="selected">
+                                <td class="checkbox-cell">
+                                    <input type="checkbox" checked>
+                                </td>
+                                <td class="index-cell">7</td>
+                                <td class="id-cell">2263</td>
+                                <td style="color: #409eff; cursor: pointer;">DJ2512001</td>
+                                <td>两板模|单色模</td>
+                                <td>1出2公仔</td>
+                                <td>消费电子</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2025-12-17</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">8</td>
+                                <td class="id-cell">2255</td>
+                                <td style="color: #409eff; cursor: pointer;">A1698</td>
+                                <td>两板模|单色模</td>
+                                <td>P盖</td>
+                                <td>洗衣机</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2024-08-09</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">9</td>
+                                <td class="id-cell">2252</td>
+                                <td style="color: #409eff; cursor: pointer;">A1323</td>
+                                <td>两板模|单色模</td>
+                                <td>上盖</td>
+                                <td>手机</td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td>2024-07-11</td>
+                            </tr>
+                            <tr>
+                                <td class="checkbox-cell">
+                                    <input type="checkbox">
+                                </td>
+                                <td class="index-cell">10</td>
+                                <td class="id-cell">2281</td>
+                                <td style="color: #409eff; cursor: pointer;">12345</td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                                <td><a href="#" class="action-btn">上传</a></td>
+                                <td><a href="#" class="action-btn">适配</a></td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- 分页 -->
+                    <div class="pagination">
+                        <div class="pagination-info">共 128 条</div>
+                        <button class="page-btn" disabled>«</button>
+                        <button class="page-btn" disabled>‹</button>
+                        <button class="page-btn active">1</button>
+                        <button class="page-btn">2</button>
+                        <button class="page-btn">3</button>
+                        <button class="page-btn">4</button>
+                        <button class="page-btn">5</button>
+                        <button class="page-btn">›</button>
+                        <button class="page-btn">»</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // 行选择效果
+        document.querySelectorAll('.data-table tbody tr').forEach(row => {
+            row.addEventListener('click', function(e) {
+                if (e.target.type !== 'checkbox') {
+                    this.classList.toggle('selected');
+                    const checkbox = this.querySelector('input[type="checkbox"]');
+                    if (checkbox) {
+                        checkbox.checked = this.classList.contains('selected');
+                    }
+                }
+            });
+        });
+
+        // 全选功能
+        document.querySelector('.data-table thead input[type="checkbox"]').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.data-table tbody input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = this.checked;
+                if (this.checked) {
+                    cb.closest('tr').classList.add('selected');
+                } else {
+                    cb.closest('tr').classList.remove('selected');
+                }
+            });
+        });
+
+        // 分页按钮效果
+        document.querySelectorAll('.page-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (!this.disabled && !this.textContent.includes('«') && !this.textContent.includes('»') && 
+                    !this.textContent.includes('‹') && !this.textContent.includes('›')) {
+                    document.querySelectorAll('.page-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        // 尺寸切换
+        document.querySelectorAll('.size-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

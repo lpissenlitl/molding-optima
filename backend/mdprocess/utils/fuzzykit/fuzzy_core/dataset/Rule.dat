@@ -1,0 +1,273 @@
+IF SHORTSHOT_low AND MEL_mid THEN MEL_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage1_high AND IV0_low THEN IV0_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage2_high AND IV1_low THEN IV1_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage3_high AND IV1_low THEN IV1_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage3_high AND IV2_mid AND IV2_low THEN IV2_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage4_high AND IV2_low THEN IV2_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage4_high AND IV2_mid AND IV3_low THEN IV3_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage4_high AND IV2_mid AND IV3_mid AND IV1_low THEN IV1_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage5_high AND IV2_low THEN IV2_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_low THEN IV3_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_mid AND IV4_low THEN IV4_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV1_low THEN IV1_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage6_high AND IV2_low THEN IV2_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_low THEN IV3_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_low THEN IV4_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV5_low THEN IV5_add_low
+IF SHORTSHOT_low AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV5_mid AND IV1_low THEN IV1_add_low
+IF SHORTSHOT_mid AND MEL_mid THEN MEL_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage1_high AND IV0_low THEN IV0_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage2_high AND IV1_low THEN IV1_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage3_high AND IV1_low THEN IV1_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage3_high AND IV2_mid AND IV2_low THEN IV2_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage4_high AND IV2_low THEN IV2_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage4_high AND IV2_mid AND IV3_low THEN IV3_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage4_high AND IV2_mid AND IV3_mid AND IV1_low THEN IV1_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage5_high AND IV2_low THEN IV2_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_low THEN IV3_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_mid AND IV4_low THEN IV4_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV1_low THEN IV1_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage6_high AND IV2_low THEN IV2_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_low THEN IV3_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_low THEN IV4_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV5_low THEN IV5_add_mid
+IF SHORTSHOT_mid AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV5_mid AND IV1_low THEN IV1_add_mid
+IF SHORTSHOT_high AND MEL_mid THEN MEL_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage1_high AND IV0_low THEN IV0_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage2_high AND IV1_low THEN IV1_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage3_high AND IV1_low THEN IV1_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage3_high AND IV2_mid AND IV2_low THEN IV2_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage4_high AND IV2_low THEN IV2_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage4_high AND IV2_mid AND IV3_low THEN IV3_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage4_high AND IV2_mid AND IV3_mid AND IV1_low THEN IV1_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage5_high AND IV2_low THEN IV2_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_low THEN IV3_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_mid AND IV4_low THEN IV4_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage5_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV1_low THEN IV1_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage6_high AND IV2_low THEN IV2_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_low THEN IV3_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_low THEN IV4_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV5_low THEN IV5_add_high
+IF SHORTSHOT_high AND MEL_high AND injectstage6_high AND IV2_mid AND IV3_mid AND IV4_mid AND IV5_mid AND IV1_low THEN IV1_add_high
+IF SHRINKAGE_low AND PP0_mid THEN PP0_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_low THEN PT0_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PP1_low THEN PP1_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PP1_mid AND PT1_low THEN PT1_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PP2_low THEN PP2_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PP2_mid AND PT2_low THEN PT2_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PP3_low THEN PP3_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PP3_mid AND PT3_low THEN PT3_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PT3_mid AND PP3_mid AND PP4_low THEN PP4_add_low
+IF SHRINKAGE_low AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PT3_mid AND PP3_mid AND PP4_mid AND PT4_low THEN PT4_add_low
+IF SHRINKAGE_mid AND PP0_mid THEN PP0_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_low THEN PT0_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PP1_low THEN PP1_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PP1_mid AND PT1_low THEN PT1_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PP2_low THEN PP2_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PP2_mid AND PT2_low THEN PT2_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PP3_low THEN PP3_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PP3_mid AND PT3_low THEN PT3_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PT3_mid AND PP3_mid AND PP4_low THEN PP4_add_mid
+IF SHRINKAGE_mid AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PT3_mid AND PP3_mid AND PP4_mid AND PT4_low THEN PT4_add_mid
+IF SHRINKAGE_high AND PP0_mid THEN PP0_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_low THEN PT0_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PP1_low THEN PP1_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PP1_mid AND PT1_low THEN PT1_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PP2_low THEN PP2_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PP2_mid AND PT2_low THEN PT2_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PP3_low THEN PP3_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PP3_mid AND PT3_low THEN PT3_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PT3_mid AND PP3_mid AND PP4_low THEN PP4_add_high
+IF SHRINKAGE_high AND PP0_high AND PT0_mid AND PT1_mid AND PP1_mid AND PT2_mid AND PP2_mid AND PT3_mid AND PP3_mid AND PP4_mid AND PT4_low THEN PT4_add_high
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH1_high AND VPTL_low THEN VPTL_add_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH1_high AND VPTL_mid AND IV0_mid THEN IV0_reduce_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH2_high AND VPTL_low THEN VPTL_add_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH2_high AND VPTL_mid AND IV1_mid THEN IV1_reduce_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH3_high AND VPTL_low THEN VPTL_add_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH3_high AND VPTL_mid AND IV2_mid THEN IV2_reduce_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH4_high AND VPTL_low THEN VPTL_add_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH4_high AND VPTL_mid AND IV3_mid THEN IV3_reduce_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH5_high AND VPTL_low THEN VPTL_add_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH5_high AND VPTL_mid AND IV4_mid THEN IV4_reduce_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH6_high AND VPTL_low THEN VPTL_add_low
+IF FLASH_low AND HOLDEXIST_low AND DLFLASH6_high AND VPTL_mid AND IV5_mid THEN IV5_reduce_low
+IF FLASH_low AND HOLDEXIST_high AND PP0_high THEN PP0_reduce_low
+IF FLASH_low AND HOLDEXIST_high AND PP1_high THEN PP1_reduce_low
+IF FLASH_low AND HOLDEXIST_high AND PP2_high THEN PP2_reduce_low
+IF FLASH_low AND HOLDEXIST_high AND PP3_high THEN PP3_reduce_low
+IF FLASH_low AND HOLDEXIST_high AND PP4_high THEN PP4_reduce_low
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH1_high AND VPTL_low THEN VPTL_add_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH1_high AND VPTL_mid AND IV0_mid THEN IV0_reduce_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH2_high AND VPTL_low THEN VPTL_add_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH2_high AND VPTL_mid AND IV1_mid THEN IV1_reduce_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH3_high AND VPTL_low THEN VPTL_add_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH3_high AND VPTL_mid AND IV2_mid THEN IV2_reduce_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH4_high AND VPTL_low THEN VPTL_add_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH4_high AND VPTL_mid AND IV3_mid THEN IV3_reduce_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH5_high AND VPTL_low THEN VPTL_add_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH5_high AND VPTL_mid AND IV4_mid THEN IV4_reduce_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH6_high AND VPTL_low THEN VPTL_add_mid
+IF FLASH_mid AND HOLDEXIST_low AND DLFLASH6_high AND VPTL_mid AND IV5_mid THEN IV5_reduce_mid
+IF FLASH_mid AND HOLDEXIST_high AND PP0_high THEN PP0_reduce_mid
+IF FLASH_mid AND HOLDEXIST_high AND PP1_high THEN PP1_reduce_mid
+IF FLASH_mid AND HOLDEXIST_high AND PP2_high THEN PP2_reduce_mid
+IF FLASH_mid AND HOLDEXIST_high AND PP3_high THEN PP3_reduce_mid
+IF FLASH_mid AND HOLDEXIST_high AND PP4_high THEN PP4_reduce_mid
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH1_high AND VPTL_low THEN VPTL_add_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH1_high AND VPTL_mid AND IV0_mid THEN IV0_reduce_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH2_high AND VPTL_low THEN VPTL_add_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH2_high AND VPTL_mid AND IV1_mid THEN IV1_reduce_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH3_high AND VPTL_low THEN VPTL_add_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH3_high AND VPTL_mid AND IV2_mid THEN IV2_reduce_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH4_high AND VPTL_low THEN VPTL_add_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH4_high AND VPTL_mid AND IV3_mid THEN IV3_reduce_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH5_high AND VPTL_low THEN VPTL_add_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH5_high AND VPTL_mid AND IV4_mid THEN IV4_reduce_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH6_high AND VPTL_low THEN VPTL_add_high
+IF FLASH_high AND HOLDEXIST_low AND DLFLASH6_high AND VPTL_mid AND IV5_mid THEN IV5_reduce_high
+IF FLASH_high AND HOLDEXIST_high AND PP0_high THEN PP0_reduce_high
+IF FLASH_high AND HOLDEXIST_high AND PP1_high THEN PP1_reduce_high
+IF FLASH_high AND HOLDEXIST_high AND PP2_high THEN PP2_reduce_high
+IF FLASH_high AND HOLDEXIST_high AND PP3_high THEN PP3_reduce_high
+IF FLASH_high AND HOLDEXIST_high AND PP4_high THEN PP4_reduce_high
+IF WELDLINE_low AND DLWELDLINE1_high AND IV0_low THEN IV0_add_low
+IF WELDLINE_low AND DLWELDLINE1_high AND IV0_mid AND NT_mid AND BT1_mid THEN NT_add_low AND BT1_add_low
+IF WELDLINE_low AND DLWELDLINE2_high AND IV1_low THEN IV1_add_low
+IF WELDLINE_low AND DLWELDLINE2_high AND IV1_mid AND NT_mid AND BT1_mid THEN NT_add_low AND BT1_add_low
+IF WELDLINE_low AND DLWELDLINE3_high AND IV2_low THEN IV2_add_low
+IF WELDLINE_low AND DLWELDLINE3_high AND IV2_mid AND NT_mid AND BT1_mid THEN NT_add_low AND BT1_add_low
+IF WELDLINE_low AND DLWELDLINE4_high AND IV3_low THEN IV3_add_low
+IF WELDLINE_low AND DLWELDLINE4_high AND IV3_mid AND NT_mid AND BT1_mid THEN NT_add_low AND BT1_add_low
+IF WELDLINE_low AND DLWELDLINE5_high AND IV4_low THEN IV4_add_low
+IF WELDLINE_low AND DLWELDLINE5_high AND IV4_mid AND NT_mid AND BT1_mid THEN NT_add_low AND BT1_add_low
+IF WELDLINE_low AND DLWELDLINE6_high AND IV5_low THEN IV5_add_low
+IF WELDLINE_low AND DLWELDLINE6_high AND IV5_mid AND NT_mid AND BT1_mid THEN NT_add_low AND BT1_add_low
+IF WELDLINE_mid AND DLWELDLINE1_high AND IV0_low THEN IV0_add_mid
+IF WELDLINE_mid AND DLWELDLINE1_high AND IV0_mid AND NT_mid AND BT1_mid THEN NT_add_mid AND BT1_add_mid
+IF WELDLINE_mid AND DLWELDLINE2_high AND IV1_low THEN IV1_add_mid
+IF WELDLINE_mid AND DLWELDLINE2_high AND IV1_mid AND NT_mid AND BT1_mid THEN NT_add_mid AND BT1_add_mid
+IF WELDLINE_mid AND DLWELDLINE3_high AND IV2_low THEN IV2_add_mid
+IF WELDLINE_mid AND DLWELDLINE3_high AND IV2_mid AND NT_mid AND BT1_mid THEN NT_add_mid AND BT1_add_mid
+IF WELDLINE_mid AND DLWELDLINE4_high AND IV3_low THEN IV3_add_mid
+IF WELDLINE_mid AND DLWELDLINE4_high AND IV3_mid AND NT_mid AND BT1_mid THEN NT_add_mid AND BT1_add_mid
+IF WELDLINE_mid AND DLWELDLINE5_high AND IV4_low THEN IV4_add_mid
+IF WELDLINE_mid AND DLWELDLINE5_high AND IV4_mid AND NT_mid AND BT1_mid THEN NT_add_mid AND BT1_add_mid
+IF WELDLINE_mid AND DLWELDLINE6_high AND IV5_low THEN IV5_add_mid
+IF WELDLINE_mid AND DLWELDLINE6_high AND IV5_mid AND NT_mid AND BT1_mid THEN NT_add_mid AND BT1_add_mid
+IF WELDLINE_high AND DLWELDLINE1_high AND IV0_low THEN IV0_add_high
+IF WELDLINE_high AND DLWELDLINE1_high AND IV0_mid AND NT_mid AND BT1_mid THEN NT_add_high AND BT1_add_high
+IF WELDLINE_high AND DLWELDLINE2_high AND IV1_low THEN IV1_add_low
+IF WELDLINE_high AND DLWELDLINE2_high AND IV1_mid AND NT_mid AND BT1_mid THEN NT_add_high AND BT1_add_high
+IF WELDLINE_high AND DLWELDLINE3_high AND IV2_low THEN IV2_add_high
+IF WELDLINE_high AND DLWELDLINE3_high AND IV2_mid AND NT_mid AND BT1_mid THEN NT_add_high AND BT1_add_high
+IF WELDLINE_high AND DLWELDLINE4_high AND IV3_low THEN IV3_add_high
+IF WELDLINE_high AND DLWELDLINE4_high AND IV3_mid AND NT_mid AND BT1_mid THEN NT_add_high AND BT1_add_high
+IF WELDLINE_high AND DLWELDLINE5_high AND IV4_low THEN IV4_add_high
+IF WELDLINE_high AND DLWELDLINE5_high AND IV4_mid AND NT_mid AND BT1_mid THEN NT_add_high AND BT1_add_high
+IF WELDLINE_high AND DLWELDLINE6_high AND IV5_low THEN IV5_add_high
+IF WELDLINE_high AND DLWELDLINE6_high AND IV5_mid AND NT_mid AND BT1_mid THEN NT_add_high AND BT1_add_high
+IF WELDLINE_low AND DLWELDLINE7_high THEN SCT1_add_level1
+IF WELDLINE_low AND DLWELDLINE8_high THEN SCT2_add_level1
+IF WELDLINE_low AND DLWELDLINE9_high THEN SCT3_add_level1
+IF WELDLINE_low AND DLWELDLINE10_high THEN SCT4_add_level1
+IF WELDLINE_low AND DLWELDLINE11_high THEN SCT5_add_level1
+IF WELDLINE_low AND DLWELDLINE12_high THEN SCT6_add_level1
+IF WELDLINE_low AND DLWELDLINE13_high THEN SCT7_add_level1
+IF WELDLINE_low AND DLWELDLINE14_high THEN SCT8_add_level1
+IF WELDLINE_mid AND DLWELDLINE7_high THEN SCT1_add_level5
+IF WELDLINE_mid AND DLWELDLINE8_high THEN SCT2_add_level5
+IF WELDLINE_mid AND DLWELDLINE9_high THEN SCT3_add_level5
+IF WELDLINE_mid AND DLWELDLINE10_high THEN SCT4_add_level5
+IF WELDLINE_mid AND DLWELDLINE11_high THEN SCT5_add_level5
+IF WELDLINE_mid AND DLWELDLINE12_high THEN SCT6_add_level5
+IF WELDLINE_mid AND DLWELDLINE13_high THEN SCT7_add_level5
+IF WELDLINE_mid AND DLWELDLINE14_high THEN SCT8_add_level5
+IF WELDLINE_high AND DLWELDLINE7_high THEN SCT1_add_level9
+IF WELDLINE_high AND DLWELDLINE8_high THEN SCT2_add_level9
+IF WELDLINE_high AND DLWELDLINE9_high THEN SCT3_add_level9
+IF WELDLINE_high AND DLWELDLINE10_high THEN SCT4_add_level9
+IF WELDLINE_high AND DLWELDLINE11_high THEN SCT5_add_level9
+IF WELDLINE_high AND DLWELDLINE12_high THEN SCT6_add_level9
+IF WELDLINE_high AND DLWELDLINE13_high THEN SCT7_add_level9
+IF WELDLINE_high AND DLWELDLINE14_high THEN SCT8_add_level9
+IF AIRTRAP_low AND DLAIRTRAP1_high AND IV0_mid THEN IV0_reduce_low
+IF AIRTRAP_low AND DLAIRTRAP2_high AND IV1_mid THEN IV1_reduce_low
+IF AIRTRAP_low AND DLAIRTRAP3_high AND IV2_mid THEN IV2_reduce_low
+IF AIRTRAP_low AND DLAIRTRAP4_high AND IV3_mid THEN IV3_reduce_low
+IF AIRTRAP_low AND DLAIRTRAP5_high AND IV4_mid THEN IV4_reduce_low
+IF AIRTRAP_low AND DLAIRTRAP6_high AND IV5_mid THEN IV5_reduce_low
+IF AIRTRAP_mid AND DLAIRTRAP1_high AND IV0_mid THEN IV0_reduce_mid
+IF AIRTRAP_mid AND DLAIRTRAP2_high AND IV1_mid THEN IV1_reduce_mid
+IF AIRTRAP_mid AND DLAIRTRAP3_high AND IV2_mid THEN IV2_reduce_mid
+IF AIRTRAP_mid AND DLAIRTRAP4_high AND IV3_mid THEN IV3_reduce_mid
+IF AIRTRAP_mid AND DLAIRTRAP5_high AND IV4_mid THEN IV4_reduce_mid
+IF AIRTRAP_mid AND DLAIRTRAP6_high AND IV5_mid THEN IV5_reduce_mid
+IF AIRTRAP_high AND DLAIRTRAP1_high AND IV0_mid THEN IV0_reduce_high
+IF AIRTRAP_high AND DLAIRTRAP2_high AND IV1_mid THEN IV1_reduce_high
+IF AIRTRAP_high AND DLAIRTRAP3_high AND IV2_mid THEN IV2_reduce_high
+IF AIRTRAP_high AND DLAIRTRAP4_high AND IV3_mid THEN IV3_reduce_high
+IF AIRTRAP_high AND DLAIRTRAP5_high AND IV4_mid THEN IV4_reduce_high
+IF AIRTRAP_high AND DLAIRTRAP6_high AND IV5_mid THEN IV5_reduce_high
+IF ABERRATION_low AND NT_mid AND BT1_mid THEN NT_reduce_low AND BT1_reduce_low
+IF ABERRATION_mid AND NT_mid AND BT1_mid THEN NT_reduce_mid AND BT1_reduce_mid
+IF ABERRATION_high AND NT_mid AND BT1_mid THEN NT_reduce_high AND BT1_reduce_high
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_high THEN IV0_reduce_low
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low THEN IDT1_add_low
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_low THEN IDT2_add_low
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_mid THEN IDT2_reduce_low
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_mid THEN IV0_reduce_low
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_mid THEN IV1_reduce_low
+IF GASVEINS_low AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_low AND MT_mid THEN MT_add_low
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_high THEN IV0_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low THEN IDT1_add_mid
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_low THEN IDT2_add_mid
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_mid THEN IDT2_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_mid THEN IV0_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_mid THEN IV1_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_low AND MT_mid THEN MT_add_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_high THEN IV0_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low THEN IDT1_add_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_low THEN IDT2_add_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_mid THEN IDT2_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_mid THEN IV0_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_mid THEN IV1_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_low AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_low AND MT_mid THEN MT_add_high
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_high THEN IV0_reduce_low
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low THEN IDT1_add_low
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_low THEN IDT2_add_low
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_mid THEN IDT2_reduce_low
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_mid THEN IV0_reduce_low
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_mid THEN IV1_reduce_low
+IF GASVEINS_low AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_low AND MT_mid THEN MT_add_low
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_high THEN IV0_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low THEN IDT1_add_mid
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_low THEN IDT2_add_mid
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_mid THEN IDT2_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_mid THEN IV0_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_mid THEN IV1_reduce_mid
+IF GASVEINS_mid AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_low AND MT_mid THEN MT_add_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_high THEN IV0_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low THEN IDT1_add_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_low THEN IDT2_add_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_low AND IV0_low AND IDT1_low AND IDT2_mid THEN IDT2_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_mid THEN IV0_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_mid THEN IV1_reduce_mid
+IF GASVEINS_high AND VALVEEXIST_high AND injectstage1_low AND IDT1_mid AND IDT2_low AND IV0_low AND IV1_low AND MT_mid THEN MT_add_high
+IF MATERIALFLOWER_low AND DLMATERIALFLOWER1_high AND IV0_mid THEN IV0_reduce_low
+IF MATERIALFLOWER_low AND DLMATERIALFLOWER2_high AND IV1_mid THEN IV1_reduce_low
+IF MATERIALFLOWER_low AND DLMATERIALFLOWER3_high AND IV2_mid THEN IV2_reduce_low
+IF MATERIALFLOWER_low AND DLMATERIALFLOWER4_high AND IV3_mid THEN IV3_reduce_low
+IF MATERIALFLOWER_low AND DLMATERIALFLOWER5_high AND IV4_mid THEN IV4_reduce_low
+IF MATERIALFLOWER_low AND DLMATERIALFLOWER6_high AND IV5_mid THEN IV5_reduce_low
+IF MATERIALFLOWER_mid AND DLMATERIALFLOWER1_high AND IV0_mid THEN IV0_reduce_mid
+IF MATERIALFLOWER_mid AND DLMATERIALFLOWER2_high AND IV1_mid THEN IV1_reduce_mid
+IF MATERIALFLOWER_mid AND DLMATERIALFLOWER3_high AND IV2_mid THEN IV2_reduce_mid
+IF MATERIALFLOWER_mid AND DLMATERIALFLOWER4_high AND IV3_mid THEN IV3_reduce_mid
+IF MATERIALFLOWER_mid AND DLMATERIALFLOWER5_high AND IV4_mid THEN IV4_reduce_mid
+IF MATERIALFLOWER_mid AND DLMATERIALFLOWER6_high AND IV5_mid THEN IV5_reduce_mid
+IF MATERIALFLOWER_high AND DLMATERIALFLOWER1_high AND IV0_mid THEN IV0_reduce_high
+IF MATERIALFLOWER_high AND DLMATERIALFLOWER2_high AND IV1_mid THEN IV1_reduce_high
+IF MATERIALFLOWER_high AND DLMATERIALFLOWER3_high AND IV2_mid THEN IV2_reduce_high
+IF MATERIALFLOWER_high AND DLMATERIALFLOWER4_high AND IV3_mid THEN IV3_reduce_high
+IF MATERIALFLOWER_high AND DLMATERIALFLOWER5_high AND IV4_mid THEN IV4_reduce_high
+IF MATERIALFLOWER_high AND DLMATERIALFLOWER6_high AND IV5_mid THEN IV5_reduce_high
