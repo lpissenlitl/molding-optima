@@ -20,8 +20,11 @@ T = TypeVar('T')
 
 class AbstractBaseSchema(BaseModel):
     """替代 marshmallow Schema 基类"""
-    
-    model_config = ConfigDict(populate_by_name=True)
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        protected_namespaces=(),
+    )
 
 
 class TracedSchema(AbstractBaseSchema):

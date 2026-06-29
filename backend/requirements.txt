@@ -1,41 +1,16 @@
-# molding-optima 后端依赖（精简版本，参考 molding-expert）
-#
-# 部署建议：
-# 1. 建议 Python 3.11+
-# 2. MySQL 8.0+（需提前创建 molding_optima 数据库，字符集 utf8mb4）
-# 3. 安装命令：pip install -r requirements.txt
-
-# === Django 框架 ===
 Django==5.2.5
 asgiref==3.9.1
-
-# === MySQL 驱动 ===
 PyMySQL==1.1.2
 sqlparse==0.5.3
-
-# === 参数验证 ===
 pydantic==2.9.2
-
-# === 跨域支持 ===
 django-cors-headers==4.6.0
-
-# === 加密相关（extensions/encrypt 使用） ===
 bcrypt==4.0.1
 cryptography==46.0.3
 pyjwt==2.10.1
-
-# === 文件处理（filecenter 使用） ===
 Pillow==12.0.0
-
-# === 报表导出（reporting 使用） ===
 openpyxl==3.1.5
-
-# === 数据库迁移工具 ===
+passlib==1.7.4
 django-extensions==4.1
-
-# === 测试框架 ===
 pytest==8.3.4
 pytest-django==4.9.0
-
-# === WSGI 服务器 ===
 uwsgi>=2.0.21; sys_platform != 'win32'

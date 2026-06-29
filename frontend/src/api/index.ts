@@ -11,8 +11,17 @@ import request from '@/utils/request'
 export const login = (params: { username: string; password: string; ua: string }) =>
   request({ url: '/api/login/', method: 'post', data: params })
 
+export const SSOLogin = (token: string) =>
+  request({ url: '/api/sso-login/', method: 'post', data: { token } })
+
 export const logout = () =>
   request({ url: '/api/logout/', method: 'post' })
+
+export const getInfo = () =>
+  request({ url: '/api/info/', method: 'get' })
+
+export const resetMyPassword = (data: any) =>
+  request({ url: '/api/users/reset-password/', method: 'post', data })
 
 export const getProfile = () =>
   request({ url: '/api/profile/', method: 'get' })
@@ -152,6 +161,11 @@ export const ruleMethodCreate = (data: any) =>
 
 export const ruleByDefect = (defectName: string) =>
   request({ url: '/api/rules/by-defect/', method: 'get', params: { defect_name: defectName } })
+
+// ==================== 搜索建议 ====================
+
+export const getSelectionOptions = (params: any) =>
+  request({ url: '/api/selection-options/', method: 'get', params })
 
 // ==================== 报表导出 ====================
 

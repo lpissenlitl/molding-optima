@@ -81,7 +81,7 @@
 
 <script>
 import DialogWrapper from "@/components/dialogWrapper"
-import { resetMyPassword } from "@/api/login"
+import { resetMyPassword } from "@/api"
 
 export default {
   name: "UserSet",

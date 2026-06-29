@@ -32,6 +32,9 @@ yarn-error.log*
 __pycache__/
 *.py[cod]
 $py.class
+
+# Django migrations (保留 __init__.py，每个开发者本地 makemigrations 生成)
+*/migrations/0*.py
 .python-version
 .venv/
 venv/

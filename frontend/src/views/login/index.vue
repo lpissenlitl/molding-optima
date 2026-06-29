@@ -72,7 +72,7 @@ import { Component, Vue, Watch } from "vue-property-decorator"
 import { UserModule } from "@/store/modules/user"
 import { Route } from "vue-router"
 import { ElForm } from "element-ui/types/form"
-import { login } from "@/api/login"
+import { login } from "@/api"
 import { isNative } from "@/utils/auth"
 
 const validateUsername = (rule: any, value: string, callback: any) => {
@@ -127,11 +127,11 @@ export default class Login extends Vue {
       if (valid) {
         const ua = navigator.userAgent.toLowerCase()
         this.loading = true
-        login(
-          this.login_form.username.trim(), 
-          this.login_form.password.trim(), 
-          ua
-        ).then((res) => {
+        login({
+          username: this.login_form.username.trim(),
+          password: this.login_form.password.trim(),
+          ua,
+        }).then((res) => {
           if (res.status === 0) {
             UserModule.setLoginData(res.data)
             if (isNative) {

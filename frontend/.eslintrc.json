@@ -23,9 +23,9 @@
     "@typescript-eslint/no-unused-vars": "warn",
 
     // 🔹 基础可修复格式（ESLint 自带，保存自动修复）
-    "semi": ["warn", "never"],           // 要求分号
+    "semi": ["warn", "never"],           // 不要求分号
     "quotes": ["warn", "double"],          // 双引号
-    "indent": ["warn", 2, {
+    "indent": ["warn", {
       "SwitchCase": 1
     }],                 // 2 空格缩进
     "space-infix-ops": "warn",             // 操作符空格 a = b
