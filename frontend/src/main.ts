@@ -1,78 +1,57 @@
-import Vue from 'vue';
+import Vue from "vue"
 
-import '@/permission';
-import 'normalize.css';
-import '@/styles/index.scss';
-import '@/icons/components';
-import '@/register-service-worker';
+// ==================== 基础依赖 ====================
+import App from "@/App.vue"
+import store from "@/store"
+import router from "@/router"
 
-//本地存储相关设定
-import {
-  getLocalStorageValue, 
-  getLocalStorageObject, 
-  saveLocalStorageValue, 
-  saveLocalStorageObject, 
-  removeLocalStorage
-} from './storage/storage'
+// ==================== 副作用导入（按执行顺序）====================
+import "@/permission"                    // 路由权限控制
+import "normalize.css"                   // CSS重置
+import "@/styles/index.scss"             // 全局样式
+import "@/icons/components"              // SVG图标注册
+import "@/register-service-worker"       // PWA服务工作者
 
-Vue.prototype.$getLocalStorageValue = getLocalStorageValue;
-Vue.prototype.$getLocalStorageObject = getLocalStorageObject;
-Vue.prototype.$saveLocalStorageValue = saveLocalStorageValue;
-Vue.prototype.$saveLocalStorageObject = saveLocalStorageObject;
-Vue.prototype.$removeLocalStorage = removeLocalStorage;
+// ==================== UI框架 ====================
+import ElementUI from "element-ui"
+Vue.use(ElementUI)
 
-import { checkNumberFormat } from '@/utils/validate'
-Vue.prototype.checkNumberFormat = checkNumberFormat
-
-import { checkUserPermission } from '@/permission'
-Vue.prototype.checkUserPermission = checkUserPermission
-
-Vue.prototype.bus = new Vue();
-
-// 读外部领料接口时，把返回的xml数据转化成json格式
-import x2js from 'x2js'
-Vue.prototype.$x2js = new x2js()  // 创建x2js对象，挂到vue原型上
-
-import ElementUI from 'element-ui';
-Vue.use(ElementUI);
-
-import SvgIcon from 'vue-svgicon';
+// ==================== 第三方插件 ====================
+import SvgIcon from "vue-svgicon"
 Vue.use(SvgIcon, {
-  tagName: 'svg-icon',
-  defaultWidth: '1em',
-  defaultHeight: '1em',
-});
+  tagName: "svg-icon",
+  defaultWidth: "1em",
+  defaultHeight: "1em",
+})
 
-import Print from 'vue-print-nb'
-Vue.use(Print); 
+import Print from "vue-print-nb"
+Vue.use(Print)
 
-import uploader from 'vue-simple-uploader'
+import uploader from "vue-simple-uploader"
 Vue.use(uploader)
 
-// 手动引入 ECharts 各模块来减小打包体积
-import 'echarts/lib/chart/bar'
-import 'echarts/lib/component/tooltip'
+// ==================== ECharts（按需引入）====================
+import "echarts/lib/chart/bar"
+import "echarts/lib/component/tooltip"
+import "echarts-gl"
 
-// 如果需要配合 ECharts 扩展使用，只需要直接引入扩展包即可
-// 以 ECharts-GL 为例：
-// 需要安装依赖：npm install --save echarts-gl，并添加如下引用
-import 'echarts-gl'
-// 在 webpack 环境下指向 components/ECharts.vue
-import ECharts from 'vue-echarts' 
-Vue.component('VChart', ECharts)  // 注册组件后即可使用
+// ==================== 自定义插件 ====================
+import {
+  GlobalMethodsPlugin,
+  ComponentsPlugin,
+  DirectivesPlugin
+} from "@/plugins"
 
-// 可拖拽窗口
-import elDragDialog from './directive/el-drag-dialog'
-Vue.directive('el-drag-dialog', elDragDialog)
+Vue.use(GlobalMethodsPlugin)
+Vue.use(ComponentsPlugin)
+Vue.use(DirectivesPlugin)
 
-Vue.config.productionTip = false;
+// ==================== 应用配置 ====================
+Vue.config.productionTip = false
 
-import App from '@/App.vue';
-import store from '@/store';
-import router from '@/router';
-
+// ==================== 创建Vue实例 ====================
 new Vue({
   router,
   store,
   render: (h) => h(App),
-}).$mount('#app');
+}).$mount("#app")

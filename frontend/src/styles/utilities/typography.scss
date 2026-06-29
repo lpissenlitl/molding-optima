@@ -1,0 +1,169 @@
+/**
+ * 排版工具类（Typography Utilities）
+ * 提供快速字体、颜色、对齐等样式设置
+ * 
+ * @author MoldingX Team
+ * @version 2.0.0
+ * @since 2026-06-05
+ * 
+ * 使用示例：
+ *   <p class="text-sm text-secondary">次要文字</p>
+ *   <h2 class="text-lg font-bold text-primary">标题</h2>
+ */
+
+// ========================================================================
+// 字体大小（Font Size）
+// ========================================================================
+
+.text-xs { font-size: var(--font-size-xs) !important; }
+.text-sm { font-size: var(--font-size-sm) !important; }
+.text-base { font-size: var(--font-size-base) !important; }
+.text-md { font-size: var(--font-size-md) !important; }
+.text-lg { font-size: var(--font-size-lg) !important; }
+.text-xl { font-size: var(--font-size-xl) !important; }
+
+// ========================================================================
+// 字重（Font Weight）
+// ========================================================================
+
+.font-light { font-weight: var(--font-weight-light) !important; }
+.font-normal { font-weight: var(--font-weight-normal) !important; }
+.font-medium { font-weight: var(--font-weight-medium) !important; }
+.font-semibold { font-weight: var(--font-weight-semibold) !important; }
+.font-bold { font-weight: var(--font-weight-bold) !important; }
+
+// ========================================================================
+// 行高（Line Height）
+// ========================================================================
+
+.leading-tight { line-height: var(--line-height-tight) !important; }
+.leading-normal { line-height: var(--line-height-normal) !important; }
+.leading-relaxed { line-height: var(--line-height-relaxed) !important; }
+
+// ========================================================================
+// 文字颜色（Text Color）
+// ========================================================================
+
+// 主题色
+.text-primary { color: var(--theme-primary) !important; }
+.text-primary-light { color: var(--theme-primary-light) !important; }
+.text-primary-dark { color: var(--theme-primary-dark) !important; }
+
+// 功能色
+.text-success { color: var(--color-success) !important; }
+.text-warning { color: var(--color-warning) !important; }
+.text-danger { color: var(--color-danger) !important; }
+.text-info { color: var(--color-info) !important; }
+
+// 中性色
+.text-primary-text { color: var(--color-text-primary) !important; }
+.text-regular { color: var(--color-text-regular) !important; }
+.text-secondary { color: var(--color-text-secondary) !important; }
+.text-placeholder { color: var(--color-text-placeholder) !important; }
+.text-disabled { color: var(--color-text-disabled) !important; }
+
+// 白色
+.text-white { color: #FFFFFF !important; }
+
+// ========================================================================
+// 背景颜色（Background Color）
+// ========================================================================
+
+.bg-base { background-color: var(--color-bg-base) !important; }
+.bg-page { background-color: var(--color-bg-page) !important; }
+.bg-overlay { background-color: var(--color-bg-overlay) !important; }
+.bg-primary { background-color: var(--theme-primary) !important; }
+.bg-success { background-color: var(--color-success) !important; }
+.bg-warning { background-color: var(--color-warning) !important; }
+.bg-danger { background-color: var(--color-danger) !important; }
+
+// ========================================================================
+// 文字对齐（Text Alignment）
+// ========================================================================
+
+.text-left { text-align: left !important; }
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
+.text-justify { text-align: justify !important; }
+
+// ========================================================================
+// 文字装饰（Text Decoration）
+// ========================================================================
+
+.underline { text-decoration: underline !important; }
+.line-through { text-decoration: line-through !important; }
+.no-underline { text-decoration: none !important; }
+
+// ========================================================================
+// 文字转换（Text Transform）
+// ========================================================================
+
+.uppercase { text-transform: uppercase !important; }
+.lowercase { text-transform: lowercase !important; }
+.capitalize { text-transform: capitalize !important; }
+
+// ========================================================================
+// 文字溢出处理（Text Overflow）
+// ========================================================================
+
+.truncate {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.break-word {
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+}
+
+.no-wrap {
+  white-space: nowrap !important;
+}
+
+// ========================================================================
+// 字体家族（Font Family）
+// ========================================================================
+
+.font-sans {
+  font-family: var(--font-family-base) !important;
+}
+
+.font-mono {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace !important;
+}
+
+// ========================================================================
+// 表单控件宽度（Form Control Width）
+// ========================================================================
+
+.input-xs { width: var(--form-control-width-xs) !important; }
+.input-sm { width: var(--form-control-width-sm) !important; }
+.input-md { width: var(--form-control-width-md) !important; }
+.input-lg { width: var(--form-control-width-lg) !important; }
+.input-xl { width: var(--form-control-width-xl) !important; }
+.input-full { width: var(--form-control-width-full) !important; }
+
+// ========================================================================
+// 其他实用工具
+// ========================================================================
+
+// 隐藏文本（屏幕阅读器可用）
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+// 清除浮动
+.clearfix::after {
+  content: "" !important;
+  display: table !important;
+  clear: both !important;
+}

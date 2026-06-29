@@ -1,17 +1,19 @@
 <template>
-  <div 
+  <div
     v-if="item.meta && !item.meta.hidden" 
     :class="['menu-wrapper', collapse ? 'simple-mode' : 'full-mode', {'first-level': !isNest}]"
   >
+    <!-- 跳转链接 -->
     <template v-if="showingChild(item.children, item)">
-      <app-link :to="resolvePath(lastShowingChild.path)">
+      <app-link v-if="$hasPermission(lastShowingChild.meta.perm)" :to="resolvePath(lastShowingChild.path)">
         <el-menu-item 
           :index="resolvePath(lastShowingChild.path)" 
           :class="{'submenu-title-noDropdown': !isNest}"
         >
-          <svg-icon 
+          <app-icon 
             v-if="lastShowingChild.meta && lastShowingChild.meta.icon" 
-            :name="lastShowingChild.meta.icon"
+            :icon="lastShowingChild.meta.icon" 
+            class="sidebar-menu-icon"
           />
           <span 
             v-if="lastShowingChild.meta && lastShowingChild.meta.title" 
@@ -22,28 +24,32 @@
         </el-menu-item>
       </app-link>
     </template>
+    <!-- 子菜单 -->
     <el-submenu
-      v-else-if="$store.state.user.userinfo.permissions.includes(item.meta.perm)"
+      v-else-if="$hasPermission(item.meta.perm)"
       :index="resolvePath(item.path)" 
       popper-append-to-body
     >
       <template slot="title">
-        <svg-icon 
+        <app-icon 
           v-if="item.meta && item.meta.icon" 
-          :name="item.meta.icon"
-        />
+          :icon="item.meta.icon" 
+          class="sidebar-menu-icon"
+        />        
         <span 
-          v-if="item.meta && item.meta.title" slot="title"
-        >{{ item.meta.title }}</span>
+          v-if="item.meta && item.meta.title" 
+          slot="title"
+        >
+          {{ item.meta.title }}
+        </span>
       </template>
       <template v-for="(route, index) in item.children">
         <sidebar-item        
-          v-if="$store.state.user.userinfo.permissions.includes(route.meta.perm)"
+          v-if="$hasPermission(route.meta.perm)"
           :key="index" 
           :item="route" 
           :base-path="item.path" 
           :collapse="collapse" 
-          class="nest-menu"
         />
       </template>
     </el-submenu>
@@ -51,48 +57,48 @@
 </template>
 
 <script lang="ts">
-import path from 'path';
-import { Route } from 'vue-router';
-import { isExternal } from '@/utils/validate';
-import { Component, Vue, Prop } from 'vue-property-decorator';
-import AppLink from './link.vue';
+import path from "path"
+import { Route } from "vue-router"
+import { isExternal } from "@/utils/validate"
+import { Component, Vue, Prop } from "vue-property-decorator"
+import AppLink from "./link.vue"
 
 @Component({
   // Set 'name' here to prevent uglifyjs from causing recursive component not work
   // See https://medium.com/haiiro-io/element-component-name-with-vue-class-component-f3b435656561 for detail
-  name: 'SidebarItem',
+  name: "SidebarItem",
   components: {
     AppLink,
   },
 })
 export default class SidebarItem extends Vue {
-  @Prop({ required: true }) private item!: Route;
-  @Prop({ default: false }) private isNest!: boolean;
-  @Prop({ default: false }) private collapse!: boolean;
-  @Prop({ default: '' }) private basePath!: string;
+  @Prop({ required: true }) private item!: Route
+  @Prop({ default: false }) private isNest!: boolean
+  @Prop({ default: false }) private collapse!: boolean
+  @Prop({ default: "" }) private basePath!: string
 
-  private lastShowingChild: Route | null = null;
+  private lastShowingChild: Route | null = null
 
   private showingChild(children: Route[], parent: Route) {
-    let showingChildren: Route[] = [];
+    let showingChildren: Route[] = []
     if (children) {
       showingChildren = children.filter((item: Route) => {
         if (item.meta && item.meta.hidden) {
-          return false;
+          return false
         } else {
-          return true;
+          return true
         }
-      });
+      })
 
       if (showingChildren.length === 0) {
         this.lastShowingChild = parent
-        return true;
+        return true
       } else if (showingChildren.length === 1) {
         this.lastShowingChild = showingChildren[0]
-        return true;
+        return true
       } else if (showingChildren.length > 1) {
-        this.lastShowingChild = null;
-        return false;
+        this.lastShowingChild = null
+        return false
       }
 
     } else {
@@ -103,9 +109,9 @@ export default class SidebarItem extends Vue {
 
   private resolvePath(routePath: string) {
     if (isExternal(routePath)) {
-      return routePath;
+      return routePath
     }
-    return path.resolve(this.basePath, routePath);
+    return path.resolve(this.basePath, routePath)
   }
 }
 </script>
@@ -114,16 +120,34 @@ export default class SidebarItem extends Vue {
 @import "src/styles/variables.scss";
 
 .el-submenu.is-active > .el-submenu__title {
-  color: $subMenuActiveText !important;
+  color: var(--submenu-active-text) !important;
+}
+.el-submenu__title:hover {
+  background-color: var(--submenu-hover) !important;
+}
+
+.el-submenu .el-submenu__title {
+  font-family: "Source Han Serif SC";
+  font-size: var(--submenu-title-font-size); 
 }
 
 .full-mode {
-  .nest-menu .el-submenu>.el-submenu__title,
-  .el-submenu .el-menu-item {
-    background-color: $subMenuBg !important;
-
+  .el-submenu {
+    .el-menu-item {
+      background-color: var(--submenu-bg) !important;
+      font-family: "Source Han Serif SC";
+      font-size: var(--menu-font-size); 
+      // text-indent: -5px;
+      &:hover {
+        background-color: var(--submenu-hover) !important;
+      }
+    }
+  } 
+  .el-menu-item {
+    font-family: "Source Han Serif SC";
+    font-size: var(--submenu-title-font-size); 
     &:hover {
-      background-color: $subMenuHover !important;
+      background-color: var(--submenu-hover) !important;
     }
   }
 }
@@ -138,17 +162,29 @@ export default class SidebarItem extends Vue {
         padding: 0 10px !important;
       }
     }
-
-    .el-submenu {
-      overflow: hidden;
-
-      &>.el-submenu__title {
-        padding-left: 10px !important;
-
-        .el-submenu__icon-arrow {
-          display: none;
-        }
+  }
+  .el-submenu {
+    .el-menu-item {
+      background-color: var(--submenu-bg) !important;
+      font-family: "Source Han Serif SC";
+      font-size: var(--menu-font-size); 
+      &:hover {
+        background-color: var(--submenu-hover) !important;
       }
+    }
+    .el-submenu__title {
+      padding-left: 8px !important;
+    }
+    .el-submenu__icon-arrow {
+      display: none;
+    }
+  }
+  .el-menu-item {
+    font-family: "Source Han Serif SC";
+    text-indent: -2px;
+    font-size: var(--submenu-title-font-size); 
+    &:hover {
+      background-color: var(--submenu-hover) !important;
     }
   }
 }
@@ -156,6 +192,12 @@ export default class SidebarItem extends Vue {
 
 <style lang="scss" scoped>
 .svg-icon {
-  margin-right: 16px;
+  margin-right: 10px;
+}
+
+.sidebar-menu-icon {
+  margin-right: 8px;
+  width: 16px;
+  height: 16px;
 }
 </style>

@@ -1,17 +1,59 @@
-/* icon font path, required */
-$--font-path: '~element-ui/lib/theme-chalk/fonts';
+/**
+ * 全局样式入口文件
+ * 
+ * 架构说明：
+ *   1. Element UI 基础样式
+ *   2. 设计令牌（CSS 变量）
+ *   3. 自定义主题类（.theme-moldingx）
+ *   4. 工具类（间距、排版等）
+ *   5. 业务样式（搜索区、卡片头等）
+ * 
+ * @author MoldingX Team
+ * @version 3.0.0
+ * @since 2026-06-05
+ */
 
-@import "~element-ui/packages/theme-chalk/src/index";
+/* ========================================================================
+ * 1. Element UI 基础样式
+ * ======================================================================== */
+// 使用自定义主题变量
+@import './element-variables.scss';
 
+/* ========================================================================
+ * 2. 基础 SCSS 模块
+ * ======================================================================== */
 @import './variables.scss';
 @import './mixin.scss';
 @import './transition.scss';
 @import './svgicon.scss';
 
+/* ========================================================================
+ * 3. 设计令牌（Design Tokens）
+ * 定义全局 CSS 变量，支持主题切换
+ * ======================================================================== */
+@import './variables/tokens.scss';
+
+/* ========================================================================
+ * 4. 自定义主题类
+ * 通过 .theme-moldingx 激活，避免全局污染
+ * ======================================================================== */
+@import './theme/custom.scss';
+
+/* ========================================================================
+ * 5. 工具类（Utilities）
+ * 提供快速样式设置
+ * ======================================================================== */
+@import './utilities/spacing.scss';
+@import './utilities/typography.scss';
+
+/* ========================================================================
+ * 6. 全局基础样式
+ * ======================================================================== */
+
 body {
   -moz-osx-font-smoothing: grayscale;
   -webkit-font-smoothing: antialiased;
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Helvetica, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif;
+  font-family: var(--font-family-base);
 }
 
 *,
@@ -32,6 +74,7 @@ div:focus {
   outline: none;
 }
 
+// 保留原有的 clearfix（兼容旧代码）
 .clearfix {
   &:after {
     content: "";
@@ -40,133 +83,384 @@ div:focus {
   }
 }
 
-.app-container {
-  padding: 20px;
+/* ========================================================================
+ * 7. 业务样式（Business Styles）
+ * 这些是项目特定的样式，保持原有实现
+ * ======================================================================== */
+
+
+/* 测试问题点显示区域 */
+.detected-issues-area {
+  color: red;
 }
 
-.toolbar {
-  background: #f2f2f2;
-  padding: 10px;
-  margin: 10px 0px;
-  overflow-y: hidden;
-  .el-form--inline {
-    .el-form-item {
-      margin-bottom: 10px;
+// ========================================================================
+// 8. 布局工具类（Layout Utilities）
+// ========================================================================
+.el-form--inline .el-form-item.full-width {
+  display: block !important;
+  width: 100% !important;
+  margin-right: 0 !important;
+
+  // 内容区域占满剩余空间（减去 label 宽度）
+  .el-form-item__content {
+    width: calc(100% - var(--label-width, 10rem)) !important;
+  }
+
+  // 特别处理 textarea、输入框等宽度
+  .el-textarea,
+  .el-input,
+  .el-select {
+    width: calc(100% - 1rem) !important;
+  }
+}
+
+// ========================================================================
+// 7. 业务样式（Business Styles）
+// 这些是项目特定的样式，保持原有实现
+// ========================================================================
+
+/**
+ * 现代化搜索区域样式
+ * 采用轻量级设计，避免 el-card 的厚重感
+ * 
+ * 使用方式：
+ *   <div class="search-container">
+ *     <el-form class="search-form" :inline="true">
+ *       <!-- 表单项 -->
+ *     </el-form>
+ *   </div>
+ */
+.search-container {
+  margin-top: var(--spacing-2);
+  margin-bottom: var(--spacing-2);
+  padding: var(--spacing-4) var(--spacing-5);
+  background: linear-gradient(to bottom, #fafbfc, #ffffff);
+  border: 1px solid var(--color-border-extra-light);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+  
+  // 悬停时轻微提升，增强交互反馈
+  &:hover {
+    box-shadow: 0 2px 8px rgba(37, 67, 115, 0.08);
+  }
+  
+  // 搜索表单布局
+  .search-form {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;  // 表单项从左开始排列
+
+    // Inline 表单优化
+    &.el-form--inline {
+      .el-form-item {
+        margin-bottom: 8px;    // 垂直间距：更紧凑
+        
+        &:last-child {
+          margin-right: 0;     // 最后一项无右边距
+        }
+      }
+    }
+
+    // 插槽项包装层：与同级 el-form-item 保持一致的间距
+    .slot-item-wrapper {
+      margin-right: var(--spacing-6);  // 与 inline form-item 一致的列间距
+      margin-bottom: 8px;              // 与 inline form-item 一致的行间距
+
+      > .el-form-item {
+        margin-bottom: 0;  // 避免 wrapper 与内部 form-item 双重底部间距
+      }
+    }
+  }
+  
+  // 操作按钮区域
+  .search-actions {
+    margin-left: auto;
+    display: flex;
+    gap: var(--spacing-3);
+    align-items: center;
+    padding-left: var(--spacing-4);
+    border-left: 1px solid var(--color-border-extra-light);
+    
+    .el-button {
+      min-width: 5.5rem;
+      font-weight: var(--font-weight-medium);
+    }
+    
+    // 展开/收起按钮样式
+    .el-button--text {
+      color: var(--theme-primary);
+      font-weight: var(--font-weight-semibold);
+      padding: 0 var(--spacing-3);
+      min-width: auto;
+      
+      &:hover {
+        color: var(--theme-primary-light);
+        background-color: rgba(37, 67, 115, 0.08);
+      }
+      
+      i {
+        margin-left: var(--spacing-1);
+      }
     }
   }
 }
 
-.search {
-  background: #f7f6f6;
-  padding: 10px;
-  margin: 10px 0px;
-  overflow-y: hidden;
-  .el-form--inline {
-    .el-form-item {
-      margin-bottom: 10px;
+/* 状态标签 —— 用于表格内带图标的状态展示
+ * 使用方式：
+ *   <span class="status-tag status-success">
+ *     <i class="el-icon-success"></i> 已导出
+ *   </span>
+ *   <span class="status-tag status-warning">
+ *     <i class="el-icon-warning"></i> 未导出
+ *   </span>
+ */
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  font-size: var(--font-size-base);
+
+  &.status-success  { color: var(--color-success); }
+  &.status-warning  { color: var(--color-warning); }
+  &.status-danger   { color: var(--color-danger); }
+  &.status-info     { color: var(--color-info); }
+}
+
+// 响应式优化
+@media (max-width: 768px) {
+  .search-container {
+    padding: var(--spacing-3);
+    
+    .search-form {
+      flex-direction: column;
+      gap: var(--spacing-3);
+      align-items: stretch;
+      
+      .search-actions {
+        margin-left: 0;
+        padding-left: 0;
+        border-left: none;
+        border-top: 1px solid var(--color-border-extra-light);
+        padding-top: var(--spacing-3);
+        width: 100%;
+        justify-content: flex-end;
+      }
     }
   }
 }
 
-// /* table 标题头 cell 内间距 */ 
-// .el-table__header th > .cell {
-//   padding: 1px 0px;
-// }
+/* 测试界面中的 card 标题 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
 
-// /* table 表数据 cell 内间距 */
-// .el-table__body-wrapper td > .cell {
-//   padding: 1px 0px;
-// }
-
-.moldtestComponents {
-  overflow: auto;
-  height: inherit;
-}
-
-/* 表格鼠标悬浮时的样式（高亮） */
-.el-table--enable-row-hover .el-table__body tr:hover {
-  background: rgb(184, 224, 250);
-  border: 1px solid #313463;
-}
-/*表格鼠标悬停的样式（背景颜色）*/
-.el-table tbody tr:hover > td {
-  background-color: #87CEFA !important;
-}
-
-/*单位显示*/
-.el-form-item .el-input span {
-  color: black;
-}
-
-.el-table__body {
-  width: 100%;
-  overflow: auto;
-}
-
-//隐藏input上下箭头
-input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{
-  -webkit-appearance: none !important;
-  -moz-appearance: none !important;
-  -o-appearance: none !important;
-  -ms-appearance: none !important;
-  appearance: none !important;
-  margin: 0;
-}
-input[type="number"]{
-  -webkit-appearance:textfield;
-  -moz-appearance:textfield;
-  -o-appearance:textfield;
-  -ms-appearance:textfield;
-  appearance:textfield;
-}
-
-//el-card样式
-.clearfix{
-  color: rgb(32, 59, 107);
-  font-size: 18px;
-  font-weight: bold;
-  height: 8px;
-}
-
-// 测试图表缩放
-.collapseItemTitle {
-  .el-collapse-item__header {
-    font-size: 18px;
-    font-weight: 700
+  .card-title {
+    color: var(--theme-color);
+    font-weight: bold; /* 加粗，更醒目 */
+    font-size: var(--card-title-font-size);  /* 可选：稍大一点 */
+    display: inline-flex;
+    align-items: center;
+    gap: 8px; /* 图标和文字间距 */
   }
-}
 
-//下一页按钮，悬浮
-.nextButton {
-  position: fixed;
-  right: 20px;
-  z-index: 999;
-  // left: auto;
-  bottom: 4px;
-  // _position:absolute;
-  // z-index: 1000;
-  font-size: 11px;
-  line-height: 32px;
-  height: 40px;
-  // padding: 0px 15px 0px 15px;
-  // width:666px;
-  margin: 0px;
   .el-button {
     width: 8rem;
   }
 }
 
-// 下拉框宽度
-.el-autocomplete-suggestion {
-  min-width: 10rem;
-  width: auto!important;
+/* 列表工具栏样式 */
+.row-toolbutton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
-// divider 分割线
-// .el-divider {
-//   margin: 30px 0 30px 0!important;
-//   span {
-//     color: blue!important;
-//     font-size: 15px!important;
-//   }
-// }
+/* src/styles/global.scss 或 main.css */
+.bottom-center-actions {
+  position: fixed;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+
+  /* 视觉增强 */
+  // background: #ffffff;
+  // box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  // border-radius: 6px;
+  // padding: 6px 8px;
+}
+
+/* 紧凑按钮：去除 Element UI 默认 margin */
+.bottom-center-actions .el-button-group .el-button {
+  margin: 0 !important;
+  width: 8rem;
+}
+
+/**
+ * 紧凑型 Radio Group —— 适用于表格、表单等空间受限场景
+ * 使用方式：<el-radio-group class="compact-radio-group">
+ */
+.compact-radio-group .el-radio {
+  margin-right: 8px !important; /* 默认 30px → 缩小 */
+}
+
+.compact-radio-group .el-radio__input {
+  width: 14px;
+  height: 14px;
+}
+
+.compact-radio-group .el-radio__inner {
+  width: 14px;
+  height: 14px;
+}
+
+.compact-radio-group .el-radio__label {
+  padding-left: 6px;     /* 默认 10px */
+  font-size: 13px;       /* 可选：稍小字体 */
+  color: #606266;
+}
+
+/**
+ * 悬浮操作栏 —— 固定在视口底部
+ * 使用方式：<div class="floating-actions fixed right">...</div>
+ * 组合方式：
+ *   - 位置：fixed + [left | center | right]
+ *   - 背景：[solid] - 白色背景 + 阴影
+ *   - 按钮：[auto-width] - 按钮自适应宽度
+ */
+
+.floating-actions {
+  position: fixed;
+  bottom: 0;
+  z-index: 1000;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+
+  // 位置
+  &.left {
+    left: 0;
+  }
+  &.center {
+    left: 0;
+    right: 0;
+    justify-content: center;
+  }
+  &.right {
+    right: 0;
+  }
+
+  // 白色背景 + 阴影
+  &.solid {
+    background: white;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  // 按钮样式
+  .el-button {
+    width: 8rem;  // 默认固定宽度，操作按钮更显眼
+    margin-left: 8px;
+    &:first-child { margin-left: 0; }
+  }
+
+  // 按钮自适应宽度
+  &.auto-width .el-button {
+    width: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .floating-actions {
+    flex-direction: column;
+    gap: 8px;
+
+    .el-button {
+      margin-left: 0;
+      width: 100%;
+    }
+  }
+}
+
+/* 定义文字类型按钮 */
+.table-action {
+  padding: 0;
+  margin: 0 4px;
+  min-height: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 13px;
+  cursor: pointer;
+  color: #303133; /* 假设 --el-text-color-regular 对应的颜色 */
+  text-decoration: underline;
+  line-height: 1.5;
+
+  &:hover:not(:disabled) {
+    background: transparent;
+    color: #409EFF; /* 假设 --el-color-primary 对应的颜色 */
+  }
+
+  &:disabled {
+    color: #C0C4CC !important; /* 假设 --el-text-color-placeholder 对应的颜色 */
+    text-decoration: none;
+    cursor: not-allowed;
+  }
+
+  &--view {
+    color: #909399; /* 假设 --el-color-info 对应的颜色 */
+    &:hover:not(:disabled) {
+      color: #82848A; /* 比 --el-color-info 更深的色号 */
+    }
+  }
+
+  &--edit {
+    color: #409EFF; /* 假设 --el-color-primary 对应的颜色 */
+    &:hover:not(:disabled) {
+      color: #66b1ff; /* 比 --el-color-primary 更深的色号 */
+    }
+  }
+
+  &--delete {
+    color: #F56C6C; /* 假设 --el-color-danger 对应的颜色 */
+    text-decoration: none; // 删除通常不加下划线
+    &:hover:not(:disabled) {
+      color: #f78989; /* 比 --el-color-danger 更深的色号 */
+    }
+  }
+}
+
+/* 自定义 drawer header */
+.custom-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 24px;
+  // padding: 0 24px;
+  box-sizing: border-box;
+
+  .drawer-title {
+    font-size: 24px;
+    font-weight: 600;
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* 子模块标题 - 轻量、紧凑 */
+.sub-section-title {
+  display: flex;
+  justify-content: space-between;
+  font-size: 17px;
+  font-weight: 600;
+  margin: 16px 0 8px 0px; /* 上下留白，比 divider 更克制 */
+  color: var(--theme-color);
+  padding-bottom: 4px;
+  border-bottom: 1px solid #ebeef5; /* 可选：极细底线，非必须 */
+}

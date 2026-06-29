@@ -1,11 +1,11 @@
 <template>
-  <div id="app">
+  <div id="app" class="theme-moldingx">
     <router-view />
   </div>
 </template>
 
 <script lang="ts">
-import { Vue, Component } from 'vue-property-decorator';
+import { Vue, Component } from "vue-property-decorator"
 
 @Component
 export default class App extends Vue {

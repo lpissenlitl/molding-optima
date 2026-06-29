@@ -9,10 +9,11 @@
         :show-timeout="200"
         :default-active="$route.path"
         :collapse="isCollapse"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
+        background-color="var(--menu-bgcolor)"
+        text-color="var(--menu-text-color)"
+        active-text-color="var(--menu-active-text-color)"
         mode="vertical"
+        :unique-opened="true"
       >
         <sidebar-item 
           v-for="(route, index) in routes" 
@@ -27,11 +28,11 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue, Prop } from 'vue-property-decorator';
-import { AppModule } from '@/store/modules/app';
-import { SettingsModule } from '@/store/modules/settings';
-import SidebarItem from '@/views/layout/components/sidebar/sidebarItem.vue';
-import SidebarLogo from '@/views/layout/components/sidebar/sidebarLogo.vue';
+import { Component, Vue, Prop } from "vue-property-decorator"
+import { AppModule } from "@/store/modules/app"
+import { SettingsModule } from "@/store/modules/settings"
+import SidebarItem from "@/views/layout/components/sidebar/sidebarItem.vue"
+import SidebarLogo from "@/views/layout/components/sidebar/sidebarLogo.vue"
 
 @Component({
   components: {
@@ -40,22 +41,22 @@ import SidebarLogo from '@/views/layout/components/sidebar/sidebarLogo.vue';
   },
 })
 export default class SideBar extends Vue {
-  @Prop({ default: false }) private collapse!: boolean;
+  @Prop({ default: false }) private collapse!: boolean
 
   get sidebar() {
-    return AppModule.sidebar;
+    return AppModule.sidebar
   }
 
   get routes() {
-    return (this.$router as any).options.routes;
+    return (this.$router as any).options.routes
   }
 
   get showLogo() {
-    return true
+    return SettingsModule.showSidebarLogo
   }
 
   get isCollapse() {
-    return !this.sidebar.opened;
+    return !this.sidebar.opened
   }
 }
 </script>

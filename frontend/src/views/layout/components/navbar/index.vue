@@ -11,28 +11,14 @@
       class="breadcrumb-container"
     />
     <div class="right-menu">
-      <!-- <template v-if="device!=='mobile'"> -->
-      <!-- <header-search class="right-menu-item" />
-        <error-log class="errLog-container right-menu-item hover-effect" />
-        <screenfull class="right-menu-item hover-effect" />
-        <el-tooltip
-          :content="$t('navbar.size')"
-          effect="dark"
-          placement="bottom"
-        >
-          <size-select class="right-menu-item hover-effect" />
-        </el-tooltip>
-        <lang-select class="right-menu-item hover-effect" /> -->
-      <!-- <help-doc class="right-menu-item hover-effect" /> -->
-      <!-- </template> -->
       <el-dropdown
         class="avatar-container right-menu-item hover-effect"
         trigger="click"
       >
         <div class="avatar-wrapper">
-          {{ group }}
+          {{ organization_name }}
           <el-button type="text">
-            {{ name }}
+            {{ username }}
             <i class="el-dropdown-icon-user">
               <svg-icon 
                 class="user"
@@ -41,19 +27,21 @@
           </el-button>
         </div>
         <el-dropdown-menu slot="dropdown">
-          <!-- <router-link class="inlineBlock" to="/">
-            <el-dropdown-item>
-              系统首页
-            </el-dropdown-item>
-          </router-link>
           <el-dropdown-item>
-            个人中心
-          </el-dropdown-item> -->
-          <el-dropdown-item>
-            <span style="display:block;" @click="showUserSet=true">修改密码</span>
+            <span 
+              style="display:block;" 
+              @click="showUserSet=true"
+            >
+              修改密码
+            </span>
           </el-dropdown-item>
           <el-dropdown-item divided>
-            <span style="display:block;" @click="logout">退出登录</span>
+            <span 
+              style="display:block;" 
+              @click="logout"
+            >
+              退出登录
+            </span>
           </el-dropdown-item>
         </el-dropdown-menu>
       </el-dropdown>
@@ -63,51 +51,49 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue } from 'vue-property-decorator';
-import { AppModule } from '@/store/modules/app';
-import { UserModule } from '@/store/modules/user';
-import Hamburger from '@/components/hamburger/index.vue';
-import Breadcrumb from '@/components/breadcrumb/index.vue';
-import HelpDoc from '@/components/helpDoc/index.vue';
-import UserSet from '@/components/userSet/index.vue';
+import { Component, Vue } from "vue-property-decorator"
+import { AppModule } from "@/store/modules/app"
+import { UserModule } from "@/store/modules/user"
+import Hamburger from "@/components/hamburger/index.vue"
+import Breadcrumb from "@/components/breadcrumb/index.vue"
+import UserSet from "@/components/userSet/index.vue"
 
 @Component({
   components: {
     Hamburger,
     Breadcrumb,
-    HelpDoc,
     UserSet,
   },
 })
 
 export default class Navbar extends Vue {
-  private showUserSet: boolean = false;
+  private showUserSet: boolean = false
 
   get sidebar() {
-    return AppModule.sidebar;
+    return AppModule.sidebar
   }
 
   get device() {
     return AppModule.device.toString()
   }
 
-  get name() {
-    return UserModule.name;
+  get username() {
+    return UserModule.username
   }
 
-  get group() {
-    return UserModule.group;
+  get organization_name() {
+    return UserModule.organization_name
   }
 
   private toggleSideBar() {
-    AppModule.ToggleSideBar(false);
+    AppModule.ToggleSideBar(false)
   }
 
   private logout() {
     UserModule.LogOut().then(() => {
-      this.$router.push({path: '/login'});
+      this.$router.push({ path: "/login" })
       // location.reload();  // 为了重新实例化vue-router对象 避免bug
-    });
+    })
   }
 }
 </script>
@@ -119,7 +105,7 @@ export default class Navbar extends Vue {
   position: relative;
   background: #fff;
   right: 0;
-  box-shadow: 0 1px 4px rgba(0,21,41,.08);
+  box-shadow: 0 1px 4px rgb(37,67,115);
 
   .hamburger-container {
     line-height: 46px;
@@ -128,7 +114,7 @@ export default class Navbar extends Vue {
     padding: 0 15px;
     cursor: pointer;
     transition: background .3s;
-    -webkit-tap-highlight-color:transparent;
+    -webkit-tap-highlight-color: transparent;
 
     &:hover {
       background: rgba(0, 0, 0, .025)
@@ -158,7 +144,7 @@ export default class Navbar extends Vue {
       display: inline-block;
       padding: 5px 8px;
       height: 100%;
-      font-size: 16px;
+      font-size: var(--basic-font-size);
       color: #5a5e66;
       vertical-align: top;
 

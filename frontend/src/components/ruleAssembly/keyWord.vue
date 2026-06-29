@@ -37,7 +37,7 @@
         <el-form-item label="调整最大值" prop="action_range_max">
           <el-input v-model="rule_keywords.action_range_max" style="width: 50%" type="number" :disabled="rule_keywords.key_type=='缺陷'"></el-input>
         </el-form-item><br />
-        <el-form-item label="调整幅度限定值" prop="action_max_val">
+        <el-form-item label="调整幅度" prop="action_max_val">
           <el-input v-model="rule_keywords.action_max_val" class="iput" type="number" :disabled="rule_keywords.key_type=='缺陷'"></el-input>
         </el-form-item>
       </el-form>
@@ -97,7 +97,8 @@ export default ({
       },
       //保存按钮
       determine() {
-        if(!this.ruleKeyId){
+        console.log(this.ruleKeyId)
+        if(!this.ruleKeyId) {
           ruleKeywordMethod.add(this.rule_keywords)
           .then(res => {
             if (res.status === 0) {
@@ -121,7 +122,7 @@ export default ({
           }).finally(()=> {
             this.$emit('closeDialog',false)
           })
-        } else {
+        }else{
           ruleKeywordMethod.edit(this.rule_keywords,this.ruleKeyId)
           .then(res => {
             if (res.status === 0) {
@@ -141,10 +142,11 @@ export default ({
           this.rule_keywords.action_range_max = -1
           this.rule_keywords.action_max_val = -1
         }
+        console.log(this.rule_keywords.key_type)
       }
     },
     watch:{
-      "formData":function(){
+      "formData":function() {
         this.rule_keywords =this.formData
       }
     }

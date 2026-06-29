@@ -1,22 +1,21 @@
 <template>
   <section :class="specialStype?'app-main-special':'app-main'">
     <transition name="fade-transform" mode="out-in">
-      <!-- or name="fade" -->
-      <!-- <router-view :key="key"></router-view> -->
       <router-view />
     </transition>
   </section>
 </template>
 
 <script lang="ts">
-import { Vue, Component , Watch} from 'vue-property-decorator';
-import { Route } from 'vue-router';
+import { Vue, Component , Watch } from "vue-property-decorator"
+import { Route } from "vue-router"
+
 @Component
 export default class AppMain extends Vue {
 
   private specialStype: boolean = false
 
-  @Watch('$route')
+  @Watch("$route")
   private onRouteChange(route: Route) {
     this.changeStyle(route)
   }
@@ -26,7 +25,7 @@ export default class AppMain extends Vue {
   }
 
   private changeStyle(route: Route) {
-    if (route.path.startsWith('/testing/view')) {
+    if (route.path.startsWith("/mold-trial/workflow")) {
       this.specialStype = true
     } else {
       this.specialStype = false

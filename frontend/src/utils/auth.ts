@@ -1,18 +1,18 @@
-import Cookies from 'js-cookie';
+import Cookies from "js-cookie"
+import settings from "@/settings"
 
-const TokenKey = 'hsmold_admin_token';
-const IDKey = 'hsmold_admin_userid';
-export const isNative = process.env.NODE_ENV === 'production' && process.env.IS_ELECTRON;
+export const isNative = process.env.NODE_ENV === "production" && process.env.IS_ELECTRON
+export const TokenKey = settings.user + "_" + settings.version + "_token" 
+export const IDKey = settings.user + "_" + settings.version + "_userid"
 
-let myMap = new Map();
-
+const myMap = new Map()
 
 function setCookie(name: string, value:any) {
-    if (isNative) {
-      myMap.set(name, value)
-    } else {
-      Cookies.set(name, value)
-    }
+  if (isNative) {
+    myMap.set(name, value)
+  } else {
+    Cookies.set(name, value)
+  }
 }
 
 function removeCookie(name: string) {
@@ -31,14 +31,14 @@ function getCookie(name: string) {
   }
 }
 
-export const getToken = () => getCookie(TokenKey);
+export const getToken = () => getCookie(TokenKey)
 
-export const setToken = (token: string) => setCookie(TokenKey, token);
+export const setToken = (token: string) => setCookie(TokenKey, token)
 
-export const removeToken = () => removeCookie(TokenKey);
+export const removeToken = () => removeCookie(TokenKey)
 
-export const getUserId = () => getCookie(IDKey);
+export const getUserId = () => getCookie(IDKey)
 
-export const setUserId = (id: any) => setCookie(IDKey, id);
+export const setUserId = (id: any) => setCookie(IDKey, id)
 
-export const removeUserId = () => removeCookie(IDKey);
+export const removeUserId = () => removeCookie(IDKey)

@@ -1,39 +1,54 @@
 <template>
-  <div 
-    :class="classObj" 
-    class="app-wrapper"
-  >
-    <div 
+  <div :class="classObj" class="app-wrapper">
+    <div
       v-if="classObj.mobile && sidebar.opened" 
       class="drawer-bg" 
       @click="handleClickOutside"
-    />
-    <sidebar class="sidebar-container" :collapse="classObj.hideSidebar" />
-    <div 
-      class="main-container"
-    >
-      <div :class="{'fixed-header': fixedHeader}">
+    ></div>
+    <sidebar 
+      class="sidebar-container" 
+      :collapse="classObj.hideSidebar"
+    ></sidebar>
+    <div class="main-container">
+      <div :class="{ 'fixed-header': fixedHeader }">
         <navbar />
       </div>
-      <div v-if="fixedHeader" style="height:40px" />
+      <div v-if="fixedHeader" style="height:40px"></div>
       <app-main />
+      <right-panel v-if="showSettings">
+        <settings />
+      </right-panel>
+      <!-- <div class="copyright-notice">
+        <a 
+          target="_blank" 
+          style="color: #5c6b77" 
+          href="https://beian.miit.gov.cn/"
+        >
+          鄂ICP备2021009988号-1
+        </a>&nbsp;
+        <span style="color: #5c6b77">@2020-2030 武汉模鼎科技有限公司 版权所有 保留一切权利</span>
+      </div> -->
     </div>
   </div>
 </template>
 
 <script lang="ts">
-import { Component, Vue } from 'vue-property-decorator';
-import { mixins } from 'vue-class-component';
-import { DeviceType, AppModule } from '@/store/modules/app';
-import { AppMain, Navbar, Sidebar } from './components';
-import { SettingsModule } from '@/store/modules/settings';
-import ResizeMixin from './mixin/ResizeHandler';
+import { Component, Vue } from "vue-property-decorator"
+import { mixins } from "vue-class-component"
+import ResizeMixin from "./mixin/ResizeHandler"
+import { DeviceType, AppModule } from "@/store/modules/app"
+import { SettingsModule } from "@/store/modules/settings"
+import { Sidebar, Navbar, AppMain } from "./components"
+import RightPanel from "@/components/rightPanel/index.vue"
+import Settings from "./components/settings/index.vue"
 
 @Component({
   components: {
-    AppMain,
-    Navbar,
     Sidebar,
+    Navbar,
+    AppMain,
+    RightPanel,
+    Settings
   },
 })
 export default class Layout extends mixins(ResizeMixin) {
@@ -43,15 +58,19 @@ export default class Layout extends mixins(ResizeMixin) {
       openSidebar: this.sidebar.opened,
       withoutAnimation: this.sidebar.withoutAnimation,
       mobile: this.device === DeviceType.Mobile,
-    };
+    }
   }
 
   get fixedHeader() {
     return SettingsModule.fixedHeader
   }
 
+  get showSettings() {
+    return SettingsModule.showSettings
+  }
+
   private handleClickOutside() {
-    AppModule.CloseSideBar(false);
+    AppModule.CloseSideBar(false)
   }
 }
 </script>
@@ -77,14 +96,6 @@ export default class Layout extends mixins(ResizeMixin) {
     z-index: 999;
   }
 
-  .main-container {
-    min-height: 100%;
-    transition: margin-left .28s;
-    margin-left: $sideBarWidth;
-    position: relative;
-  
-  }
-
   .sidebar-container {
     transition: width 0.28s;
     width: $sideBarWidth !important;
@@ -98,6 +109,13 @@ export default class Layout extends mixins(ResizeMixin) {
     overflow: hidden;
   }
 
+  .main-container {
+    min-height: 100%;
+    transition: margin-left .28s;
+    margin-left: $sideBarWidth;
+    position: relative;
+  }
+
   .fixed-header {
     position: fixed;
     top: 0;
@@ -107,18 +125,19 @@ export default class Layout extends mixins(ResizeMixin) {
     transition: width 0.28s;
   }
 
+  /* 隐藏sidebar */
   .hideSidebar {
-    .main-container {
-      margin-left: 36px;
+    
+    .sidebar-container {
+      width: $sideBarHideWidth !important;
     }
 
-    .sidebar-container {
-      width: 36px !important;
+    .main-container {
+      margin-left: $sideBarHideWidth;
     }
 
     .fixed-header {
-      width: calc(100% - 20px);
-      // width: 100%;
+      width: calc(100% - #{$sideBarHideWidth});
     }
   }
 
@@ -126,6 +145,10 @@ export default class Layout extends mixins(ResizeMixin) {
   .mobile {
     .main-container {
       margin-left: 0px;
+    }
+
+    .fixed-header {
+      width: 100%;
     }
 
     .sidebar-container {
@@ -152,6 +175,7 @@ export default class Layout extends mixins(ResizeMixin) {
       transition: none;
     }
   }
+
   .copyright-notice {
     text-align: center; 
     position: fixed; 

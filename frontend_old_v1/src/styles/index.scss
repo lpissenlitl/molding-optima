@@ -1,0 +1,172 @@
+/* icon font path, required */
+$--font-path: '~element-ui/lib/theme-chalk/fonts';
+
+@import "~element-ui/packages/theme-chalk/src/index";
+
+@import './variables.scss';
+@import './mixin.scss';
+@import './transition.scss';
+@import './svgicon.scss';
+
+body {
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, Helvetica, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif;
+}
+
+*,
+*:before,
+*:after {
+  box-sizing: border-box;
+}
+
+a,
+a:focus,
+a:hover {
+  color: inherit;
+  outline: none;
+  text-decoration: none;
+}
+
+div:focus {
+  outline: none;
+}
+
+.clearfix {
+  &:after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+}
+
+.app-container {
+  padding: 20px;
+}
+
+.toolbar {
+  background: #f2f2f2;
+  padding: 10px;
+  margin: 10px 0px;
+  overflow-y: hidden;
+  .el-form--inline {
+    .el-form-item {
+      margin-bottom: 10px;
+    }
+  }
+}
+
+.search {
+  background: #f7f6f6;
+  padding: 10px;
+  margin: 10px 0px;
+  overflow-y: hidden;
+  .el-form--inline {
+    .el-form-item {
+      margin-bottom: 10px;
+    }
+  }
+}
+
+// /* table 标题头 cell 内间距 */ 
+// .el-table__header th > .cell {
+//   padding: 1px 0px;
+// }
+
+// /* table 表数据 cell 内间距 */
+// .el-table__body-wrapper td > .cell {
+//   padding: 1px 0px;
+// }
+
+.moldtestComponents {
+  overflow: auto;
+  height: inherit;
+}
+
+/* 表格鼠标悬浮时的样式（高亮） */
+.el-table--enable-row-hover .el-table__body tr:hover {
+  background: rgb(184, 224, 250);
+  border: 1px solid #313463;
+}
+/*表格鼠标悬停的样式（背景颜色）*/
+.el-table tbody tr:hover > td {
+  background-color: #87CEFA !important;
+}
+
+/*单位显示*/
+.el-form-item .el-input span {
+  color: black;
+}
+
+.el-table__body {
+  width: 100%;
+  overflow: auto;
+}
+
+//隐藏input上下箭头
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  -o-appearance: none !important;
+  -ms-appearance: none !important;
+  appearance: none !important;
+  margin: 0;
+}
+input[type="number"]{
+  -webkit-appearance:textfield;
+  -moz-appearance:textfield;
+  -o-appearance:textfield;
+  -ms-appearance:textfield;
+  appearance:textfield;
+}
+
+//el-card样式
+.clearfix{
+  color: rgb(32, 59, 107);
+  font-size: 18px;
+  font-weight: bold;
+  height: 8px;
+}
+
+// 测试图表缩放
+.collapseItemTitle {
+  .el-collapse-item__header {
+    font-size: 18px;
+    font-weight: 700
+  }
+}
+
+//下一页按钮，悬浮
+.nextButton {
+  position: fixed;
+  right: 20px;
+  z-index: 999;
+  // left: auto;
+  bottom: 4px;
+  // _position:absolute;
+  // z-index: 1000;
+  font-size: 11px;
+  line-height: 32px;
+  height: 40px;
+  // padding: 0px 15px 0px 15px;
+  // width:666px;
+  margin: 0px;
+  .el-button {
+    width: 8rem;
+  }
+}
+
+// 下拉框宽度
+.el-autocomplete-suggestion {
+  min-width: 10rem;
+  width: auto!important;
+}
+
+// divider 分割线
+// .el-divider {
+//   margin: 30px 0 30px 0!important;
+//   span {
+//     color: blue!important;
+//     font-size: 15px!important;
+//   }
+// }

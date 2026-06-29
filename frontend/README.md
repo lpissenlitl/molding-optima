@@ -98,6 +98,22 @@ https://github.com/ElemeFE/element/issues/15775
 * 多制作组件，不要一个文件写太多内容
 
 
+## 📚 开发规范
+
+**重要**：所有开发人员必须遵循项目代码规范，详见 [CODING_STANDARDS.md](./CODING_STANDARDS.md)
+
+主要内容包括：
+- ✅ 命名规范（Data用下划线，Methods用驼峰）
+- ✅ 组件开发规范
+- ✅ Vue 组件结构规范
+- ✅ 样式规范（SCSS + CSS变量）
+- ✅ API 调用规范
+- ✅ 注释规范
+- ✅ 文件组织规范
+- ✅ 最佳实践
+
+---
+
 ## 版本管理
 历史版本：
 

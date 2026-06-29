@@ -1,8 +1,8 @@
 {
-  "name": "vue-typescript-admin-template",
+  "name": "molding-optima",
   "version": "0.1.0",
   "private": true,
-  "description": "代码地址\r * http://47.56.108.192/hsmoldingfront/hsmoldingweb",
+  "description": "",
   "author": "",
   "scripts": {
     "serve": "vue-cli-service serve",
@@ -20,6 +20,7 @@
   "main": "background.js",
   "dependencies": {
     "@babel/core": "^7.12.3",
+    "@iconify/vue2": "^2.1.0",
     "@logicflow/core": "^1.2.12",
     "@logicflow/extension": "^1.2.13",
     "@types/js-cookie": "^2.2.1",
@@ -32,6 +33,7 @@
     "browserslist": "^4.19.1",
     "core-js": "3.6.5",
     "dateformat": "^3.0.3",
+    "dayjs": "^1.11.19",
     "echarts": "^4.2.1",
     "echarts-gl": "^1.1.1",
     "el-dialog": "^1.0.0",
@@ -81,9 +83,9 @@
     "babel-core": "7.0.0-bridge.0",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.27.0",
-    "fibers": "^5.0.0",
+    "fork-ts-checker-webpack-plugin": "^6.5.2",
     "jest": "^26.1.0",
-    "sass": "^1.17.2",
+    "sass": "1.32.13",
     "sass-loader": "^8.0.2",
     "ts-jest": "^26.1.1",
     "typescript": "^4.2.4",
@@ -92,12 +94,12 @@
     "vue-template-compiler": "^2.6.8"
   },
   "bugs": {
-    "url": "https://github.com/hsmolding/HsMoldingWeb/issues"
+    "url": ""
   },
-  "homepage": "https://github.com/hsmolding/HsMoldingWeb#readme",
+  "homepage": "",
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hsmolding/HsMoldingWeb.git"
+    "url": ""
   }
 }

@@ -33,8 +33,9 @@
     "src/**/*.tsx",
     "src/**/*.vue",
     "tests/**/*.ts",
-    "tests/**/*.tsx"
-, "src/directive/el-drag-dialog.js"  ],
+    "tests/**/*.tsx",
+    "src/directives/el-drag-dialog.js"
+  ],
   "exclude": [
     "node_modules"
   ]

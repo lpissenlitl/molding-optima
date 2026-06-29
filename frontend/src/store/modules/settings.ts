@@ -1,7 +1,7 @@
-import { VuexModule, Module, Mutation, Action, getModule } from 'vuex-module-decorators'
-import store from '@/store'
-import elementVariables from '@/styles/element-variables.scss'
-import defaultSettings from '@/settings'
+import { VuexModule, Module, Mutation, Action, getModule } from "vuex-module-decorators"
+import store from "@/store"
+import elementVariables from "@/styles/element-variables.scss"
+import defaultSettings from "@/settings"
 
 export interface ISettingsState {
   theme: string
@@ -12,7 +12,7 @@ export interface ISettingsState {
   sidebarTextTheme: boolean
 }
 
-@Module({ dynamic: true, store, name: 'settings' })
+@Module({ dynamic: true, store, name: "settings" })
 class Settings extends VuexModule implements ISettingsState {
   public theme = elementVariables.theme
   public fixedHeader = defaultSettings.fixedHeader

@@ -1,0 +1,131 @@
+from extensions.views import BaseView, PaginationResponse
+from django.utils.decorators import method_decorator
+from extensions.decorators import validate_parameters
+from identity.schemas import (
+    CompanySchema,
+    CompanyListSchema,
+    OrganizationSchema,
+    OrganizationListSchema,
+    OrganizationBatchUpdateSchema
+)
+from identity.decorators import require_login
+from identity.services import company_service
+from extensions.schemas import BatchDeleteSchema
+
+
+class AdminCompanyDetailView(BaseView):
+    """管理员获取公司详情"""
+    
+    @method_decorator(require_login)
+    def get(self, request, company_id):
+        return company_service.get_company_info(request.user, company_id)
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(CompanySchema))
+    def put(self, request, company_id, cleaned_data):
+        company_service.update_company_info(request.user, company_id, **cleaned_data)
+
+    @method_decorator(require_login)
+    def delete(self, request, company_id):
+        company_service.delete_company(request.user, company_id)
+
+
+class AdminCompanyListView(BaseView):
+    """管理员获取公司列表"""
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(CompanyListSchema))
+    def get(self, request, cleaned_data):
+        total, items = company_service.get_list_of_company(request.user, **cleaned_data)
+        return PaginationResponse(total, items)
+    """管理员创建公司"""
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(CompanySchema))
+    def post(self, request, cleaned_data):
+        company_service.create_company(request.user, **cleaned_data)
+        
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(BatchDeleteSchema))
+    def delete(self, request, cleaned_data):
+        """批量删除公司"""
+        company_service.batch_delete_company(request.user, **cleaned_data)
+
+
+class AdminCompanyEnableView(BaseView):
+    
+    @method_decorator(require_login)
+    def put(self, request, company_id):
+        """管理员启用公司"""
+        company_service.enable_company(request.user, company_id)
+
+
+class AdminCompanyDisableView(BaseView):
+    
+    @method_decorator(require_login)
+    def put(self, request, company_id):
+        """管理员禁用公司"""
+        company_service.disable_company(request.user, company_id)
+
+
+class AdminAssumeCompanyView(BaseView):
+    
+    @method_decorator(require_login)
+    def put(self, request, company_id):
+        """管理员开始接管公司"""
+        company_service.assume_company(request.user, company_id)
+
+
+class AdminReleaseCompanyView(BaseView):
+    
+    @method_decorator(require_login)
+    def put(self, request, company_id):
+        """管理员放弃公司"""
+        company_service.release_company(request.user, company_id)
+
+        
+class AdminOrganizationListView(BaseView):
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(OrganizationListSchema))
+    def get(self, request, cleaned_data):
+        """管理员获取组织树"""
+        total, groups =  company_service.get_list_of_organization(request.user, **cleaned_data)
+        return PaginationResponse(total, groups)
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(OrganizationSchema))
+    def post(self, request, cleaned_data):
+        """管理员创建组织"""
+        return company_service.create_organization(request.user, **cleaned_data)
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(OrganizationBatchUpdateSchema))
+    def put(self, request, cleaned_data):
+        """管理员批量更新组织"""
+        company_service.batch_update_organization_structure(request.user, **cleaned_data)
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(BatchDeleteSchema))
+    def delete(self, request, cleaned_data):
+        """管理员批量删除组织"""
+        company_service.batch_delete_organization(request.user, **cleaned_data)  
+
+
+class AdminOrganizationDetailView(BaseView):
+    
+    @method_decorator(require_login)
+    def get(self, request, organization_id):
+        """管理员获取组织详情"""
+        return company_service.get_organization_info(request.user, organization_id)
+    
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(OrganizationSchema))
+    def put(self, request, organization_id, cleaned_data):
+        """管理员更新组织信息"""
+        company_service.update_organization_info(request.user, organization_id, **cleaned_data)
+    
+    @method_decorator(require_login)
+    def delete(self, request, organization_id):
+        """管理员删除组织信息"""
+        company_service.delete_organization(request.user, organization_id)

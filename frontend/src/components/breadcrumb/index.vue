@@ -10,47 +10,47 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue, Watch } from 'vue-property-decorator';
-import { RouteRecord } from 'vue-router';
-import { compile } from 'path-to-regexp'
+import { Component, Vue, Watch } from "vue-property-decorator"
+import { RouteRecord } from "vue-router"
+import { compile } from "path-to-regexp"
 
 @Component
 export default class Breadcrumb extends Vue {
-  private breadcrumbs: RouteRecord[] = [];
+  private breadcrumbs: RouteRecord[] = []
 
   private created() {
-    this.getBreadcrumb();
+    this.getBreadcrumb()
   }
 
-  @Watch('$route')
+  @Watch("$route")
   private onRouteChange() {
-    this.getBreadcrumb();
+    this.getBreadcrumb()
   }
 
   private getBreadcrumb() {
-    let matched = this.$route.matched.filter((item) => item.name);
-    const first = matched[0];
+    let matched = this.$route.matched.filter((item) => item.name)
+    const first = matched[0]
     // if (first && first.name !== 'dashboard') {
     //   matched = [{ path: '/dashboard', meta: { title: 'Dashboard' }} as RouteRecord].concat(matched);
     // }
     this.breadcrumbs = matched.filter((item) => {
-      return item.meta && item.meta.title && item.meta.breadcrumb !== false;
-    });
+      return item.meta && item.meta.title && item.meta.breadcrumb !== false
+    })
   }
 
   private pathCompile(path: string) {
-    const { params } = this.$route;
+    const { params } = this.$route
     const toPath = compile(path)
-    return toPath(params);
+    return toPath(params)
   }
 
   private handleLink(item: any) {
-    const { redirect, path } = item;
+    const { redirect, path } = item
     if (redirect) {
-      this.$router.push(redirect);
-      return;
+      this.$router.push(redirect)
+      return
     }
-    this.$router.push(this.pathCompile(path));
+    this.$router.push(this.pathCompile(path))
   }
 }
 </script>
@@ -58,13 +58,16 @@ export default class Breadcrumb extends Vue {
 <style lang="scss" scoped>
   .app-breadcrumb.el-breadcrumb {
     display: inline-block;
-    font-size: 14px;
+    font-size: var(--breadcrumb-font-size);
+    font-family: "Source Han Serif SC";
     line-height: 50px;
     margin-left: 10px;
 
     .no-redirect {
-      color: #97a8be;
-      cursor: text;
+      font-weight: bold;
+      color: #303133;
+      // color: #97a8be;
+      // cursor: text;
     }
   }
 </style>

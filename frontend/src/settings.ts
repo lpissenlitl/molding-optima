@@ -1,5 +1,8 @@
 interface ISettings {
-  title: string // Overrides the default title
+  author: string // developer
+  version: string // software current version
+  user: string // current user
+  title: 'molding-optima 智能工艺参数优化系统',
   showSettings: boolean // Controls settings panel display
   showTagsView: boolean // Controls tagsview display
   showSidebarLogo: boolean // Controls siderbar logo display
@@ -12,11 +15,14 @@ interface ISettings {
 
 // You can customize below settings :)
 const settings: ISettings = {
-  title: '智能工艺',
-  showSettings: true,
+  author: 'molding',
+  version: 'v5.0.0',
+  user: 'molding-optima',
+  title: 'molding-optima 智能工艺参数优化系统',
+  showSettings: false,
   showTagsView: true,
   fixedHeader: true,
-  showSidebarLogo: false,
+  showSidebarLogo: true,
   errorLog: ['production'],
   sidebarTextTheme: true,
   devServerPort: 9527,

@@ -1,7 +1,7 @@
-import Cookies from 'js-cookie';
-import { VuexModule, Module, Mutation, Action, getModule } from 'vuex-module-decorators';
-import store from '@/store';
-import {saveLocalStorageObject, getLocalStorageObject, removeLocalStorage} from '@/storage/storage'
+import Cookies from "js-cookie"
+import { VuexModule, Module, Mutation, Action, getModule } from "vuex-module-decorators"
+import store from "@/store"
+import { saveLocalStorageObject, getLocalStorageObject, removeLocalStorage } from "@/storage/storage"
 
 export enum DeviceType {
   Mobile,
@@ -9,47 +9,49 @@ export enum DeviceType {
 }
 
 export interface IAppState {
-  device: DeviceType
+  device: DeviceType,
   sidebar: {
-    opened: boolean
-    withoutAnimation: boolean
-  };
-  language: string
-  pageSizeArray: number[]
+    opened: boolean,
+    withoutAnimation: boolean,
+  },
+  language: string,
+  pageSizeArray: number[],
   customSetting: Object
 }
 
-@Module({ dynamic: true, store, name: 'app' })
+@Module({ dynamic: true, store, name: "app" })
 class App extends VuexModule implements IAppState {
-  public sidebar = {
-    opened: Cookies.get('sidebarStatus') !== 'closed',
-    withoutAnimation: false,
-  };
+
   public device = DeviceType.Desktop
+  public sidebar = {
+    opened: Cookies.get("sidebarStatus") !== "closed",
+    withoutAnimation: false,
+  }
   public language = "cn"
-  public customSetting = getLocalStorageObject('custom_setting') || {};
+  public pageSizeArray = [30,100,200]
+  public customSetting = getLocalStorageObject("custom_setting") || {}
 
-  @Action({ commit: 'TOGGLE_SIDEBAR' })
+  @Action({ commit: "TOGGLE_SIDEBAR" })
   public ToggleSideBar(withoutAnimation: boolean) {
-    return withoutAnimation;
+    return withoutAnimation
   }
 
-  @Action({ commit: 'CLOSE_SIDEBAR' })
+  @Action({ commit: "CLOSE_SIDEBAR" })
   public CloseSideBar(withoutAnimation: boolean) {
-    return withoutAnimation;
+    return withoutAnimation
   }
 
-  @Action({ commit: 'TOGGLE_DEVICE' })
+  @Action({ commit: "TOGGLE_DEVICE" })
   public ToggleDevice(device: DeviceType) {
-    return device;
+    return device
   }
 
-  @Action({ commit: 'SAVE_CUSTOM_SETTING' })
+  @Action({ commit: "SAVE_CUSTOM_SETTING" })
   public SaveCustomSetting(customSetting: any) {
     return customSetting
   }
 
-  @Action({ commit: 'DEL_CUSTOM_SETTING' })
+  @Action({ commit: "DEL_CUSTOM_SETTING" })
   public DelCustomSetting() {
     return 
   }
@@ -57,24 +59,24 @@ class App extends VuexModule implements IAppState {
   @Mutation
   private TOGGLE_SIDEBAR(withoutAnimation: boolean) {
     if (this.sidebar.opened) {
-      Cookies.set('sidebarStatus', 'closed');
+      Cookies.set("sidebarStatus", "closed")
     } else {
-      Cookies.set('sidebarStatus', 'opened');
+      Cookies.set("sidebarStatus", "opened")
     }
-    this.sidebar.opened = !this.sidebar.opened;
-    this.sidebar.withoutAnimation = withoutAnimation;
+    this.sidebar.opened = !this.sidebar.opened
+    this.sidebar.withoutAnimation = withoutAnimation
   }
 
   @Mutation
   private CLOSE_SIDEBAR(withoutAnimation: boolean) {
-    Cookies.set('sidebarStatus', 'closed');
-    this.sidebar.opened = false;
-    this.sidebar.withoutAnimation = withoutAnimation;
+    Cookies.set("sidebarStatus", "closed")
+    this.sidebar.opened = false
+    this.sidebar.withoutAnimation = withoutAnimation
   }
 
   @Mutation
   private TOGGLE_DEVICE(device: DeviceType) {
-    this.device = device;
+    this.device = device
   }
 
   @Mutation
@@ -88,7 +90,6 @@ class App extends VuexModule implements IAppState {
     removeLocalStorage("custom_setting")
   } 
 
-  public pageSizeArray= [30,100,200];
 }
 
-export const AppModule = getModule(App);
+export const AppModule = getModule(App)

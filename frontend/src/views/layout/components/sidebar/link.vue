@@ -8,15 +8,15 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue, Prop } from 'vue-property-decorator';
-import { isExternal } from '@/utils/validate';
+import { Component, Vue, Prop } from "vue-property-decorator"
+import { isExternal } from "@/utils/validate"
 
 @Component
 export default class Link extends Vue {
-  @Prop({ required: true }) private to!: string;
+  @Prop({ required: true }) private to!: string
 
   private isExternalLink(routePath: string) {
-    return isExternal(routePath);
+    return isExternal(routePath)
   }
 }
 </script>

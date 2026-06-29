@@ -1,11 +1,27 @@
 /* Element Variables */
 
+// ========================================================================
+// Element UI 基础配置
+// 注意：这里保持 Element UI 的默认配置或接近默认值
+// 具体的主题色定制应该在 theme/custom.scss 中通过 CSS 实现
+// ========================================================================
+
 // Override Element UI variables
-$--color-primary: #1890ff;
-$--color-success: #13ce66;
-$--color-warning: #ffba00;
-$--color-danger: #ff4949;
-$--color-info: #5d5d5d;
+
+// 默认主题色（Element UI 原生颜色）- 已注释备用
+// $--color-primary: #409EFF;      // Element UI 默认主色
+// $--color-success: #67C23A;      // Element UI 默认成功色
+// $--color-warning: #E6A23C;      // Element UI 默认警告色
+// $--color-danger: #F56C6C;       // Element UI 默认危险色
+// $--color-info: #909399;         // Element UI 默认信息色
+
+// MoldingX 品牌主题色
+$--color-primary: #254373;         // 主品牌色
+$--color-success: #67C23A;         // 成功色（保持默认）
+$--color-warning: #E6A23C;         // 警告色（保持默认）
+$--color-danger: #F56C6C;          // 危险色（保持默认）
+$--color-info: #909399;            // 信息色（保持默认）
+
 $--button-font-weight: 400;
 $--color-text-regular: #1f2d3d;
 $--border-color-light: #dfe4ed;

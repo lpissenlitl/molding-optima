@@ -21,7 +21,7 @@
         width="80"
         align="center"
       >
-        <template slot-scope="scope">
+        <template #default="scope">
           <el-checkbox v-model="tableList[scope.$index].visible"></el-checkbox>
         </template>
       </el-table-column>
@@ -30,7 +30,7 @@
         min-width="380"
         header-align="center"
       >
-        <template slot-scope="scope">
+        <template #default="scope">
           <span>{{ tableList[scope.$index].label }}</span>
           <span></span>
         </template>
@@ -41,7 +41,7 @@
         align="center"
         width="120"
       >
-        <template slot-scope="scope">
+        <template #default="scope">
           <el-input
             size="mini"
             v-model="tableList[scope.$index].width"
@@ -97,7 +97,9 @@ export default {
     rowDrop() {
       // 此时找到的元素是要拖拽元素的父容器
       const tables = document.querySelector(".settingDialog .el-dialog__body");
+      // console.log(tables)
       const tbody = tables.getElementsByTagName("tbody").item(0)
+      // console.log(tbody)
       let _this = this;
       Sortable.create(tbody, {
       // 指定父元素下可被拖拽的子元素
@@ -105,11 +107,13 @@ export default {
           onEnd ({ newIndex, oldIndex }) {
             const currRow = _this.tableData.splice(oldIndex, 1)[0];
             _this.tableData.splice(newIndex, 0, currRow);
+            // console.log(_this.tableData)
           }
       });
     },
     refreshTableView() {
       this.$emit("close")
+      // this.initTableList()
     }
   },
   watch: {

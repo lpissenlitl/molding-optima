@@ -1,0 +1,171 @@
+/**
+ * 设计令牌（Design Tokens）
+ * 定义全局样式变量，支持主题切换和样式一致性
+ * 
+ * @author MoldingX Team
+ * @version 2.0.0
+ * @since 2026-06-05
+ */
+
+:root {
+  // ========================================================================
+  // 字体系统（Typography）
+  // 参考 Element UI 默认值，提供业务扩展
+  // ========================================================================
+  
+  // 基础字号
+  --font-size-xs: 12px;      // 辅助文字、标签
+  --font-size-sm: 13px;      // 次要信息
+  --font-size-base: 14px;    // Element UI 默认正文
+  --font-size-md: 16px;      // 业务常用（原 --font-size-md）
+  --font-size-lg: 18px;      // 小标题
+  --font-size-xl: 20px;      // 大标题
+  
+  // 字重
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  // 行高
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.8;
+  
+  // 字体家族
+  --font-family-base: -apple-system, BlinkMacSystemFont, Segoe UI, 
+                      Helvetica Neue, Helvetica, PingFang SC, 
+                      Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif;
+  
+  // ========================================================================
+  // 颜色系统（Colors）
+  // ========================================================================
+  
+  // --- 主题色（Brand Colors）---
+  --theme-primary: #254373;           // 主品牌色
+  --theme-primary-light: #3a5a8f;     // 悬停状态
+  --theme-primary-dark: #1a2d4d;      // 激活状态
+  --theme-primary-disabled: #8fa3c4;  // 禁用状态
+  
+  // --- 功能色（Functional Colors）---
+  --color-success: #67C23A;   // 成功
+  --color-warning: #E6A23C;   // 警告
+  --color-danger: #F56C6C;    // 危险/错误
+  --color-info: #909399;      // 信息
+  
+  // --- 中性色（Neutral Colors）---
+  // 文字颜色
+  --color-text-primary: #303133;      // 主要文字
+  --color-text-regular: #606266;      // 常规文字
+  --color-text-secondary: #909399;    // 次要文字
+  --color-text-placeholder: #C0C4CC;  // 占位文字
+  --color-text-disabled: #DCDFE6;     // 禁用文字
+  
+  // 边框颜色
+  --color-border-base: #DCDFE6;       // 基础边框
+  --color-border-light: #E4E7ED;      // 浅色边框
+  --color-border-lighter: #EBEEF5;    // 更浅边框
+  --color-border-extra-light: #F2F6FC;// 极浅边框
+  
+  // 背景颜色
+  --color-bg-base: #FFFFFF;           // 基础背景
+  --color-bg-page: #F0F2F5;           // 页面背景
+  --color-bg-overlay: #F5F7FA;        // 浮层背景
+  --color-bg-disabled: #F5F7FA;       // 禁用背景
+  
+  // ========================================================================
+  // 间距系统（Spacing）
+  // 基于 4px 网格系统
+  // ========================================================================
+  
+  --spacing-1: 4px;    // 最小间距
+  --spacing-2: 8px;    // 小组件间距
+  --spacing-3: 12px;   // 中等间距
+  --spacing-4: 16px;   // 标准间距
+  --spacing-5: 24px;   // 大间距
+  --spacing-6: 32px;   // 超大间距
+  --spacing-8: 48px;   // 区块间距
+  --spacing-10: 64px;  // 页面边距
+  
+  // ========================================================================
+  // 圆角系统（Border Radius）
+  // ========================================================================
+  
+  --radius-sm: 2px;     // 小圆角（按钮、标签）
+  --radius-base: 4px;   // 基础圆角（输入框、卡片）
+  --radius-md: 8px;     // 中等圆角（对话框）
+  --radius-lg: 16px;    // 大圆角
+  --radius-full: 9999px;// 完全圆形
+  
+  // ========================================================================
+  // 阴影系统（Shadows）
+  // ========================================================================
+  
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-base: 0 2px 12px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+  
+  // ========================================================================
+  // 表单控件宽度（Form Control Widths）
+  // ========================================================================
+  
+  --form-control-width-xs: 6rem;    // 超短输入（如数量）
+  --form-control-width-sm: 8rem;    // 短输入（如编号）
+  --form-control-width-md: 12.5rem; // 标准输入（默认）
+  --form-control-width-lg: 16rem;   // 长输入（如名称）
+  --form-control-width-xl: 24rem;   // 超长输入（如描述）
+  --form-control-width-full: 100%;  // 全宽输入
+  
+  // ========================================================================
+  // 响应式断点（Breakpoints）
+  // ========================================================================
+  
+  --breakpoint-xs: 480px;   // 超小屏幕（手机）
+  --breakpoint-sm: 768px;   // 小屏幕（平板竖屏）
+  --breakpoint-md: 1024px;  // 中等屏幕（平板横屏）
+  --breakpoint-lg: 1280px;  // 大屏幕（桌面）
+  --breakpoint-xl: 1920px;  // 超大屏幕（大桌面）
+  
+  // ========================================================================
+  // Z-Index 层级（Z-Index Scale）
+  // ========================================================================
+  
+  --z-index-dropdown: 1000;
+  --z-index-sticky: 1020;
+  --z-index-fixed: 1030;
+  --z-index-modal-backdrop: 1040;
+  --z-index-modal: 1050;
+  --z-index-popover: 1060;
+  --z-index-tooltip: 1070;
+  
+  // ========================================================================
+  // 过渡动画（Transitions）
+  // ========================================================================
+  
+  --transition-fast: 150ms ease-in-out;
+  --transition-base: 200ms ease-in-out;
+  --transition-slow: 300ms ease-in-out;
+  
+  // ========================================================================
+  // 布局组件专用（Layout Components）
+  // 侧边栏、菜单、面包屑等
+  // ========================================================================
+  
+  // 字体大小
+  --sidebar-title-font-size: 27px;      // 侧边栏 Logo 标题
+  --submenu-title-font-size: 21px;      // 子菜单项
+  --breadcrumb-font-size: 20px;         // 面包屑导航
+  --menu-font-size: 18px;               // 主菜单项
+  
+  // 颜色
+  --sidebar-logo-bg: #2b2f3a;           // Logo 背景
+  --sidebar-title-color: #ffffff;       // Logo 文字
+  --menu-bgcolor: #304156;              // 菜单背景
+  --menu-text-color: #bfcbd9;           // 菜单文字
+  --menu-active-text-color: #409EFF;    // 激活菜单文字
+  --submenu-hover: #001528;             // 子菜单悬停
+  --submenu-bg: #1f2d3d;                // 子菜单背景
+  --submenu-active-text: #f4f4f5;       // 激活子菜单文字
+}

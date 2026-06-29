@@ -1,0 +1,40 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2021": true
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:vue/recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "parser": "vue-eslint-parser",
+  "parserOptions": {
+    "parser": "@typescript-eslint/parser",
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "plugins": ["vue", "@typescript-eslint"],
+  "rules": {
+    // 🔹 关键类型检查
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": "warn",
+
+    // 🔹 基础可修复格式（ESLint 自带，保存自动修复）
+    "semi": ["warn", "never"],           // 要求分号
+    "quotes": ["warn", "double"],          // 双引号
+    "indent": ["warn", 2],                 // 2 空格缩进
+    "space-infix-ops": "warn",             // 操作符空格 a = b
+    "keyword-spacing": "warn",             // if (condition) 而不是 if(condition)
+    "object-curly-spacing": ["warn", "always"], // { a: 1 }
+    "array-bracket-spacing": ["warn", "never"],  // [1, 2, 3]
+
+    // 🔹 关闭烦人的风格规则
+    "vue/attributes-order": "off",         // 不强制属性顺序
+    "vue/max-attributes-per-line": "off",  // 不限制每行属性数
+    "vue/html-indent": ["warn", 2],        // HTML 缩进 2 空格（可修复）
+    "vue/html-self-closing": "off"         // 不强制自闭合标签
+  }
+}

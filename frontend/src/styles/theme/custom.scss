@@ -1,0 +1,402 @@
+/**
+ * MoldingX 自定义主题样式
+ * 通过 .theme-moldingx 类名激活，避免全局污染
+ * 
+ * @author MoldingX Team
+ * @version 2.0.0
+ * @since 2026-06-05
+ * 
+ * 使用方式：
+ *   <div id="app" class="theme-moldingx">
+ *     <!-- 所有 Element UI 组件将应用此主题 -->
+ *   </div>
+ */
+
+.theme-moldingx {
+  // ========================================================================
+  // Element UI 主题色已通过 SCSS 变量定义
+  // 详见: src/styles/element-variables.scss
+  // 这里只需要添加额外的样式定制(如间距、圆角等)
+  // ========================================================================
+  
+  // --- Radio 单选框 ---
+  .el-radio__input.is-checked .el-radio__inner {
+    background-color: var(--theme-primary);
+    border-color: var(--theme-primary);
+  }
+  
+  // --- Input 输入框焦点 ---
+  .el-input__inner:focus,
+  .el-textarea__inner:focus {
+    border-color: var(--theme-primary);
+  }
+  
+  // --- Select 下拉框 ---
+  .el-select-dropdown__item.selected {
+    color: var(--theme-primary);
+    font-weight: var(--font-weight-semibold);
+  }
+  
+  // --- Pagination 分页 ---
+  .el-pagination button:hover {
+    color: var(--theme-primary);
+  }
+  
+  .el-pagination .el-pager li.active {
+    color: var(--theme-primary);
+  }
+  
+  // --- Loading 加载 ---
+  .el-loading-spinner .path {
+    stroke: var(--theme-primary);
+  }
+  
+  // ========================================================================
+  // Tabs 标签页定制
+  // ========================================================================
+  
+  .el-tabs {
+    .el-tabs__item {
+      color: var(--theme-primary);
+      font-size: var(--font-size-md);
+      
+      &.is-active {
+        font-weight: var(--font-weight-semibold);
+      }
+    }
+    
+    .el-tabs__active-bar {
+      background-color: var(--theme-primary);
+    }
+    
+    .el-tabs__nav-wrap::after {
+      background-color: var(--color-border-lighter);
+    }
+  }
+  
+  // ========================================================================
+  // Divider 分割线定制
+  // ========================================================================
+  
+  .el-divider {
+    .el-divider__text {
+      color: var(--theme-primary);
+      font-size: var(--font-size-md);
+      font-weight: var(--font-weight-semibold);
+      background-color: var(--color-bg-base);
+    }
+  }
+  
+  // ========================================================================
+  // Card 卡片定制
+  // ========================================================================
+  
+  .el-card {
+    border-radius: var(--radius-base);
+    box-shadow: var(--shadow-sm);
+    
+    .clearfix {
+      color: var(--theme-primary);
+      font-size: var(--font-size-md);
+      font-weight: var(--font-weight-semibold);
+    }
+    
+    .el-card__header {
+      padding-bottom: var(--spacing-2);
+      border-bottom: 2px solid var(--theme-primary);
+    }
+    
+    .el-card__body {
+      padding: var(--spacing-4);
+    }
+  }
+  
+  // ========================================================================
+  // Dialog 对话框定制
+  // ========================================================================
+  
+  .el-dialog {
+    border-radius: var(--radius-md);
+    
+    .el-dialog__header {
+      width: 100%;
+      background-color: var(--color-bg-overlay);
+      border-bottom: 2px solid var(--theme-primary);
+      text-align: center;
+      padding: var(--spacing-4) var(--spacing-5);
+      
+      .el-dialog__title {
+        color: var(--theme-primary);
+        font-size: var(--font-size-lg);
+        font-weight: var(--font-weight-semibold);
+      }
+      
+      .el-dialog__headerbtn {
+        top: var(--spacing-4);
+        right: var(--spacing-5);
+        
+        .el-dialog__close {
+          color: var(--color-text-secondary);
+          font-size: var(--font-size-lg);
+          
+          &:hover {
+            color: var(--theme-primary);
+          }
+        }
+      }
+    }
+    
+    .el-dialog__body {
+      padding: var(--spacing-5);
+    }
+    
+    .el-dialog__footer {
+      padding: var(--spacing-4) var(--spacing-5);
+      border-top: 1px solid var(--color-border-lighter);
+    }
+  }
+  
+  // ========================================================================
+  // Table 表格定制
+  // ========================================================================
+  
+  .el-table {
+    font-size: var(--font-size-base);
+    
+    .el-table__header {
+      width: 100%;
+      
+      th {
+        background-color: var(--color-bg-overlay);
+        color: var(--color-text-primary);
+        font-size: var(--font-size-base);
+        font-weight: var(--font-weight-semibold);
+        border-bottom: 2px solid var(--theme-primary) !important;
+      }
+    }
+    
+    .el-table__body {
+      width: 100%;
+      
+      .el-table__row {
+        .el-table__cell {
+          padding: var(--spacing-3) 0;
+        }
+        
+        &:hover > td {
+          background-color: rgba(37, 67, 115, 0.05) !important;
+        }
+      }
+    }
+    
+    // 斑马纹
+    &.el-table--striped {
+      .el-table__body tr.el-table__row--striped td {
+        background-color: #fafafa;
+      }
+    }
+  }
+  
+  // ========================================================================
+  // Collapse 折叠面板定制
+  // ========================================================================
+  
+  .el-collapse {
+    border-color: var(--color-border-light);
+    
+    .el-collapse-item__header {
+      color: var(--theme-primary);
+      font-size: var(--font-size-md);
+      font-weight: var(--font-weight-semibold);
+      background-color: var(--color-bg-base);
+      border-bottom-color: var(--color-border-light);
+      
+      &:hover {
+        color: var(--theme-primary-light);
+      }
+    }
+    
+    .el-collapse-item__wrap {
+      background-color: var(--color-bg-base);
+      border-bottom-color: var(--color-border-light);
+    }
+  }
+  
+  // ========================================================================
+  // Drawer 抽屉定制
+  // ========================================================================
+  
+  .el-drawer {
+    .el-drawer__header {
+      color: var(--theme-primary);
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-semibold);
+      padding: var(--spacing-3) var(--spacing-5);
+      margin: 0;
+      background-color: var(--color-bg-overlay);
+      border-bottom: 2px solid var(--theme-primary);
+    }
+    
+    .el-drawer__body {
+      padding: var(--spacing-5);
+    }
+  }
+  
+  // ========================================================================
+  // Form 表单定制
+  // ========================================================================
+  
+  .el-form {
+    // 表单项间距
+    .el-form-item {
+      margin-bottom: var(--spacing-5);
+      
+      .el-form-item__label {
+        color: var(--color-text-regular);
+        font-size: var(--font-size-base);
+        font-weight: var(--font-weight-normal);
+      }
+    }
+    
+    // Inline 表单优化
+    &.el-form--inline {
+      .el-form-item {
+        margin-right: var(--spacing-6);
+      }
+    }
+    
+    // 输入框单位显示
+    .el-form-item .el-input span {
+      color: var(--color-text-regular);
+    }
+  }
+  
+  // 表单控件默认宽度（仅在 form 内生效）
+  .el-form-item > .el-form-item__content {
+    > .el-input,
+    > .el-select,
+    > .el-date-picker,
+    > .el-radio-group,
+    > .el-input-number,
+    > .el-autocomplete {
+      width: var(--form-control-width-md);
+    }
+  }
+  
+  // Autocomplete 输入框宽度
+  .input-md,
+  > .el-input,
+  > .el-select,
+  > .el-date-picker,
+  > .el-radio-group,
+  > .el-input-number,
+  > .el-autocomplete {
+    width: var(--form-control-width-md);
+  }
+  
+  // ========================================================================
+  // Button 按钮样式
+  // ========================================================================
+  // ⚠️ 重要：不要直接覆盖 .el-button 样式！
+  // 
+  // 原因：
+  // 1. Element UI 按钮有多种变体（type, size, plain, round, circle, disabled等）
+  // 2. 直接覆盖会破坏原有样式，导致 round 按钮变方形、plain 按钮 hover 文字看不清等问题
+  // 3. 需要维护 126+ 种组合的样式规则，维护成本极高
+  //
+  // 推荐做法：
+  // - 方案 A：使用 CSS 变量自定义 Element UI 主题（参见 element-variables.scss）
+  // - 方案 B：保持默认样式，特殊需求通过内联样式或自定义 class 解决
+  // - 方案 C：升级到 Element Plus（Vue 3），原生支持 CSS 变量
+  //
+  // 详见：src/styles/theme/_devRefs/BUTTON_STYLING_BEST_PRACTICES.md
+  // ========================================================================
+  
+  // ❌ 以下代码已注释，不应启用
+  // .el-button {
+  //   font-size: var(--font-size-base);
+  //   border-radius: var(--radius-sm);
+  //   
+  //   &.el-button--primary {
+  //     background-color: var(--theme-primary);
+  //     border-color: var(--theme-primary);
+  //     
+  //     &:hover,
+  //     &:focus {
+  //       background-color: var(--theme-primary-light);
+  //       border-color: var(--theme-primary-light);
+  //     }
+  //   }
+  // }
+  
+  // ========================================================================
+  // Tag 标签增强（可选）
+  // ========================================================================
+  
+  .el-tag {
+    font-size: var(--font-size-sm);
+    border-radius: var(--radius-sm);
+  }
+  
+  // ========================================================================
+  // Checkbox & Radio 增强（可选）
+  // ========================================================================
+  
+  .el-checkbox__label,
+  .el-radio__label {
+    font-size: var(--font-size-base);
+    color: var(--color-text-regular);
+  }
+}
+
+// ========================================================================
+// Autocomplete 下拉框宽度（全局样式，因为下拉框挂载在 body 下）
+// ========================================================================
+.el-autocomplete-suggestion {
+  min-width: var(--form-control-width-md) !important;
+  width: auto !important;
+}
+
+// ========================================================================
+// 表格尺寸变体（可在任何地方使用，无需 theme-moldingx）
+// ========================================================================
+
+// 紧凑型表格
+.table-compact,
+.table-size-small {
+  &.el-table .el-table__body .el-table__row .el-table__cell,
+  .el-table__body .el-table__row .el-table__cell {
+    padding: var(--spacing-1) var(--spacing-2) !important;
+  }
+}
+
+// 标准型表格
+.table-normal,
+.table-size-normal {
+  &.el-table .el-table__body .el-table__row .el-table__cell,
+  .el-table__body .el-table__row .el-table__cell {
+    padding: var(--spacing-3) var(--spacing-2) !important;
+  }
+}
+
+// 宽松型表格
+.table-spacious,
+.table-size-large {
+  &.el-table .el-table__body .el-table__row .el-table__cell,
+  .el-table__body .el-table__row .el-table__cell {
+    padding: var(--spacing-4) var(--spacing-3) !important;
+  }
+}
+
+// ========================================================================
+// 朴素表格样式（替代 .simple-table）
+// ========================================================================
+
+.table-simple {
+  :deep(.el-table__header th) {
+    background-color: var(--color-bg-overlay);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    border-bottom: 2px solid var(--theme-primary) !important;
+  }
+}

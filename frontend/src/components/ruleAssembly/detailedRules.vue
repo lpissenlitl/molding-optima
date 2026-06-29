@@ -160,26 +160,20 @@ export default ({
       initView() {
         ruleKeywordMethod.get()
         .then(res => {
+          console.log(res)
           if (res.status === 0) {
             let keywords = res.data.items
             this.concludeKeywordOptions.length = 0
             this.normal_conditionKeywordOptions.length = 0
             this.defect_conditionKeywordOptions.length = 0
-            let keyOptions = []
             for (let i = 0; i < keywords.length; ++i) {
               if (keywords[i].key_type === "参数") {
                 this.normal_conditionKeywordOptions.push({ label: keywords[i].name, value: keywords[i].name })
                 this.concludeKeywordOptions.push({ label: keywords[i].name, value: keywords[i].name })
               } else if (keywords[i].key_type === "缺陷") {
-                keyOptions.push({ label: keywords[i].name, value: keywords[i].name })
+                this.defect_conditionKeywordOptions.push({ label: keywords[i].name, value: keywords[i].name })
               }
             }
-            // 去重
-            keyOptions.forEach(i => {
-              if(!this.concludeKeywordOptions[i.label]){
-                this.concludeKeywordOptions.push({ label: keywords[i].name, value: keywords[i].name })
-              }
-            })
           }
         })
       },
@@ -207,7 +201,7 @@ export default ({
         this.$emit('close-rules',false)
       },
       determine() {
-        if(this.isValid()){
+        if(this.isValid()) {
           this.generate()
           // 不带id,就是新增
           ruleDetailMethod.add({"rule":this.browse, "is_auto":0, "company_id":UserModule.company_id}).then(res => {
@@ -217,7 +211,7 @@ export default ({
         }
       },
       update() {
-        if(this.isValid()){
+        if(this.isValid()) {
           this.generate()
           // 带id,就是编辑
           ruleDetailMethod.edit({"rule":this.browse}, this.ruleId).then(res => {
@@ -226,47 +220,49 @@ export default ({
           this.resetView()
         }
       },
-      generate(){        
+      generate() {        
         let if_form = "IF "
-        for(let i=0;i<this.conditionList.length;i++){
+        for(let i=0;i<this.conditionList.length;i++) {
           let condition = this.conditionList[i]
-          if(i!=0){
+          console.log(condition)
+          if(i!=0) {
               if_form += " AND "
           }
           if_form += condition.keyword +"_"+ condition.describe
-          // if(condition.conditiontype === "qx"){
+          // if(condition.conditiontype === "qx") {
           //     if_form += condition.keyword +"_"+ condition.describe
-          // } else {
+          // }else{
           //     if_form += condition.keyword +"_"+ condition.describe
           // }
         }  
         let then_form = " THEN "
-        for(let i=0;i<this.conclusionList.length;i++){
+        for(let i=0;i<this.conclusionList.length;i++) {
           let conclusion = this.conclusionList[i]
-          if(i!=0){
+          console.log(conclusion)
+          if(i!=0) {
               then_form += " AND "
           }
           then_form += conclusion.keyword + "_" + conclusion.action + "_" + conclusion.describe  
         } 
         this.browse = if_form + then_form
       }, 
-      isValid(){
-        for(let i=0;i<this.conditionList.length;i++){
-          if(this.conditionList[i].conditiontype == ""){
+      isValid() {
+        for(let i=0;i<this.conditionList.length;i++) {
+          if(this.conditionList[i].conditiontype == "") {
             this.$message({
               type: 'warning',
               message: '条件类型不能为空'
             });  
             return false
           }
-          if(this.conditionList[i].keyword == ""){
+          if(this.conditionList[i].keyword == "") {
             this.$message({
               type: 'warning',
               message: '关键字不能为空'
             });  
             return false
           }
-          if(this.conditionList[i].describe == ""){
+          if(this.conditionList[i].describe == "") {
             this.$message({
               type: 'warning',
               message: '描述不能为空'
@@ -274,29 +270,29 @@ export default ({
             return false
           } 
         }
-        for(let i=0;i<this.conclusionList.length;i++){
-          if(this.conditionList[i].conditiontype == ""){
+        for(let i=0;i<this.conclusionList.length;i++) {
+          if(this.conditionList[i].conditiontype == "") {
             this.$message({
               type: 'warning',
               message: '条件类型不能为空'
             });  
             return false
           }
-          if(this.conclusionList[i].keyword == ""){
+          if(this.conclusionList[i].keyword == "") {
             this.$message({
               type: 'warning',
               message: '关键字不能为空'
             });  
             return false
           }
-          if(this.conclusionList[i].describe == ""){
+          if(this.conclusionList[i].describe == "") {
             this.$message({
               type: 'warning',
               message: '描述不能为空'
             }); 
             return false
           } 
-          if(this.conclusionList[i].action == ""){
+          if(this.conclusionList[i].action == "") {
             this.$message({
               type: 'warning',
               message: '动作不能为空'
@@ -306,7 +302,7 @@ export default ({
         }
         return true
       },
-      resetView(){
+      resetView() {
         this.conditionList = [{
           conditiontype: '',
           keyword: '',
@@ -323,6 +319,7 @@ export default ({
     },
     watch: {
       ruleData: function() {
+        console.log(this.ruleData)
         this.conditionList = this.ruleData.get("conditionList")
         this.conclusionList = this.ruleData.get("conclusionList")
         this.browse = this.ruleData.get("rule")

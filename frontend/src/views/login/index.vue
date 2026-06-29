@@ -2,53 +2,53 @@
   <div class="login-container">
     <el-form 
       ref="loginForm" 
-      :model="loginForm" 
-      :rules="loginRules" 
+      :model="login_form" 
+      :rules="login_rules" 
       class="login-form"
       auto-complete="on" 
       label-position="left"
     >
-      <h3 class="title">
-        <div>智能工艺</div>
-        <div>Molding Optima</div>
-        <div>v4.1</div>
-      </h3>
-
-      <el-form-item 
-        prop="name"
-      >
+      <div class="form-header">
+        <h3 class="title">
+          试模专家系统
+        </h3>
+        <!-- 原始文字: Molding Expert -->
+        <p class="subtitle">
+          <span class="letter" style="--i:0">M</span><span class="letter" style="--i:1">o</span><span class="letter" style="--i:2">l</span><span class="letter" style="--i:3">d</span><span class="letter" style="--i:4">i</span><span class="letter" style="--i:5">n</span><span class="letter" style="--i:6">g</span>
+          <span class="space"></span>
+          <span class="letter" style="--i:8">E</span><span class="letter" style="--i:9">x</span><span class="letter" style="--i:10">p</span><span class="letter" style="--i:11">e</span><span class="letter" style="--i:12">r</span><span class="letter" style="--i:13">t</span>
+        </p>
+      </div>
+      
+      <el-form-item prop="username">
         <span class="svg-container">
           <svg-icon name="user" />
         </span>
-
         <el-input 
-          v-model="loginForm.name" 
-          name="name" 
+          v-model="login_form.username" 
+          name="username" 
           type="text" 
           auto-complete="on" 
-          placeholder="user"
+          placeholder="用户名"
+          style="width: 85%;"
         />
       </el-form-item>
 
-      <el-form-item 
-        prop="password"
-      >
+      <el-form-item prop="password">
         <span class="svg-container">
           <svg-icon name="password" />
         </span>
-
         <el-input
-          :type="pwdType"
-          v-model="loginForm.password"
+          :type="pwd_type"
+          v-model="login_form.password"
           name="password"
           auto-complete="on"
-          placeholder="password"
+          placeholder="密码"
+          style="width: 85%;"
           @keyup.enter.native="handleLogin"
         />
-        <span class="show-pwd" @click="showPwd">
-          <svg-icon 
-            :name="pwdType === 'password' ? 'eye-off' : 'eye-on'"
-          />
+        <span class="show-pwd" @click="togglePwd">
+          <svg-icon :name="pwd_type === 'password' ? 'eye-off' : 'eye-on'" />
         </span>
       </el-form-item>
 
@@ -63,64 +63,62 @@
         </el-button>
       </el-form-item>
     </el-form>
-
-    <!-- <div style="position:fixed;text-align:center;bottom:0;margin:0 auto;width:100%;color: #5c6b77">
-      <a target="_blank" style="color: #5c6b77" href="https://beian.miit.gov.cn/">鄂ICP备2021009988号-1</a>&nbsp;
-      @2020-2030 武汉模鼎科技有限公司
-    </div> -->
   </div>
 </template>
 
 <script lang="ts">
-import { isValidUsername } from '@/utils/validate';
-import { Component, Vue, Watch } from 'vue-property-decorator';
-import { UserModule } from '@/store/modules/user';
-import { Route } from 'vue-router';
-import { ElForm } from 'element-ui/types/form';
-import { login } from '@/api/login';
-import { isNative } from '@/utils/auth';
+import { isValidUsername } from "@/utils/validate"
+import { Component, Vue, Watch } from "vue-property-decorator"
+import { UserModule } from "@/store/modules/user"
+import { Route } from "vue-router"
+import { ElForm } from "element-ui/types/form"
+import { login } from "@/api/login"
+import { isNative } from "@/utils/auth"
 
 const validateUsername = (rule: any, value: string, callback: any) => {
   if (!isValidUsername(value)) {
-    callback(new Error('请输入正确的用户名'));
+    callback(new Error("请输入正确的用户名"))
   } else {
-    callback();
+    callback()
   }
-};
+}
+
 const validatePass = (rule: any, value: string, callback: any) => {
   if (value.length < 5) {
-    callback(new Error('密码不能小于5位'));
+    callback(new Error("密码不能小于5位"))
   } else {
-    callback();
+    callback()
   }
-};
+}
 
 @Component
 export default class Login extends Vue {
-  private loginForm = {
-    name: '',
-    password: '',
-  };
-  private loginRules = {
-    name: [{ required: true, trigger: 'blur', validator: validateUsername }],
-    password: [{ required: true, trigger: 'blur', validator: validatePass }],
-  };
-  private loading = false;
-  private pwdType = 'password';
-  private redirect: string | undefined = undefined;
+  // Data: 使用 snake_case（与后端字段一致）
+  private login_form = {
+    username: "",
+    password: "",
+  }
+  
+  private login_rules = {
+    username: [{ required: true, trigger: "blur", validator: validateUsername }],
+    password: [{ required: true, trigger: "blur", validator: validatePass }],
+  }
+  
+  private loading = false
+  private pwd_type = "password"
+  private redirect: string | undefined = undefined
 
-  @Watch('$route', { immediate: true })
-  private OnRouteChange(route: Route) {
-    // TODO: remove the "as string" hack after v4 release for vue-router
-    // See https://github.com/vuejs/vue-router/pull/2050 for details
-    this.redirect = route.query && route.query.redirect as string;
+  @Watch("$route", { immediate: true })
+  private onRouteChange(route: Route) {
+    this.redirect = route.query && route.query.redirect as string
   }
 
-  private showPwd() {
-    if (this.pwdType === 'password') {
-      this.pwdType = '';
+  // Methods: 使用 camelCase
+  private togglePwd() {
+    if (this.pwd_type === "password") {
+      this.pwd_type = ""
     } else {
-      this.pwdType = 'password';
+      this.pwd_type = "password"
     }
   }
 
@@ -129,23 +127,26 @@ export default class Login extends Vue {
       if (valid) {
         const ua = navigator.userAgent.toLowerCase()
         this.loading = true
-        login(this.loginForm.name.trim(), this.loginForm.password.trim(), ua)
-        .then((res) => {
+        login(
+          this.login_form.username.trim(), 
+          this.login_form.password.trim(), 
+          ua
+        ).then((res) => {
           if (res.status === 0) {
             UserModule.setLoginData(res.data)
             if (isNative) {
-              this.$router.push({ path: '/' });
+              this.$router.push({ path: "/" })
             } else {
-              this.$router.push({ path: this.redirect || '/' });
+              this.$router.push({ path: this.redirect || "/" })
             }
           }
-        }).finally( () => {
+        }).finally(() => {
           this.loading = false
         })
       } else {
-        return false;
+        return false
       }
-    });
+    })
   }
 }
 </script>
@@ -190,6 +191,51 @@ export default class Login extends Vue {
     margin: 120px auto;
   }
 
+  .form-header {
+    text-align: center;
+    margin-bottom: 40px;
+
+    .title {
+      font-size: 38px;
+      font-weight: 600;
+      color: $lightGray;
+      margin: 0 0 12px 0;
+      letter-spacing: 4px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: $darkGray;
+      margin: 0;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      height: 20px;
+
+      .letter {
+        display: inline-block;
+        color: #FFFFFF;
+        animation: letterBounce 1.2s ease-in-out infinite;
+        animation-delay: calc(var(--i) * 0.06s);
+      }
+
+      .space {
+        display: inline-block;
+        width: 0.5em;
+      }
+    }
+  }
+}
+
+@keyframes letterBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.login-container {
   .el-input {
     display: inline-block;
     width: 85%;
@@ -202,32 +248,12 @@ export default class Login extends Vue {
     color: #454545;
   }
 
-  .tips {
-    font-size: 14px;
-    color: #fff;
-    margin-bottom: 10px;
-    span {
-      &:first-of-type {
-        margin-right: 16px;
-      }
-    }
-  }
-
   .svg-container {
-    padding: 6px 5px 6px 15px;
+    padding: 6px 5px 6px 10px;
     color: $darkGray;
     vertical-align: middle;
     width: 30px;
     display: inline-block;
-  }
-
-  .title {
-    font-size: 36px;
-    font-weight: 400;
-    color: $lightGray;
-    margin: 0px auto 40px auto;
-    text-align: center;
-    font-weight: bold;
   }
 
   .show-pwd {
