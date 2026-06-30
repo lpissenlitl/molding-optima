@@ -110,5 +110,6 @@ class Command(BaseCommand):
             is_active=True,
             is_staff=True,
             is_tenant_admin=True,
+            is_superuser=True,
         )
         self.stdout.write(self.style.SUCCESS(f"  ✓ 创建超级管理员: {user.username}"))

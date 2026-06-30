@@ -1,5 +1,5 @@
 import { VuexModule, Module, MutationAction, Mutation, Action, getModule } from "vuex-module-decorators"
-import { login, SSOLogin, logout, getInfo } from "@/api"
+import { login, SSOLogin, logout, getInfo } from "@/api/login"
 import { getToken, setToken, removeToken, setUserId, getUserId, removeUserId } from "@/utils/auth"
 import store from "@/store"
 

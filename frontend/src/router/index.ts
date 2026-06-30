@@ -1,21 +1,28 @@
 /**
  * molding-optima 路由配置
  *
+ * 设计源头：molding-expert/molding-expert-web/src/router/index.ts
+ * 业务边界：不引入 schedule / inventory / mold-trial / monitoring / costing / notice / moldflow
+ *
  * 模块：
  * - /login           登录
- * - /admin           公司/组织/角色/用户管理（superManage）
- * - /process         工艺管理（processManage）- 核心
- * - /polymer         材料管理（polymerManage）
- * - /filler          填充物管理（fillerManage）
- *
- * 后续迁移 vue3 + element-plus 时重构
+ * - /mold            模具管理（moldManage）
+ * - /equipment       设备管理（machineManage）
+ * - /process         工艺管理（processManage - 核心）
+ * - /polymer         材料管理（polymerManage + fillerManage）
+ * - /admin           权限管理（superManage）
  */
 import Vue from 'vue'
 import Router from 'vue-router'
+import Layout from '@/views/layout/layout.vue'
 
 Vue.use(Router)
 
-import Layout from '@/views/layout/layout.vue'
+// 解决重复路由点击报错
+const originalPush = Router.prototype.push
+Router.prototype.push = function push(location: any) {
+  return (originalPush.call(this, location) as any).catch((err: any) => { err })
+}
 
 export default new Router({
   mode: 'history',
@@ -37,87 +44,100 @@ export default new Router({
     },
     {
       path: '/',
-      component: Layout,
-      redirect: '/process/conditions',
+      redirect: '/process/parameter/list',
     },
     {
-      // ========== 工艺管理（核心）==========
-      path: '/process',
-      component: Layout,
-      redirect: '/process/conditions',
-      name: 'process',
-      meta: { title: '工艺管理', icon: 'mdi:cog-outline', perm: 'process_manage' },
-      children: [
-        {
-          path: 'conditions',
-          name: 'process_condition_list',
-          component: () => import('@/views/processManage/condition/ConditionList.vue'),
-          meta: { title: '工艺列表', icon: 'mdi:tune', perm: 'process_list' },
-        },
-        {
-          path: 'conditions/create',
-          name: 'process_condition_create',
-          component: () => import('@/views/processManage/condition/ConditionForm.vue'),
-          meta: { title: '录入工艺', icon: 'mdi:plus-circle', perm: 'process_entry' },
-        },
-        {
-          path: 'conditions/:id',
-          name: 'process_condition_detail',
-          component: () => import('@/views/processManage/condition/ConditionDetail.vue'),
-          meta: { title: '工艺详情', icon: 'mdi:information-outline', perm: 'process_list', hidden: true },
-        },
-        {
-          path: 'transplant',
-          name: 'process_transplant',
-          component: () => import('@/views/processManage/transplant/Transplant.vue'),
-          meta: { title: '工艺移植', icon: 'mdi:transfer', perm: 'process_transplant' },
-        },
-        {
-          path: 'optimize',
-          name: 'process_optimize',
-          component: () => import('@/views/processManage/optimize/Optimize.vue'),
-          meta: { title: '工艺优化', icon: 'mdi:rocket-launch', perm: 'process_optimize' },
-        },
-        {
-          path: 'expert',
-          name: 'process_expert',
-          component: () => import('@/views/processManage/expert/Expert.vue'),
-          meta: { title: '专家调优', icon: 'mdi:account-tie', perm: 'process_optimize' },
-        },
-      ],
-    },
-    {
-      // ========== 主数据：模具/机器/材料/填充物 ==========
+      // ========== 模具管理 ==========
       path: '/mold',
       component: Layout,
       redirect: '/mold/list',
-      name: 'mold',
+      name: 'mold_manage',
       meta: { title: '模具管理', icon: 'mdi:tools', perm: 'mold_manage' },
       children: [
         {
           path: 'list',
           name: 'mold_list',
-          component: () => import('@/views/superManage/MoldList.vue'),
+          component: () => import('@/views/moldManage/MoldList.vue'),
           meta: { title: '模具列表', icon: 'mdi:view-grid', perm: 'mold_list' },
+        },
+        {
+          path: 'create',
+          name: 'mold_create',
+          component: () => import('@/views/moldManage/MoldForm.vue'),
+          meta: { title: '新增模具', icon: 'mdi:plus-circle', perm: 'add_mold', hidden: true },
+        },
+        {
+          path: 'project/list',
+          name: 'project_list',
+          component: () => import('@/views/moldManage/ProjectList.vue'),
+          meta: { title: '项目列表', icon: 'mdi:briefcase', perm: 'project_list' },
+        },
+        {
+          path: 'project/create',
+          name: 'project_create',
+          component: () => import('@/views/moldManage/ProjectForm.vue'),
+          meta: { title: '新增项目', icon: 'mdi:plus-circle', perm: 'add_project', hidden: true },
         },
       ],
     },
     {
-      path: '/machine',
+      // ========== 设备管理 ==========
+      path: '/equipment',
       component: Layout,
-      redirect: '/machine/list',
+      redirect: '/equipment/injection/list',
       name: 'machine',
       meta: { title: '设备管理', icon: 'mdi:factory', perm: 'machine_manage' },
       children: [
         {
-          path: 'list',
-          name: 'machine_list',
-          component: () => import('@/views/superManage/MachineList.vue'),
+          path: 'injection/list',
+          name: 'injection_list',
+          component: () => import('@/views/machineManage/InjectionMachineList.vue'),
           meta: { title: '机器列表', icon: 'mdi:server-outline', perm: 'machine_list' },
+        },
+        {
+          path: 'injection/create',
+          name: 'injection_create',
+          component: () => import('@/views/machineManage/InjectionMachineForm.vue'),
+          meta: { title: '新增机器', icon: 'mdi:plus-circle', perm: 'add_machine' },
+        },
+        {
+          path: 'auxiliary/list',
+          name: 'auxiliary_list',
+          component: () => import('@/views/machineManage/AuxiliaryEquipmentList.vue'),
+          meta: { title: '辅助装置', icon: 'mdi:tools', perm: 'auxiliary_list' },
         },
       ],
     },
     {
+      // ========== 工艺管理（核心）==========
+      path: '/process',
+      component: Layout,
+      redirect: '/process/parameter/list',
+      name: 'process',
+      meta: { title: '工艺管理', icon: 'mdi:cog-outline', perm: 'process_manage' },
+      children: [
+        {
+          path: 'parameter/list',
+          name: 'process_parameter_list',
+          component: () => import('@/views/processManage/parameter/ProcessParameterList.vue'),
+          meta: { title: '工艺列表', icon: 'mdi:tune', perm: 'process_list' },
+        },
+        {
+          path: 'parameter/create',
+          name: 'process_parameter_create',
+          component: () => import('@/views/processManage/parameter/ProcessParameterCreate.vue'),
+          meta: { title: '工艺录入', icon: 'mdi:plus-circle', perm: 'process_entry' },
+        },
+        {
+          path: 'parameter/transplant',
+          name: 'process_transplant',
+          component: () => import('@/views/processManage/adaptation/ProcessParameterTransplant.vue'),
+          meta: { title: '工艺移植', icon: 'mdi:transfer', perm: 'process_transplant' },
+        },
+      ],
+    },
+    {
+      // ========== 材料管理 ==========
       path: '/polymer',
       component: Layout,
       redirect: '/polymer/list',
@@ -127,29 +147,26 @@ export default new Router({
         {
           path: 'list',
           name: 'polymer_list',
-          component: () => import('@/views/polymerManage/list.vue'),
+          component: () => import('@/views/polymerManage/PolymerList.vue'),
           meta: { title: '材料列表', icon: 'mdi:beaker', perm: 'polymer_list' },
         },
         {
           path: 'create',
           name: 'polymer_create',
-          component: () => import('@/views/polymerManage/create.vue'),
+          component: () => import('@/views/polymerManage/PolymerForm.vue'),
           meta: { title: '新增材料', icon: 'mdi:plus-circle', perm: 'add_polymer' },
         },
-      ],
-    },
-    {
-      path: '/filler',
-      component: Layout,
-      redirect: '/filler/list',
-      name: 'filler',
-      meta: { title: '填充物管理', icon: 'mdi:grain', perm: 'polymer_manage' },
-      children: [
         {
-          path: 'list',
+          path: 'filler/list',
           name: 'filler_list',
           component: () => import('@/views/fillerManage/FillerList.vue'),
-          meta: { title: '填充物列表', icon: 'mdi:grain', perm: 'polymer_list' },
+          meta: { title: '填充物信息', icon: 'mdi:grain', perm: 'polymer_list' },
+        },
+        {
+          path: 'filler/create',
+          name: 'filler_create',
+          component: () => import('@/views/fillerManage/FillerCreate.vue'),
+          meta: { title: '新增填充物', icon: 'mdi:plus-circle', perm: 'add_polymer' },
         },
       ],
     },
@@ -168,6 +185,12 @@ export default new Router({
           meta: { title: '公司管理', icon: 'mdi:office-building', perm: 'company_manage' },
         },
         {
+          path: 'company/create',
+          name: 'company_create',
+          component: () => import('@/views/superManage/CompanyCreate.vue'),
+          meta: { title: '新增公司', icon: 'mdi:plus-circle', perm: 'add_company', hidden: true },
+        },
+        {
           path: 'organization/tree',
           name: 'organization_tree',
           component: () => import('@/views/superManage/OrganizationTree.vue'),
@@ -180,10 +203,22 @@ export default new Router({
           meta: { title: '角色管理', icon: 'mdi:shield-account', perm: 'role_manage' },
         },
         {
+          path: 'role/create',
+          name: 'role_create',
+          component: () => import('@/views/superManage/RoleCreate.vue'),
+          meta: { title: '新增角色', icon: 'mdi:plus-circle', perm: 'add_role', hidden: true },
+        },
+        {
           path: 'user/list',
           name: 'user_list',
           component: () => import('@/views/superManage/UserList.vue'),
           meta: { title: '用户管理', icon: 'mdi:account-group', perm: 'user_manage' },
+        },
+        {
+          path: 'user/create',
+          name: 'user_create',
+          component: () => import('@/views/superManage/UserCreate.vue'),
+          meta: { title: '新增用户', icon: 'mdi:account-plus', perm: 'add_user', hidden: true },
         },
       ],
     },

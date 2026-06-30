@@ -1,19 +1,20 @@
 /**
  * molding-optima axios 请求封装
  *
- * - 后端默认运行在 http://127.0.0.1:8765
  * - 认证：使用 X-Auth-Token header
  * - 后端响应格式：{ status, msg, data }
+ * - 请求使用相对路径，由 vue.config.js devServer.proxy 自动转发到后端
+ * - BASE_URL 仅作为环境变量入口保留，当前未传入 axios.create
  */
 import axios from "axios"
 import { Message, MessageBox } from "element-ui"
 import { getToken, removeToken } from "@/utils/auth"
 
-// 后端地址（开发环境）
-const BASE_URL = process.env.VUE_APP_BASE_API || "http://127.0.0.1:8765"
+// 后端地址（环境变量入口，当前通过 vue.config.js devServer.proxy 转发）
+const BASE_URL = process.env.VUE_APP_BASE_API || "http://127.0.0.1:8200"
 
 const service = axios.create({
-  baseURL: BASE_URL,
+  // baseURL: BASE_URL,
   timeout: 30000,
 })
 

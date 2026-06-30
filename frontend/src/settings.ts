@@ -2,7 +2,7 @@ interface ISettings {
   author: string // developer
   version: string // software current version
   user: string // current user
-  title: 'molding-optima 智能工艺参数优化系统',
+  title: string // software title
   showSettings: boolean // Controls settings panel display
   showTagsView: boolean // Controls tagsview display
   showSidebarLogo: boolean // Controls siderbar logo display
@@ -18,7 +18,7 @@ const settings: ISettings = {
   author: 'molding',
   version: 'v5.0.0',
   user: 'molding-optima',
-  title: 'molding-optima 智能工艺参数优化系统',
+  title: '模鼎科技',
   showSettings: false,
   showTagsView: true,
   fixedHeader: true,

@@ -10,13 +10,13 @@
     >
       <div class="form-header">
         <h3 class="title">
-          试模专家系统
+          智能工艺系统
         </h3>
-        <!-- 原始文字: Molding Expert -->
+        <!-- 原始文字: molding-optima -->
         <p class="subtitle">
-          <span class="letter" style="--i:0">M</span><span class="letter" style="--i:1">o</span><span class="letter" style="--i:2">l</span><span class="letter" style="--i:3">d</span><span class="letter" style="--i:4">i</span><span class="letter" style="--i:5">n</span><span class="letter" style="--i:6">g</span>
-          <span class="space"></span>
-          <span class="letter" style="--i:8">E</span><span class="letter" style="--i:9">x</span><span class="letter" style="--i:10">p</span><span class="letter" style="--i:11">e</span><span class="letter" style="--i:12">r</span><span class="letter" style="--i:13">t</span>
+          <span class="letter" style="--i:0">m</span><span class="letter" style="--i:1">o</span><span class="letter" style="--i:2">l</span><span class="letter" style="--i:3">d</span><span class="letter" style="--i:4">i</span><span class="letter" style="--i:5">n</span><span class="letter" style="--i:6">g</span>
+          <span class="space" style="--i:7"></span>
+          <span class="letter" style="--i:8">o</span><span class="letter" style="--i:9">p</span><span class="letter" style="--i:10">t</span><span class="letter" style="--i:11">i</span><span class="letter" style="--i:12">m</span><span class="letter" style="--i:13">a</span>
         </p>
       </div>
       
@@ -72,7 +72,7 @@ import { Component, Vue, Watch } from "vue-property-decorator"
 import { UserModule } from "@/store/modules/user"
 import { Route } from "vue-router"
 import { ElForm } from "element-ui/types/form"
-import { login } from "@/api"
+import { login } from "@/api/login"
 import { isNative } from "@/utils/auth"
 
 const validateUsername = (rule: any, value: string, callback: any) => {

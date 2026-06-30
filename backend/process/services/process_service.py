@@ -249,3 +249,99 @@ def transplant_process_parameter(source_condition_id, target_context):
         "parameters_count": len(source_params),
         "message": "阶段 1 占位实现；算法将在第二阶段实现",
     }
+
+
+# ==================== Frontend / Flat 视图（迁移自 molding-expert）====================
+from process.services.process_transformer import (
+    _transform_frontend_to_flat,
+    _construct_setting_process_frontend,
+)
+
+
+def get_process_parameter_flat(condition_id):
+    """获取工艺参数（扁平格式，对齐 molding-expert）"""
+    condition = _get_process_condition_by_id(condition_id)
+    parameter = condition.process_parameters.filter(is_deleted=False).first()
+    if not parameter:
+        raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
+    return parameter.to_dict()
+
+
+def get_process_parameter_frontend(condition_id):
+    """获取工艺参数（前端嵌套格式，对齐 molding-expert）"""
+    condition = _get_process_condition_by_id(condition_id)
+    parameter = condition.process_parameters.filter(is_deleted=False).first()
+    if not parameter:
+        raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
+
+    injection_unit = None
+    if getattr(condition, "injection_unit_id", None):
+        try:
+            from masterdata.models import InjectionUnit
+            injection_unit = InjectionUnit.objects.get(id=condition.injection_unit_id)
+        except Exception:
+            pass
+
+    return {
+        "condition": {
+            "id": condition.id,
+            "mold_info": condition.mold.to_dict(include_rvs=True) if condition.mold else None,
+            "shot_index": condition.shot_index,
+            "machine_info": condition.injection_machine.to_dict(include_rvs=True) if condition.injection_machine else None,
+            "injection_index": condition.injection_index,
+            "injection_unit": injection_unit.to_dict() if injection_unit else None,
+            "polymer_info": condition.polymer.to_dict(include_rvs=True) if condition.polymer else None,
+        },
+        "parameter": {
+            "setting_process": _construct_setting_process_frontend(parameter, injection_unit),
+        },
+    }
+
+
+def create_process_parameter_frontend(company_id, organization_id, **kwargs):
+    """创建工艺参数（前端嵌套结构，对齐 molding-expert /parameter/frontend/）"""
+    condition_kwargs = kwargs.get("condition")
+    parameter_nested = kwargs.get("parameter", {})
+    setting_process = parameter_nested.get("setting_process")
+
+    if not condition_kwargs:
+        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺条件信息存在")
+    if not setting_process:
+        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺参数信息存在")
+
+    # 转换前端嵌套结构为扁平字段
+    flat = _transform_frontend_to_flat(setting_process)
+
+    # 过滤 ProcessParameter 允许的字段
+    allowed = ProcessParameter.get_allowed_fields()
+    cleaned = {k: v for k, v in flat.items() if k in allowed}
+
+    condition = _create_process_condition(company_id, organization_id, **condition_kwargs)
+    cleaned["process_condition_id"] = condition.id
+    cleaned["company_id"] = company_id
+    if organization_id:
+        cleaned["organization_id"] = organization_id
+
+    ProcessParameter.create_with_check(**cleaned)
+    return get_process_parameter_frontend(condition.id)
+
+
+def update_process_parameter_frontend(condition_id, **kwargs):
+    """更新工艺参数（前端嵌套结构，对齐 molding-expert /parameter/<id>/frontend/）"""
+    condition = _get_process_condition_by_id(condition_id)
+
+    if "condition" in kwargs:
+        condition.update_info(**kwargs["condition"])
+
+    if "parameter" in kwargs:
+        parameter_nested = kwargs["parameter"]
+        setting_process = parameter_nested.get("setting_process")
+        if setting_process:
+            flat = _transform_frontend_to_flat(setting_process)
+            allowed = ProcessParameter.get_allowed_fields()
+            parameter_kwargs = {k: v for k, v in flat.items() if k in allowed}
+            parameter = condition.process_parameters.filter(is_deleted=False).first()
+            if parameter:
+                parameter.update_info(**parameter_kwargs)
+
+    return get_process_parameter_frontend(condition_id)

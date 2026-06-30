@@ -1,5 +1,5 @@
 """
-molding-optima 工艺参数视图
+molding-optima 工艺参数视图（对齐 molding-expert）
 """
 from django.utils.decorators import method_decorator
 from django.db import transaction
@@ -9,54 +9,26 @@ from extensions.decorators import validate_parameters
 from extensions.views import BaseView
 
 from process.schemas import (
-    ProcessConditionSchema,
     ProcessParameterSchema,
-    ProcessConditionAndParameterSchema,
     ProcessParameterListSchema,
     BatchDeleteProcessParameterSchema,
 )
 from process.services import process_service
 
 
-# ==================== 工艺条件与参数 ====================
+# ==================== 工艺参数（对齐 molding-expert 4-16）====================
 
-class ProcessConditionListView(BaseView):
-    """工艺条件列表"""
+class ProcessParameterListView(BaseView):
+    """工艺参数列表"""
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterListSchema))
     def get(self, request, cleaned_data):
-        return process_service.get_process_condition_list(**cleaned_data)
-
-    @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessConditionSchema))
-    def post(self, request, cleaned_data):
-        return process_service._create_process_condition(
-            company_id=request.user.company_id,
-            organization_id=request.user.organization_id,
-            **cleaned_data,
-        )
-
-
-class ProcessConditionDetailView(BaseView):
-    """工艺条件详情"""
-
-    @method_decorator(require_login)
-    def get(self, request, condition_id):
-        return process_service.get_process_parameter(condition_id)
-
-    @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessConditionSchema))
-    def put(self, request, condition_id, cleaned_data):
-        return process_service.update_process_condition(condition_id, **cleaned_data)
-
-    @method_decorator(require_login)
-    def delete(self, request, condition_id):
-        process_service.soft_delete_process_condition(condition_id)
+        return process_service.get_process_parameter_list(**cleaned_data)
 
 
 class ProcessParameterCreateView(BaseView):
-    """工艺参数创建"""
+    """工艺参数前端创建（对齐 molding-expert /parameter/frontend/）"""
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterSchema))
@@ -68,26 +40,37 @@ class ProcessParameterCreateView(BaseView):
         )
 
 
-class ProcessParameterListView(BaseView):
-    """工艺参数列表"""
+class ProcessParameterDetailView(BaseView):
+    """工艺参数详情/更新/删除（对齐 molding-expert /parameter/<condition_id>/）"""
 
     @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessParameterListSchema))
-    def get(self, request, cleaned_data):
-        return process_service.get_process_parameter_list(**cleaned_data)
-
-
-class ProcessParameterDetailView(BaseView):
-    """工艺参数详情/更新/删除"""
+    def get(self, request, condition_id):
+        return process_service.get_process_parameter(condition_id)
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterSchema))
-    def put(self, request, parameter_id, cleaned_data):
-        return process_service.update_process_parameter(parameter_id, **cleaned_data)
+    def put(self, request, condition_id, cleaned_data):
+        return process_service.update_process_parameter(condition_id, **cleaned_data)
 
     @method_decorator(require_login)
-    def delete(self, request, parameter_id):
-        process_service.delete_process_parameter(parameter_id)
+    def delete(self, request, condition_id):
+        process_service.delete_process_parameter(condition_id)
+
+
+class ProcessParameterFlatView(BaseView):
+    """工艺参数扁平视图（对齐 molding-expert /parameter/<id>/flat/）"""
+
+    @method_decorator(require_login)
+    def get(self, request, condition_id):
+        return process_service.get_process_parameter_flat(condition_id)
+
+
+class ProcessParameterFrontendView(BaseView):
+    """工艺参数前端视图（对齐 molding-expert /parameter/<id>/frontend/）"""
+
+    @method_decorator(require_login)
+    def get(self, request, condition_id):
+        return process_service.get_process_parameter_frontend(condition_id)
 
 
 class ProcessParameterBatchDeleteView(BaseView):
@@ -99,36 +82,7 @@ class ProcessParameterBatchDeleteView(BaseView):
         return process_service.batch_delete_process_parameter(cleaned_data["ids"])
 
 
-class ProcessConditionAndParameterCreateView(BaseView):
-    """一次性创建工艺条件及参数"""
-
-    @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessConditionAndParameterSchema))
-    def post(self, request, cleaned_data):
-        condition_data = cleaned_data["condition"]
-        parameter_data = cleaned_data["parameter"]
-
-        with transaction.atomic():
-            condition = process_service._create_process_condition(
-                company_id=request.user.company_id,
-                organization_id=request.user.organization_id,
-                **condition_data,
-            )
-            parameter_data["process_condition_id"] = condition.id
-            parameter = process_service.create_process_parameter(
-                company_id=request.user.company_id,
-                organization_id=request.user.organization_id,
-                **parameter_data,
-            )
-
-        return {
-            "condition": condition.to_dict(),
-            "parameter": parameter.to_dict(),
-        }
-
-
-# ==================== 工艺优化 / 调优 / 移植 ====================
-# 注：ProcessIndex 已合并到 ProcessCondition（所有非关键文本字段存到 process_context_snapshot JSON）
+# ==================== 工艺移植 ====================
 
 from process.services import (
     process_record_service,
@@ -144,7 +98,7 @@ from extensions.schemas import (
 
 
 class ProcessTransplantView(BaseView):
-    """工艺参数移植"""
+    """工艺参数移植（对齐 molding-expert /parameter/transplant/）"""
 
     @method_decorator(require_login)
     def post(self, request):
