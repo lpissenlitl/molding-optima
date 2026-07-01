@@ -9,6 +9,8 @@ API 路径说明（对齐 molding-expert 风格）：
 - /api/processes/parameter/<int:condition_id>/frontend/ → 工艺参数前端视图（molding-expert 风格）
 - /api/processes/parameter/batch_delete/           → 工艺参数批量删除
 - /api/processes/parameter/transplant/             → 工艺参数移植
+- /api/processes/initialization/                   → 工艺参数初始化（基于规则推理初始参数，不落库）
+- /api/processes/initialization/from-ids/         → 工艺参数初始化（第三方场景，ID → 建 Condition + 建 Parameter）
 
 molding-optima 独有功能：
 - /api/processes/optimization/<id>/                → 工艺优化
@@ -32,6 +34,8 @@ from .views.processes import (
     ProcessParameterFrontendView,
     ProcessParameterBatchDeleteView,
     ProcessTransplantView,
+    ProcessInitializationView,
+    ProcessInitializationFromIdsView,
     ProcessOptimizationView,
     ProcessOptimizationHistoryView,
     ProcessExpertSuggestionView,
@@ -56,6 +60,10 @@ urlpatterns = [
 
     # ========== 工艺移植（对齐 molding-expert）==========
     path("processes/parameter/transplant/", ProcessTransplantView.as_view()),
+
+    # ========== 工艺参数初始化（molding-optima 独有，基于规则推理）==========
+    path("processes/initialization/", ProcessInitializationView.as_view()),
+    path("processes/initialization/from-ids/", ProcessInitializationFromIdsView.as_view()),
 
     # ========== 规则管理（molding-optima 独有）==========
     path("processes/rules/keywords/", RuleKeywordListView.as_view()),
