@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "description": "工艺参数初始化规则 - 单段参数系数",
+    "author": "expert",
+    "updated_at": "2026-06-29"
+  },
+  "rules": [
+    {
+      "rule_code": "DEFAULT",
+      "rule_name": "默认规则",
+      "description": "适用于所有材料的默认初始化规则",
+      "priority": 9999,
+      "is_active": true,
+      "conditions": [],
+      "coefficients": {
+        "injection": {
+          "inj_pres_ratio": 0.65,
+          "inj_time_coef": 4.0,
+          "inj_time_min": 3.0
+        },
+        "vp_switch": {
+          "base_posi_small": 10,
+          "base_posi_large": 15,
+          "base_posi_threshold_weight": 120
+        },
+        "holding": {
+          "hold_pres_base_ratio": 0.25,
+          "hold_pres_thickness_factor": 10,
+          "hold_pres_max_limit": 120,
+          "hold_pres_inj_ratio": 0.65,
+          "hold_velo_ratio": 0.15,
+          "hold_time_min": 2.0,
+          "hold_time_max": 10.0
+        },
+        "cooling": {
+          "cool_time_factor": 5.0,
+          "cool_time_min": 5.0,
+          "weight_factor_threshold": 100,
+          "else_time": 1.5
+        },
+        "metering": {
+          "meter_pres_ratio_straight": 0.55,
+          "meter_pres_ratio_locking": 0.6,
+          "meter_speed_temp_ratio_min": 0.3,
+          "meter_speed_temp_ratio_max": 0.75,
+          "screw_speed_factor": 60.0
+        },
+        "decompression": {
+          "pre_decomp_mode": 0,
+          "pst_decomp_mode": 0,
+          "decomp_dist_ratio": 0.1,
+          "decomp_dist_min": 2.0,
+          "decomp_dist_max": 10.0
+        },
+        "temperature": {
+          "noz_temp_offset_straight": -5.0,
+          "noz_temp_offset_locking": 0.0,
+          "brl_temp_decrement_normal": 10.0,
+          "brl_temp_decrement_high": 8.0,
+          "brl_temp_stage_threshold": 7
+        }
+      }
+    },
+    {
+      "rule_code": "MATERIAL_GENERAL",
+      "rule_name": "通用材料注射速度",
+      "description": "适用于PVC/POM/PMMA/ABS/AS/PE/HDPE/LDPE/LLDPE/PP等通用材料",
+      "priority": 100,
+      "is_active": true,
+      "conditions": [
+        {
+          "field": "polymer.abbreviation",
+          "operator": "in",
+          "value": ["PVC", "POM", "PMMA", "ABS", "AS", "PE", "HDPE", "LDPE", "LLDPE", "PP"]
+        }
+      ],
+      "coefficients": {
+        "injection": {
+          "inj_velo_ratio_thin": 0.3,
+          "inj_velo_ratio_thick": 0.4,
+          "inj_ratio_threshold": 100,
+          "inj_ratio_coef": 500.0
+        }
+      }
+    },
+    {
+      "rule_code": "MATERIAL_PC_ABS",
+      "rule_name": "PC+ABS材料注射速度",
+      "description": "适用于PC+ABS合金材料",
+      "priority": 100,
+      "is_active": true,
+      "conditions": [
+        {
+          "field": "polymer.abbreviation",
+          "operator": "exact",
+          "value": "PC+ABS"
+        }
+      ],
+      "coefficients": {
+        "injection": {
+          "inj_velo_ratio_thin": 0.215,
+          "inj_velo_ratio_thick": 0.34,
+          "inj_ratio_threshold": 100,
+          "inj_ratio_coef": 800.0
+        }
+      }
+    },
+    {
+      "rule_code": "MATERIAL_OTHER",
+      "rule_name": "其他材料注射速度",
+      "description": "适用于其他未分类材料",
+      "priority": 200,
+      "is_active": true,
+      "conditions": [
+        {
+          "field": "polymer.abbreviation",
+          "operator": "not_in",
+          "value": ["PVC", "POM", "PMMA", "ABS", "AS", "PE", "HDPE", "LDPE", "LLDPE", "PP", "PC+ABS"]
+        }
+      ],
+      "coefficients": {
+        "injection": {
+          "inj_velo_ratio_thin": 0.35,
+          "inj_velo_ratio_thick": 0.42,
+          "inj_ratio_threshold": 100,
+          "inj_ratio_coef": 500.0
+        }
+      }
+    },
+    {
+      "rule_code": "GATE_DIRECT",
+      "rule_name": "直浇口/点浇口保压时间",
+      "description": "适用于直浇口、护耳式浇口、点浇口",
+      "priority": 100,
+      "is_active": true,
+      "conditions": [
+        {
+          "field": "product.gate_type",
+          "operator": "in",
+          "value": ["直浇口", "护耳式浇口", "点浇口"]
+        }
+      ],
+      "coefficients": {
+        "holding": {
+          "hold_time_formula": "0.5 + 0.1 * avg_thickness"
+        }
+      }
+    },
+    {
+      "rule_code": "GATE_SIDE",
+      "rule_name": "侧浇口保压时间",
+      "description": "适用于侧浇口",
+      "priority": 100,
+      "is_active": true,
+      "conditions": [
+        {
+          "field": "product.gate_type",
+          "operator": "exact",
+          "value": "侧浇口"
+        }
+      ],
+      "coefficients": {
+        "holding": {
+          "hold_time_formula": "2 * gate_area",
+          "gate_area_circle": "pi * gate_radius^2",
+          "gate_area_rect": "gate_length * gate_width"
+        }
+      }
+    },
+    {
+      "rule_code": "GATE_OTHER",
+      "rule_name": "其他浇口保压时间",
+      "description": "适用于其他未分类浇口",
+      "priority": 200,
+      "is_active": true,
+      "conditions": [
+        {
+          "field": "product.gate_type",
+          "operator": "not_in",
+          "value": ["直浇口", "护耳式浇口", "点浇口", "侧浇口"]
+        }
+      ],
+      "coefficients": {
+        "holding": {
+          "hold_time_formula": "0.3 + 0.6 * avg_thickness^2"
+        }
+      }
+    },
+    {
+      "rule_code": "MOLD_TEMP_DEFAULTS",
+      "rule_name": "模温默认值",
+      "description": "材料推荐模温默认值",
+      "priority": 100,
+      "is_active": true,
+      "conditions": [],
+      "coefficients": {
+        "mold_temp": {
+          "PP": 40,
+          "PC": 80,
+          "ABS": 50,
+          "PC+ABS": 70,
+          "PC/ABS": 70,
+          "PS": 40,
+          "PE": 40,
+          "LDPE": 40,
+          "HDPE": 40,
+          "LLDPE": 40,
+          "PVC": 40,
+          "PA6": 60,
+          "PA66": 70,
+          "PA": 60,
+          "PET": 90,
+          "default": 50
+        }
+      }
+    }
+  ]
+}

@@ -13,7 +13,7 @@ from process.schemas import (
     ProcessParameterListSchema,
     BatchDeleteProcessParameterSchema,
 )
-from process.services import process_service
+from process.services import condition_service
 
 
 # ==================== 工艺参数（对齐 molding-expert 4-16）====================
@@ -24,7 +24,7 @@ class ProcessParameterListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterListSchema))
     def get(self, request, cleaned_data):
-        return process_service.get_process_parameter_list(**cleaned_data)
+        return condition_service.get_process_parameter_list(**cleaned_data)
 
 
 class ProcessParameterCreateView(BaseView):
@@ -33,7 +33,7 @@ class ProcessParameterCreateView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterSchema))
     def post(self, request, cleaned_data):
-        return process_service.create_process_parameter(
+        return condition_service.create_process_parameter(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **cleaned_data,
@@ -45,16 +45,16 @@ class ProcessParameterDetailView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return process_service.get_process_parameter(condition_id)
+        return condition_service.get_process_parameter(condition_id)
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterSchema))
     def put(self, request, condition_id, cleaned_data):
-        return process_service.update_process_parameter(condition_id, **cleaned_data)
+        return condition_service.update_process_parameter(condition_id, **cleaned_data)
 
     @method_decorator(require_login)
     def delete(self, request, condition_id):
-        process_service.delete_process_parameter(condition_id)
+        condition_service.delete_process_parameter(condition_id)
 
 
 class ProcessParameterFlatView(BaseView):
@@ -62,7 +62,7 @@ class ProcessParameterFlatView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return process_service.get_process_parameter_flat(condition_id)
+        return condition_service.get_process_parameter_flat(condition_id)
 
 
 class ProcessParameterFrontendView(BaseView):
@@ -70,7 +70,7 @@ class ProcessParameterFrontendView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return process_service.get_process_parameter_frontend(condition_id)
+        return condition_service.get_process_parameter_frontend(condition_id)
 
 
 class ProcessParameterBatchDeleteView(BaseView):
@@ -79,16 +79,16 @@ class ProcessParameterBatchDeleteView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(BatchDeleteProcessParameterSchema))
     def post(self, request, cleaned_data):
-        return process_service.batch_delete_process_parameter(cleaned_data["ids"])
+        return condition_service.batch_delete_process_parameter(cleaned_data["ids"])
 
 
 # ==================== 工艺移植 ====================
 
 from process.services import (
-    process_record_service,
-    process_transplant_service,
-    process_expert_service,
-    process_optimize_service,
+    record_service,
+    transplant_service,
+    expert_service,
+    optimize_service,
     rule_service,
 )
 from extensions.schemas import (
@@ -102,7 +102,7 @@ class ProcessTransplantView(BaseView):
 
     @method_decorator(require_login)
     def post(self, request):
-        return process_transplant_service.transplant_process_parameter(
+        return transplant_service.transplant_process_parameter(
             source_parameter_id=request.DATA.get("source_parameter_id"),
             target_machine_spec=request.DATA.get("target_machine_spec"),
         )
@@ -113,7 +113,7 @@ class ProcessOptimizationView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return process_optimize_service.get_process_optimization(condition_id)
+        return optimize_service.get_process_optimization(condition_id)
 
     @method_decorator(require_login)
     def post(self, request):
@@ -124,7 +124,7 @@ class ProcessOptimizationView(BaseView):
             "target_defect": "短射"  # 可选
         }
         """
-        return process_optimize_service.add_process_optimization(
+        return optimize_service.add_process_optimization(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             condition_id=request.DATA.get("condition_id"),
@@ -133,7 +133,7 @@ class ProcessOptimizationView(BaseView):
 
     @method_decorator(require_login)
     def put(self, request, condition_id):
-        return process_optimize_service.update_process_optimization(
+        return optimize_service.update_process_optimization(
             condition_id, **request.DATA,
         )
 
@@ -143,7 +143,7 @@ class ProcessOptimizationHistoryView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return process_optimize_service.get_optimization_history(condition_id)
+        return optimize_service.get_optimization_history(condition_id)
 
 
 # ==================== 专家调优 ====================
@@ -160,7 +160,7 @@ class ProcessExpertSuggestionView(BaseView):
             "defect_feedback": { "B000": "level", "B001": "position", "B002": "feedback", ... }
         }
         """
-        return process_expert_service.suggest_expert_adjustment(
+        return expert_service.suggest_expert_adjustment(
             condition_id=request.DATA.get("condition_id"),
             defect_feedback=request.DATA.get("defect_feedback"),
         )
@@ -171,7 +171,7 @@ class ProcessExpertDefectTemplateView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request):
-        return process_expert_service.get_defect_template()
+        return expert_service.get_defect_template()
 
 
 class ProcessExpertCreateView(BaseView):
@@ -179,7 +179,7 @@ class ProcessExpertCreateView(BaseView):
 
     @method_decorator(require_login)
     def post(self, request):
-        return process_expert_service.create_expert_optimization(
+        return expert_service.create_expert_optimization(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **request.DATA,
