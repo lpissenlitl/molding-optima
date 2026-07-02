@@ -2,30 +2,124 @@
 
 > 本文档定义了 molding-optima 工艺模块的数据模型设计。
 
+## 0. 工业级优化设计（2026-07-02）
+
+### 0.1 设计哲学
+
+针对工业实际场景，ProcessCondition 采用**三层结构**设计：
+
+| 层级 | 关系类型 | 处理方式 | 理由 |
+|------|----------|----------|------|
+| **顶层铝定** | 核心实体关系 | FK 外键 | 必须可追溯 |
+| **索引定位** | 业务规则映射 | Int 字段 | 通过业务规则推导 |
+| **细节上下文** | 动态嵌套关系 | JSON 字段 | 灵活避免僵化 |
+
+### 0.2 核心原则：业务规则 > 硬外键
+
+不是所有关系都需要 FK。业务规则能推导的，用上下文承载：
+
+- **mold + shot_index** → 通过业务规则确定 mold 的哪个浇注系统（GatingSystem）
+  - 严格按照注射顺序：第 1 射 → 第 1 个 gating_system
+- **injection_machine + injection_index** → 按索引定位注射单元
+- **cavity/gate/overrides** → 在 process_context_snapshot JSON 中灵活描述
+
+### 0.3 优化后的 ProcessCondition 结构
+
+```python
+class ProcessCondition(BusinessBaseModel):
+    """工艺条件（工业级三层设计）"""
+
+    # ====== 业务元信息 ======
+    status = CharField()
+    condition_code = CharField()
+    origin_type = CharField()
+    
+    # ====== 顶层外键（核心实体） ======
+    mold = FK("masterdata.Mold")
+    shot_index = IntegerField()           # 业务规则推导 gating_system
+    
+    injection_machine = FK("masterdata.InjectionMoldingMachine")
+    injection_index = IntegerField()      # 索引定位注射单元
+    
+    polymer = FK("masterdata.Polymer")
+    
+    # ====== 细节上下文（JSON） ======
+    process_context_snapshot = JSONField(default=dict)
+    # {
+    #   "gating_system_id": 1,    # 由 shot_index 推导
+    #   "cavity_id": 1,
+    #   "gate_id": 1,
+    #   "overrides": {            # 用户前端调整
+    #     "product_weight": 85,
+    #     "gate_type": "侧浇口"
+    #   }
+    # }
+```
+
+### 0.4 为什么不用硬外键
+
+| 维度 | 硬外键方案 | JSON 上下文方案 |
+|------|------------|----------------|
+| 数据完整性 | DB 强制约束 | 业务规则约束 |
+| 灵活性 | 低（加字段需迁移） | 高（JSON 灵活扩展） |
+| 迁移成本 | 高 | 低 |
+| 复杂关系 | 难以表达 | 容易表达 |
+
+### 0.5 业务规则推导示例
+
+```python
+def get_gating_system(mold, shot_index):
+    """mold + shot_index → gating_system"""
+    systems = mold.gating_systems.order_by('id')
+    if shot_index and 1 <= shot_index <= len(systems):
+        return systems[shot_index - 1]
+    return systems.first()
+
+
+def get_injection_unit(machine, injection_index):
+    """machine + injection_index → InjectionUnit"""
+    units = machine.injection_units.all()
+    idx = injection_index or 1
+    if 1 <= idx <= len(units):
+        return units[idx - 1]
+    return units.first()
+```
+
+### 0.6 优势
+
+1. **核心可追溯**：mold / injection_machine / polymer 都是 FK，历史数据可追溯
+2. **动态关系灵活**：cavity / gate 等复杂嵌套关系用 JSON 描述，避免迁徒
+3. **业务规则清晰**：shot_index → gating_system、injection_index → InjectionUnit 是业务规则
+4. **保留快照能力**：process_context_snapshot 记录完整上下文，不依赖外部关联
+
 ## 1. 设计原则
 
 1. **锚点稳定**：`ProcessCondition + ProcessParameter` 作为稳定锚点
 2. **分层扩展**：基础数据 + 可选扩展模块（调试记录、AI推荐等）
 3. **版本管理**：通过 `parent_param` 自关联支持树形版本结构
 4. **完整上下文**：工艺参数关联模具、机台、材料等完整上下文信息
+5. **三层结构**：ProcessCondition 采用顶层外键 + 索引定位 + JSON 上下文快照
+6. **业务规则**：能用业务规则推导的关系，避免硬外键（如 shot_index → gating_system）
+7. **工业级**：支持多射注塑机、多浇注系统、多型腔、多浇口、多产品等复杂场景
 
 ## 2. 模型关系图
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        ProcessCondition                              │
-│         (模具 + 机台 + 材料 + 注射单元 + 状态 + 起源类型)             │
+│            （顶层外键 + 索引定位 + JSON 上下文快照）                     │
 │─────────────────────────────────────────────────────────────────────│
 │  id                    │ 主键                                         │
 │  status                │ 状态：draft/testing/approved/rejected/obsolete│
 │  condition_code        │ 工艺条件编号                                  │
 │  origin_type           │ 起源：manual/template/ai/transplant...       │
-│  process_context_snapshot│ 工艺快照 JSON                               │
-│  mold_id               │ 模具 FK                                      │
-│  shot_index            │ 注射次数（多射场景）                          │
-│  injection_machine_id  │ 注塑机 FK                                    │
-│  injection_index       │ 注射单元（多射场景）                          │
-│  polymer_id            │ 材料 FK                                      │
+│  process_context_snapshot│ 上下文快照 JSON （gating_system_id,           │
+│                         │ cavity_id, gate_id, overrides）             │
+│  mold_id               │ 顶层 FK：模具                                  │
+│  shot_index            │ 索引：第几射 → 推导 gating_system              │
+│  injection_machine_id  │ 顶层 FK：注塑机                                │
+│  injection_index       │ 索引：哪个注射单元                              │
+│  polymer_id            │ 顶层 FK：材料                                  │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -82,6 +176,14 @@
 
 ### 3.1 ProcessCondition（工艺条件）
 
+**三层结构设计**：
+
+| 层级 | 字段 | 说明 |
+|------|------|------|
+| 顶层外键 | mold, injection_machine, polymer | 核心实体，可追溯 |
+| 索引定位 | shot_index, injection_index | 业务规则推导动态关系 |
+| JSON 上下文 | process_context_snapshot | 动态细节、用户覆盖 |
+
 ```python
 class ProcessCondition(BusinessBaseModel):
     """
@@ -125,7 +227,35 @@ class ProcessCondition(BusinessBaseModel):
     )
 
     # --- 上下文快照 JSON ---
+    # 动态上下文描述，避免硬外键，保持灵活性
     process_context_snapshot = models.JSONField(null=True, blank=True, verbose_name="工艺条件快照")
+    """
+    JSON 结构约定：
+    {
+        # 动态细节（业务规则推导出的具体定位）
+        "gating_system_id": 1,        # 由 mold + shot_index 推导
+        "cavity_id": 1,               # 该系统的型腔
+        "gate_id": 1,                 # 该型腔的浇口（可选）
+        
+        # 用户覆盖字段（产品/工艺可调整）
+        "overrides": {
+            "product_weight": 85,     # 覆盖后端默认值
+            "runner_weight": 0,
+            "gate_type": "侧浇口",
+            "ave_thickness": 2.8,
+            "max_thickness": 3.5,
+            "max_length": 150,
+            "gate_radius": 1.5,
+            "gate_length": 2.0,
+            "gate_width": 3.0
+        },
+        
+        # 快照元信息（可选）
+        "source": "initialization_from_ids",
+        "matched_rules": ["DEFAULT", "MATERIAL_GENERAL"],
+        "created_by": "algorithm_init"
+    }
+    """
 
     # --- 模具信息 ---
     mold = models.ForeignKey(
@@ -992,3 +1122,89 @@ class ExpertRule(BusinessBaseModel):
     class Meta:
         verbose_name = "专家规则"
         verbose_name_plural = "专家规则"
+
+---
+
+## 8. 优化设计总结
+
+### 8.1 ProcessCondition 三层结构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ProcessCondition                          │
+│                                                              │
+│  【顶层外键】核心实体，可追溯                                  │
+│  ├── mold (FK)                                               │
+│  ├── injection_machine (FK)                                  │
+│  └── polymer (FK)                                            │
+│                                                              │
+│  【索引定位】业务规则推导                                      │
+│  ├── shot_index → gating_system（业务规则）                  │
+│  └── injection_index → InjectionUnit（索引定位）            │
+│                                                              │
+│  【JSON 上下文】动态细节 + 用户覆盖                            │
+│  └── process_context_snapshot                                │
+│      ├── gating_system_id, cavity_id, gate_id               │
+│      ├── overrides（产品/工艺字段）                          │
+│      └── matched_rules, source（快照元信息）                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 8.2 业务规则推导接口
+
+```python
+class ProcessConditionService:
+    @staticmethod
+    def resolve_gating_system(condition):
+        """mold + shot_index → GatingSystem"""
+        systems = condition.mold.gating_systems.order_by('id')
+        idx = condition.shot_index or 1
+        if 1 <= idx <= len(systems):
+            return systems[idx - 1]
+        return systems.first()
+    
+    @staticmethod
+    def resolve_injection_unit(condition):
+        """machine + injection_index → InjectionUnit"""
+        units = condition.injection_machine.injection_units.all()
+        idx = condition.injection_index or 1
+        if 1 <= idx <= len(units):
+            return units[idx - 1]
+        return units.first()
+    
+    @staticmethod
+    def get_overrides(condition):
+        """从快照中提取用户覆盖"""
+        snapshot = condition.process_context_snapshot or {}
+        return snapshot.get('overrides', {})
+```
+
+### 8.3 为什么不用硬外键
+
+| 场景 | 硬外键 | JSON 上下文 |
+|------|--------|--------------|
+| molding腔变化频繁 | 需频繁迁移 | JSON 灵活扩展 |
+| 多射复杂场景 | 多个FK关联难表达 | JSON 嵌套表达 |
+| 用户随时调整 | 需要额外字段 | overrides 直接存 |
+| 历史快照 | 依赖外部关联 | 快照独立完整 |
+
+### 8.4 适用原则
+
+1. **核心实体必须 FK**：mold、machine、polymer 是不可变的核心
+2. **动态关系业务规则推导**：shot_index → gating_system
+3. **复杂嵌套 JSON 表达**：cavity、gate、overrides
+4. **快照保留独立性**：process_context_snapshot 不依赖外部关联
+
+### 8.5 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| `_dev_refs/init-api-refactor-design.md` | 工艺初始化接口重构设计 |
+| `_dev_refs/algorithm-context-design.md` | 算法上下文双重来源设计 |
+| `_dev_refs/process-ai-architecture-design.md` | 工艺智能系统架构设计 |
+| `_dev_refs/process-init-rule-design.md` | 工艺初始化规则设计 |
+
+---
+
+*文档生成时间：2026-06-29*
+*最后更新：2026-07-02*

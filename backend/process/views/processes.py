@@ -13,7 +13,7 @@ from process.schemas import (
     ProcessParameterListSchema,
     BatchDeleteProcessParameterSchema,
     ProcessInitializationSchema,
-    InitializationFromIdsSchema,
+    ProcessInferSchema,
 )
 from process.services import condition_service
 
@@ -260,88 +260,85 @@ class RuleMethodDetailView(BaseView):
 # ==================== 工艺参数初始化（基于规则推理）====================
 
 class ProcessInitializationView(BaseView):
-    """工艺参数初始化接口（纯推理，不落库）
+    """工艺参数初始化接口（统一入口，都是落库接口）
 
     POST /api/processes/initialization/
-    请求体（两种互斥模式）：
-    - Mode A: {"condition_id": 123}
-    - Mode B: {
-        "machine_info": {...},
-        "polymer_info": {...},
-        "product_info": {...}
-      }
+
+    Mode A：基于已有 condition_id
+    请求体：
+    {
+        "condition_id": 123,
+        // 可选覆盖字段
+        "product_weight": 80,
+        "gate_type": "点浇口",
+        // 工艺设置（段数与模式）
+        "process_set": {
+            "inj_stg": 1, "hold_stg": 1, "met_stg": 1,
+            "vps_mode": 0, ...
+        }
+    }
+    后端行为：从 condition 查询 mold/machine/polymer，创建新的 Parameter 记录
+
+    Mode B：基于 masterdata ID 组装
+    请求体：
+    {
+        "mold_id": 100,
+        "polymer_id": 5,
+        "injection_machine_id": 10,
+        "shot_index": 1, "injection_index": 1,
+        "status": "draft",
+        "origin_type": "ai_recommendation",
+        // 可选覆盖字段
+        "product_weight": 80,
+        "gate_type": "点浇口",
+        // 工艺设置（段数与模式）
+        "process_set": {
+            "inj_stg": 1, "hold_stg": 1, "met_stg": 1,
+            ...
+        }
+    }
+    后端行为：从 masterdata 查询并组装，创建新 Condition + Parameter
+
+    其他场景：
+    - /initialization/infer/：纯推理，前端传完整数据（扁平化结构），不查库不落库
 
     响应：
+    Mode A:
     {
-        "param_source": "algorithm_init",
-        "condition_id": 123 | null,
-        "matched_rules": ["DEFAULT", "MATERIAL_GENERAL", "GATE_DIRECT"],
-        "process": {...},   # 注塑机工艺参数（扁平）
-        "mold_temp": {...},
-        "hot_runner": {...},
-        "summary": {...}    # 关键参数摘要
+        "condition_id": 123,         # 原 condition ID
+        "parameter_id": 456,         # 新建 Parameter
+        "matched_rules": [...],
+        "process": {...}, "mold_temp": {...}, "hot_runner": {...},
+        "summary": {...}
+    }
+    Mode B:
+    {
+        "condition_id": 789,         # 新建
+        "parameter_id": 790,         # 新建
+        ...
     }
     """
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessInitializationSchema))
     def post(self, request, cleaned_data):
-        return initialization_service.infer_initial_params(
-            condition_id=cleaned_data.get("condition_id"),
-            machine_info=cleaned_data.get("machine_info"),
-            polymer_info=cleaned_data.get("polymer_info"),
-            product_info=cleaned_data.get("product_info"),
-        )
+        condition_id = cleaned_data.get("condition_id")
 
+        # Mode A：基于已有 condition_id 推理，不需 mold/machine/polymer 查询（infer_initial_params 内部会查）
+        if condition_id is not None:
+            return initialization_service.infer_initial_params(
+                condition_id=condition_id,
+            )
 
-class ProcessInitializationFromIdsView(BaseView):
-    """工艺参数初始化接口（第三方用户场景：ID → 可选落库）
+        # Mode B：基于 masterdata ID 组装并创建工艺记录
+        mold_id = cleaned_data.get("mold_id")
+        polymer_id = cleaned_data.get("polymer_id")
+        injection_machine_id = cleaned_data.get("injection_machine_id")
+        if not (mold_id and polymer_id and injection_machine_id):
+            raise ValueError(
+                "必须提供 condition_id（Mode A）或者同时提供 mold_id + polymer_id + injection_machine_id（Mode B）"
+            )
 
-    POST /api/processes/initialization/from-ids/
-
-    与 /initialization/ 的区别：
-    - 输入：masterdata 的 ID（mold_id / polymer_id / injection_machine_id）
-    - 行为：save=True 时创建 ProcessCondition + ProcessParameter；save=False 时纯推理不落库
-    - 适用：第三方集成一次性创建完整工艺记录，或只做纯推理试算
-
-    请求体（InitializationFromIdsSchema）：
-    {
-        "save": true,                    // 是否落库，默认 true
-        "mold_id": 100,
-        "polymer_id": 5,
-        "injection_machine_id": 10,
-        "shot_index": 1,
-        "injection_index": 1,
-        "status": "draft",
-        "origin_type": "ai_recommendation",
-        "condition_code": null,           // 不传则自动生成（save=True 时生效）
-        "inj_stg": 1, "hold_stg": 1, "met_stg": 1,
-        "barrel_temperature_stage": 5,
-        "vps_mode": 0, "pre_met_decomp_mode": 0, "pst_met_decomp_mode": 0,
-        // 可选覆盖字段（masterdata 字段不准确时手动覆盖）
-        "product_weight": 80, "runner_weight": 0, "gate_type": "点浇口",
-        "ave_thickness": 2.5, "max_thickness": 3.0, "max_length": 150,
-        "gate_radius": 1.5, "gate_length": null, "gate_width": null
-    }
-
-    响应：
-    save=True:
-    {
-        "condition_id": 123,           // 新建 ProcessCondition.id
-        "parameter_id": 456,           // 新建 ProcessParameter.id (param_source=algorithm_init)
-        ...
-    }
-    save=False:
-    {
-        "condition_id": null,          // 不创建
-        "parameter_id": null,          // 不创建
-        ...
-    }
-    """
-
-    @method_decorator(require_login)
-    @method_decorator(validate_parameters(InitializationFromIdsSchema))
-    def post(self, request, cleaned_data):
         # 提取可选覆盖字段（用户覆盖 masterdata 默认值）
         overrides = {
             k: cleaned_data[k] for k in (
@@ -350,24 +347,72 @@ class ProcessInitializationFromIdsView(BaseView):
                 'gate_radius', 'gate_length', 'gate_width',
             ) if cleaned_data.get(k) is not None
         }
+        # 提取 process_set 字段中的段数与模式设置
+        process_set = cleaned_data.get("process_set") or {}
         return initialization_service.create_and_infer_initial_params(
-            mold_id=cleaned_data["mold_id"],
-            polymer_id=cleaned_data["polymer_id"],
-            injection_machine_id=cleaned_data["injection_machine_id"],
+            mold_id=mold_id,
+            polymer_id=polymer_id,
+            injection_machine_id=injection_machine_id,
             shot_index=cleaned_data.get("shot_index", 1),
             injection_index=cleaned_data.get("injection_index", 1),
             status=cleaned_data.get("status", "draft"),
             origin_type=cleaned_data.get("origin_type", "ai_recommendation"),
             condition_code=cleaned_data.get("condition_code"),
             overrides=overrides or None,
-            inj_stg=cleaned_data.get("inj_stg", 1),
-            hold_stg=cleaned_data.get("hold_stg", 1),
-            met_stg=cleaned_data.get("met_stg", 1),
-            barrel_temperature_stage=cleaned_data.get("barrel_temperature_stage", 5),
-            vps_mode=cleaned_data.get("vps_mode"),
-            pre_met_decomp_mode=cleaned_data.get("pre_met_decomp_mode"),
-            pst_met_decomp_mode=cleaned_data.get("pst_met_decomp_mode"),
-            save=cleaned_data.get("save", True),
+            inj_stg=process_set.get("inj_stg", 1),
+            hold_stg=process_set.get("hold_stg", 1),
+            met_stg=process_set.get("met_stg", 1),
+            barrel_temperature_stage=process_set.get("barrel_temperature_stage", 5),
+            vps_mode=process_set.get("vps_mode"),
+            pre_met_decomp_mode=process_set.get("pre_met_decomp_mode"),
+            pst_met_decomp_mode=process_set.get("pst_met_decomp_mode"),
+            save=True,
+        )
+
+
+class ProcessInitializationInferView(BaseView):
+    """工艺参数纯推理接口（前端传完整数据，不查库不落库）
+
+    POST /api/processes/initialization/infer/
+
+    请求体：
+    {
+        "machine_info": {...},     // 注塑机本身信息
+        "injection_unit": {...},   // 注射单元参数
+        "polymer_info": {...},     // 材料信息
+        "mold_info": {...},        // 模具信息
+        "product_info": {...},     // 产品信息
+        "process_set": {...}       // 工艺设置
+    }
+
+    适用场景：
+    - 第三方集成：调用方没有我们的 masterdata
+    - 算法试算：仅做参数推荐，不保存记录
+
+    不落库原因：数据库中没有关联数据，落库是数据丢失。
+
+    响应：与 /initialization/ 一致，但 condition_id 和 parameter_id 始终为 null
+    """
+
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(ProcessInferSchema))
+    def post(self, request, cleaned_data):
+        # 合并扁平化字段为算法引擎期望的格式
+        machine_info = {
+            **cleaned_data["machine_info"],
+            **cleaned_data["injection_unit"],
+        }
+        polymer_info = cleaned_data["polymer_info"]
+        # 把 mold_info + process_set 合并到 product_info
+        product_info = {
+            **cleaned_data["mold_info"],
+            **cleaned_data["product_info"],
+            **cleaned_data["process_set"],
+        }
+        return initialization_service.infer_initial_params(
+            machine_info=machine_info,
+            polymer_info=polymer_info,
+            product_info=product_info,
         )
 
 

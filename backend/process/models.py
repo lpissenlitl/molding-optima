@@ -56,11 +56,6 @@ class ProcessCondition(BusinessBaseModel):
         null=True, blank=True,
         verbose_name="工艺起源类型",
     )
-
-    # --- 上下文快照 JSON ---
-    # 阶段 1 中格式待定，仅作为可扩展 JSON 字段保留
-    process_context_snapshot = models.JSONField(null=True, blank=True, verbose_name="工艺条件快照")
-
     # --- 模具信息 ---
     mold = models.ForeignKey(
         "masterdata.Mold",
@@ -89,6 +84,9 @@ class ProcessCondition(BusinessBaseModel):
         related_name="+",
         verbose_name="材料信息",
     )
+
+    # --- 上下文快照 JSON ---
+    process_context_snapshot = models.JSONField(null=True, blank=True, verbose_name="工艺条件快照")
 
     class Meta:
         verbose_name = "工艺条件"
