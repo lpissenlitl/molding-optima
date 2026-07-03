@@ -1,0 +1,15 @@
+# FuzzyEngine 初始规则样本
+# 格式：每一行一条规则字符串，与 fuzzykit 兼容
+# IF {条件_模糊级} AND ... THEN {参数_动作_{数值|模糊级}}
+
+# 短射 (SHORTSHOT) 通用兜底规则
+IF SHORTSHOT_high THEN hold_time_add_low
+IF SHORTSHOT_high THEN inj_pres_add_low
+
+# 飞边 (FLASH) 通用兜底规则
+IF FLASH_high THEN hold_pres_reduce_low
+IF FLASH_high THEN inj_pres_reduce_low
+
+# 翘曲 (WARPAGE) 通用兜底规则
+IF WARPAGE_high THEN mold_temp_add_low
+IF WARPAGE_high THEN cool_time_add_low

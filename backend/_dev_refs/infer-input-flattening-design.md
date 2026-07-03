@@ -186,13 +186,29 @@ class ProcessSetSchema(BaseSchema):
 | **初始化服务** | 保留现有 infer_initial_params 接口（接收合并后的 dict） |
 | **后续演进** | 可让 ProcessInitializer 直接接收扁平化结构 |
 
-## 8. 相关文件
+## 8. 落地状态（2026-07-02 更新）
+
+> 本文档拆分出的 5 个 Schema 均已实现并被 `/processes/initialization/infer/` 接口使用。
+
+| Schema | 代码位置 |
+|--------|----------|
+| `MachineInfoSchema` | [`process/schemas.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/schemas.py) |
+| `InjectionUnitSchema` | 同上 |
+| `PolymerInfoSchema` | 同上 |
+| `MoldInfoSchema` / `ProductInfoSchema` / `ProcessSetSchema` | 同上 |
+| View 组装逻辑 | [`process/views/processes.py:ProcessInitializationInferView`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/views/processes.py#L373-L416) 将 5 个拆分字段合并为 `init_context` dict 后调用 `infer_initial_params(...)` |
+| 算法层接收 | [`ProcessInitializer.derive`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py) 按 `machine_info` / `injection_unit` / `polymer_info` / `product_info` / `mold_info` 拆分消费 |
+
+后续演进项「**让 `ProcessInitializer` 直接接收扁平化结构**」：当前仍是 `derive(product_info, machine_info, polymer_info, mold_info)` 多参数形式，但内部已不使用嵌套对象，**与扁平化设计等价**。
+
+## 9. 相关文件
 
 | 文件 | 说明 |
 |------|------|
-| `process/schemas.py` | 5 个独立 Schema 定义 |
-| `process/views/processes.py` | ProcessInitializationInferView 字段合并逻辑 |
+| `process/schemas.py` | 6 个独立 Schema 定义（含 MachineInfo / InjectionUnit / PolymerInfo / MoldInfo / ProductInfo / ProcessSet） |
+| `process/views/processes.py` | `ProcessInitializationInferView` 字段合并逻辑 |
 
 ---
 
 *文档生成时间：2026-07-02*
+*最后更新：2026-07-02*

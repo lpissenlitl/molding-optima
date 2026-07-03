@@ -287,15 +287,21 @@ class ProcessInitializationSchema(BaseSchema):
 | **合并逻辑** | 后端默认值 → 应用前端 overrides → 最终上下文 |
 | **算法解耦** | 算法只接收扁平字段，不感知嵌套结构 |
 
-## 9. 相关文件
+## 9. 落地状态（2026-07-02 更新）
 
-| 文件 | 说明 |
-|------|------|
-| `process/services/initialization_service.py` | 提取层（`_build_*_info`）和合并逻辑 |
-| `process/schemas.py` | `ProcessInitializationSchema` 定义覆盖字段边界 |
-| `process/views/processes.py` | `ProcessInitializationView` 传递 overrides |
-| `process/engines/expert/initializer.py` | 算法层（`ProcessInitializer`）接收扁平字段 |
+> 本文档提出的"算法上下文双重来源"设计已在代码侧兑现。以下是各路径的代码位置：
+
+| 路径 | 实现位置 |
+|------|----------|
+| 后端提取 `_build_product_info` | [`process/services/initialization_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/initialization_service.py) `Mold` → `GatingSystem` → `Cavity` → `Gate` 四层提取 |
+| 后端提取 `_build_machine_info` / `_build_polymer_info` | 同上服务文件 |
+| 前端覆盖 `overrides` 字段 | [`process/schemas.py:ProcessInitializationSchema`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/schemas.py) 在 Schema 顶层接受产品/工艺可调字段 |
+| 合并逻辑 `prepare_context` | 服务层按 `DB defaults → overrides → final context` 顺序合并；结果同时回写到 `process_context_snapshot` |
+| 算法解耦 `ProcessInitializer.derive` | [`process/engines/expert/initializer.py:ProcessInitializer.derive`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py) 只接收扁平字段 |
+
+设计原则「**后端默认值 → 前端覆盖 → 最终上下文**」三重顺序与代码逻辑一致。
 
 ---
 
 *文档生成时间：2026-07-02*
+*最后更新：2026-07-02*

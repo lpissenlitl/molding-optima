@@ -1204,6 +1204,19 @@ class ProcessConditionService:
 | `_dev_refs/process-ai-architecture-design.md` | 工艺智能系统架构设计 |
 | `_dev_refs/process-init-rule-design.md` | 工艺初始化规则设计 |
 
+## 9. 落地状态（2026-07-02 更新）
+
+> 本文档中的设计在后续迭代中已逐步兑现，以下补充每个模型的代码侧落库位置。
+
+| 设计模型 | 落库文件 | 备注 |
+|----------|----------|------|
+| `ProcessCondition`（三层结构 + JSON 快照） | [`process/models/process_condition.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/process_condition.py) | 顶层 FK（mold/machine/polymer）+ `shot_index` / `injection_index` + `process_context_snapshot` JSON 均已实现 |
+| `ProcessParameter`（版本树） | [`process/models/process_parameter.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/process_parameter.py) | `parent_param` 自关联、`seq_idx` 自动分配、`param_source` 枚举与设计一致 |
+| `TuningRecord` | [`process/models/tuning_record.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/tuning_record.py) | 包含 `defect_feedbacks` JSON、`result` 6 种迭代状态、`parameter_snapshot` |
+| `Recommendation` | [`process/models/recommendation.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/recommendation.py) | 名称已从 `AIRecommendation` 改为 `Recommendation`；`source_type` 枚举含 `fuzzy_rule` / `rule_miner` / `llm` / `doe` / `genetic` |
+| `RuleLibrary` / `RuleKeyword` / `RuleMethod` / `MinedRule` / `ExpertRule` | [`process/models/rules.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/rules.py) | 五个模型全部定义；服务层 CRUD 仅覆盖 `RuleKeyword` / `RuleMethod`，详见 [`rule_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/rule_service.py) |
+| 业务规则推导（`resolve_gating_system` 等） | [`process/services/condition_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/condition_service.py) | `get_gating_system(mold, shot_index)` 与 `get_injection_unit(machine, injection_index)` 实现于服务层 |
+
 ---
 
 *文档生成时间：2026-06-29*

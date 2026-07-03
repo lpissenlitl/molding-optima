@@ -91,9 +91,30 @@ python manage.py import_init_rules
 
 ## 3. 后续步骤
 
-- [ ] 修改 `initializer.py` 使用数据库规则而非 JSON 文件
-- [ ] 实现 `InitRuleMatcher` 从数据库匹配规则
-- [ ] 添加管理界面 CRUD
+> 以下三项最初被列为"待办"，在本文档发布后已陆续实现，本节更新每项的落地证据。
+
+| 原计划项 | 状态 | 落库证据 |
+|----------|------|----------|
+| 修改 `initializer.py` 使用数据库规则 | ✅ 已完成 | [process_initializer.py:135-139](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py#L135-L139) `ProcessInitializer.__init__` 注入 `self.rule_matcher = InitRuleMatcher(...)`，不再硬编码 JSON 文件 |
+| 实现 `InitRuleMatcher` 从数据库匹配规则 | ✅ 已完成 | [rule_matcher.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_matcher.py) 293 行，实现 `_load_from_db` / `_load_from_json` / `_build_fallback` **三级回退**，并在 [`match()`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_matcher.py) 中按优先级匹配 + `_match_conditions` 走 6 个操作符（exact/in/not_in/gte/lte/gt/lt） |
+| 添加管理界面 CRUD | ⚠️ 部分完成 | 服务层 [`RuleService`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/rule_service.py) 已实现 `RuleKeyword` / `RuleMethod` 的 CRUD，但 `ExpertRule` 当前仅依赖 `init_rules` 管理命令导入，业务侧 CRUD API 与管理界面尚未落地 |
+
+### 3.1 三级回退策略（补充）
+
+`InitRuleMatcher` 启动时按以下顺序构建规则缓存：
+
+1. **数据库优先**：`ExpertRule.objects.filter(is_active=True).order_by('priority')`
+2. **JSON 兜底**：[`InitRuleLoader`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_loader.py) 读取 `expert_rules/init_rules.json`，避免冷启动失败
+3. **内置默认**：`_build_fallback()` 提供硬编码 `DEFAULT_RULE` 系数，确保任何场景都至少有一条规则命中
+
+### 3.2 数据导入命令
+
+```bash
+python manage.py init_rules            # 增量同步
+python manage.py init_rules --force    # 强制覆盖（同步 JSON → DB）
+```
+
+落地位置：[`init_rules.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/bootstrap/management/commands/init_rules.py)
 
 ## 4. 相关文件
 

@@ -132,9 +132,22 @@ def prepare_context(condition_id=None, mold_id=None, ..., overrides=None):
 | 3 | 新增 `/initialization/infer/` 接口 | ✅ 完成 |
 | 4 | 删除 `ProcessInitializationFromIdsView` 和 `InitializationFromIdsSchema` | ✅ 完成 |
 | 5 | 更新 URL 路由，删除 `/initialization/from-ids/` | ✅ 完成 |
-| 6 | 测试验证 | 待补充 |
+| 6 | 测试验证 | ⚠️ 暂未编写自动化测试（`tests/` 下无针对初始化流程的用例，建议补齐） |
 
-## 4. 相关文件变更
+## 4. 落地状态补充（2026-07-02 更新）
+
+上文 1-5 项均已在代码侧兑现，以下补充定位以备查阅：
+
+| 接口 / 类 | 落地位置 |
+|----------|----------|
+| `ProcessInitializationSchema`（统一 Mode A/B） | [`process/schemas.py:ProcessInitializationSchema`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/schemas.py) |
+| `ProcessInitializationInferSchema`（5 个拆分 Schema） | [`process/schemas.py:ProcessInitializationInferSchema`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/schemas.py) |
+| `ProcessInitializationView` | [`process/views/processes.py:ProcessInitializationView`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/views/processes.py#L262-L370) |
+| `ProcessInitializationInferView` | [`process/views/processes.py:ProcessInitializationInferView`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/views/processes.py#L373-L416) |
+| Service `infer_initial_params` / `create_and_infer_initial_params` | [`process/services/initialization_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/initialization_service.py) (583 行，583 行 Mode A / Mode B / save=False 三模式) |
+| URL 路由 | [`process/urls.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/urls.py) 仅保留 `initialization/` 与 `initialization/infer/` |
+
+## 5. 相关文件变更
 
 | 文件 | 变更 |
 |------|------|

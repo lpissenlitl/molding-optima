@@ -376,16 +376,24 @@ backend/process/
 │       └── rule_matcher.py    # 新增：规则匹配器
 ```
 
-## 9. 实施计划
+## 9. 实施计划（2026-07-02 更新）
 
-| 步骤 | 内容 | 优先级 |
-|------|------|--------|
-| 1 | 创建 InitRule 模型 | P0 |
-| 2 | 创建种子数据迁移 | P0 |
-| 3 | 实现 InitRuleMatcher | P0 |
-| 4 | 修改 ProcessInitializer 使用规则匹配 | P0 |
-| 5 | 测试验证功能 | P0 |
-| 6 | 添加管理接口 | P1 |
+> 原计划中绝大部分项已在代码侧落地。以下以「原计划 / 当前状态 / 落库位置」三列呈现。
+
+| 原计划 | 当前状态 | 落库位置 |
+|--------|----------|----------|
+| 1. 创建 `InitRule` 模型（以 `ExpertRule` 落地） | ✅ 已完成 | [`process/models/rules.py:ExpertRule`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/rules.py) |
+| 2. 创建种子数据迁移 | ✅ 已完成 | 管理命令 [`init_rules`](file:///Users/lpissenlit/workfiles/molding-optima/backend/bootstrap/management/commands/init_rules.py) + 迁移文件 |
+| 3. 实现 `InitRuleMatcher` | ✅ 已完成 | [`process/engines/expert/rule_matcher.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_matcher.py)（293 行，三级回退 + 6 个操作符） |
+| 4. 修改 `ProcessInitializer` 使用规则匹配 | ✅ 已完成 | [`process/engines/expert/initializer.py:135-139`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py#L135-L139) |
+| 5. 测试验证 | ⚠️ 暂未补充 | `tests/` 目录下尚无针对 `InitRuleMatcher` / `ProcessInitializer` 的单元测试 |
+| 6. 添加管理接口 | ⚠️ 部分完成 | `RuleKeyword` / `RuleMethod` 服务层 CRUD 已实现，查看 [`process/services/rule_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/rule_service.py)；`ExpertRule` 仍依赖管理命令，无业务侧 CRUD |
+
+### 9.1 与 `init-rule-database-migration.md` 的边界
+
+本设计文档描述了规则引擎的内部设计（模型、匹配逻辑、系数含义），那份文档则描述从 JSON 到 DB 的迁移过程。两者互补：
+- 本文档 = **应该怎么用**
+- `init-rule-database-migration.md` = **现在能怎么用**
 
 ---
 

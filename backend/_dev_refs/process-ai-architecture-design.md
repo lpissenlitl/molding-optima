@@ -958,21 +958,21 @@ RECOMMENDATION_CONFIG = {
 
 ## 6. 模块现状与改进方向
 
-| 模块 | 现状 | 改进方向 |
-|------|------|----------|
-| **工艺初始化** | 硬编码规则 (`process_generate.py`)，固定公式 | 升级为 `ExpertEngine`，规则入库，支持数据学习优化 |
-| **工艺优化** | 模糊推理 (`nets.py`) | 迁移为 `FuzzyEngine`，保留核心算法 |
-| **规则来源** | 专家总结 | 专家 + 数据学习（RuleMiner）+ LLM |
-| **系统成长** | 规则固定 | 随 TuningRecord 数据积累自动学习 |
+| 模块 | 现状（2026-07-02 更新） | 改进方向 |
+|------|--------------------------|----------|
+| **工艺初始化** | ✅ 已升级为 `ExpertEngine`，规则入库（DB 优先、JSON 兜底、内置默认三级回退），走 `InitRuleMatcher` | 后续可加入 RuleMiner 输出的优化规则 |
+| **工艺优化** | ⚠️ `FuzzyEngine` 仅框架完成（基类适配、`recommend` 为空、`fuzzy_core/` 已迁移未对接） | 迁入 `NumTskRuleNet` 、对接 `RuleMethod` 数据 |
+| **规则来源** | 专家总结入库完成；RuleMiner / LLM 暂未接入 | 接入自学习闭环 |
+| **系统成长** | 规则尚固定 | 随 `TuningRecord` 积累触发 `RuleMinerEngine._mine_rules()` |
 
 **引擎演进路径：**
 
 | 引擎 | 现状 | 短期目标 | 长期目标 |
 |------|------|----------|----------|
-| `ExpertEngine` | 硬编码 | 规则入库可配置 | 数据驱动自动学习 |
-| `FuzzyEngine` | 固定规则库 | 迁移框架 | 与 RuleMiner 联动 |
-| `LLMEngine` | 无 | 设计 RAG 架构 | 接入门控知识 |
-| `RuleMinerEngine` | 无 | 基础实现 | 持续优化 |
+| `ExpertEngine` | ✅ 已完成（初始化落地） | ✅ 与 `recommendation_service` 联动 | 数据驱动自动学习 |
+| `FuzzyEngine` | ⚠️ 骨架（仅完成 `recommend` 框架、`_load_rules` 未实现） | 接入 `NumTskRuleNet` 与 `RuleMethod` 库 | 与 `RuleMiner` 联动 |
+| `LLMEngine` | ⚠️ 占位（`recommend` 返回空列表） | 设计 RAG 架构 | 接入门控知识 |
+| `RuleMinerEngine` | ⚠️ 骨架（FP-Growth/Apriori 未实现） | 基础实现 | 持续优化 |
 
 ## 7. 核心优势
 
@@ -982,35 +982,54 @@ RECOMMENDATION_CONFIG = {
 4. **统一入口**：前端只需调用 `RecommendationService`，无需关心底层算法
 5. **数据闭环**：从数据到知识，从知识到智能的完整闭环
 
-## 8. 待实施事项
+## 8. 待实施事项（2026-07-02 更新）
+
+> 原列表中的事项在后续迭代中已陆续落地，本节以「原计划 / 当前状态 / 落库位置」三列重新梳理。
+>
+> ✅ = 已完成；⚠️ = 部分实现 / 骨架；☐ = 未启动
 
 ### 阶段零：专家系统引擎（ExpertEngine）
-- [ ] 设计 `ExpertEngine` 引擎架构
-- [ ] 将 `process_generate.py` 规则迁移为结构化专家规则
-- [ ] 实现 `RuleLoader` 规则加载器
-- [ ] 设计 `expert_rules/` 专家规则库结构
+
+| 原计划 | 当前状态 | 落库位置 |
+|--------|----------|----------|
+| 设计 `ExpertEngine` 引擎架构 | ✅ 已完成 | [`process/engines/expert/expert_engine.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/expert_engine.py) 适配 `AIEngineBase` |
+| 将 `process_generate.py` 规则迁移为结构化专家规则 | ✅ 已完成 | [`process/engines/expert/initializer.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py)（721 行） |
+| 实现 `RuleLoader` 规则加载器 | ✅ 已完成 | [`process/engines/expert/rule_loader.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_loader.py) JSON 兜底；[`rule_matcher.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_matcher.py) DB 加载与三级回退 |
+| 设计 `expert_rules/` 专家规则库结构 | ✅ 已完成 | [`process/engines/expert/expert_rules/init_rules.json`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/expert_rules/init_rules.json) + `ExpertRule` 表 |
 
 ### 阶段一：基础模型扩展
-- [ ] 设计并实现 `TuningRecord` 模型
-- [ ] 设计并实现 `AIRecommendation` 模型
-- [ ] 设计 `TuningRecord` 的 API 接口
+
+| 原计划 | 当前状态 | 落库位置 |
+|--------|----------|----------|
+| 设计并实现 `TuningRecord` 模型 | ✅ 已完成 | [`process/models/tuning_record.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/tuning_record.py) |
+| 设计并实现 `AIRecommendation` 模型（更名为 `Recommendation`） | ✅ 已完成 | [`process/models/recommendation.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/models/recommendation.py) |
+| 设计 `TuningRecord` 的 API 接口 | ✅ 已完成 | [`process/services/tuning_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/tuning_service.py)（268 行 CRUD + 趋势分析） |
 
 ### 阶段二：AI 引擎框架
-- [ ] 实现 `AIEngineBase` 基类和 `EngineRegistry`
-- [ ] 迁移现有 `nets.py` 为 `FuzzyEngine`
-- [ ] 实现 `RecommendationService` 统一入口
+
+| 原计划 | 当前状态 | 落库位置 |
+|--------|----------|----------|
+| 实现 `AIEngineBase` 基类和 `EngineRegistry` | ✅ 已完成 | [`process/engines/base_engine.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/base_engine.py) |
+| 迁移现有 `nets.py` 为 `FuzzyEngine` | ⚠️ 仅骨架 | [`process/engines/fuzzy/fuzzy_engine.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/fuzzy/fuzzy_engine.py) `recommend` 未实现，`fuzzy_core/` 已迁入但未对接 |
+| 实现 `RecommendationService` 统一入口 | ✅ 已完成 | [`process/services/recommendation_service.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/services/recommendation_service.py)（254 行，多引擎整合） |
 
 ### 阶段三：自学习能力
-- [ ] 实现 `RuleMinerEngine` 规则挖掘引擎
-- [ ] 设计规则评估与入库流程
-- [ ] 实现定时任务触发规则学习
+
+| 原计划 | 当前状态 | 说明 |
+|--------|----------|------|
+| 实现 `RuleMinerEngine` 规则挖掘引擎 | ⚠️ 骨架 | [`process/engines/rule_miner/rule_miner_engine.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/rule_miner/rule_miner_engine.py) FP-Growth/Apriori 未实现 |
+| 设计规则评估与入库流程 | ⚠️ 骨架 | `MinedRule` 模型已定义，但 `approve_rule` / `_sync_to_expert_rule` 未实现 |
+| 实现定时任务触发规则学习 | ☐ 未启动 | `RuleMinerScheduler` / `scheduled_task` 未实现 |
 
 ### 阶段四：LLM 扩展
-- [ ] 实现 `LLMEngine` 大模型推理引擎
-- [ ] 设计 RAG 相似案例检索
-- [ ] 配置 LLM API 集成
+
+| 原计划 | 当前状态 | 说明 |
+|--------|----------|------|
+| 实现 `LLMEngine` 大模型推理引擎 | ⚠️ 占位 | [`process/engines/llm/llm_engine.py`](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/llm/llm_engine.py) `recommend` 返回空列表 |
+| 设计 RAG 相似案例检索 | ☐ 未启动 | `_retrieve_similar_cases` 为空函数 |
+| 配置 LLM API 集成 | ☐ 未启动 | 未引入 `LLM_API_KEY` 配置 |
 
 ---
 
 *文档生成时间：2026-06-29*
-*最后更新：2026-06-29*
+*最后更新：2026-07-02*

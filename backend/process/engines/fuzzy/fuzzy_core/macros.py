@@ -1,67 +1,84 @@
 """
 模糊推理常量定义
 
-定义常见的常量、枚举等
+定义常见的常量、枚举、映射表等。
+本文件从 `old/mdprocess/utils/fuzzykit/macros.py` 迁入必要的常量
 """
 
-# 缺陷类型
-DEFECT_TYPES = [
-    'short_shot',      # 短射
-    'flash',           # 飞边
-    'warpage',         # 翘曲
-    'sink_mark',       # 缩痕
-    'bubble',          # 气泡
-    'burn_mark',       # 烧焦
-    'flow_mark',       # 流痕
-    'jet_mark',        # 喷射纹
-    'delamination',    # 分层
-    'gloss_variation', # 光泽不良
-]
-
-# 缺陷等级
-DEFECT_LEVELS = [
-    'light',    # 轻微
-    'medium',   # 中等
-    'severe',   # 严重
-]
-
-# 隶属度类型
-MEMBERSHIP_TYPES = [
-    'triangular',     # 三角形
-    'trapezoidal',    # 梯形
-    'gaussian',       # 高斯
-    'bell',           # 钟形
-    'singleton',      # 单点
-]
-
-# 模糊等级（3级或5级）
-FUZZY_LEVELS = {
-    3: {
-        'low': (0, 0, 50),
-        'medium': (30, 50, 70),
-        'high': (50, 100, 100),
-    },
-    5: {
-        'very_low': (0, 0, 25),
-        'low': (0, 25, 50),
-        'medium': (25, 50, 75),
-        'high': (50, 75, 100),
-        'very_high': (75, 100, 100),
-    },
+# === 缺陷名称常量集合（老 fuzzykit 遗留）===
+# 描述：用于在 FuzzyRule 词法解析时区分"工艺参数名称"与"缺陷名称"
+# 构造时将工艺参数名与这些缺陷名比对，若在 set 里则看作缺陷条件
+DEFECT_CONST = {
+    'SHORTSHOT',    # 短射
+    'FLASH',        # 飞边
+    'SHRINKAGE',    # 缩痕
+    'WELDLINE',     # 熔接线
+    'ABERRATION',   # 异色
+    'AIRTRAP',      # 气穴
+    'TOPWHITE',     # 顶白
+    'WARPAGE',      # 翘曲
+    'BUBBLE',       # 气泡
+    'BURN_MARK',    # 烧焦
+    'FLOW_MARK',    # 流痕
+    'JET_MARK',     # 喷射纹
+    'DELAMINATION', # 分层
+    'GLOSS_VARIATION', # 光泽不良
 }
 
-# 模糊运算方法
-FUZZY_OPERATORS = [
-    'min_max',      # min-max 运算
-    'prod_sum',     # 乘积-求和运算
-    'bounded',      # 有界运算
+# === 映射字典（严重级别/动作 -> 整数映射）===
+# 低/中/高 -> 0/1/2（表示隶属度等级索引）
+# 动作映射：add -> +1 / reduce -> -1 / adjust -> -2（弹出标记）
+HS_MAPPING_DICT = {
+    'low': 0, 'mid': 1, 'high': 2,
+    'level1': 0, 'level2': 1, 'level3': 2, 'level4': 3, 'level5': 4,
+    'level6': 5, 'level7': 6, 'level8': 7, 'level9': 8,
+    'add': 1, 'reduce': -1, 'adjust': -2,
+}
+
+# === 缺陷字典（数字 id -> 缺陷名称）===
+HS_DEFECT_DICT = {
+    1: 'SHORTSHOT',    # 短射
+    2: 'FLASH',        # 飞边
+    3: 'SHRINKAGE',    # 缩痕
+    4: 'WELDLINE',     # 熔接线
+    5: 'ABERRATION',   # 异色
+    6: 'AIRTRAP',      # 气穴
+    7: 'TOPWHITE',     # 顶白
+}
+
+# === 动动作名 -> 字串映射（补全 Action 用）===
+ADJUST_ACTIONS = {
+    'add': '增加',
+    'reduce': '减少',
+    'adjust': '提示',
+    'add_pct': '增加百分比',
+    'reduce_pct': '减少百分比',
+}
+
+# === 隶属度函数类型 ===
+MEMBERSHIP_TYPES = [
+    'gauss',           # 高斯（默认）
+    'tri',             # 三角
+    'trap',            # 梯形（预留）
 ]
 
-# 去模糊化方法
-DEFUZZIFICATION_METHODS = [
-    'centroid',     # 重心法
-    'bisector',     #  bisector 法
-    'mom',          # 最大隶属度均值法
-    'lom',          # 最大隶属度取大法
-    'som',          # 最大隶属度取小法
+# === 反模糊化方法 ===
+DEFUZZ_METHODS = [
+    'centroid',        # 重心法（推荐）
+    'bisector',        # 均分面积法
+    'mom',             # 最大隶属度均值
+    'som',             # 最大隶属度取小
+    'lom',             # 最大隶属度取大
 ]
+
+# === 模糊等级 ===
+FUZZY_LEVELS = {
+    3: ['low', 'mid', 'high'],
+    5: ['very_low', 'low', 'mid', 'high', 'very_high'],
+}
+
+# === 推理超参 ===
+MIN_ACTIVATION_THRESHOLD = 0.01001     # 无效激活判定阈值
+MAMDANI_SAMPLE_POINTS = 200            # Mamdani 输出值采样点
+EPSILON = 1e-7                         # 防除零
+

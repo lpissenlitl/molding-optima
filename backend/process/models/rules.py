@@ -95,6 +95,12 @@ class RuleKeyword(BusinessBaseModel):
     FUZZY_LEVELS = [(3, '3级'), (5, '5级')]
     fuzzy_level = models.IntegerField(choices=FUZZY_LEVELS, default=3, verbose_name="模糊级别")
 
+    # --- 模糊步长（新增，迁移期可能为空）---
+    # 含义：单次模糊推理的调整步长。也被用于结果参数（sol_dict）的输出区间
+    # 例：inj_pres_1 的 step=10 表示单次加 10MPa
+    # 取値范围：參数取值区间 end - start / f_level（迁参期留空）
+    step = models.FloatField(null=True, blank=True, verbose_name="模糊步长")
+
     # --- 参数类型 ---
     keyword_type = models.CharField(max_length=45, verbose_name="参数类型")
     # 示例: 'pressure', 'speed', 'time', 'temperature'
@@ -182,6 +188,20 @@ class RuleMethod(BusinessBaseModel):
     rule_type = models.CharField(max_length=45, verbose_name="规则类型")
     priority = models.FloatField(default=1.0, verbose_name="优先级")
     confidence = models.FloatField(default=1.0, verbose_name="置信度")
+
+    # --- 规则层级（新增，区分工厂级 vs 兜底层）---
+    # factory: NumTskRuleNet 处理（精确数值/百分比规则）
+    # fallback: FuzzyRuleNet (Mamdani) 处理（模糊级别规则）
+    RULE_LEVELS = [
+        ('factory', '工厂级'),
+        ('fallback', '兜底层'),
+    ]
+    rule_level = models.CharField(
+        max_length=20,
+        choices=RULE_LEVELS,
+        default='factory',
+        verbose_name="规则层级",
+    )
 
     # --- 启用控制 ---
     is_auto = models.BooleanField(default=True, verbose_name="是否自动应用")
