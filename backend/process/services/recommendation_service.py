@@ -4,8 +4,10 @@
 整合多个 AI 引擎，提供统一的推荐接口
 """
 
+import logging
 from typing import List, Optional
 
+from process.engines.base_engine import EngineRegistry, Recommendation as EngineRecommendation
 from process.models import (
     ProcessCondition,
     ProcessParameter,
@@ -14,20 +16,42 @@ from process.models import (
 )
 from process.services.tuning_service import ProcessTuningService
 
+_logger = logging.getLogger(__name__)
+
 
 class ProcessRecommendationService:
     """
     推荐服务 - 对外统一入口
 
     使用方式：
-    1. 实例化服务
+    1. 实例化服务（自动注册默认引擎）
     2. 调用 get_recommendations 获取推荐
     3. 调用 adopt_recommendation 采纳推荐
+
+    阶段（当前骨架）：
+      - FuzzyEngine 已在 EngineRegistry 注册并调用
+      - trend 后处理、多引擎合并策略留 TODO（设计中）
     """
 
     def __init__(self):
-        # TODO: 后续初始化引擎注册
-        pass
+        # 引擎自注册（lazy import 避免循环依赖）
+        self._register_default_engines()
+
+    def _register_default_engines(self):
+        """
+        注册默认引擎。
+
+        设计约束（临时）：
+          - 当前只注册 FuzzyEngine，后续接入 RuleMiner / LLM
+          - 幂等：多次调用不会重复注册
+        """
+        try:
+            from process.engines.fuzzy import FuzzyEngine
+
+            if not EngineRegistry.get_engine("fuzzy"):
+                EngineRegistry.register("fuzzy", FuzzyEngine())
+        except Exception as e:  # noqa: BLE001
+            _logger.warning("[recommendation_service] FuzzyEngine 注册失败: %s", e)
 
     def get_recommendations(
         self,
@@ -38,28 +62,76 @@ class ProcessRecommendationService:
         """
         获取推荐结果
 
+        流程：
+          1. _build_context 拼装推理上下文（含 iteration_trend）
+          2. 从 EngineRegistry 获取可用引擎（按优先级排序）
+          3. 各引擎独立调用 recommend()，收集结果
+          4. trend 后处理（TODO）
+          5. 合并多引擎结果（TODO：当前为各引擎结果并列返回）
+
         Args:
             process_condition_id: 工艺条件 ID
             defect_feedbacks: 缺陷反馈列表
-            engine_types: 指定使用的引擎类型，None 表示使用所有可用引擎
+            engine_types: 指定使用的引擎子类型列表，None 表示使用所有可用引擎
 
         Returns:
             {
                 'recommendations': [...],
-                'engine_sources': {'模糊推理': [...], '规则挖掘': [...]},
-                'best_recommendation': {...}
+                'engine_sources': {'模糊推理': [...]},
+                'best_recommendation': {...} | None,
             }
         """
-        # 构建上下文
+        # 1. 构建上下文
         context = self._build_context(process_condition_id, defect_feedbacks or [])
+        if not context:
+            return {
+                "recommendations": [],
+                "engine_sources": {},
+                "best_recommendation": None,
+            }
 
-        # TODO: 后续通过引擎注册中心获取可用引擎并调用
-        # 目前返回空结果，待引擎实现后完善
+        # 2. 获取可用引擎
+        engines = EngineRegistry.get_engines_by_priority(
+            context=context,
+            prefer_engines=engine_types,
+        )
+        if not engines:
+            _logger.info(
+                "[recommendation_service] 无可用引擎: condition_id=%s", process_condition_id
+            )
+            return {
+                "recommendations": [],
+                "engine_sources": {},
+                "best_recommendation": None,
+            }
+
+        # 3. 逐个引擎调用
+        all_recommendations: List[EngineRecommendation] = []
+        engine_sources: dict = {}
+        for engine in engines:
+            try:
+                recs = engine.recommend(context) or []
+            except Exception as e:  # noqa: BLE001
+                _logger.warning(
+                    "[recommendation_service] 引擎 %s 推理失败: %s",
+                    engine.engine_name, e,
+                )
+                recs = []
+            engine_sources[engine.engine_name] = [r.to_dict() for r in recs]
+            all_recommendations.extend(recs)
+
+        # 4. trend 后处理（TODO：设计中）
+        # TODO: 按 iteration_trend.trend 调整 absolute 类的推荐值
+        #       worsening -> *0.5 / improving -> *1.2 / stable -> 1.0
+
+        # 5. 合并去重（TODO：当前为各引擎结果并列）
+        # TODO: 同一参数多引擎推荐时按 confidence 取最高
+        merged = [r.to_dict() for r in all_recommendations]
 
         return {
-            'recommendations': [],
-            'engine_sources': {},
-            'best_recommendation': None,
+            "recommendations": merged,
+            "engine_sources": engine_sources,
+            "best_recommendation": merged[0] if merged else None,
         }
 
     def _build_context(
@@ -130,7 +202,7 @@ class ProcessRecommendationService:
         """序列化工艺条件"""
         return {
             'id': condition.id,
-            'condition_code': condition.condition_code,
+            'condition_no': condition.condition_no,
             'status': condition.status,
             'origin_type': condition.origin_type,
             'mold_id': condition.mold_id,

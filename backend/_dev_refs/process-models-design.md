@@ -31,7 +31,7 @@ class ProcessCondition(BusinessBaseModel):
 
     # ====== 业务元信息 ======
     status = CharField()
-    condition_code = CharField()
+    condition_no = CharField()  # 2026-07-03 重命名：condition_code → condition_no
     origin_type = CharField()
     
     # ====== 顶层外键（核心实体） ======
@@ -111,7 +111,7 @@ def get_injection_unit(machine, injection_index):
 │─────────────────────────────────────────────────────────────────────│
 │  id                    │ 主键                                         │
 │  status                │ 状态：draft/testing/approved/rejected/obsolete│
-│  condition_code        │ 工艺条件编号                                  │
+│  condition_no          │ 工艺条件编号（2026-07-03 改名）            │
 │  origin_type           │ 起源：manual/template/ai/transplant...       │
 │  process_context_snapshot│ 上下文快照 JSON （gating_system_id,           │
 │                         │ cavity_id, gate_id, overrides）             │
@@ -208,7 +208,7 @@ class ProcessCondition(BusinessBaseModel):
     status = models.CharField(null=True, blank=True, max_length=20, verbose_name="状态")
 
     # --- 基本信息 ---
-    condition_code = models.CharField(null=True, blank=True, max_length=50, verbose_name="工艺条件编号")
+    condition_no = models.CharField(null=True, blank=True, max_length=50, verbose_name="工艺条件编号")  # 2026-07-03 重命名
 
     PROCESS_CONDITION_ORIGIN_CHOICES = [
         ('manual_creation', '手工新建'),

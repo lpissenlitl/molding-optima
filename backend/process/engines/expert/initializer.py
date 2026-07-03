@@ -109,33 +109,49 @@ class ProcessInitializer:
         self,
         machine_info: Dict[str, Any],
         polymer_info: Dict[str, Any],
+        mold_info: Dict[str, Any],
+        process_set: Optional[Dict[str, Any]] = None,
         rule_matcher: Optional[InitRuleMatcher] = None,
     ):
+        """
+        工艺参数初始化器（4 维独立 dict 输入）
+
+        接受 4 个独立维度的输入（职责清晰）：
+        - machine_info：设备信息（机台本身 + 注射单元合一）
+        - polymer_info：材料信息
+        - mold_info：模具信息（模具级 + 产品/浇口/壁厚派生合一）
+        - process_set：工艺设置（段数 + 模式），None 时用空 dict
+        """
         if not machine_info:
             raise ValueError("机器信息不能为空")
         if not polymer_info:
             raise ValueError("材料信息不能为空")
+        if not mold_info:
+            raise ValueError("模具信息不能为空")
 
         self.machine = machine_info
         self.material = polymer_info
-        self.product: Optional[Dict[str, Any]] = None
+        self.mold = mold_info
+        self.process_set = process_set or {}
         self.rule_matcher = rule_matcher or InitRuleMatcher()
         # 当前上下文匹配后的合并系数（derive 时填充）
         self._coeffs: Dict[str, Any] = {}
 
-    def derive(self, product_info: Dict[str, Any]) -> ProductionParams:
+    def derive(self) -> ProductionParams:
         """
         推导初始工艺参数
 
+        直接使用 __init__ 传入的 4 维 dict，不再接受额外参数。
         包含注塑机、模温机、热流道的完整工艺参数。
         """
-        self.product = product_info
         self._validate_inputs()
         # 关键：先加载规则系数，再进入派生流程
+        # 规则匹配传入 4 维 context（与类属性命名一致）
         self._coeffs = self.rule_matcher.match({
-            'polymer': self.material,
-            'product': self.product,
             'machine': self.machine,
+            'material': self.material,
+            'mold': self.mold,
+            'process_set': self.process_set,
         })
 
         params = ProductionParams(
@@ -184,10 +200,11 @@ class ProcessInitializer:
             if not self.material.get(key):
                 self.material[key] = default
 
-        required_product_fields = ['product_weight', 'gate_type', 'ave_thickness', 'max_thickness']
-        for field in required_product_fields:
-            if not self.product.get(field):
-                raise ValueError(f"产品信息缺少必要字段: {field}")
+        # 模具/产品必填字段（来自 mold_info）
+        required_mold_fields = ['product_weight', 'gate_type', 'ave_thickness', 'max_thickness']
+        for field in required_mold_fields:
+            if not self.mold.get(field):
+                raise ValueError(f"模具/产品信息缺少必要字段: {field}")
         # runner_weight 允许为 0（表示热流道）
 
     # ========== 系数读取辅助 ==========
@@ -203,11 +220,16 @@ class ProcessInitializer:
         推导注塑机工艺参数（主体）
 
         包含：注射、VP切换、保压、冷却、计量、松退、温度
+
+        字段来源：
+        - 产品/模具参数：self.mold（product_weight / runner_weight / ave_thickness / max_thickness / max_length / gate_type / gate_radius / gate_length / gate_width / inject_cycle_require）
+        - 工艺设定：self.process_set（vps_mode / VP_switch_mode / pre_met_decomp_mode / pst_met_decomp_mode）
         """
-        prod = self.product
+        prod = self.mold
         mach = self.machine
         mat = self.material
         proc = params.process
+        ps = self.process_set
 
         # 提取分组系数（避免每处重复 .get）
         c_inj = self._coeffs.get('injection', {})
@@ -282,12 +304,12 @@ class ProcessInitializer:
         proc.inj_dly_t = HSO_INJ_START_DELAY_TIME
 
         # ========== VP切换参数 ==========
-        # vps_mode 优先使用 product_info['vps_mode'] (int)，否则从字符串派生
-        vps_mode_int = prod.get('vps_mode')
+        # vps_mode 优先使用 process_set['vps_mode'] (int)，否则从字符串派生
+        vps_mode_int = ps.get('vps_mode')
         if isinstance(vps_mode_int, int) and 0 <= vps_mode_int <= 2:
             proc.vps_mode = vps_mode_int
         else:
-            vp_mode = prod.get('VP_switch_mode', '位置')
+            vp_mode = ps.get('VP_switch_mode', '位置')
             proc.vps_mode = 0 if vp_mode == "位置" else (1 if vp_mode == "时间" else 2)
 
         weight_threshold = c_vps.get('base_posi_threshold_weight', 120)
@@ -455,7 +477,7 @@ class ProcessInitializer:
 
     def _derive_hot_runner(self, params: ProductionParams):
         """推导热流道工艺参数"""
-        prod = self.product
+        prod = self.mold
 
         valve_num = prod.get('valve_num', 0)
         params.hot_runner.valve_num = valve_num
@@ -515,8 +537,12 @@ class ProcessInitializer:
         - 注射段数：根据注射行程（>=40mm→4段, 20-40mm→3段, 10-20mm→2段, <10mm→1段）
         - 保压段数：默认2段
         - 计量段数：默认1段
+
+        段数/模式优先使用 process_set 中的值（如 inj_stg / hold_stg / met_stg），
+        未指定时按行程自动推荐。
         """
-        prod = self.product
+        prod = self.mold
+        ps = self.process_set
         mat = self.material
         proc = params.process
 
@@ -538,17 +564,17 @@ class ProcessInitializer:
         else:
             inj_stg = 1
 
-        if prod.get('inj_stg'):
-            inj_stg = prod['inj_stg']
+        if ps.get('inj_stg'):
+            inj_stg = ps['inj_stg']
 
         proc.inj_stg = inj_stg
 
         # ========== 2. 确定保压段数 ==========
-        prod_hold_stg = prod.get('hold_stg', 2)
+        prod_hold_stg = ps.get('hold_stg', 2)
         proc.hold_stg = prod_hold_stg
 
         # ========== 3. 确定计量段数 ==========
-        prod_met_stg = prod.get('met_stg', 1)
+        prod_met_stg = ps.get('met_stg', 1)
         proc.met_stg = prod_met_stg
 
         # ========== 4. 多级注射 ==========
@@ -604,8 +630,8 @@ class ProcessInitializer:
                 for i in range(inj_stg)
             ]
         else:
-            product_weight = self.product['product_weight'] - runner_weight
-            total_weight = self.product['product_weight']
+            product_weight = self.mold['product_weight'] - runner_weight
+            total_weight = self.mold['product_weight']
             part_percent = product_weight / total_weight
             runner_percent = runner_weight / total_weight
 

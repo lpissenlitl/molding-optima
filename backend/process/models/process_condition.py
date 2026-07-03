@@ -30,7 +30,7 @@ class ProcessCondition(BusinessBaseModel):
     status = models.CharField(null=True, blank=True, max_length=20, verbose_name="状态")
 
     # --- 基本信息 ---
-    condition_code = models.CharField(null=True, blank=True, max_length=50, verbose_name="工艺条件编号")
+    condition_no = models.CharField(null=True, blank=True, max_length=50, verbose_name="工艺条件编号")
 
     PROCESS_CONDITION_ORIGIN_CHOICES = [
         ('manual_creation', '手工新建'),
@@ -48,9 +48,35 @@ class ProcessCondition(BusinessBaseModel):
         verbose_name="工艺起源类型",
     )
 
+    # --- 前端上下文输入 JSON ---
+    # 与 process_context_snapshot 的区别：前端可控的覆盖/调整输入
+    # process_context_snapshot 是后端自动生成的不可变快照
+    process_context = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="工艺上下文（前端输入）",
+        help_text="""
+        前端传给后端的业务覆盖与调整值。与 process_context_snapshot
+        并存：snapshot 是后端不可变快照（创建时锁定），context 是
+        前端可变的覆盖输入（用于指导后端处理）。
+        {
+            "product_weight": 85,
+            "runner_weight": 0,
+            "gate_type": "侧浇口",
+            "ave_thickness": 2.8,
+            "max_thickness": 3.5,
+            "max_length": 150,
+            "gate_radius": 1.5,
+            "gate_length": 2.0,
+            "gate_width": 3.0
+        }
+        """
+    )
+
     # --- 上下文快照 JSON ---
+    # 后端自动生成的不可变快照（创建时锁定）
     process_context_snapshot = models.JSONField(
-        null=True, 
+        null=True,
         verbose_name="工艺条件快照",
         help_text="""
         {

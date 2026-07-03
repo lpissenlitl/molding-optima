@@ -21,10 +21,11 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 class ProcessConditionSchema(BaseSchema):
     """工艺条件"""
 
-    condition_code: Optional[str] = Field(None, description="工艺条件编号")
+    condition_no: Optional[str] = Field(None, description="工艺条件编号")
     status: Optional[str] = Field(None, description="状态")
     origin_type: Optional[str] = Field(None, description="工艺起源类型")
-    process_context_snapshot: Optional[dict] = Field(None, description="工艺条件快照")
+    process_context: Optional[dict] = Field(None, description="工艺上下文（前端输入，业务覆盖值）")
+    process_context_snapshot: Optional[dict] = Field(None, description="工艺条件快照（后端自动生成）")
     mold_id: Optional[int] = Field(None, description="模具 ID")
     shot_index: Optional[int] = Field(None, description="注射次数")
     injection_machine_id: Optional[int] = Field(None, description="注塑机 ID")
@@ -182,23 +183,23 @@ class BatchDeleteProcessParameterSchema(BaseSchema):
 # ========== 工艺参数初始化（基于规则推理） ==========
 
 class MachineInfoSchema(BaseSchema):
-    """注塑机本身信息（推理输入）
+    """设备信息（推理输入）
 
-    仅描述机器级别的元数据，注射相关参数在 InjectionUnitSchema 中。
+    单射设计：工艺推理时一台机台只取一个 InjectionUnit（按 injection_index 选取），
+    因此 injection_unit 的字段被扁平化到 machine_info 同一层，避免 view 层做二次融合。
+
+    包含：
+    - 机器本身：power_method（动力方式）
+    - 注射单元：screw_diameter / max_set_* / nozzle_type
     """
 
+    # === 机器本身 ===
     power_method: Optional[str] = Field(
         None,
         description="动力方式：液压机/电动机",
     )
 
-
-class InjectionUnitSchema(BaseSchema):
-    """注射单元参数（推理输入）
-
-    描述一个注射单元的物理能力，喷嘴安装在注射单元上。
-    """
-
+    # === 注射单元（扁平化，原 InjectionUnitSchema 内容）===
     screw_diameter: Optional[float] = Field(None, description="螺杆直径 (mm)")
     max_set_injection_pressure: Optional[float] = Field(None, description="最大设定注射压力")
     max_set_injection_velocity: Optional[float] = Field(None, description="最大设定注射速度")
@@ -223,49 +224,47 @@ class PolymerInfoSchema(BaseSchema):
 class MoldInfoSchema(BaseSchema):
     """模具信息（推理输入）
 
-    描述模具级别的元数据（如射数），产品/浇口/壁厚等详细信息在 ProductInfoSchema 中。
+    单射设计：工艺推理时一个 mold 只取第一个 cavity / gate，
+    因此 product / cavity / gate 的字段被扁平化到 mold_info 同一层。
+
+    包含：
+    - 模具级：shot_count
+    - 产品（来自 GatingSystem）：product_weight / runner_weight
+    - 产品尺寸（来自 Cavity）：ave_thickness / max_thickness / max_length
+    - 浇口（来自 Gate）：gate_type / gate_radius / gate_length / gate_width
+    - 热流道：valve_num
+    - 周期：inject_cycle_require
     """
 
+    # === 模具级 ===
     shot_count: Optional[int] = Field(None, description="模具射数")
 
-
-class ProductInfoSchema(BaseSchema):
-    """产品信息（推理输入）
-
-    描述产品的物理特征，从 mold 的 cavity/gate 提取：
-    - 产品本身特征：product_weight, runner_weight
-    - 产品尺寸（来自 Cavity）：ave_thickness, max_thickness, max_length
-    - 浇口特征（来自 Gate）：gate_type, gate_radius, gate_length, gate_width
-    """
-
-    # 产品本身特征
-    product_weight: float = Field(..., description="产品重量 (g)")
+    # === 产品本身（来自 GatingSystem）===
+    product_weight: Optional[float] = Field(None, description="产品重量 (g)")
     runner_weight: Optional[float] = Field(0, description="流道重量 (g)，0 表示热流道")
 
-    # 产品尺寸（来自 Cavity）
-    ave_thickness: float = Field(..., description="平均壁厚 (mm)")
-    max_thickness: float = Field(..., description="最大壁厚 (mm)")
+    # === 产品尺寸（来自 Cavity）===
+    ave_thickness: Optional[float] = Field(None, description="平均壁厚 (mm)")
+    max_thickness: Optional[float] = Field(None, description="最大壁厚 (mm)")
     max_length: Optional[float] = Field(100, description="最大流长 (mm)")
 
-    # 浇口特征（来自 Gate）
-    gate_type: str = Field(
-        ..., description="浇口类型：直浇口/侧浇口/点浇口/护耳式浇口/...",
-    )
+    # === 浇口（来自 Gate）===
+    gate_type: Optional[str] = Field(None, description="浇口类型：直浇口/侧浇口/点浇口/护耳式浇口/...")
     gate_radius: Optional[float] = Field(None, description="浇口半径 (mm)，侧浇口使用")
     gate_length: Optional[float] = Field(None, description="浇口长度 (mm)，侧浇口使用")
     gate_width: Optional[float] = Field(None, description="浇口宽度 (mm)，侧浇口使用")
 
-    # 热流道
+    # === 热流道 ===
     valve_num: Optional[int] = Field(0, description="热流道阀针数量")
 
-    # 周期要求（可由模具设计决定）
+    # === 周期要求 ===
     inject_cycle_require: Optional[float] = Field(None, description="注塑周期要求 (s)")
 
 
 class ProcessSetSchema(BaseSchema):
     """工艺设置（推理输入）
 
-    描述工艺段数与模式设置，与产品/模具无关，是独立设置项。
+    独立维度：与机器/模具/材料无关，是推理时需要的"工艺元数据"。
     """
 
     # 段数设置
@@ -304,28 +303,20 @@ class ProcessInferSchema(BaseSchema):
     }
     """
 
-    # 机器层面
+    # 4 个独立维度（扁平化、职责清晰）
+    # - 设备信息（机台本身 + 注射单元合一）
+    # - 材料信息
+    # - 模具信息（模具级 + 产品/浇口/壁厚派生合一）
+    # - 工艺设置（与设备/模具/材料无关的"工艺元数据"）
     machine_info: MachineInfoSchema = Field(
-        ..., description="注塑机本身信息（动力方式）",
+        ..., description="设备信息（机器本身 + 注射单元）",
     )
-    injection_unit: InjectionUnitSchema = Field(
-        ..., description="注射单元参数（螺杆、最大压力等）",
-    )
-
-    # 材料层面
     polymer_info: PolymerInfoSchema = Field(
         ..., description="材料信息",
     )
-
-    # 模具/产品层面
     mold_info: MoldInfoSchema = Field(
-        ..., description="模具信息（模具级）",
+        ..., description="模具信息（模具级 + 产品/浇口/壁厚派生）",
     )
-    product_info: ProductInfoSchema = Field(
-        ..., description="产品信息（产品级）",
-    )
-
-    # 工艺设置
     process_set: ProcessSetSchema = Field(
         ..., description="工艺设置（段数与模式）",
     )
@@ -347,22 +338,15 @@ class ProcessInitializationSchema(BaseSchema):
       后端不查库，不落库（数据库中没有关联数据，落库也是数据丢失）
     - /initialization/（本接口）：后端从数据库查询上下文，默认落库
 
-    响应：
-    Mode A:
+    响应（两种模式统一）：
     {
         "param_source": "algorithm_init",
-        "condition_id": 123,         # 现有 condition ID（保持不变）
-        "parameter_id": 456,         # 新创建的 ProcessParameter ID
+        "condition_id": int,            # Mode A 沿用现有 / Mode B 新建
+        "parameter_id": int | None,     # 两种模式都新建 ProcessParameter
         "matched_rules": [...],
-        "process": {...}, "mold_temp": {...}, "hot_runner": {...},
-        "summary": {...}
-    }
-    Mode B:
-    {
-        "condition_id": 789,         # 新建
-        "parameter_id": 790,         # 新建
-        "matched_rules": [...],
-        "process": {...}, "mold_temp": {...}, "hot_runner": {...},
+        "process": {...},
+        "mold_temp": {...},
+        "hot_runner": {...},
         "summary": {...}
     }
     """
@@ -390,27 +374,23 @@ class ProcessInitializationSchema(BaseSchema):
     # ====== Mode B 工艺元信息 ======
     shot_index: int = Field(1, description="Mode B：注射次数（多射场景）")
     injection_index: int = Field(1, description="Mode B：注射单元索引")
-    status: str = Field("draft", description="Mode B：工艺条件状态：draft/testing/approved/...")
-    origin_type: str = Field(
-        "ai_recommendation",
-        description="Mode B：工艺起源类型：manual_creation/ai_recommendation/template_based/...",
-    )
-    condition_code: Optional[str] = Field(
+    # 移除前端传的 status / origin_type——这两个由后端根据调用场景自动决定
+    # 初始化接口固定为：status="draft", origin_type="ai_recommendation"
+    condition_no: Optional[str] = Field(
         None,
         description="Mode B：工艺条件编号（不传则自动生成，如 C-{mold}-{timestamp}）",
     )
 
-    # ====== 用户覆盖字段（可选）======
-    # 用于 masterdata 字段不准确时手动覆盖，仅限产品/工艺相关字段
-    product_weight: Optional[float] = Field(None, description="覆盖：产品重量 (g)")
-    runner_weight: Optional[float] = Field(None, description="覆盖：流道重量 (g)，0 表示热流道")
-    gate_type: Optional[str] = Field(None, description="覆盖：浇口类型")
-    ave_thickness: Optional[float] = Field(None, description="覆盖：平均壁厚 (mm)")
-    max_thickness: Optional[float] = Field(None, description="覆盖：最大壁厚 (mm)")
-    max_length: Optional[float] = Field(None, description="覆盖：最大流长 (mm)")
-    gate_radius: Optional[float] = Field(None, description="覆盖：侧浇口半径 (mm)")
-    gate_length: Optional[float] = Field(None, description="覆盖：侧浇口长度 (mm)")
-    gate_width: Optional[float] = Field(None, description="覆盖：侧浇口宽度 (mm)")
+    # ====== 业务上下文覆盖（可选）======
+    # 前端传给后端的业务覆盖与调整值。
+    # 传入后：
+    # 1) 合并到推理上下文（覆盖 masterdata 默认值）
+    # 2) 持久化到 ProcessCondition.process_context 字段（保留用户意图）
+    # 内部不再独立定义字段，用通用 dict 承载，详见 ProcessCondition.process_context 字段文档
+    process_context: Optional[dict] = Field(
+        None,
+        description="业务上下文覆盖（dict）。覆盖 masterdata 中的产品/工艺相关字段（如 product_weight / gate_type / ave_thickness 等）。后端会原样持久化到 Condition.process_context。",
+    )
 
     # ====== 工艺设置（段数与模式） ======
     # 使用嵌套的 process_set 字段，参数结构与 ProcessSetSchema 保持一致

@@ -3,7 +3,7 @@ molding-optima 工艺管理 - 模型
 
 参考 molding-expert-service/process/models.py 的设计：
 - 字段命名采用 molding-expert 风格（inj_spd_1, inj_pres_1 等，可读性更好）
-- 保留 molding-optima 业务所需的额外字段（status, condition_code, origin_type, shot_index, injection_index）
+- 保留 molding-optima 业务所需的额外字段（status, condition_no, origin_type, shot_index, injection_index）
 
 模型：
 - ProcessCondition：工艺条件主表
@@ -39,7 +39,7 @@ class ProcessCondition(BusinessBaseModel):
     status = models.CharField(null=True, blank=True, max_length=20, verbose_name="状态")
 
     # --- 基本信息 ---
-    condition_code = models.CharField(null=True, blank=True, max_length=50, verbose_name="工艺条件编号")
+    condition_no = models.CharField(null=True, blank=True, max_length=50, verbose_name="工艺条件编号")
 
     PROCESS_CONDITION_ORIGIN_CHOICES = [
         ('manual_creation', '手工新建'),

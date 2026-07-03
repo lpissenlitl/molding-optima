@@ -74,9 +74,9 @@
     "injection_machine_id": 3,
     "shot_index": 1,
     "injection_index": 1,
-    "status": "draft",
-    "origin_type": "ai_recommendation",
-    "condition_code": null,
+    "status": "draft",                  // 2026-07-03：后端固定，前端不传
+    "origin_type": "ai_recommendation",// 2026-07-03：后端固定，前端不传
+    "condition_no": null,              // 2026-07-03 重命名：condition_code → condition_no
     
     // 用户覆盖字段（两种模式通用）
     "product_weight": 80,

@@ -85,9 +85,10 @@ class ProcessCondition(BusinessBaseModel):
     status = CharField()  # draft/testing/approved/rejected/obsolete
     
     # 基本信息
-    condition_code = CharField()
+    condition_no = CharField()  # 2026-07-03 重命名：condition_code → condition_no
     origin_type = CharField()  # manual_creation/template_based/ai_recommendation...
-    process_context_snapshot = JSONField()  # 工艺快照
+    process_context_snapshot = JSONField()  # 工艺快照（后端自动生成）
+    process_context = JSONField()  # 业务上下文（前端输入，2026-07-03 新增）
     
     # 模具信息
     mold = ForeignKey("masterdata.Mold")
