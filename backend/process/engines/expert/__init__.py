@@ -18,22 +18,38 @@
 
 from .expert_engine import ExpertEngine
 from .initializer import ProcessInitializer
+from .algorithm_engine import AlgorithmEngine
 from .rule_loader import InitRuleLoader
 from .rule_matcher import InitRuleMatcher
+from .data_validator import DataValidator
 from .param_types import (
     ProcessParams,
     MoldTempParams,
     HotRunnerParams,
     ProductionParams,
 )
+from .helpers import (
+    compute_screw_cross_area,
+    compute_total_injection_length,
+    compute_cushion_length,
+    parse_material_family,
+    get_coeff,
+)
 
 __all__ = [
     "ExpertEngine",
     "ProcessInitializer",
+    "AlgorithmEngine",
     "InitRuleLoader",
     "InitRuleMatcher",
+    "DataValidator",
     "ProcessParams",
     "MoldTempParams",
     "HotRunnerParams",
     "ProductionParams",
+    "compute_screw_cross_area",
+    "compute_total_injection_length",
+    "compute_cushion_length",
+    "parse_material_family",
+    "get_coeff",
 ]

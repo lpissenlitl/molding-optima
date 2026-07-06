@@ -43,6 +43,7 @@ BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(H
 sys.path.insert(0, BACKEND_ROOT)
 
 from process.engines.expert.initializer import ProcessInitializer  # noqa: E402
+from process.engines.expert.algorithm_engine import AlgorithmEngine  # noqa: E402
 
 PASS = '\033[92m'
 FAIL = '\033[91m'
@@ -312,56 +313,56 @@ def test_scenario_h_level_strings():
         process_set={},
     )
     init.derive()  # 必须先 derive() 才会加载 _coeffs
-    coeffs = init._coeffs
+    coeffs = init.engine._coeffs
     c_met = coeffs.get('metering', {})
 
     # H1：_get_family_meter_shear_ratio 各 level
 
     # 已知 abbreviation（精确匹配）
-    factor, level, key_used = init._get_family_meter_shear_ratio('PP', c_met)
+    factor, level, key_used = init.engine._get_family_meter_shear_ratio('PP', c_met)
     _assert_close(factor, 1.10, "H1.1 PP family_factor == 1.10", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "H1.2 PP level == 'precise_abbrev'（完整匹配）")
     _assert_eq(key_used, 'PP', "H1.3 PP key_used == 'PP'")
 
     # 已知 family（abbreviation 不精确但 family 可解析）
-    factor, level, key_used = init._get_family_meter_shear_ratio('PA66', c_met)
+    factor, level, key_used = init.engine._get_family_meter_shear_ratio('PA66', c_met)
     _assert_close(factor, 0.50, "H1.4 PA66 family_factor == 0.50（精确匹配）", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "H1.5 PA66 level == 'precise_abbrev'")
     _assert_eq(key_used, 'PA66', "H1.6 PA66 key_used == 'PA66'")
 
     # 未知 abbreviation + family 不可解析 → default
-    factor, level, key_used = init._get_family_meter_shear_ratio('XXX', c_met)
+    factor, level, key_used = init.engine._get_family_meter_shear_ratio('XXX', c_met)
     _assert_close(factor, 1.0, "H1.7 XXX family_factor == 1.0（default）", eps=0.01)
     _assert_eq(level, 'default', "H1.8 XXX level == 'default'")
 
     # H2：_get_ld_correction 各桶 level
 
     # 字段缺失 → default
-    factor, level = init._get_ld_correction(None, c_met)
+    factor, level = init.engine._get_ld_correction(None, c_met)
     _assert_close(factor, 1.00, "H2.1 L/D 缺失 ld_factor == 1.00（default）", eps=0.01)
     _assert_eq(level, 'default', "H2.2 L/D 缺失 level == 'default'")
 
     # short L/D=16
-    factor, level = init._get_ld_correction(16.0, c_met)
+    factor, level = init.engine._get_ld_correction(16.0, c_met)
     _assert_close(factor, 1.05, "H2.3 L/D=16 ld_factor == 1.05（short）", eps=0.01)
     _assert_eq(level, 'short', "H2.4 L/D=16 level == 'short'")
 
     # standard L/D=20
-    factor, level = init._get_ld_correction(20.0, c_met)
+    factor, level = init.engine._get_ld_correction(20.0, c_met)
     _assert_close(factor, 1.00, "H2.5 L/D=20 ld_factor == 1.00（standard）", eps=0.01)
     _assert_eq(level, 'standard', "H2.6 L/D=20 level == 'standard'")
 
     # long L/D=24
-    factor, level = init._get_ld_correction(24.0, c_met)
+    factor, level = init.engine._get_ld_correction(24.0, c_met)
     _assert_close(factor, 0.95, "H2.7 L/D=24 ld_factor == 0.95（long）", eps=0.01)
     _assert_eq(level, 'long', "H2.8 L/D=24 level == 'long'")
 
     # 边界 L/D=18（standard）
-    factor, level = init._get_ld_correction(18.0, c_met)
+    factor, level = init.engine._get_ld_correction(18.0, c_met)
     _assert_eq(level, 'standard', "H2.9 L/D=18（边界）level == 'standard'")
 
     # 边界 L/D=22（standard）
-    factor, level = init._get_ld_correction(22.0, c_met)
+    factor, level = init.engine._get_ld_correction(22.0, c_met)
     _assert_eq(level, 'standard', "H2.10 L/D=22（边界）level == 'standard'")
 
 

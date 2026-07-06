@@ -34,6 +34,8 @@ BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(H
 sys.path.insert(0, BACKEND_ROOT)
 
 from process.engines.expert.initializer import ProcessInitializer  # noqa: E402
+from process.engines.expert.algorithm_engine import AlgorithmEngine  # noqa: E402
+from process.engines.expert.helpers import parse_material_family  # noqa: E402
 
 PASS = '\033[92m'
 FAIL = '\033[91m'
@@ -176,15 +178,16 @@ def test_scenario_a_pet_cap_long_hold():
 
     # 调试：手动重算一次
     init_dbg = ProcessInitializer(mold_info=mold, machine_info=_machine(), polymer_info=material)
-    init_dbg._coeffs = init_dbg.rule_matcher.match({'machine': _machine(), 'material': material, 'mold': mold, 'process_set': {}})
-    ch = init_dbg._coeffs.get('holding', {})
-    fam_dbg = init_dbg._parse_family('PET')
-    bucket_dbg, _ = init_dbg._get_thickness_bucket(5.0, init_dbg._coeffs.get('injection', {}))
-    ft, fl = init_dbg._get_family_gate_freeze_time(fam_dbg, bucket_dbg, ch)
-    gf_dbg = init_dbg._get_gate_factor_for_hold('直浇口', ch)
-    rf_dbg, rl_dbg = init_dbg._get_runner_factor('', 0.0, ch)
-    mt_dbg, mtl_dbg = init_dbg._get_mold_temp_factor(130.0, ch)
-    ck_dbg = init_dbg._get_crystallinity_kick(fam_dbg, ch)
+    coeffs = init_dbg.rule_matcher.match({'machine': _machine(), 'material': material, 'mold': mold, 'process_set': {}})
+    init_dbg._engine = AlgorithmEngine(mold=mold, machine=_machine(), material=material, process_set={}, coeffs=coeffs)
+    ch = coeffs.get('holding', {})
+    fam_dbg = parse_material_family('PET')
+    bucket_dbg, _ = init_dbg.engine._get_thickness_bucket(5.0, coeffs.get('injection', {}))
+    ft, fl = init_dbg.engine._get_family_gate_freeze_time(fam_dbg, bucket_dbg, ch)
+    gf_dbg = init_dbg.engine._get_gate_factor_for_hold('直浇口', ch)
+    rf_dbg, rl_dbg = init_dbg.engine._get_runner_factor('', 0.0, ch)
+    mt_dbg, mtl_dbg = init_dbg.engine._get_mold_temp_factor(130.0, ch)
+    ck_dbg = init_dbg.engine._get_crystallinity_kick(fam_dbg, ch)
     print(f"  [debug PET] family={fam_dbg} bucket={bucket_dbg} freeze_t={ft}({fl}) "
           f"gate={gf_dbg} runner={rf_dbg}({rl_dbg}) mt={mt_dbg}({mtl_dbg}) cryst={ck_dbg}")
     raw_dbg = ft * gf_dbg * rf_dbg * mt_dbg * ck_dbg
@@ -234,19 +237,20 @@ def test_scenario_b_four_level_fallback():
         process_set={},
     )
     # 直接喂一个去掉 thin key 的 family_gate_freeze_time
-    init._coeffs = init.rule_matcher.match({
+    coeffs = init.rule_matcher.match({
         'machine': init.machine,
         'material': init.material,
         'mold': init.mold,
         'process_set': init.process_set,
     })
-    c_hold = dict(init._coeffs.get('holding', {}))
+    c_hold = dict(coeffs.get('holding', {}))
     pp_table = dict(c_hold['family_gate_freeze_time'].get('PP', {}))
     pp_table.pop('thin', None)  # 模拟薄壁数据缺失
     c_hold['family_gate_freeze_time'] = {**c_hold['family_gate_freeze_time'], 'PP': pp_table}
-    init._coeffs['holding'] = c_hold
+    coeffs['holding'] = c_hold
+    init._engine = AlgorithmEngine(mold=init.mold, machine=init.machine, material=init.material, process_set=init.process_set, coeffs=coeffs)
 
-    freeze_t, freeze_level = init._get_family_gate_freeze_time('PP', 'thin', c_hold)
+    freeze_t, freeze_level = init.engine._get_family_gate_freeze_time('PP', 'thin', c_hold)
     _assert_close(freeze_t, 12.5, "B3 PP thin 缺数据 → 中桶兜底 12.5s")
     if freeze_level == 'family_default_bucket':
         _passes.append(f"  {PASS}[PASS]{NC} B3 freeze level=family_default_bucket")
@@ -262,14 +266,15 @@ def test_scenario_b_four_level_fallback():
         polymer_info=_base_material(abbreviation='UNKNOWN_MATERIAL'),
         process_set={},
     )
-    init4._coeffs = init4.rule_matcher.match({
+    coeffs4 = init4.rule_matcher.match({
         'machine': init4.machine,
         'material': init4.material,
         'mold': init4.mold,
         'process_set': init4.process_set,
     })
-    c_hold_4 = init4._coeffs.get('holding', {})
-    freeze_t_4, freeze_level_4 = init4._get_family_gate_freeze_time('', 'thick', c_hold_4)
+    init4._engine = AlgorithmEngine(mold=init4.mold, machine=init4.machine, material=init4.material, process_set=init4.process_set, coeffs=coeffs4)
+    c_hold_4 = coeffs4.get('holding', {})
+    freeze_t_4, freeze_level_4 = init4.engine._get_family_gate_freeze_time('', 'thick', c_hold_4)
     _assert_close(freeze_t_4, 75.0, "B4 未知 family thick → default=75.0")
     if freeze_level_4 == 'default':
         _passes.append(f"  {PASS}[PASS]{NC} B4 freeze level=default")
@@ -315,14 +320,15 @@ def test_scenario_c_boundary_guards():
         polymer_info=_base_material(abbreviation='ABS', recommended_mold_temp=0.0),
         process_set={},
     )
-    init3._coeffs = init3.rule_matcher.match({
+    coeffs3 = init3.rule_matcher.match({
         'machine': init3.machine,
         'material': init3.material,
         'mold': init3.mold,
         'process_set': init3.process_set,
     })
-    c_hold_3 = init3._coeffs.get('holding', {})
-    _, mt_level = init3._get_mold_temp_factor(0.0, c_hold_3)
+    init3._engine = AlgorithmEngine(mold=init3.mold, machine=init3.machine, material=init3.material, process_set=init3.process_set, coeffs=coeffs3)
+    c_hold_3 = coeffs3.get('holding', {})
+    _, mt_level = init3.engine._get_mold_temp_factor(0.0, c_hold_3)
     if mt_level == 'default':
         _passes.append(f"  {PASS}[PASS]{NC} C3 mold_temp=0 → level=default")
     else:
@@ -331,20 +337,21 @@ def test_scenario_c_boundary_guards():
         )
 
     # C4: 不存在 family → default_hold_time_max=300s 兜底
-    init4 = ProcessInitializer(
+    init4_c4 = ProcessInitializer(
         mold_info=_base_mold(max_thickness=2.0),
         machine_info=_machine(),
         polymer_info=_base_material(abbreviation='UNKNOWN_MATERIAL'),
         process_set={},
     )
-    init4._coeffs = init4.rule_matcher.match({
-        'machine': init4.machine,
-        'material': init4.material,
-        'mold': init4.mold,
-        'process_set': init4.process_set,
+    coeffs4_c4 = init4_c4.rule_matcher.match({
+        'machine': init4_c4.machine,
+        'material': init4_c4.material,
+        'mold': init4_c4.mold,
+        'process_set': init4_c4.process_set,
     })
-    c_hold_4 = init4._coeffs.get('holding', {})
-    cap = init4._get_family_hold_time_max('UNKNOWN_FAMILY', c_hold_4)
+    init4_c4._engine = AlgorithmEngine(mold=init4_c4.mold, machine=init4_c4.machine, material=init4_c4.material, process_set=init4_c4.process_set, coeffs=coeffs4_c4)
+    c_hold_4_c4 = coeffs4_c4.get('holding', {})
+    cap = init4_c4.engine._get_family_hold_time_max('UNKNOWN_FAMILY', c_hold_4_c4)
     _assert_close(cap, 300.0, "C4 未知 family 上限 → default_hold_time_max=300s")
 
 

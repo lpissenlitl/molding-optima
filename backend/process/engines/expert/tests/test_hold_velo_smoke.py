@@ -30,6 +30,8 @@ BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(H
 sys.path.insert(0, BACKEND_ROOT)
 
 from process.engines.expert.initializer import ProcessInitializer  # noqa: E402
+from process.engines.expert.algorithm_engine import AlgorithmEngine  # noqa: E402
+from process.engines.expert.helpers import parse_material_family  # noqa: E402
 
 PASS = '\033[92m'
 FAIL = '\033[91m'
@@ -170,14 +172,15 @@ def test_scenario_a_pet_cap_long_hold():
 
     # 调试：手动重算
     init_dbg = ProcessInitializer(mold_info=mold, machine_info=_machine(), polymer_info=material)
-    init_dbg._coeffs = init_dbg.rule_matcher.match({
+    coeffs = init_dbg.rule_matcher.match({
         'machine': _machine(), 'material': material, 'mold': mold, 'process_set': {}
     })
-    ch = init_dbg._coeffs.get('holding', {})
-    fam_dbg = init_dbg._parse_family('PET')
-    bucket_dbg, _ = init_dbg._get_thickness_bucket(5.0, init_dbg._coeffs.get('injection', {}))
-    fvr, lvl_dbg = init_dbg._get_family_hold_velo_ratio(fam_dbg, ch)
-    gfv_dbg = init_dbg._get_gate_factor_for_hold_velo(bucket_dbg, ch)
+    init_dbg._engine = AlgorithmEngine(mold=mold, machine=_machine(), material=material, process_set={}, coeffs=coeffs)
+    ch = coeffs.get('holding', {})
+    fam_dbg = parse_material_family('PET')
+    bucket_dbg, _ = init_dbg.engine._get_thickness_bucket(5.0, coeffs.get('injection', {}))
+    fvr, lvl_dbg = init_dbg.engine._get_family_hold_velo_ratio(fam_dbg, ch)
+    gfv_dbg = init_dbg.engine._get_gate_factor_for_hold_velo(bucket_dbg, ch)
     raw_dbg = 100 * fvr * gfv_dbg
     cap_dbg = 100 * ch.get('max_safe_hold_velo_ratio', 0.30)
     print(f"  [debug PET] family={fam_dbg} bucket={bucket_dbg} fvr={fvr}({lvl_dbg}) "

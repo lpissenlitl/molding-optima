@@ -46,6 +46,7 @@ BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(H
 sys.path.insert(0, BACKEND_ROOT)
 
 from process.engines.expert.initializer import ProcessInitializer  # noqa: E402
+from process.engines.expert.algorithm_engine import AlgorithmEngine  # noqa: E402
 
 PASS = '\033[92m'
 FAIL = '\033[91m'
@@ -277,19 +278,19 @@ def test_scenario_g_boundary_clamp():
         process_set={},
     )
     init.derive()  # 必须先 derive() 才会加载 _coeffs
-    c_back = init._coeffs.get('back_pressure', {})
+    c_back = init.engine._coeffs.get('back_pressure', {})
     # meter_speed = 0.75 × 150 = 112.5 → rpm_ratio=0.75 → speed_factor=1.0+0.3*(0.75-0.5)=1.075
-    sf, level = init._get_speed_factor(112.5, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(112.5, 150.0, c_back)
     _assert_close(sf, 1.075, "G3 rpm_ratio=0.75 → speed_factor ≈ 1.075", eps=0.01)
     _assert_eq(level, 'high', "G3.1 rpm_ratio=0.75 level == 'high'")
 
     # G4：转速联动（rpm_ratio=0.30 → speed_factor=0.94，未钳到 0.85 下限）
-    sf, level = init._get_speed_factor(45.0, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(45.0, 150.0, c_back)
     _assert_close(sf, 0.94, "G4 rpm_ratio=0.30 → speed_factor ≈ 0.94", eps=0.01)
     _assert_eq(level, 'low', "G4.1 rpm_ratio=0.30 level == 'low'")
 
     # G5：rpm_ratio=0.5 → speed_factor=1.00
-    sf, level = init._get_speed_factor(75.0, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(75.0, 150.0, c_back)
     _assert_close(sf, 1.00, "G5 rpm_ratio=0.5 → speed_factor ≈ 1.00（基准）", eps=0.01)
     _assert_eq(level, 'base', "G5.1 rpm_ratio=0.5 level == 'base'")
 
@@ -314,59 +315,59 @@ def test_scenario_h_level_strings():
         process_set={},
     )
     init.derive()
-    c_back = init._coeffs.get('back_pressure', {})
+    c_back = init.engine._coeffs.get('back_pressure', {})
 
     # H1：_get_family_back_pres_factor 各 level
 
     # 已知 abbreviation（精确匹配）
-    factor, level, key_used = init._get_family_back_pres_factor('PA66', c_back)
+    factor, level, key_used = init.engine._get_family_back_pres_factor('PA66', c_back)
     _assert_close(factor, 0.40, "H1.1 PA66 family_factor == 0.40", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "H1.2 PA66 level == 'precise_abbrev'")
     _assert_eq(key_used, 'PA66', "H1.3 PA66 key_used == 'PA66'")
 
     # 已知 abbreviation（PVC 精确匹配）
-    factor, level, key_used = init._get_family_back_pres_factor('PVC', c_back)
+    factor, level, key_used = init.engine._get_family_back_pres_factor('PVC', c_back)
     _assert_close(factor, 0.50, "H1.4 PVC family_factor == 0.50", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "H1.5 PVC level == 'precise_abbrev'")
 
     # 已知 abbreviation（PMMA 精确匹配）
-    factor, level, key_used = init._get_family_back_pres_factor('PMMA', c_back)
+    factor, level, key_used = init.engine._get_family_back_pres_factor('PMMA', c_back)
     _assert_close(factor, 1.50, "H1.6 PMMA family_factor == 1.50", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "H1.7 PMMA level == 'precise_abbrev'")
 
     # 已知 family（abbreviation 不精确但 family 可解析）
     # 注意：PA66 在第 1 级就精确匹配了，用 'PA6' 演示第 2 级 fallback
-    factor, level, key_used = init._get_family_back_pres_factor('PA6', c_back)
+    factor, level, key_used = init.engine._get_family_back_pres_factor('PA6', c_back)
     _assert_close(factor, 0.60, "H1.8 PA6 family_factor == 0.60（精确匹配）", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "H1.9 PA6 level == 'precise_abbrev'")
 
     # 未知 abbreviation + family 不可解析 → default
-    factor, level, key_used = init._get_family_back_pres_factor('XXX', c_back)
+    factor, level, key_used = init.engine._get_family_back_pres_factor('XXX', c_back)
     _assert_close(factor, 1.0, "H1.10 XXX family_factor == 1.0（default）", eps=0.01)
     _assert_eq(level, 'default', "H1.11 XXX level == 'default'")
 
     # H2：_get_speed_factor 各 level
 
     # 字段缺失 → default
-    sf, level = init._get_speed_factor(None, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(None, 150.0, c_back)
     _assert_close(sf, 1.00, "H2.1 meter_speed 缺失 speed_factor == 1.00（default）", eps=0.01)
     _assert_eq(level, 'default', "H2.2 meter_speed 缺失 level == 'default'")
 
     # max_screw_speed = 0 → default（避免除零）
-    sf, level = init._get_speed_factor(75.0, 0, c_back)
+    sf, level = init.engine._get_speed_factor(75.0, 0, c_back)
     _assert_close(sf, 1.00, "H2.3 max_screw_speed=0 speed_factor == 1.00（default）", eps=0.01)
     _assert_eq(level, 'default', "H2.4 max_screw_speed=0 level == 'default'")
 
     # high 桶（rpm_ratio > 0.5）
-    sf, level = init._get_speed_factor(112.5, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(112.5, 150.0, c_back)
     _assert_eq(level, 'high', "H2.5 rpm_ratio=0.75 level == 'high'")
 
     # base 桶（rpm_ratio = 0.5）
-    sf, level = init._get_speed_factor(75.0, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(75.0, 150.0, c_back)
     _assert_eq(level, 'base', "H2.6 rpm_ratio=0.5 level == 'base'")
 
     # low 桶（rpm_ratio < 0.5）
-    sf, level = init._get_speed_factor(45.0, 150.0, c_back)
+    sf, level = init.engine._get_speed_factor(45.0, 150.0, c_back)
     _assert_eq(level, 'low', "H2.7 rpm_ratio=0.30 level == 'low'")
 
 

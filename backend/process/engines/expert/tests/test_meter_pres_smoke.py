@@ -34,6 +34,7 @@ sys.path.insert(0, BACKEND_ROOT)
 
 from process.engines.expert.initializer import ProcessInitializer  # noqa: E402
 from process.engines.expert.rule_matcher import InitRuleMatcher  # noqa: E402
+from process.engines.expert.algorithm_engine import AlgorithmEngine  # noqa: E402
 
 PASS = '\033[92m'
 FAIL = '\033[91m'
@@ -261,32 +262,32 @@ def test_scenario_g_boundary_clamp():
     )
     # 关键：必须先 derive() 才会加载 _coeffs
     init.derive()
-    coeffs = init._coeffs
+    coeffs = init.engine._coeffs
     c_met = coeffs.get('metering', {})
 
     # 已知 family
-    factor, level, key_used = init._get_family_meter_viscosity('PP', c_met)
+    factor, level, key_used = init.engine._get_family_meter_viscosity('PP', c_met)
     _assert_close(factor, 0.6, "G3.1 PP family_factor == 0.6", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "G3.2 PP level == 'precise_abbrev'（完整匹配）")
     _assert_eq(key_used, 'PP', "G3.3 PP key_used == 'PP'")
 
     # 未知 abbreviation 但 family 可解析（如 PA66）
-    factor, level, key_used = init._get_family_meter_viscosity('PA66', c_met)
+    factor, level, key_used = init.engine._get_family_meter_viscosity('PA66', c_met)
     _assert_close(factor, 1.3, "G3.4 PA66 family_factor == 1.3（精确匹配）", eps=0.01)
     _assert_eq(level, 'precise_abbrev', "G3.5 PA66 level == 'precise_abbrev'")
     _assert_eq(key_used, 'PA66', "G3.6 PA66 key_used == 'PA66'")
 
     # 未知 abbreviation + family 不可解析
-    factor, level, key_used = init._get_family_meter_viscosity('XXX', c_met)
+    factor, level, key_used = init.engine._get_family_meter_viscosity('XXX', c_met)
     _assert_close(factor, 1.0, "G3.7 XXX family_factor == 1.0（default）", eps=0.01)
     _assert_eq(level, 'default', "G3.8 XXX level == 'default'")
 
     # nozzle_factor 字符串验证
-    f, l = init._get_nozzle_factor('直通型', c_met)
+    f, l = init.engine._get_nozzle_factor('直通型', c_met)
     _assert_close(f, 1.0, "G3.5 直通 nozzle_factor == 1.0", eps=0.01)
     _assert_eq(l, 'straight', "G3.6 直通 level == 'straight'")
 
-    f, l = init._get_nozzle_factor('锁定型', c_met)
+    f, l = init.engine._get_nozzle_factor('锁定型', c_met)
     _assert_close(f, 1.10, "G3.7 锁定 nozzle_factor == 1.10", eps=0.01)
     _assert_eq(l, 'locking', "G3.8 锁定 level == 'locking'")
 

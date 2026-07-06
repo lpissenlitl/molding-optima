@@ -274,7 +274,22 @@
                 4.0
               ]
             }
-          }
+          },
+          "family_fill_efficiency": {
+            "PP": 0.85,
+            "PE": 0.85,
+            "PS": 0.70,
+            "ABS": 0.65,
+            "AS": 0.65,
+            "PMMA": 0.55,
+            "PC": 0.40,
+            "PBT": 0.50,
+            "PET": 0.45,
+            "PA": 0.35,
+            "POM": 0.40,
+            "PVC": 0.30
+          },
+          "default_fill_efficiency": 0.60
         },
         "vp_switch": {
           "cushion_min_abs": 5,

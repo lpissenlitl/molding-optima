@@ -194,7 +194,7 @@ def test_scenario_b_user_int():
     mode, pos, t, pres, log = _run_and_capture_log(mold, material, process_set={'vps_mode': 1})
     _assert_eq(mode, 1, "B1.1 mode=1（时间切换）")
     _assert_eq(pos, 0, "B1.2 vps_pos=0（时间模式不填位置）")
-    _assert_close(t, 0.97, "B1.3 vps_t ≈ 0.97s（inj_time × 0.95 ≈ 1.07 × 0.95）", eps=0.05)
+    _assert_close(t, 0.5985, "B1.3 vps_t ≈ 0.5985s（inj_time × 0.95 ≈ 0.63 × 0.95，#5 重构 v2 后）", eps=0.05)
     _assert_eq(pres, 0, "B1.4 vps_pres=0（时间模式不填压力）")
     _assert_in(log, "source=explicit", "B1.5 日志 source=explicit")
 
@@ -210,7 +210,7 @@ def test_scenario_b_user_int():
     mode, pos, t, pres, log = _run_and_capture_log(mold, material, process_set={'vps_mode': 3})
     _assert_eq(mode, 3, "B3.1 mode=3（位置&时间）")
     _assert_close(pos, 10.88, "B3.2 vps_pos ≈ 10.88mm（inj_pos 推导）", eps=0.5)
-    _assert_close(t, 0.97, "B3.3 vps_t ≈ 0.97s（inj_time × 0.95）", eps=0.05)
+    _assert_close(t, 0.5985, "B3.3 vps_t ≈ 0.5985s（inj_time × 0.95）", eps=0.05)
     _assert_eq(pres, 0, "B3.4 vps_pres=0（位置&时间模式不填压力）")
 
 
@@ -229,7 +229,7 @@ def test_scenario_c_string_legacy():
     # C2: 时间
     mode, _, t, _, _ = _run_and_capture_log(mold, material, process_set={'VP_switch_mode': '时间'})
     _assert_eq(mode, 1, "C2 \"时间\" → mode=1")
-    _assert_close(t, 0.97, "C2 vps_t ≈ 0.97s", eps=0.05)
+    _assert_close(t, 0.5985, "C2 vps_t ≈ 0.5985s", eps=0.05)
 
     # C3: 压力（新增显式映射）
     mode, _, _, pres, _ = _run_and_capture_log(mold, material, process_set={'VP_switch_mode': '压力'})
@@ -240,7 +240,7 @@ def test_scenario_c_string_legacy():
     mode, pos, t, _, _ = _run_and_capture_log(mold, material, process_set={'VP_switch_mode': '位置&时间'})
     _assert_eq(mode, 3, "C4 \"位置&时间\" → mode=3")
     _assert_close(pos, 10.88, "C4 vps_pos ≈ 10.88mm", eps=0.5)
-    _assert_close(t, 0.97, "C4 vps_t ≈ 0.97s", eps=0.05)
+    _assert_close(t, 0.5985, "C4 vps_t ≈ 0.5985s", eps=0.05)
 
     # C5: 其他 → 兜底到压力
     mode, _, _, pres, _ = _run_and_capture_log(mold, material, process_set={'VP_switch_mode': '其他'})
@@ -268,7 +268,7 @@ def test_scenario_d_boundary():
     mode, pos, t, _, _ = _run_and_capture_log(mold, material, process_set={'vps_mode': 3, 'VP_switch_mode': '时间'})
     _assert_eq(mode, 3, "D3.1 vps_mode=3 优先于 VP_switch_mode='时间'")
     _assert_close(pos, 10.88, "D3.2 vps_pos ≈ 10.88mm", eps=0.5)
-    _assert_close(t, 0.97, "D3.3 vps_t ≈ 0.97s", eps=0.05)
+    _assert_close(t, 0.5985, "D3.3 vps_t ≈ 0.5985s", eps=0.05)
 
 
 # ========== 主函数 ==========

@@ -141,34 +141,63 @@ inj_velo = min(
 
 ### 3.5 算法 #5：注射时间 (inj_time)
 
-**物理意义**：使熔体在工艺窗口约束下完成填充所需时间，本质是几何下限被工艺钳制窗口约束。
+**物理意义**：使熔体在工艺窗口约束下完成填充所需时间。本质是**保护性参数**（不是物理精确参数）——用户在实际生产中为了提高效率往往会用更高的注射速度（远超算法推荐），所以 inj_time 算法本质是“保护性窗口约束 + 几何下限参考”。
 
-**推导公式**（二维差异化 + 几何钳制：材料流动性 × 壁厚档 → (min_t, max_t) 工艺窗口）：
+**推导公式**（重构 v2：family 填充效率驱动，**自包含不依赖 #4 inj_velo**）：
 ```python
-inj_time_geo = inj_len / inj_velo
+# 步骤 1：基于界面最大值 + family 填充效率推导等效速度（自包含）
+fill_efficiency = family_fill_efficiency[family]   # 11 family × 0.30~0.85
+equivalent_velo = max_set_inj_velo × fill_efficiency  # 物理 mm/s
+
+# 步骤 2：计算几何下限（用等效速度，不用 #4 inj_velo）
+inj_time_geo = inj_len / equivalent_velo if equivalent_velo > 0 else min_t
+
+# 步骤 3：family × bucket 工艺窗口钳制（保护性约束）
 (min_t, max_t) = family_time_window[family][bucket]
 inj_time = clamp(inj_time_geo, min_t, max_t)  # = max(min_t, min(inj_time_geo, max_t))
 ```
 
+**重构动机（v1 → v2）**：
+- **v1 问题**：依赖 #4 inj_velo 输出（混合模式：部分系数 + 部分物理绝对值）
+  - 在某些场景（如设备界面为 %）下，inj_velo 的物理意义不明确
+  - 算法鲁棒性差，#4 的精度问题会传导到 #5
+- **v2 改进**：采用 family 填充效率驱动（纯系数模式）
+  - #5 自包含：只需 `inj_len + max_set_inj_velo + family`，不依赖 #4 输出
+  - 鲁棒性提升：#4 与 #5 完全解耦，可独立调整
+  - 与 #3 #4 #6 #7 等系数模式一致（认知一致）
+
+**family_fill_efficiency 表的物理含义**：
+- 语义：**family 实际填充速度 / 机器最大速度**（无量纲系数）
+- PP/PE 高流动性 → 0.85（可接近 max）
+- PC 高黏度 → 0.40（必须慢）
+- PVC 极易分解 → 0.30（最慢）
+- 3 级兑底：family 表 → default_fill_efficiency=0.60（未知材料中位）
+
 **物理依据**：
-- 几何下限：`inj_len / inj_velo` 保证物理可达（与已物理化的 `inj_velo` 协同）
-- 薄壁冻结上限（thin 桶）：t ≤ 1.5mm → max_t 1.0~2.5s 防前缘冷却成欠注
-- 厚壁飞边下限（thick 桶）：t > 3.0mm → min_t 1.5~3.0s 防高剪切飞边
+- 几何下限：`inj_len / equivalent_velo` 保证物理可达（与重构后 equivalent_velo 协同）
+- **保护下限**（min_t）：薄壁冻结防护、厚壁响应时间、机器物理响应限制
+- **保护上限**（max_t）：薄壁冻结防护（thin max_t 1.0~2.5s 防前缘冷却成欠注）、厚壁飞边防护（thick min_t 1.5~3.0s 防高剪切烧焦）
 - 材料窗口差异：PC/PA66/PET 等高黏度 → 整体放宽；PP/PE 快填能力强 → 整体收紧
 - 桶分界（`thickness_bucket_thresholds = [1.5, 3.0]mm`）：thin / medium / thick 三档
 
-**数据源**：3 级兜底（精确值 `Polymer.recommend_inj_time_window` / family×bucket 查表 33 行 / `default_time_window = (0.6, 2.5)`）
+**数据源**：3 级兑底（精确值 `Polymer.recommend_inj_time_window` / family×bucket 查表 33 行 / `default_time_window = (0.6, 2.5)`） + family_fill_efficiency 2 级兑底（family 表 / default）
 
 **主要收益**：
-- 删除拍脑袋的 `inj_time_coef = 4.0`（对中位场景偏大 75%~92%）
-- 解决 `inj_time_min = 3.0` 对极小件偏大问题（节省 ~78% 周期）
-- 薄壁冻结上限真正生效（thin 桶钳制）
-- 厚壁飞边下限按材料差异化（family × thick 桶下限）
-- 与 `inj_velo` 协同：几何下限基于已物理化的 inj_velo
+- **解耦 #5 与 #4**：#5 不依赖 #4 inj_velo 输出，算法可独立调试与测试
+- **鲁棒性提升**：用户界面参数为 % 场景下，#5 不再依赖可能不明确含义的 inj_velo
+- **明确设计语义**：`family_fill_efficiency` 是无量纲系数，与 `inj_velo / max_set_inj_velo` 形式一致
+- **保留所有 v1 收益**：
+  - 删除拍脑袋的 `inj_time_coef = 4.0`（对中位场景偏大 75%~92%）
+  - 解决 `inj_time_min = 3.0` 对极小件偏大问题（节省 ~78% 周期）
+  - 薄壁冻结上限真正生效（thin 桶钳制）
+  - 厚壁飞边下限按材料差异化（family × thick 桶下限）
+  - 与 `family_time_window` 钳制逻辑协同
 
-**注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识窗口表 33 行），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
+**注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识窗口表 33 行 + family_fill_efficiency 11 family），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
 
 **完成文档**：[2026-07-05-injection-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-time-physics-design.md)
+**v2 重构记录**：2026-07-06 重构为 family 填充效率驱动（方向 A），详见路线图 §7 更新日志
+**Smoke Test**：[test_inj_time_smoke.py](file:///f:/items/moldingx/molding-optima/backend/process/engines/expert/tests/test_inj_time_smoke.py)（30 个断言全过）
 
 ---
 
@@ -931,3 +960,76 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 ---
 
 *最后更新时间：2026-07-05（#19+#20 温度族实施全闭环：设计文档 v1.0 598 行 + 代码 4 辅助函数 + smoke test 588 行 37 断言全过 + 8 套回归 smoke test 零回退 + 路线图总计 20/20 ✅）*
+
+---
+
+## 8. 增量迭代记录（v2 重构与修复）
+
+### 8.1 2026-07-06：#5 注射时间 重构 v2（family 填充效率驱动）
+
+**背景**：
+- 用户提出“纯物理推导难工程化落地”问题（原话：“我们无法换算，如果注塑机的面板注射速度用的是%，你该怎么办”）
+- 原设计 #5 依赖 #4 inj_velo 输出（混合模式：部分系数 + 部分物理绝对值）
+- 在用户界面为 %/inch/s 等场景下，inj_velo 的物理意义不明确
+
+**设计原则讨论**：从用户原始设计哲学中提取三个核心约束：
+1. **C1：界面单位多样化**：mm/s/inch/s/%，用户各自习惯
+2. **C2：双最大值字段**：数据库已有“界面最大值”和“实际最大值”
+3. **C5：工艺窗口大**：容错性高，不是非要极端精确才能合格
+4. **C6：依赖界面参数即可合格**：即使不追求物理绝对值精度，也能生产合格产品
+
+**重构方案选择**：明确选择**方向 A**（解耦 #5 与 #4）
+- 备选方向 C（保持现状 + 文档化）被否决：需用户主动选择方向 A
+- 备选方向 B（彻底系数化）被否决：引入全新 family_geometry_factor 概念负担重
+
+**v2 设计**：
+```python
+# 步骤 1：基于界面最大值 + family 填充效率推导等效速度（自包含）
+fill_efficiency = family_fill_efficiency[family]   # 11 family × 0.30~0.85
+equivalent_velo = max_set_inj_velo × fill_efficiency
+
+# 步骤 2：几何下限
+inj_time_geo = inj_len / equivalent_velo
+
+# 步骤 3：family × bucket 工艺窗口钳制（保护性约束）
+inj_time = clamp(inj_time_geo, min_t, max_t)
+```
+
+**family_fill_efficiency 表（11 family × 0.30~0.85）**：
+| family | fill_efficiency | 物理依据 |
+|--------|----------------|---------|
+| PP/PE | 0.85 | 高流动性，可接近 max |
+| PS | 0.70 | 中等流动性 |
+| ABS/AS | 0.65 | 中等流动性 |
+| PMMA | 0.55 | 中等黏度，怕剪切 |
+| PC | 0.40 | 高黏度，需慢 |
+| PBT | 0.50 | 中高黏度 |
+| PET | 0.45 | 高黏度，半结晶 |
+| PA | 0.35 | 高黏度+吸湿 |
+| POM | 0.40 | 高黏度+剪切释放甲醛 |
+| PVC | 0.30 | 极易分解（释放 HCl） |
+| default | 0.60 | 未知材料中位 |
+
+**代码变更**：
+- `process/engines/expert/expert_rules/init_rules.json` L277+ 新增 family_fill_efficiency 11 family × default_fill_efficiency
+- `process/engines/expert/initializer.py` L967+ 新增 `_get_family_fill_efficiency` 辅助函数（2 级兑底）
+- `process/engines/expert/initializer.py` L2232+ 重写 #5 主推导区域为 3 步逻辑
+- `process/engines/expert/initializer.py` L2206/2229 修复 #3 #4 logger 除零 bug（max_inj_pres/velo=0 时崩溃）
+
+**验证**：
+- 新增 `test_inj_time_smoke.py`（281 行 / 30 个断言 / 8 场景 A-H）全过
+- 8 套回归 smoke test 零回退：test_vp_switch_mode_smoke 36/36（同步更新 5 个 vps_t 预期值 0.97→0.5985）、test_cool_time_smoke 11/11、test_hold_time_smoke 17/17、test_hold_velo_smoke 21/21、test_meter_back_pres_smoke 34/34、test_meter_pres_smoke 22/22、test_meter_speed_smoke 28/28、test_suckback_smoke 33/33、test_temperature_smoke 37/37
+- 总计：269 个断言全过
+
+**主要收益**：
+- **解耦 #5 与 #4**：#5 不依赖 #4 inj_velo 输出，算法可独立调试与测试
+- **鲁棒性提升**：用户界面为 % 场景下，#5 不再依赖可能不明确含义的 inj_velo
+- **明确设计语义**：family_fill_efficiency 是无量纲系数，与 inj_velo / max_set_inj_velo 形式一致
+- **保留所有 v1 收益**：薄壁冻结防护、厚壁飞边下限差异化、family × bucket 工艺窗口钳制
+
+**后续增量迭代方向**（可选）：
+- #8 保压时间 检查是否依赖 inj_time 输出
+- #10 冷却时间 检查是否依赖 inj_time 输出
+- 考虑为“界面单位适配层”预留接口（数据库、API、算法三层都可添加适配层）
+
+---
