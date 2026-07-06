@@ -293,6 +293,14 @@ class ProcessInferSchema(BaseSchema):
     - 必须按信息归属层级提供完整的输入上下文
     - 与 /initialization/ 接口的区别：完全由调用方提供数据，后端不查库
 
+    请求体（4 个独立维度，职责清晰）：
+    {
+        "mold_info": {...},        // 模具信息（模具级 + 产品/浇口/壁厚派生合一）
+        "machine_info": {...},     // 设备信息（机台本身 + 注射单元合一）
+        "polymer_info": {...},     // 材料信息
+        "process_set": {...}       // 工艺设置（与设备/模具/材料无关的"工艺元数据"）
+    }
+
     响应：
     {
         "param_source": "algorithm_init",
@@ -303,98 +311,76 @@ class ProcessInferSchema(BaseSchema):
     }
     """
 
-    # 4 个独立维度（扁平化、职责清晰）
+    # 4 个独立维度（扁平化、职责清晰），顺序统一为：模具 → 设备 → 材料 → 工艺设定
+    # - 模具信息（模具级 + 产品/浇口/壁厚派生合一）
     # - 设备信息（机台本身 + 注射单元合一）
     # - 材料信息
-    # - 模具信息（模具级 + 产品/浇口/壁厚派生合一）
     # - 工艺设置（与设备/模具/材料无关的"工艺元数据"）
+    mold_info: MoldInfoSchema = Field(
+        ..., description="模具信息（模具级 + 产品/浇口/壁厚派生）",
+    )
     machine_info: MachineInfoSchema = Field(
         ..., description="设备信息（机器本身 + 注射单元）",
     )
     polymer_info: PolymerInfoSchema = Field(
         ..., description="材料信息",
     )
-    mold_info: MoldInfoSchema = Field(
-        ..., description="模具信息（模具级 + 产品/浇口/壁厚派生）",
-    )
     process_set: ProcessSetSchema = Field(
         ..., description="工艺设置（段数与模式）",
     )
 
 
-class ProcessInitializationSchema(BaseSchema):
-    """工艺参数初始化请求（统一接口，都是落库接口）
+class ProcessInitializationFromConditionSchema(BaseSchema):
+    """【Mode A】基于已有 condition_id 的工艺初始化请求
 
-    支持两种方式构建 Condition + Parameter：
-    - Mode A：基于已有 condition_id —— 后端从数据库查询 mold/machine/polymer，
-      创建新的 Parameter 记录（关联到现有 condition）
-    - Mode B：基于 masterdata ID（mold_id + polymer_id + injection_machine_id）——
-      后端从数据库查询 masterdata 并组装 Context，创建新的 Condition + Parameter
+    POST /api/processes/initialization/
 
-    两种模式互斥，不同时提供。两种模式默认都落库，因为数据库中有完整数据可关联。
+    Step 1 入口适配：condition_id
+    Step 2 数据前处理：process_context（可选，含关联 ID 与字段覆盖）
+    Step 3+4 推理算法 + 落库：在已有 condition 上创建新 ProcessParameter
 
-    与 infer 接口的区别：
-    - /initialization/infer/：完全由调用方提供数据（machine_info/polymer_info/product_info），
-      后端不查库，不落库（数据库中没有关联数据，落库也是数据丢失）
-    - /initialization/（本接口）：后端从数据库查询上下文，默认落库
-
-    响应（两种模式统一）：
-    {
-        "param_source": "algorithm_init",
-        "condition_id": int,            # Mode A 沿用现有 / Mode B 新建
-        "parameter_id": int | None,     # 两种模式都新建 ProcessParameter
-        "matched_rules": [...],
-        "process": {...},
-        "mold_temp": {...},
-        "hot_runner": {...},
-        "summary": {...}
-    }
+    status / origin_type 由后端固定为 draft / ai_recommendation。
     """
 
-    # ====== Mode A：基于已有 condition ======
-    condition_id: Optional[int] = Field(
-        None,
-        description="Mode A：工艺条件 ID（提供时使用该模式，后端从数据库查询上下文，纯推理不落库）",
+    condition_id: int = Field(
+        ..., description="工艺条件 ID（必填）",
     )
-
-    # ====== Mode B：基于 masterdata ID 组装 ======
-    mold_id: Optional[int] = Field(
-        None,
-        description="Mode B：模具 ID（与 polymer_id、injection_machine_id 同时提供以使用此模式）",
-    )
-    polymer_id: Optional[int] = Field(
-        None,
-        description="Mode B：材料 ID（与 mold_id、injection_machine_id 同时提供以使用此模式）",
-    )
-    injection_machine_id: Optional[int] = Field(
-        None,
-        description="Mode B：注塑机 ID（与 mold_id、polymer_id 同时提供以使用此模式）",
-    )
-
-    # ====== Mode B 工艺元信息 ======
-    shot_index: int = Field(1, description="Mode B：注射次数（多射场景）")
-    injection_index: int = Field(1, description="Mode B：注射单元索引")
-    # 移除前端传的 status / origin_type——这两个由后端根据调用场景自动决定
-    # 初始化接口固定为：status="draft", origin_type="ai_recommendation"
-    condition_no: Optional[str] = Field(
-        None,
-        description="Mode B：工艺条件编号（不传则自动生成，如 C-{mold}-{timestamp}）",
-    )
-
-    # ====== 业务上下文覆盖（可选）======
-    # 前端传给后端的业务覆盖与调整值。
-    # 传入后：
-    # 1) 合并到推理上下文（覆盖 masterdata 默认值）
-    # 2) 持久化到 ProcessCondition.process_context 字段（保留用户意图）
-    # 内部不再独立定义字段，用通用 dict 承载，详见 ProcessCondition.process_context 字段文档
+    # process_context 可选：关联 ID + 字段覆盖（Step 2 的补充输入）
     process_context: Optional[dict] = Field(
         None,
-        description="业务上下文覆盖（dict）。覆盖 masterdata 中的产品/工艺相关字段（如 product_weight / gate_type / ave_thickness 等）。后端会原样持久化到 Condition.process_context。",
+        description="业务上下文覆盖（dict）。含两类："
+                    "1) 关联 ID（gating_system_id / cavity_id / gate_id / injection_unit_id）指定 1:N 中的具体子项；"
+                    "2) 字段覆盖（任意键）覆盖 ORM 默认值。",
+    )
+    # process_set 与 process_context 职责分离：与设备/模具/材料无关的"工艺元数据"
+    process_set: Optional[ProcessSetSchema] = Field(
+        None, description="工艺设置（段数与模式）",
     )
 
-    # ====== 工艺设置（段数与模式） ======
-    # 使用嵌套的 process_set 字段，参数结构与 ProcessSetSchema 保持一致
-    process_set: Optional[ProcessSetSchema] = Field(
+
+class ProcessInitializationFromMasterdataSchema(BaseSchema):
+    """【Mode B】基于 masterdata ID 的工艺初始化请求
+
+    POST /api/processes/initialization/from-masterdata/
+
+    Step 1 入口适配：3 个 masterdata ID
+    Step 2 数据前处理：process_context（可选）
+    Step 3+4 推理算法 + 落库：创建 Condition + ProcessParameter
+
+    status / origin_type / condition_no 由后端自动生成。
+    """
+
+    mold_id: int = Field(..., description="模具 ID（必填）")
+    polymer_id: int = Field(..., description="材料 ID（必填）")
+    injection_machine_id: int = Field(..., description="注塑机 ID（必填）")
+
+    process_context: Optional[dict] = Field(
         None,
-        description="工艺设置（段数与模式），包含 inj_stg/hold_stg/met_stg/barrel_temperature_stage/vps_mode 等",
+        description="业务上下文覆盖（dict）。含关联 ID + 字段覆盖。",
+    )
+    process_set: Optional[ProcessSetSchema] = Field(
+        None, description="工艺设置（段数与模式）",
+    )
+    condition_no: Optional[str] = Field(
+        None, description="工艺条件编号（None 时后端自动生成 C-{mold}-S{shot}-{ts}）",
     )

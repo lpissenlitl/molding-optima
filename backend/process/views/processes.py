@@ -7,18 +7,27 @@ from django.db import transaction
 from identity.decorators import require_login
 from extensions.decorators import validate_parameters
 from extensions.views import BaseView
+from extensions.schemas import PaginationBaseSchema, BatchIdsSchema
 
 from process.schemas import (
     ProcessParameterSchema,
     ProcessParameterListSchema,
     BatchDeleteProcessParameterSchema,
-    ProcessInitializationSchema,
+    ProcessInitializationFromConditionSchema,
+    ProcessInitializationFromMasterdataSchema,
     ProcessInferSchema,
 )
-from process.services import main_service
+from process.services import (
+    main_service,
+    transplant_service,
+    expert_service,
+    optimize_service,
+    rule_service,
+    initialization_service,
+)
 
 
-# ==================== 工艺参数（对齐 molding-expert 4-16）====================
+# ==================== 工艺参数 ====================
 
 class ProcessParameterListView(BaseView):
     """工艺参数列表"""
@@ -79,26 +88,12 @@ class ProcessParameterBatchDeleteView(BaseView):
     """工艺参数批量删除"""
 
     @method_decorator(require_login)
-    @method_decorator(validate_parameters(BatchDeleteProcessParameterSchema))
+    @method_decorator(validate_parameters(BatchIdsSchema))
     def post(self, request, cleaned_data):
         return main_service.batch_delete_process_parameter(cleaned_data["ids"])
 
 
 # ==================== 工艺移植 ====================
-
-from process.services import (
-    record_service,
-    transplant_service,
-    expert_service,
-    optimize_service,
-    rule_service,
-    initialization_service,
-)
-from extensions.schemas import (
-    PaginationBaseSchema,
-    BatchIdsSchema,
-)
-
 
 class ProcessTransplantView(BaseView):
     """工艺参数移植（对齐 molding-expert /parameter/transplant/）"""
@@ -111,81 +106,108 @@ class ProcessTransplantView(BaseView):
         )
 
 
-class ProcessOptimizationView(BaseView):
-    """工艺优化（基于规则匹配）"""
+# ==================== 工艺参数初始化（基于规则推理）====================
+
+class ProcessInitializationView(BaseView):
+    """【Mode A】工艺参数初始化接口（基于已有 condition_id）
+
+    POST /api/processes/initialization/
+
+    4 步逻辑：
+      Step 1: 入口适配 —— condition_id
+      Step 2: 数据前处理 —— ORM + process_context → 4 维 dict
+      Step 3: 推理算法 —— 内部调用 infer_initial_params
+      Step 4: 输出后处理 —— 落库（创建 ProcessParameter）
+
+    请求体：
+    {
+        "condition_id": 123,                                       # 必填
+        "process_context": {                                       # 可选：关联 ID + 字段覆盖
+            "gating_system_id": 3, "cavity_id": 12, "gate_id": 25, # 关联 ID（指定 1:N）
+            "injection_unit_id": 7,
+            "product_weight": 80, "gate_type": "点浇口"             # 字段覆盖
+        },
+        "process_set": {"inj_stg": 1, "hold_stg": 1, ...}          # 可选：工艺设置
+    }
+
+    后端行为：在已有 condition 上创建新 ProcessParameter
+    """
 
     @method_decorator(require_login)
-    def get(self, request, condition_id):
-        return optimize_service.get_process_optimization(condition_id)
-
-    @method_decorator(require_login)
-    def post(self, request):
-        """
-        请求体：
-        {
-            "condition_id": int,
-            "target_defect": "短射"  # 可选
-        }
-        """
-        return optimize_service.add_process_optimization(
-            company_id=request.user.company_id,
-            organization_id=request.user.organization_id,
-            condition_id=request.DATA.get("condition_id"),
-            target_defect=request.DATA.get("target_defect"),
-        )
-
-    @method_decorator(require_login)
-    def put(self, request, condition_id):
-        return optimize_service.update_process_optimization(
-            condition_id, **request.DATA,
-        )
-
-
-class ProcessOptimizationHistoryView(BaseView):
-    """工艺优化历史"""
-
-    @method_decorator(require_login)
-    def get(self, request, condition_id):
-        return optimize_service.get_optimization_history(condition_id)
-
-
-# ==================== 专家调优 ====================
-
-class ProcessExpertSuggestionView(BaseView):
-    """专家调优建议（基于缺陷反馈 + 规则匹配）"""
-
-    @method_decorator(require_login)
-    def post(self, request):
-        """
-        请求体：
-        {
-            "condition_id": int,
-            "defect_feedback": { "B000": "level", "B001": "position", "B002": "feedback", ... }
-        }
-        """
-        return expert_service.suggest_expert_adjustment(
-            condition_id=request.DATA.get("condition_id"),
-            defect_feedback=request.DATA.get("defect_feedback"),
+    @method_decorator(validate_parameters(ProcessInitializationFromConditionSchema))
+    def post(self, request, cleaned_data):
+        return initialization_service.infer_from_condition(
+            condition_id=cleaned_data["condition_id"],
+            process_context=cleaned_data.get("process_context"),
+            process_set=cleaned_data.get("process_set"),
         )
 
 
-class ProcessExpertDefectTemplateView(BaseView):
-    """缺陷类型模板"""
+class ProcessInitializationFromMasterdataView(BaseView):
+    """【Mode B】工艺参数初始化接口（基于 masterdata ID）
+
+    POST /api/processes/initialization/from-masterdata/
+
+    4 步逻辑：
+      Step 1: 入口适配 —— 3 个 masterdata ID
+      Step 2: 数据前处理 —— ORM + process_context → 4 维 dict
+      Step 3: 推理算法 —— 内部调用 infer_initial_params
+      Step 4: 输出后处理 —— 落库（创建 Condition + ProcessParameter）
+
+    请求体：
+    {
+        "mold_id": 100,                                            # 必填
+        "polymer_id": 5,                                           # 必填
+        "injection_machine_id": 10,                                # 必填
+        "process_context": {...},                                   # 可选
+        "process_set": {...},                                       # 可选
+        "condition_no": "..."                                       # 可选，不传自动生成
+    }
+
+    后端行为：创建新 Condition + ProcessParameter
+    status / origin_type 由后端固定为 draft / ai_recommendation
+    """
 
     @method_decorator(require_login)
-    def get(self, request):
-        return expert_service.get_defect_template()
+    @method_decorator(validate_parameters(ProcessInitializationFromMasterdataSchema))
+    def post(self, request, cleaned_data):
+        return initialization_service.infer_from_masterdata(
+            mold_id=cleaned_data["mold_id"],
+            injection_machine_id=cleaned_data["injection_machine_id"],
+            polymer_id=cleaned_data["polymer_id"],
+            process_context=cleaned_data.get("process_context"),
+            process_set=cleaned_data.get("process_set"),
+            condition_no=cleaned_data.get("condition_no"),
+        )
 
 
-class ProcessExpertCreateView(BaseView):
-    """创建专家调优记录"""
+class ProcessInitializationInferView(BaseView):
+    """【/infer/】工艺参数纯推理接口（前端传完整数据，不查库不落库）
+
+    POST /api/processes/initialization/infer/
+
+    只跑 Step 3（跳过 Step 1/2/4）：
+      - service 不查 DB（数据库里没数据）
+      - service 不落库（无关联可挂）
+      - 前端直接传 4 维 dict
+
+    请求体（4 个独立维度，职责清晰）：
+    {
+        "mold_info": {...},        # 模具信息（模具级 + 产品/浇口/壁厚派生）
+        "machine_info": {...},     # 设备信息（机台本身 + 注射单元）
+        "polymer_info": {...},     # 材料信息
+        "process_set": {...}       # 工艺设置（与设备/模具/材料无关的"工艺元数据"）
+    }
+    """
 
     @method_decorator(require_login)
-    def post(self, request):
-        return expert_service.create_expert_optimization(
-            company_id=request.user.company_id,
-            organization_id=request.user.organization_id,
-            **request.DATA,
+    @method_decorator(validate_parameters(ProcessInferSchema))
+    def post(self, request, cleaned_data):
+        return initialization_service.infer_from_dict(
+            mold_info=cleaned_data["mold_info"],
+            machine_info=cleaned_data["machine_info"],
+            polymer_info=cleaned_data["polymer_info"],
+            process_set=cleaned_data.get("process_set"),
         )
 
 
@@ -257,146 +279,87 @@ class RuleMethodDetailView(BaseView):
         rule_service.delete_rule_method(rule_method_id)
 
 
-# ==================== 工艺参数初始化（基于规则推理）====================
+# ==================== 专家调优 ====================
 
-class ProcessInitializationView(BaseView):
-    """工艺参数初始化接口（统一入口，都是落库接口）
-
-    POST /api/processes/initialization/
-
-    Mode A：基于已有 condition_id
-    请求体：
-    {
-        "condition_id": 123,
-        // 可选业务上下文覆盖（覆盖 masterdata 中的产品/工艺相关字段）
-        "process_context": {
-            "product_weight": 80,
-            "gate_type": "点浇口",
-            "ave_thickness": 2.5
-            // ... 后端会原样持久化到 Condition.process_context
-        },
-        // 工艺设置（段数与模式，可选）
-        "process_set": {
-            "inj_stg": 1, "hold_stg": 1, "met_stg": 1,
-            "vps_mode": 0, ...
-        }
-    }
-    后端行为：从 condition 查询 mold/machine/polymer，创建新 ProcessParameter
-              status / origin_type 由后端固定为 draft / ai_recommendation
-
-    Mode B：基于 masterdata ID 组装
-    请求体：
-    {
-        "mold_id": 100,
-        "polymer_id": 5,
-        "injection_machine_id": 10,
-        "shot_index": 1, "injection_index": 1,
-        // 可选业务上下文覆盖
-        "process_context": {
-            "product_weight": 80,
-            "gate_type": "点浇口"
-        },
-        // 工艺设置（段数与模式，Mode B 必填项在 process_set 里）
-        "process_set": {
-            "inj_stg": 1, "hold_stg": 1, "met_stg": 1,
-            ...
-        }
-    }
-    后端行为：从 masterdata 查询并组装，创建新 Condition + ProcessParameter
-              status / origin_type 由后端固定为 draft / ai_recommendation
-
-    其他场景：
-    - /initialization/infer/：纯推理，前端传完整数据（扁平化结构），不查库不落库
-
-    响应（两种模式统一）：
-    {
-        "param_source": "algorithm_init",
-        "condition_id": int,            # Mode A 沿用现有 / Mode B 新建
-        "parameter_id": int,            # 两种模式都新建 ProcessParameter
-        "matched_rules": [...],
-        "process": {...}, "mold_temp": {...}, "hot_runner": {...},
-        "summary": {...}
-    }
-    """
+class ProcessExpertSuggestionView(BaseView):
+    """专家调优建议（基于缺陷反馈 + 规则匹配）"""
 
     @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessInitializationSchema))
-    def post(self, request, cleaned_data):
-        # 提取业务上下文覆盖（前端传给后端的覆盖值，两种 Mode 都用）
-        # 通用 dict，传入后会：
-        # 1) 合并到推理上下文（覆盖 masterdata 默认值）
-        # 2) 持久化到 Condition.process_context 字段
-        process_context = cleaned_data.get("process_context") or {}
-        # 提取 process_set 字段中的段数与模式设置（仅 Mode B 使用）
-        process_set = cleaned_data.get("process_set") or {}
-
-        condition_id = cleaned_data.get("condition_id")
-
-        # Mode A：基于已有 condition_id 推理
-        # - 推理 + 落库：在已有 condition 上创建新 ProcessParameter
-        # - process_context：会持久化到 Condition.process_context（仅第一次时）
-        if condition_id is not None:
-            return initialization_service.infer_initial_params(
-                condition_id=condition_id,
-                process_context=process_context or None,
-                save=True,
-            )
-
-        # Mode B：基于 masterdata ID 组装并创建工艺记录
-        mold_id = cleaned_data.get("mold_id")
-        polymer_id = cleaned_data.get("polymer_id")
-        injection_machine_id = cleaned_data.get("injection_machine_id")
-        if not (mold_id and polymer_id and injection_machine_id):
-            raise ValueError(
-                "必须提供 condition_id（Mode A）或者同时提供 mold_id + polymer_id + injection_machine_id（Mode B）"
-            )
-
-        return initialization_service.create_and_infer_initial_params(
-            mold_id=mold_id,
-            polymer_id=polymer_id,
-            injection_machine_id=injection_machine_id,
-            shot_index=cleaned_data.get("shot_index", 1),
-            injection_index=cleaned_data.get("injection_index", 1),
-            condition_no=cleaned_data.get("condition_no"),
-            process_context=process_context or None,
-            process_set=process_set,
-            save=True,
+    def post(self, request):
+        """
+        请求体：
+        {
+            "condition_id": int,
+            "defect_feedback": { "B000": "level", "B001": "position", "B002": "feedback", ... }
+        }
+        """
+        return expert_service.suggest_expert_adjustment(
+            condition_id=request.DATA.get("condition_id"),
+            defect_feedback=request.DATA.get("defect_feedback"),
         )
 
 
-class ProcessInitializationInferView(BaseView):
-    """工艺参数纯推理接口（前端传完整数据，不查库不落库）
-
-    POST /api/processes/initialization/infer/
-
-    请求体（4 个独立维度，职责清晰）：
-    {
-        "machine_info": {...},     // 设备信息（机台本身 + 注射单元合一）
-        "polymer_info": {...},     // 材料信息
-        "mold_info": {...},        // 模具信息（模具级 + 产品/浇口/壁厚派生合一）
-        "process_set": {...}       // 工艺设置（与设备/模具/材料无关的"工艺元数据"）
-    }
-
-    适用场景：
-    - 第三方集成：调用方没有我们的 masterdata
-    - 算法试算：仅做参数推荐，不保存记录
-
-    不落库原因：数据库中没有关联数据，落库是数据丢失。
-
-    响应：与 /initialization/ 一致，但 condition_id 和 parameter_id 始终为 null
-    """
+class ProcessExpertDefectTemplateView(BaseView):
+    """缺陷类型模板"""
 
     @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessInferSchema))
-    def post(self, request, cleaned_data):
-        # 纯推理：直接传 4 个独立 dict，service 内部组装给算法引擎
-        return initialization_service.infer_initial_params(
-            machine_info=cleaned_data["machine_info"],
-            polymer_info=cleaned_data["polymer_info"],
-            mold_info=cleaned_data["mold_info"],
-            process_set=cleaned_data["process_set"],
-            save=False,  # 纯推理接口，不落库
+    def get(self, request):
+        return expert_service.get_defect_template()
+
+
+class ProcessExpertCreateView(BaseView):
+    """创建专家调优记录"""
+
+    @method_decorator(require_login)
+    def post(self, request):
+        return expert_service.create_expert_optimization(
+            company_id=request.user.company_id,
+            organization_id=request.user.organization_id,
+            **request.DATA,
         )
+
+
+
+
+
+
+class ProcessOptimizationView(BaseView):
+    """工艺优化（基于规则匹配）"""
+
+    @method_decorator(require_login)
+    def get(self, request, condition_id):
+        return optimize_service.get_process_optimization(condition_id)
+
+    @method_decorator(require_login)
+    def post(self, request):
+        """
+        请求体：
+        {
+            "condition_id": int,
+            "target_defect": "短射"  # 可选
+        }
+        """
+        return optimize_service.add_process_optimization(
+            company_id=request.user.company_id,
+            organization_id=request.user.organization_id,
+            condition_id=request.DATA.get("condition_id"),
+            target_defect=request.DATA.get("target_defect"),
+        )
+
+    @method_decorator(require_login)
+    def put(self, request, condition_id):
+        return optimize_service.update_process_optimization(
+            condition_id, **request.DATA,
+        )
+
+
+class ProcessOptimizationHistoryView(BaseView):
+    """工艺优化历史"""
+
+    @method_decorator(require_login)
+    def get(self, request, condition_id):
+        return optimize_service.get_optimization_history(condition_id)
+
 
 
 class RuleByDefectView(BaseView):

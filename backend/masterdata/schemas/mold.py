@@ -65,7 +65,7 @@ class GatingSystemSchema(AbstractBaseSchema):
     
     id: Optional[int] = Field(None, description="浇注系统ID")
     # --- 流道类型 ---
-    runner_type: Optional[str] = Field(None, description="流道类型")
+    runner_type: Optional[str] = Field(None, description="流道类型（热流道/冷流道/热转冷）")
     total_product_weight: Optional[float] = Field(None, description="总产品重量")
     # --- 热流道系统（热流道 & 热转冷） ---
     hot_runner_supplier: Optional[str] = Field(None, description="热流道供应商")

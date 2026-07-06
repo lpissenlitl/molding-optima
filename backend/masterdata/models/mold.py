@@ -119,8 +119,8 @@ class GatingSystem(AbstractBaseModel):
         verbose_name="所属模具"
     )
     
-    # --- 流道类型 ---
-    runner_type = models.CharField(null=True, max_length=50, verbose_name="流道类型")
+    # --- 流道类型（热流道/冷流道/热转冷） ---
+    runner_type = models.CharField(null=True, max_length=50, verbose_name="流道类型（热流道/冷流道/热转冷）")
     total_product_weight = models.FloatField(null=True, verbose_name="产品总重量 [g]")
     
     # --- 热流道系统（热流道 & 热转冷） ---

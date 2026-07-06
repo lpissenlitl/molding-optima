@@ -35,6 +35,7 @@ from .views.processes import (
     ProcessParameterBatchDeleteView,
     ProcessTransplantView,
     ProcessInitializationView,
+    ProcessInitializationFromMasterdataView,
     ProcessInitializationInferView,
     ProcessOptimizationView,
     ProcessOptimizationHistoryView,
@@ -62,9 +63,11 @@ urlpatterns = [
     path("processes/parameter/transplant/", ProcessTransplantView.as_view()),
 
     # ========== 工艺参数初始化（molding-optima 独有，基于规则推理）==========
-    # /initialization/         → 统一接口（落库）：Mode A 传 condition_id / Mode B 传 masterdata ID
-    # /initialization/infer/   → 纯推理接口（不查库不落库）：前端传完整数据
+    # /initialization/                 → Mode A：基于 condition_id（落库）
+    # /initialization/from-masterdata/ → Mode B：基于 masterdata ID（创建 Condition + 落库）
+    # /initialization/infer/           → 纯推理（不查库不落库）：前端传完整数据
     path("processes/initialization/", ProcessInitializationView.as_view()),
+    path("processes/initialization/from-masterdata/", ProcessInitializationFromMasterdataView.as_view()),
     path("processes/initialization/infer/", ProcessInitializationInferView.as_view()),
 
     # ========== 规则管理（molding-optima 独有）==========
