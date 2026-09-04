@@ -29,6 +29,13 @@ export const roleList = (params?: any) =>
 export const organizationList = (params?: any) =>
   request({ url: '/api/organizations/', method: 'get', params })
 
+/**
+ * 获取组织树（用于前端 el-tree-select 等场景）
+ * 后端在 list 端点加 tree=true 返回完整树形结构
+ */
+export const getOrganizationTree = (params?: any) =>
+  request({ url: '/api/organizations/', method: 'get', params: { tree: true, ...params } })
+
 // ==================== 主数据：模具/注塑机/材料/填充物 ====================
 
 export const moldList = (params?: any) =>

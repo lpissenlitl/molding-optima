@@ -1,0 +1,142 @@
+/**
+ * 主题系统（Themes）
+ * 通过 <html data-theme="..."> 切换三套主题：
+ * - light（默认）：办公室、弱光环境
+ * - dark：夜班、长时间作业
+ * - high-contrast：车间强光、远距离可读
+ *
+ * 设计原则：
+ * - :root 是 light（由 tokens.scss 提供基础变量）
+ * - 本文件只覆盖"会变"的颜色相关变量
+ * - 间距、圆角、字号、阴影等基础变量保持不变
+ *
+ * 触发时机：
+ * - main.ts 启动时立即应用（避免 FOUC）
+ * - 用户在 SettingsDrawer 中切换时即时应用
+ */
+
+[data-theme='dark'] {
+  // 主题色（暗色背景下用更亮的蓝色，提高可读性）
+  --theme-primary: #4a90e2;
+  --theme-primary-light: #6ba9e9;
+  --theme-primary-dark: #3a7bc8;
+  --theme-primary-disabled: #4a5a6e;
+
+  // 背景（深色系，从浅到深排列）
+  --color-bg-base: #1a1d23;       // 卡片背景
+  --color-bg-page: #14171c;       // 页面背景（更深）
+  --color-bg-overlay: #252932;    // 浮层背景
+  --color-bg-disabled: #2a2e35;   // 禁用背景
+
+  // 文字（浅色系）
+  --color-text-primary: #e5e7eb;
+  --color-text-regular: #d1d5db;
+  --color-text-secondary: #9ca3af;
+  --color-text-placeholder: #6b7280;
+  --color-text-disabled: #4b5563;
+
+  // 边框（深色下的浅灰）
+  --color-border-base: #374151;
+  --color-border-light: #2d3748;
+  --color-border-lighter: #252932;
+  --color-border-extra-light: #1f242c;
+
+  // 交互色
+  --color-focus-ring: rgba(74, 144, 226, 0.3);
+  --color-text-icon: #d1d5db;
+
+  // 滚动条
+  --color-scrollbar-thumb: #4b5563;
+  --color-scrollbar-thumb-hover: #6b7280;
+  --color-scrollbar-track: #1a1d23;
+
+  // layout 专用色（深色侧边栏）
+  --menu-bgcolor: #0f1419;
+  --menu-text-color: #9ca3af;
+  --submenu-hover: #1a1d23;
+  --submenu-bg: #0a0d12;
+  --sidebar-logo-bg: #0a0d12;
+  --submenu-active-text: #e5e7eb;
+
+  // 阴影（深色下用更黑的阴影）
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-base: 0 2px 12px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme='high-contrast'] {
+  // 主题色（车间强光 → 用警示色金黄，最大可读性）
+  --theme-primary: #ffd700;
+  --theme-primary-light: #ffed4e;
+  --theme-primary-dark: #d4af00;
+  --theme-primary-disabled: #7a6f00;
+
+  // 背景（纯黑，最强对比）
+  --color-bg-base: #000;
+  --color-bg-page: #000;
+  --color-bg-overlay: #1a1a1a;
+  --color-bg-disabled: #1a1a1a;
+
+  // 文字（纯白，最强对比）
+  --color-text-primary: #fff;
+  --color-text-regular: #f5f5f5;
+  --color-text-secondary: #d4d4d4;
+  --color-text-placeholder: #a3a3a3;
+  --color-text-disabled: #737373;
+
+  // 边框（白色，对比度极高）
+  --color-border-base: #fff;
+  --color-border-light: #d4d4d4;
+  --color-border-lighter: #a3a3a3;
+  --color-border-extra-light: #737373;
+
+  // 交互色
+  --color-focus-ring: rgba(255, 215, 0, 0.4);
+  --color-text-icon: #fff;
+
+  // 滚动条
+  --color-scrollbar-thumb: #fff;
+  --color-scrollbar-thumb-hover: #d4d4d4;
+  --color-scrollbar-track: #1a1a1a;
+
+  // layout 专用色
+  --menu-bgcolor: #000;
+  --menu-text-color: #f5f5f5;
+  --submenu-hover: #1a1a1a;
+  --submenu-bg: #0d0d0d;
+  --sidebar-logo-bg: #000;
+  --submenu-active-text: #fff;
+}
+
+// =============================================================================
+// 字号系统（Font Size）
+// 通过 <html data-font-size="large"> 切换
+// =============================================================================
+
+[data-font-size='large'] {
+  // 1. body 根字号放大（影响所有用 em/rem 的元素）
+  font-size: 16px;  // 14 → 16（+14%）
+
+  // 2. 覆盖本项目设计令牌（影响所有用 var(--font-size-*) 的组件）
+  --font-size-xs: 13px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;  // 核心：14 → 16
+  --font-size-md: 18px;
+  --font-size-lg: 20px;
+  --font-size-xl: 22px;
+
+  // 3. 覆盖 Element Plus 字号变量（影响所有 el-* 组件）
+  --el-font-size-extra-large: 22px;
+  --el-font-size-large: 20px;
+  --el-font-size-medium: 18px;
+  --el-font-size-base: 16px;        // 核心：14 → 16
+  --el-font-size-small: 14px;       // 13 → 14
+  --el-font-size-extra-small: 13px; // 12 → 13
+
+  // 4. 同步放大 layout 专用字号（侧边栏/面包屑）
+  --sidebar-title-font-size: 30px;
+  --submenu-title-font-size: 23px;
+  --breadcrumb-font-size: 22px;
+  --menu-font-size: 20px;
+}

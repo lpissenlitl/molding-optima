@@ -1,21 +1,21 @@
 <template>
   <el-button-group>
     <el-button
-      size="mini"
+      size="small"
       :type="currentSize === 'small' ? 'primary' : ''"
       @click="$emit('update', 'small')"
     >
       小
     </el-button>
     <el-button
-      size="mini"
-      :type="currentSize === 'normal' ? 'primary' : ''"
-      @click="$emit('update', 'normal')"
+      size="small"
+      :type="currentSize === 'default' ? 'primary' : ''"
+      @click="$emit('update', 'default')"
     >
       中
     </el-button>
     <el-button
-      size="mini"
+      size="small"
       :type="currentSize === 'large' ? 'primary' : ''"
       @click="$emit('update', 'large')"
     >
@@ -30,7 +30,7 @@ export default {
   props: {
     size: {
       type: String,
-      default: "normal"
+      default: "default"
     }
   },
   computed: {

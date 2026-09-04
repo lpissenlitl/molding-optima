@@ -1,57 +1,90 @@
-import Vue from "vue"
+import { createApp, watch } from 'vue'
+import { createPinia } from 'pinia'
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
+import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import 'element-plus/dist/index.css'
+import '@/styles/tokens.scss'
+import '@/styles/themes.scss'
+import '@/styles/element-plus.scss'
+import '@/styles/reset.scss'
+import '@/styles/utilities/custom-tag.scss'
+import '@/styles/utilities/search-form.scss'
+import '@/styles/utilities/form-responsive.scss'
+import ComponentsPlugin from '@/plugins/components'
+import GlobalMethodsPlugin from '@/plugins/global-methods'
 
-// ==================== 基础依赖 ====================
-import App from "@/App.vue"
-import store from "@/store"
-import router from "@/router"
+import App from './App.vue'
+import router from '@/router'
+import '@/permission' // 路由守卫（登录态、未授权跳转）
 
-// ==================== 副作用导入（按执行顺序）====================
-import "@/permission"                    // 路由权限控制
-import "normalize.css"                   // CSS重置
-import "@/styles/index.scss"             // 全局样式
-import "@/icons/components"              // SVG图标注册
-import "@/register-service-worker"       // PWA服务工作者
+// =============================================================================
+// 同步应用主题与字号（在 mount 之前，避免 FOUC 闪烁）
+// 直接读 localStorage 是因为此时 Pinia 还没初始化，store 不能用
+// =============================================================================
+function applySettingsFromStorage() {
+  try {
+    const raw = localStorage.getItem('molding-optima:settings')
+    if (!raw) return
+    const settings = JSON.parse(raw)
+    if (settings.theme) {
+      document.documentElement.dataset.theme = settings.theme
+    }
+    if (settings.fontSize) {
+      document.documentElement.dataset.fontSize = settings.fontSize
+    }
+  } catch {
+    // localStorage 读取失败，忽略（用默认主题）
+  }
+}
+applySettingsFromStorage()
 
-// ==================== UI框架 ====================
-import ElementUI from "element-ui"
-Vue.use(ElementUI)
+const app = createApp(App)
 
-// ==================== 第三方插件 ====================
-import SvgIcon from "vue-svgicon"
-Vue.use(SvgIcon, {
-  tagName: "svg-icon",
-  defaultWidth: "1em",
-  defaultHeight: "1em",
-})
+// =============================================================================
+// 状态管理：Pinia + 持久化
+// =============================================================================
+const pinia = createPinia()
+pinia.use(piniaPluginPersistedstate)
+app.use(pinia)
 
-import Print from "vue-print-nb"
-Vue.use(Print)
+// =============================================================================
+// 主题与字号：监听 store 变化，实时同步到 <html data-*> 属性
+// =============================================================================
+import { useSettingsStore } from '@/stores/settings'
 
-import uploader from "vue-simple-uploader"
-Vue.use(uploader)
+// Pinia 已激活后再订阅（避免 race condition）
+const settingsStore = useSettingsStore()
 
-// ==================== ECharts（按需引入）====================
-import "echarts/lib/chart/bar"
-import "echarts/lib/component/tooltip"
-import "echarts-gl"
+// 主题切换：同步到 <html data-theme>
+watch(
+  () => settingsStore.theme,
+  (theme) => {
+    document.documentElement.dataset.theme = theme
+  },
+  { immediate: false } // initial 已由 applySettingsFromStorage 处理
+)
 
-// ==================== 自定义插件 ====================
-import {
-  GlobalMethodsPlugin,
-  ComponentsPlugin,
-  DirectivesPlugin
-} from "@/plugins"
+// 字号切换：同步到 <html data-font-size>
+watch(
+  () => settingsStore.fontSize,
+  (fontSize) => {
+    document.documentElement.dataset.fontSize = fontSize
+  },
+  { immediate: false }
+)
 
-Vue.use(GlobalMethodsPlugin)
-Vue.use(ComponentsPlugin)
-Vue.use(DirectivesPlugin)
+// UI 框架：Element Plus（中文 locale）
+app.use(ElementPlus, { locale: zhCn })
 
-// ==================== 应用配置 ====================
-Vue.config.productionTip = false
+// 路由
+app.use(router)
 
-// ==================== 创建Vue实例 ====================
-new Vue({
-  router,
-  store,
-  render: (h) => h(App),
-}).$mount("#app")
+// 全局组件插件（AppIcon）
+app.use(ComponentsPlugin)
+
+// 全局方法插件（$hasPermission / $querySuggestions / $dayjs 等）
+// mold 视图依赖这些全局方法，必须在挂载前注册
+app.use(GlobalMethodsPlugin)
+
+app.mount('#app')

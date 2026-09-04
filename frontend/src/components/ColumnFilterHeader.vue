@@ -26,7 +26,7 @@
           v-model="searchKeyword"
           placeholder="搜索..."
           prefix-icon="el-icon-search"
-          size="mini"
+          size="small"
           clearable
           class="filter-search"
         />
@@ -202,7 +202,7 @@ export default {
   color: #409EFF;
 }
 
-::v-deep .column-filter-popover {
+:deep(.column-filter-popover) {
   min-width: 200px;
   padding: 0;
   border-radius: 4px;
@@ -255,7 +255,7 @@ export default {
   margin-bottom: 10px;
 }
 
-::v-deep .filter-search .el-input__inner {
+:deep(.filter-search .el-input__inner) {
   height: 30px;
   line-height: 30px;
   font-size: 12px;
@@ -270,18 +270,18 @@ export default {
   padding: 2px 0;
 }
 
-::v-deep .el-checkbox {
+:deep(.el-checkbox) {
   margin-right: 0;
   height: 26px;
   line-height: 26px;
 }
 
-::v-deep .el-checkbox__label {
+:deep(.el-checkbox__label) {
   font-size: 13px;
   padding-left: 6px;
 }
 
-::v-deep .el-checkbox__input {
+:deep(.el-checkbox__input) {
   line-height: 1;
 }
 

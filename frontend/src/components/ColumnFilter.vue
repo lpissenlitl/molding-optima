@@ -13,7 +13,7 @@
           <span>{{ title || `筛选${label}` }}</span>
           <el-button 
             type="text" 
-            size="mini" 
+            size="small" 
             @click="handleClear"
             :disabled="values.length === 0"
           >
@@ -27,17 +27,17 @@
           v-model="searchKeyword"
           placeholder="搜索..."
           prefix-icon="el-icon-search"
-          size="mini"
+          size="small"
           clearable
           class="filter-search"
         />
         
         <!-- 全选/反选 -->
         <div v-if="all_values.length > 3" class="filter-actions">
-          <el-button type="text" size="mini" @click="handleSelectAll">
+          <el-button type="text" size="small" @click="handleSelectAll">
             全选
           </el-button>
-          <el-button type="text" size="mini" @click="handleInvert">
+          <el-button type="text" size="small" @click="handleInvert">
             反选
           </el-button>
         </div>
@@ -59,12 +59,12 @@
         
         <!-- 底部按钮 -->
         <div class="filter-footer">
-          <el-button size="mini" @click="handleCancel">
+          <el-button size="small" @click="handleCancel">
             取消
           </el-button>
           <el-button 
             type="primary" 
-            size="mini" 
+            size="small" 
             @click="handleConfirm"
           >
             确定
@@ -177,10 +177,13 @@ export default {
     
     /**
      * 确认筛选
+     * 输出格式：{ include: [...], exclude: [] }
+     * 当前版本 ColumnFilter 只支持包含（include）模式，exclude 留空数组
+     * 后续若需要排除模式，可在弹窗顶部加 radio 切换模式
      */
     handleConfirm() {
       this.visible = false
-      this.$emit("confirm", [...this.internalValues])
+      this.$emit("confirm", { include: [...this.internalValues], exclude: [] })
     },
     
     /**
@@ -223,10 +226,19 @@ export default {
 
 <style scoped>
 .column-header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   width: 100%;
+}
+
+/* 筛选图标绝对定位到右边，让 label 视觉上居中 */
+.column-header > .el-popover {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .filter-content {
@@ -268,7 +280,7 @@ export default {
   overflow-y: auto;
 }
 
-::v-deep .el-checkbox {
+:deep(.el-checkbox) {
   margin-right: 0;
 }
 

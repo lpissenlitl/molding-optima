@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <el-dialog 
     v-el-drag-dialog
     width="80%"
@@ -24,12 +24,12 @@
 </template>
     
 <script>
-import MoldCreate from "@/views/moldManage/MoldForm.vue"
-import MachineCreate from "@/views/machineManage/InjectionMachineForm.vue"
-import PolymerCreate from "@/views/polymerManage/PolymerForm.vue"
+import MoldCreate from "@/views/mold/pages/MoldForm.vue"
+import MachineCreate from "@/views/equipment/pages/InjectionMachineForm.vue"
+import PolymerCreate from "@/views/polymer/pages/PolymerForm.vue"
 // import ReservationCreate from "@/views/scheduleManage/ReservationForm.vue"
-import FillerCreate from "@/views/fillerManage/FillerCreate.vue"
-import UserCreate from "@/views/superManage/UserCreate.vue"
+import FillerCreate from "@/views/polymer/pages/FillerForm.vue"
+import UserCreate from "@/views/admin/pages/UserCreate.vue"
 export default {
   name: "DragDialog",
   components: { 

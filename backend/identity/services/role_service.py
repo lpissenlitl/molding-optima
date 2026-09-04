@@ -18,6 +18,13 @@ ADMIN_PERMISSION_CODES = [
     # 权限管理根菜单
     "permission_manage",
 
+    # 公司管理
+    "company_manage",
+    "review_company",
+    "add_company",
+    "delete_company",
+    "update_company",
+
     # 部门管理
     "department_manage",
     "review_department",
@@ -118,9 +125,17 @@ def create_role(
     is_active: bool = True,
     description: str = None,
     permission_codes: list = None,
+    company_id: int = None,
 ):
-    """创建角色"""
-    company_id = operator.company_id
+    """创建角色
+
+    :param company_id: 公司 ID。None 时使用 operator 所在公司（创建租户角色时由
+        create_company 传入）。
+    """
+    # 优先用传入的 company_id（如创建公司时自动建管理员角色），
+    # 否则用 operator 所在公司
+    if company_id is None:
+        company_id = operator.company_id
     name, code = validate_role_info(company_id, name, code)
     with transaction.atomic():
         role = Role.objects.create(
@@ -133,14 +148,14 @@ def create_role(
         basic_permission_codes = [
             # 系统权限
             "system_permission",
-            
+
             # 权限管理（部门、角色、用户）
             "permission_manage",  # 前端导航栏目录-用户管理(权限管理)
             "review_department",  # 获取组织id
             "review_role",        # 获取角色id
             "user_manage"         # 用户管理界面
         ]
-        all_permission_codes = list(set(basic_permission_codes + permission_codes))
+        all_permission_codes = list(set(basic_permission_codes + (permission_codes or [])))
         role.set_permissions(permission_codes=all_permission_codes)
         return role.to_dict()
     

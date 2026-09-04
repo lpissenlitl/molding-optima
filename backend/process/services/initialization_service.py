@@ -32,6 +32,23 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# 辅助函数（必须早于 _REQUIRED_*_FIELDS 派生）
+# ============================================================
+
+def _derive_required_fields(mapping: Dict[str, Dict[str, Any]]) -> Tuple[str, ...]:
+    """从 mapping spec 派生必需字段集（condition != '可选'）
+
+    单一数据源原则：mapping 定义字段类型与 condition，
+    必需字段集自动派生，避免重复维护。
+    """
+    return tuple(
+        target_key
+        for target_key, spec in mapping.items()
+        if spec.get('condition', '可选') != '可选'
+    )
+
+
+# ============================================================
 # 常量层：字段映射（algorithm 期望字段 → ORM 属性）
 # ============================================================
 # 以 process_generate.py 9-115 行的检查清单为标准，
@@ -430,19 +447,6 @@ def _map_model_to_dict(model_obj, mapping: Dict[str, Dict[str, Any]]) -> Dict[st
         if value is not None:
             result[target_key] = value
     return result
-
-
-def _derive_required_fields(mapping: Dict[str, Dict[str, Any]]) -> Tuple[str, ...]:
-    """从 mapping spec 派生必需字段集（condition != '可选'）
-
-    单一数据源原则：mapping 定义字段类型与 condition，
-    必需字段集自动派生，避免重复维护。
-    """
-    return tuple(
-        target_key
-        for target_key, spec in mapping.items()
-        if spec.get('condition', '可选') != '可选'
-    )
 
 
 def audit_field_completeness(

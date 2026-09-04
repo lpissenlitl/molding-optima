@@ -1,121 +1,150 @@
-## 前端可视化项目
-###代码地址
-* https://github.com/hsmolding/HsMoldingWeb
+# molding-optima · 前端
 
-### 线上测试地址
-http://18.166.106.94:8200/login  
-用户名 admin  
-密码 Aa1111  
+Vue 3 + Vite 5 + TypeScript + Element Plus 智能工艺系统前端。
 
-## 涉及技术点
-* VUE基本框架，https://cn.vuejs.org/v2/guide/
-* echarts绘图库，https://echarts.apache.org/examples/en/
-* axios网络请求库， https://github.com/axios/axios
-* 项目支持TS和JS，根据自己的经验选择合适的方式实现VUE实例
-* UI框架element-UI，后期可以加入jquery-UI或者其他插件
-
-* 项目框架参照地址， https://github.com/Armour/vue-typescript-admin-template
-* 项目可参照demo， https://armour.github.io/vue-typescript-admin-template/#/dashboard
-
-* vue typescript学习指南， https://armour.github.io/vue-typescript-admin-docs/zh/guide/#%E5%8A%9F%E8%83%BD
-
-* babel，浏览器兼容， https://www.babeljs.cn/docs/index.html
-
-* [eslint](https://eslint.org/)，代码格式检查工具  
-可以在 .eslintrc.json 文件中修改检查规范，并自定义相关的代码规范，后面的代码书写需要遵循项目统一规范  
-[eslint设置](https://eslint.org/docs/user-guide/getting-started)  
-[typescript-eslint设置](https://github.com/typescript-eslint/typescript-eslint/blob/master/docs/getting-started/linting/README.md)
-```js
-//运行eslint检查代码
-yarn eslint
-```
-
-## 开发工具
-* webstorm/VSCode (推荐VSCode，不用每次激活麻烦)
-
-## VSCode插件
-* editorConfig， 项目中配置了editorconfig文件，使用该插件，会自动将editorconfig配置的选项覆盖掉settings配置
-
-
-## 项目依赖安装
-* 编译环境需要[node.js](https://nodejs.org/en/)
-* 编译命令使用[npm](https://www.npmjs.com/)， 或者[yarn](https://yarnpkg.com/getting-started/install)
-
-```js
-yarn
-或者
-npm install
-```
-
-## 项目本地运行
-* 如果搭建了本地后端python服务器，要链接本地后端服务，需要修改 vue.config.js 中的HOST 
-```js
-// 本地后端服务器地址
-let HOST = 'http://127.0.0.1:8200'
-// 线上后端服务器地址
-let HOST = 'http://18.166.106.94:8200'
-```
-
-* 运行前项目
-```
-yarn serve
-//或者
-npm run serve
-```
-
-* 更新依赖库
-```
-yarn upgrade
-```
-
-## 一键发布
-* 测试服
-```js
-yarn deploy_dev
-//或者
-npm run deploy_dev 
-```
-
-* 线上
-```js
-yarn deploy
-//或者
-npm run deploy 
-```
-
-* 本地APP
-```js
-yarn electron:serve
-```
-
-
-## 开发问题
-* label-width= "auto"会引发异常，不要使用
-https://github.com/ElemeFE/element/issues/15775
-
-* const变量放入到特定的文件中
-
-* 多制作组件，不要一个文件写太多内容
-
-
-## 📚 开发规范
-
-**重要**：所有开发人员必须遵循项目代码规范，详见 [CODING_STANDARDS.md](./CODING_STANDARDS.md)
-
-主要内容包括：
-- ✅ 命名规范（Data用下划线，Methods用驼峰）
-- ✅ 组件开发规范
-- ✅ Vue 组件结构规范
-- ✅ 样式规范（SCSS + CSS变量）
-- ✅ API 调用规范
-- ✅ 注释规范
-- ✅ 文件组织规范
-- ✅ 最佳实践
+> 与上游 [molding-expert-web](https://github.com/hsmolding/HsMoldingWeb) 共享 API 契约，独立演进。
+> 架构决策详见 [architecture.md](../architecture.md)。
 
 ---
 
-## 版本管理
-历史版本：
+## 🎯 角色定位
 
+本前端是 molding-optima 的 SPA 前端，定位：
+- **面向工艺工程师**：注塑工艺初始化 + 缺陷驱动调优
+- **三大业务模块**：用户管理 / 基础数据 / 工艺管理
+- **演进策略**：与 molding-expert-web 并行演进，不主动融合
 
-当前版本：
+---
+
+## 🛠 技术栈
+
+| 维度 | 选型 |
+|---|---|
+| 框架 | Vue 3（Composition API + `<script setup>`）|
+| 构建 | Vite 5 |
+| 语言 | TypeScript |
+| 状态 | Pinia |
+| 路由 | Vue Router 4 |
+| UI | Element Plus |
+| HTTP | axios |
+| 图标 | Iconify（[@iconify/vue](https://iconify.design/)）|
+| 样式 | SCSS（CSS 变量 + Mixin，详见 §样式系统）|
+
+---
+
+## 🚀 快速开始
+
+```bash
+# 安装依赖
+npm install
+
+# 开发（默认端口 9527）
+npm run dev
+
+# 生产构建
+npm run build
+
+# 类型检查（不输出，仅检查）
+vue-tsc --noEmit
+```
+
+启动后访问 http://localhost:9527/
+
+> 后端默认代理到 `http://127.0.0.1:8200`，配置见 [vite.config.ts](./vite.config.ts)。
+
+---
+
+## 📁 目录结构
+
+```
+src/
+├── api/                # API 封装（按业务模块拆分）
+├── components/         # 公共组件
+├── composables/        # 组合式函数
+├── directives/         # 自定义指令
+├── layouts/            # 布局组件
+├── router/             # 路由配置
+├── stores/             # Pinia 状态
+├── styles/             # 全局样式（详见 §样式系统）
+├── utils/              # 工具函数
+├── views/              # 业务页面
+│   ├── login/
+│   ├── 404.vue
+│   └── {module}/
+├── App.vue
+└── main.ts
+```
+
+---
+
+## 🎨 样式系统（五层架构）
+
+> **设计原则**：CSS 变量（运行时） + SCSS Mixin（编译时）= 完整工具集。
+> 详见 [architecture.md §ADR-004](../architecture.md#adr-004前端样式系统分层架构五层)。
+
+| 文件 | 职责 | 时机 |
+|---|---|---|
+| `tokens.scss` | 设计令牌（颜色/尺寸/间距/字体）| 运行时（CSS 变量）|
+| `mixins.scss` | SCSS 工具集（断点/flex/文本截断）| 编译时（Mixin）|
+| `element-plus.scss` | Element Plus 主题色覆盖 | 运行时（CSS 变量）|
+| `reset.scss` | CSS Reset | 全局重置 |
+| `transition.scss` | Vue 3 过渡动画 | 运行时 |
+
+### 使用约定
+
+```vue
+<style scoped lang="scss">
+
+/* ✅ 颜色/尺寸/间距：走 tokens.scss */
+.button {
+  color: var(--theme-primary);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-md);
+}
+
+/* ✅ 重复样式块：走 mixins.scss */
+.row {
+  @include flex-between;
+}
+
+/* ✅ 响应式：走 mixins.scss（语义化断点）*/
+@include breakpoint-down(md) {
+  .button { padding: var(--spacing-2); }
+}
+
+</style>
+```
+
+**规则**：所有 `<style>` 必须 `lang="scss"`；先查 tokens，再查 mixin，两者都不够才写新代码。
+
+---
+
+## 📐 前端代码规范
+
+详见 [CODING_STANDARDS.md](./CODING_STANDARDS.md)（与 molding-expert-web 共享）。
+
+> 注：Vue 3 + Composition API 部分需以本项目实际代码为准（如 `<script setup>`、`ref`/`reactive`、`defineStore`）。
+
+---
+
+## 🔌 关键依赖
+
+| 库 | 用途 | 备注 |
+|---|---|---|
+| vue@3 | 框架 | Composition API |
+| vite@5 | 构建 | Sass Modern Compiler API |
+| element-plus | UI 库 | 主题色由 CSS 变量驱动 |
+| pinia | 状态 | 替代 Vuex |
+| vue-router@4 | 路由 | |
+| axios | HTTP | 统一拦截器 |
+| @iconify/vue | 图标 | mdi 图标集 |
+| sass | SCSS 编译 | Modern API（`api: 'modern-compiler'`）|
+
+历史依赖（已移除）：vuex / vue-print-nb / vue-svgicon / vue-simple-uploader / vuex-module-decorators / jest / ts-jest。
+
+---
+
+## 📝 版本
+
+**当前版本**：v0.5
+**最后更新**：2026-09-02

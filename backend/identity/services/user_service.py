@@ -3,7 +3,7 @@ from identity.models import User, Role, Token, RedirectToken, Company, Organizat
 from datetime import timedelta, datetime
 from extensions.encrypt.pwdutils import check_pwd_strength, hash_pwd, check_pwd
 from extensions.exceptions import BizException
-from utils.sercurity import generate_random_password
+from utils.security import generate_random_password
 from utils.db import parse_ordering, paginate_queryset, build_filters
 from utils.validation import validate_required, validate_pk, validate_id_list, validate_code
 from identity.exceptions import (
@@ -200,9 +200,28 @@ def register_user(
                 # 由邀请方指定角色
                 _bind_user_to_roles(user, roles)
             else:
-                # 无指定角色，分配默认角色
-                default_role = get_company_default_role(company_id)
-                user.roles.add(default_role)
+                # 无指定角色：尝试分配公司级默认角色（'member'）
+                # 若公司未初始化（缺 'member' 角色），降级到 system_demo 的 guest 角色
+                # 保证用户至少能登录访问，避免 '公司未初始化' 阻塞创建流程
+                try:
+                    default_role = get_company_default_role(company_id)
+                    user.roles.add(default_role)
+                except RuntimeError:
+                    # 公司级默认角色缺失：回退到系统游客角色
+                    try:
+                        guest_role = get_system_guest_role()
+                        user.roles.add(guest_role)
+                        logging.warning(
+                            f"公司 {company_id} 缺少默认角色 'member'，"
+                            f"用户 {username} 已降级使用 system_demo guest 角色。"
+                            f"建议运行 init_platform 为该公司初始化默认角色。"
+                        )
+                    except Exception:
+                        # 极端情况：system_demo 也未初始化
+                        logging.error(
+                            f"公司 {company_id} 缺默认角色，且 system_demo guest 角色也不存在。"
+                            f"用户 {username} 将无任何角色，请检查 init_platform 是否执行成功。"
+                        )
 
         if extra_accessible_orgs:
             _bind_user_to_organizations(user, extra_accessible_orgs)     

@@ -2,10 +2,11 @@
 molding-optima 工艺优化 service
 
 阶段 1：基于 DEFECT_OPTIMIZATION_HINTS 硬编码字典（兜底）
-阶段 2（当前）：优先调用 FuzzyEngine，无规则时回退到阶段 1 字典
+阶段 2（已完成）：优先调用 FuzzyEngine，无规则时回退到阶段 1 字典
 阶段 3（规划）：基于 process_context_snapshot 写优化建议到字段中
 """
 import logging
+from typing import Optional
 
 from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND
 from process.models import ProcessCondition, ProcessParameter, RuleMethod
@@ -34,6 +35,81 @@ DEFECT_OPTIMIZATION_HINTS = {
     "浇口印": {"increase": ["cool_t"], "decrease": ["hold_pres_1"]},
     "阴阳面": {"increase": ["brl_temp_1", "brl_temp_2", "inj_spd_1"], "decrease": []},
 }
+
+
+# 中文缺陷名 → 英文 defect_name 译文表（与 RuleMethod.defect_name 对齐）
+DEFECT_NAME_MAP = {
+    "短射": "SHORTSHOT",
+    "缩水": "SINK_MARK",
+    "飞边": "FLASH",
+    "熔接痕": "WELD_LINE",
+    "困气": "TRAP",
+    "气纹": "FLOW_MARK",
+    "烧焦": "BURN",
+    "料花": "FLOW_LINE",
+    "色差": "COLOR_SHIFT",
+    "水波纹": "RIPPLE",
+    "脱模不良": "EJECT_DIFFICULT",
+    "顶白": "WHITENING",
+    "变形": "WARPAGE",
+    "尺寸偏大": "OVERSIZE",
+    "尺寸偏小": "UNDERSIZE",
+    "浇口印": "GATE_MARK",
+    "阴阳面": "BRIGHT_DARK",
+}
+
+
+# 工艺参数字段白名单（仅数值型字段，避免非数值字段进入 FuzzyEngine）
+PROCESS_PARAM_FIELDS = (
+    [f'inj_spd_{i}' for i in range(1, 7)]
+    + [f'inj_pres_{i}' for i in range(1, 7)]
+    + [f'inj_pos_{i}' for i in range(1, 7)]
+    + ['inj_t', 'inj_dly_t']
+    + ['vps_mode', 'vps_pos', 'vps_t', 'vps_pres', 'vps_spd']
+    + [f'hold_pres_{i}' for i in range(1, 6)]
+    + [f'hold_spd_{i}' for i in range(1, 6)]
+    + [f'hold_t_{i}' for i in range(1, 6)]
+    + ['cool_t']
+    + [f'met_pres_{i}' for i in range(1, 5)]
+    + [f'met_rot_spd_{i}' for i in range(1, 5)]
+    + [f'met_back_pres_{i}' for i in range(1, 5)]
+    + [f'met_pos_{i}' for i in range(1, 5)]
+    + ['pre_met_decomp_pres', 'pre_met_decomp_spd', 'pre_met_decomp_t', 'pre_met_decomp_dist']
+    + ['pst_met_decomp_pres', 'pst_met_decomp_spd', 'pst_met_decomp_t', 'pst_met_decomp_dist']
+    + ['met_lim_t', 'met_end_pos']
+    + ['noz_temp'] + [f'brl_temp_{i}' for i in range(1, 10)]
+)
+
+
+def translate_defect_name(chinese_name: str) -> str:
+    """中文缺陷名 → 英文 defect_name（供 FuzzyEngine 查询 RuleMethod）。"""
+    if not chinese_name:
+        return ""
+    if chinese_name in DEFECT_NAME_MAP:
+        return DEFECT_NAME_MAP[chinese_name]
+    # 兜底：原文返回（可能是英文）
+    return chinese_name
+
+
+def get_fuzzy_engine():
+    """
+    获取 FuzzyEngine 实例（优先 EngineRegistry，避免重复初始化）。
+    """
+    try:
+        from process.engines.base_engine import EngineRegistry
+        engine = EngineRegistry.get_engine('fuzzy')
+        if engine is not None:
+            return engine
+    except Exception as e:  # noqa: BLE001
+        _logger.warning("[optimize_service] 从 EngineRegistry 获取 FuzzyEngine 失败: %s", e)
+
+    # 兑底：直接 import 并实例化
+    try:
+        from process.engines.fuzzy import FuzzyEngine
+        return FuzzyEngine()
+    except Exception as e:  # noqa: BLE001
+        _logger.warning("[optimize_service] FuzzyEngine 实例化失败: %s", e)
+        return None
 
 
 def get_process_optimization(condition_id):
@@ -147,45 +223,62 @@ def add_process_optimization(
     }
 
 
+def _extract_process_parameters(current_params: list) -> dict:
+    """从 ProcessParameter 列表提取数值型工艺参数（FuzzyEngine 输入）。
+
+    仅提取 PROCESS_PARAM_FIELDS 白名单内的数值字段，避免非数值字段进入
+    FuzzyEngine 造成 keyword 解析错误。
+    """
+    snapshot = {}
+    if not current_params:
+        return snapshot
+
+    first_param = current_params[0]
+    for field_name in PROCESS_PARAM_FIELDS:
+        value = getattr(first_param, field_name, None)
+        # 仅保留数值字段
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            snapshot[field_name] = float(value)
+    return snapshot
+
+
 def _infer_via_fuzzy_engine(
     condition: ProcessCondition,
     current_params: list,
     target_defect: str,
 ) -> tuple:
     """
-    调用 FuzzyEngine 推理（骨架接入，未调通端到端）。
+    调用 FuzzyEngine 推理（阶段 2 完成）。
+
+    路由顺序：
+      1. 从 EngineRegistry 获取 FuzzyEngine 实例
+      2. 中文 defect_name → 英文（DEFECT_NAME_MAP）
+      3. 提取数值型工艺参数快照（PROCESS_PARAM_FIELDS 白名单）
+      4. 分析迭代趋势（ProcessTuningService.analyze_iteration_trend）
+      5. 调用 FuzzyEngine.recommend(context)
+      6. Recommendation → adjustments 格式转换
 
     Returns:
-        (adjustments, source) —— source 可能是 'fuzzy_engine' / 'fuzzy_unavailable' / 'fuzzy_error'
-
-    设计约束（临时）：
-      - 趈势后处理、推荐应用、多引擎合并均未实现，只走 FuzzyEngine 单一路径
-      - defect_name 译文统一、polymer_category / product_category 提取方式后续调
-      - FuzzyEngine 不可用 / 异常时返回 ([], 'fuzzy_unavailable')，调用方回退到硬编码字典
+        (adjustments, source) —— source 可能是：
+        - 'fuzzy_engine': FuzzyEngine 成功返回推荐
+        - 'fuzzy_unavailable': FuzzyEngine 不可用（is_available False）
+        - 'fuzzy_error': FuzzyEngine 推理异常
     """
     if not target_defect:
         return [], "fuzzy_unavailable"
 
-    try:
-        # Lazy import：避免 init 阶段循环依赖，service 依赖逆向 engines 也可以
-        from process.engines.fuzzy import FuzzyEngine
-    except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize_service] FuzzyEngine 导入失败: %s", e)
+    engine = get_fuzzy_engine()
+    if engine is None:
         return [], "fuzzy_unavailable"
 
-    # 构造 FuzzyEngine 输入 context（骨架）
-    # TODO: polymer_category / product_category 从 Polymer / Mold 提取（当前从 condition.snapshot.overrides 读）
-    parameter_snapshot = {}
-    if current_params:
-        first_param = current_params[0]
-        for field in first_param._meta.fields:
-            if field.name.startswith('_') or field.name in ['id', 'created_at', 'updated_at']:
-                continue
-            value = getattr(first_param, field.name, None)
-            if value is not None:
-                parameter_snapshot[field.name] = value
+    # 1. 翻译中文 defect_name → 英文
+    defect_name_en = translate_defect_name(target_defect)
 
-    # 趋垫分析（复用 recommendation_service 的 iteration_trend）
+    # 2. 提取工艺参数快照
+    parameter_snapshot = _extract_process_parameters(current_params)
+
+    # 3. 趋势分析（复用 tuning_service）
+    trend_dict = {"trend": "unknown"}
     try:
         first_param = current_params[0] if current_params else None
         if first_param:
@@ -197,38 +290,43 @@ def _infer_via_fuzzy_engine(
                 "unchanged_count": trend.unchanged,
                 "last_result": trend.last_result,
             }
-        else:
-            trend_dict = {"trend": "unknown"}
     except Exception as e:  # noqa: BLE001
         _logger.warning("[optimize_service] iteration_trend 分析失败: %s", e)
-        trend_dict = {"trend": "unknown"}
 
-    overrides = (condition.process_context_snapshot or {}).get("overrides", {}) \
-        if hasattr(condition, "process_context_snapshot") else {}
+    # 4. 从 process_context_snapshot 读取 polymer_category / product_category
+    overrides = {}
+    snapshot = getattr(condition, 'process_context_snapshot', None) or {}
+    if isinstance(snapshot, dict):
+        overrides = snapshot.get('overrides', {}) or {}
 
     fuzzy_context = {
-        "defect_name": target_defect,  # TODO: 中文→SHORTSHOT 译文表
-        "defect_feedbacks": [{"defect_name": target_defect}],
+        "defect_name": defect_name_en,
+        "defect_feedbacks": [{"defect_name": defect_name_en}],
         "process_parameter": parameter_snapshot,
         "iteration_trend": trend_dict,
         "polymer_category": overrides.get("polymer_category"),
         "product_category": overrides.get("product_category"),
-        "rule_library_code": None,
+        "rule_library_code": overrides.get("rule_library_code"),
     }
 
-    # 调用 FuzzyEngine（暂不接 EngineRegistry，单引擎路径）
+    # 5. 调用 FuzzyEngine
     try:
-        engine = FuzzyEngine()
         if not engine.is_available(fuzzy_context):
+            _logger.info("[optimize_service] FuzzyEngine 不可用 (defect=%s, trend=%s)",
+                         defect_name_en, trend_dict.get("trend"))
             return [], "fuzzy_unavailable"
         recommendations = engine.recommend(fuzzy_context)
     except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize_service] FuzzyEngine 推理失败: %s", e)
+        _logger.warning("[optimize_service] FuzzyEngine 推理失败: %s", e, exc_info=True)
         return [], "fuzzy_error"
 
-    # Recommendation -> adjustments 格式转换
+    if not recommendations:
+        _logger.info("[optimize_service] FuzzyEngine 未返回推荐 (defect=%s)", defect_name_en)
+        return [], "fuzzy_unavailable"
+
+    # 6. Recommendation → adjustments 格式转换
     adjustments = []
-    for rec in recommendations or []:
+    for rec in recommendations:
         param_name = rec.param_name
         current_val = parameter_snapshot.get(param_name)
         adjustments.append({
@@ -241,6 +339,8 @@ def _infer_via_fuzzy_engine(
             "source": rec.source or "fuzzy_rule",
         })
 
+    _logger.info("[optimize_service] FuzzyEngine 返回 %d 条推荐 (defect=%s)",
+                 len(adjustments), defect_name_en)
     return adjustments, "fuzzy_engine"
 
 

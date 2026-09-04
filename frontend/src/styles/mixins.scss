@@ -1,0 +1,179 @@
+/* ============================================================
+ * SCSS 工具集（Mixins）
+ *
+ * 设计原则：
+ * - tokens.scss 定义 CSS 变量（运行时）
+ * - 本文件提供 SCSS mixin（编译时），弥补 CSS 变量做不到的事
+ *   （如 @media、循环、条件等）
+ * - 全局注入（vite.config.ts 的 additionalData），无需 @use
+ *
+ * @author MoldingX Team
+ * @since 2026-09-02
+ * ============================================================ */
+
+// 使用 Sass 模块化 API（避免 global-builtin 废弃警告）
+@use 'sass:map';
+
+/* ============================================================
+ * 响应式断点
+ *
+ * 为什么需要：CSS 变量 (var(--breakpoint-md)) 不能直接用在 @media
+ * 必须用 SCSS 编译时确定的数值。
+ *
+ * 使用：
+ *   .card { padding: 16px; }
+ *   @include breakpoint(md) {
+ *     .card { padding: 8px; }
+ *   }
+ * ============================================================ */
+
+$breakpoints: (
+  xs: 480px,
+  sm: 768px,
+  md: 1024px,
+  lg: 1280px,
+  xl: 1920px,
+);
+
+// 移动优先（min-width）：mobile → desktop
+@mixin breakpoint-up($name) {
+  $value: map.get($breakpoints, $name);
+  @if $value == null {
+    @error "breakpoint-up: 未知断点 `#{$name}`,可选: xs, sm, md, lg, xl";
+  }
+  @media (min-width: $value) {
+    @content;
+  }
+}
+
+// 桌面优先（max-width）：desktop → mobile
+@mixin breakpoint-down($name) {
+  $value: map.get($breakpoints, $name);
+  @if $value == null {
+    @error "breakpoint-down: 未知断点 `#{$name}`,可选: xs, sm, md, lg, xl";
+  }
+  @media (max-width: ($value - 1px)) {
+    @content;
+  }
+}
+
+/* ============================================================
+ * 文本处理
+ * ============================================================ */
+
+// 单行省略（必须设置 width 或 max-width）
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 多行省略（必须设置 width 或 max-width）
+@mixin text-clamp($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// 文本不可选中（防止按钮文字被误选）
+@mixin text-unselectable {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* ============================================================
+ * Flex 布局
+ * ============================================================ */
+
+// 居中（水平 + 垂直）
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// 两端对齐（垂直居中）
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// 列向居中（垂直居中 + 水平居中）
+@mixin flex-column-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================
+ * 滚动条
+ *
+ * 使用：
+ *   .scroll-area {
+ *     @include scrollbar;
+ *   }
+ * ============================================================ */
+
+@mixin scrollbar($size: 8px, $radius: 4px) {
+  &::-webkit-scrollbar {
+    width: $size;
+    height: $size;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-scrollbar-thumb);
+    border-radius: $radius;
+    &:hover {
+      background: var(--color-scrollbar-thumb-hover);
+    }
+  }
+  &::-webkit-scrollbar-track {
+    background: var(--color-scrollbar-track);
+  }
+}
+
+/* ============================================================
+ * 实用工具
+ * ============================================================ */
+
+// 清除浮动（兼容老代码 / 第三方组件）
+@mixin clearfix {
+  &::after {
+    content: '';
+    display: table;
+    clear: both;
+  }
+}
+
+// 视觉隐藏但屏幕阅读器可读（无障碍）
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// 全屏铺满（用于 login、404 等独立页面）
+@mixin fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+}
+
+// 卡片（统一阴影 + 圆角）
+@mixin card($radius: var(--radius-md)) {
+  background: var(--color-bg-base);
+  border-radius: $radius;
+  box-shadow: var(--shadow-base);
+}

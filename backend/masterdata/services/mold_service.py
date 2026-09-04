@@ -16,7 +16,7 @@ from utils.db import (
     build_filters
 )
 from masterdata.services.project_service import create_project
-from utils.object_utils import safe_get
+from utils.objects import safe_get
 import re
 
 

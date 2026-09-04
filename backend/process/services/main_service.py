@@ -14,7 +14,7 @@ from masterdata.models import Mold, GatingSystem, InjectionMoldingMachine, Polym
 from extensions.exceptions import ERROR_ILLEGAL_ARGUMENT, BizException, ERROR_DATA_NOT_FOUND, ERROR_REQUIRED_FIELD
 from utils.validation import validate_pk, validate_id_list
 from utils.db import build_filters, parse_ordering, paginate_queryset
-from utils.object_utils import safe_get
+from utils.objects import safe_get
 from utils.code_generator import generate_unique_code
 from process.services.process_transformer import _transform_frontend_to_flat, _construct_setting_process_frontend
 

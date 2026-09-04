@@ -50,7 +50,7 @@
         />
         <el-button
           type="text"
-          size="mini"
+          size="small"
           @click="abortUpload(file)"
         >
           取消
@@ -60,14 +60,14 @@
       <div v-else-if="file.error" class="action-area">
         <el-button
           type="text"
-          size="mini"
+          size="small"
           @click="retryUpload(file)"
         >
           重试
         </el-button>
         <el-button
           type="danger"
-          size="mini"
+          size="small"
           @click="handleRemove(file)"
         >
           删除
@@ -77,7 +77,7 @@
       <div v-else class="action-area">
         <el-button
           type="danger"
-          size="mini"
+          size="small"
           @click="handleRemove(file)"
         >
           删除

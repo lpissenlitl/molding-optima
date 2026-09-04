@@ -1,94 +1,51 @@
+<!--
+  SidebarLogo：layout 顶部 Logo 区
+  - 展开：图标 + 文字
+  - 折叠：仅图标（节省空间）
+-->
 <template>
-  <div
-    class="sidebar-logo-container"
-    :class="{'collapse': collapse}"
-  >
-    <transition name="sidebarLogoFade">
-      <router-link
-        v-if="collapse"
-        key="collapse"
-        class="sidebar-logo-link"
-        to="/"
-      >
-        <img src="@/image/md.png" class="sidebar-logo">
-      </router-link>
-      <router-link
-        v-else
-        key="expand"
-        class="sidebar-logo-link"
-        to="/"
-      >
-        <!-- <img src="@/image/intelligent_injection.png" class="sidebar-logo"> -->
-        <h1 class="sidebar-title">
-          {{ title }}
-        </h1>
-      </router-link>
-    </transition>
+  <div :class="['sidebar-logo', { 'sidebar-logo--collapsed': collapsed }]">
+    <AppIcon icon="mdi:cube-outline" class="sidebar-logo__icon" />
+    <span v-if="!collapsed" class="sidebar-logo__title">Molding Optima</span>
   </div>
 </template>
 
-<script lang="ts">
-import { Component, Prop, Vue } from "vue-property-decorator"
-import settings from "@/settings"
-
-@Component({
-  name: "SidebarLogo"
-})
-export default class extends Vue {
-  @Prop({ required: true }) private collapse!: boolean
-
-  get title() {
-    return  settings.title
-  }
-}
+<script setup lang="ts">
+defineProps<{
+  collapsed?: boolean
+}>()
 </script>
 
-<style lang="scss" scoped>
+<style scoped lang="scss">
+.sidebar-logo {
+  height: 56px;
+  background: var(--sidebar-logo-bg);  // 主题切换
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: padding 0.28s ease;
 
-  .sidebar-logo-container {
-    position: relative;
-    width: 100%;
-    height: 52px;
-    line-height: 52px;
-    background: var(--sidebar-logo-bg);
-    text-align: center;
+  &--collapsed {
+    gap: 0;
+    padding: 0;
+  }
+
+  &__icon {
+    font-size: 24px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    white-space: nowrap;
     overflow: hidden;
-
-    & .sidebar-logo-link {
-      height: 100%;
-      width: 100%;
-
-      & .sidebar-logo {
-        width: 100%;
-        height: 100%;
-      }
-
-      & .sidebar-title {
-        display: inline-block;
-        margin: 0;
-        color: var(--sidebar-title-color);
-        font-weight: 580;
-        font-family: "Source Han Serif SC";
-        line-height: 50px;
-        font-size: var(--sidebar-title-font-size);  
-        vertical-align: middle;
-      }
-    }
-
-    &.collapse {
-      .sidebar-logo {
-        margin-right: 0px;
-      }
-    }
   }
-
-  .sidebarLogoFade-enter-active {
-    transition: opacity 1.5s;
-  }
-
-  .sidebarLogoFade-enter,
-  .sidebarLogoFade-leave-to {
-    opacity: 0;
-  }
-
+}
 </style>

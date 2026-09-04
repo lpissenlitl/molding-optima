@@ -10,7 +10,7 @@
     :on-exceed="handleExceed"
   >
     <el-button 
-      size="mini" 
+      size="small" 
       type="primary"
       style="width:10rem"
       :loading="upload_loading"

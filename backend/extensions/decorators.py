@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 from django.http import HttpRequest, QueryDict
 import json
 
-from utils.request_utils import querydict_to_dict, parse_get_params, querydict_to_dict_with_type_convert
+from utils.http import querydict_to_dict, parse_get_params, querydict_to_dict_with_type_convert
 from extensions.exceptions import BizException, ERROR_ILLEGAL_ARGUMENT
 
 

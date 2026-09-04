@@ -99,6 +99,16 @@ export const premiumOptions = [
   { label: "否", value: false }
 ]
 
+export const projectSourceOptions = [
+  { label: '手动创建', value: 'manual' },
+  { label: '系统同步', value: 'sync' },
+  { label: '批量导入', value: 'import' },
+]
+
+export const projectSourceMap = Object.fromEntries(
+  projectSourceOptions.map((o) => [o.value, o.label])
+)
+
 export const importanceLevelOptions = [
   { label: "高", value: "高" },
   { label: "中", value: "中" },

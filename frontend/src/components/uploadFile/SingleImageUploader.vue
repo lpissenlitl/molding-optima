@@ -139,7 +139,7 @@ export default {
   display: inline-block;
 }
 
-.avatar-uploader ::v-deep .el-upload {
+.avatar-uploader :deep(.el-upload) {
   border: 1px dashed #d9d9d9;
   border-radius: 6px;
   cursor: pointer;
@@ -152,7 +152,7 @@ export default {
   align-items: center;
 }
 
-.avatar-uploader ::v-deep .el-upload:hover {
+.avatar-uploader :deep(.el-upload:hover) {
   border-color: #409eff;
 }
 

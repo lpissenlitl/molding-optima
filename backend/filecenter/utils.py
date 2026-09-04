@@ -4,7 +4,7 @@ import re
 from django.conf import settings
 from extensions.exceptions import BizException, ERROR_REQUIRED_FIELD, ERROR_ILLEGAL_ARGUMENT, ERROR_FOLDER_NAME_NOT_ALLOWED
 from masterdata.models import Mold
-from utils.object_utils import safe_get
+from utils.objects import safe_get
 
 # molding-optima 不引入 moldflow/schedule/trial。
 # 以下 import 为可选依赖，未启用时 usage_type 仅支持 'mold' 与 'process'。

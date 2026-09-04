@@ -3,7 +3,7 @@ from masterdata.models import Project
 from utils.validation import validate_pk, validate_id_list
 from utils.db import build_filters, parse_ordering, paginate_queryset
 from utils.code_generator import generate_unique_code
-from utils.object_utils import safe_get
+from utils.objects import safe_get
 from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND
 
 

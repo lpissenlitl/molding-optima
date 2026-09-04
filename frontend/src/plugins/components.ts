@@ -1,22 +1,17 @@
-/**
- * 全局组件插件
- * 注册所有需要在整个应用中使用的组件
- */
-import Vue from "vue"
+// 全局组件插件（Vue 3 版）
+// 集中管理需要在整个应用中使用的组件
 
-// Iconify 图标组件
-import { Icon } from "@iconify/vue2"
+import type { App } from 'vue'
 
-// ECharts 图表组件
-import ECharts from "vue-echarts"
+// Iconify 图标组件（工业领域图标）
+import { Icon } from '@iconify/vue'
 
 /**
- * 安装插件
+ * 安装全局组件
  */
-export default function installComponents(VueConstructor: typeof Vue) {
-  // Iconify 图标
-  VueConstructor.component("AppIcon", Icon)
-  
-  // ECharts 图表
-  VueConstructor.component("VChart", ECharts)
+export default {
+  install(app: App) {
+    // Iconify 图标（模板中可直接使用 <AppIcon icon="mdi:factory" />）
+    app.component('AppIcon', Icon)
+  },
 }

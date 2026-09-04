@@ -12,7 +12,7 @@
     :on-exceed="handleExceed"
   >
     <el-link 
-      size="mini" 
+      size="small" 
       type="primary"
       :loading="upload_loading"
     >

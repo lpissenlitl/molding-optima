@@ -91,6 +91,11 @@ class AdminOrganizationListView(BaseView):
     @method_decorator(validate_parameters(OrganizationListSchema))
     def get(self, request, cleaned_data):
         """管理员获取组织列表"""
+        # tree=true 返回完整组织树（用于前端 el-tree-select 等场景）
+        if cleaned_data.pop("tree", False):
+            return company_service.get_organization_tree(
+                company_id=request.user.company_id
+            )
         total, groups = company_service.get_list_of_organization(
             company_id=request.user.company_id,
             **cleaned_data

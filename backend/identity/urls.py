@@ -2,6 +2,8 @@ from django.urls import path
 from identity import views
 
 urlpatterns = [
+    # 服务健康检查（无需鉴权，供前端 login 页 status 指示器使用）
+    path("health/", views.HealthView.as_view()),
     # 用户注册、登录、登出
     path("register/", views.RegisterView.as_view()),
     path("login/", views.LoginView.as_view()),

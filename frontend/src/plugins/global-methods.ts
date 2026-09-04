@@ -1,8 +1,16 @@
 /**
- * 全局方法插件
- * 将所有工具方法挂载到 Vue.prototype
+ * 全局方法插件（Vue 3 + app.config.globalProperties）
+ *
+ * 用途：把常用工具挂载到全局 this 上，使组件可以通过 this.$xxx 调用。
+ * 历史版本：本文件早期是 Vue 2 风格（VueConstructor.prototype.$xxx），
+ * 在 Vue 3 中无效。现改为 app.config.globalProperties，可继续以
+ * `this.$xxx` 在 Options API 组件中调用（模板里也可用）。
+ *
+ * 注：
+ * - 仅迁移 mold 视图实际用到的方法（最小可用版本）
+ * - 其他组件若仍依赖旧 API，按需补全
  */
-import Vue from "vue"
+import type { App } from 'vue'
 
 // 本地存储
 import {
@@ -11,60 +19,48 @@ import {
   getLocalStorage,
   removeLocalStorage,
   clearLocalStorage
-} from "@/utils/storage"
+} from '@/utils/storage'
 
 // 对象操作
-import { assignExistingKeys } from "@/utils/assign"
+import { assignExistingKeys } from '@/utils/assign'
 
 // 格式化
-import { formatNumber } from "@/utils/number"
-import { formatDateTime } from "@/utils/datetime"
+import { formatNumber } from '@/utils/number'
+import { formatDateTime } from '@/utils/datetime'
 
 // 权限
-import { hasPermission } from "@/utils/permission"
+import { hasPermission } from '@/utils/permission'
 
 // 数据查询
-import { querySuggestions } from "@/utils/data-fetcher"
+import { querySuggestions } from '@/utils/data-fetcher'
 
 // 日期库
-import dayjs from "dayjs"
-
-// XML转换
-import x2js from "x2js"
-
-// 事件总线
-const bus = new Vue()
+import dayjs from 'dayjs'
 
 /**
- * 安装插件
+ * 安装全局方法（Vue 3 风格）
  */
-export default function installGlobalMethods(VueConstructor: typeof Vue) {
+export default function installGlobalMethods(app: App) {
   // 存储相关
-  VueConstructor.prototype.$createStorageKey = createStorageKey
-  VueConstructor.prototype.$setLocalStorage = setLocalStorage
-  VueConstructor.prototype.$getLocalStorage = getLocalStorage
-  VueConstructor.prototype.$removeLocalStorage = removeLocalStorage
-  VueConstructor.prototype.$clearLocalStorage = clearLocalStorage
+  app.config.globalProperties.$createStorageKey = createStorageKey
+  app.config.globalProperties.$setLocalStorage = setLocalStorage
+  app.config.globalProperties.$getLocalStorage = getLocalStorage
+  app.config.globalProperties.$removeLocalStorage = removeLocalStorage
+  app.config.globalProperties.$clearLocalStorage = clearLocalStorage
 
   // 对象操作
-  VueConstructor.prototype.$assignExistingKeys = assignExistingKeys
+  app.config.globalProperties.$assignExistingKeys = assignExistingKeys
 
   // 格式化
-  VueConstructor.prototype.$formatNumber = formatNumber
-  VueConstructor.prototype.$formatDateTime = formatDateTime
+  app.config.globalProperties.$formatNumber = formatNumber
+  app.config.globalProperties.$formatDateTime = formatDateTime
 
   // 权限
-  VueConstructor.prototype.$hasPermission = hasPermission
+  app.config.globalProperties.$hasPermission = hasPermission
 
   // 数据查询
-  VueConstructor.prototype.$querySuggestions = querySuggestions
+  app.config.globalProperties.$querySuggestions = querySuggestions
 
   // 日期库
-  VueConstructor.prototype.$dayjs = dayjs
-
-  // 事件总线
-  VueConstructor.prototype.$bus = bus
-
-  // XML转换
-  VueConstructor.prototype.$x2js = new x2js()
+  app.config.globalProperties.$dayjs = dayjs
 }

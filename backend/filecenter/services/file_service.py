@@ -1,8 +1,8 @@
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
 from django.db import transaction
-from utils.object_utils import safe_get
+from utils.objects import safe_get
 from utils.upload import calculate_md5
-from utils.request_utils import querydict_to_dict_with_type_convert
+from utils.http import querydict_to_dict_with_type_convert
 from identity.models import User
 from filecenter.models import File, FileReference
 from filecenter.utils import build_storage_path, build_file_path

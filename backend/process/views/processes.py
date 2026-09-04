@@ -6,7 +6,7 @@ from django.db import transaction
 
 from identity.decorators import require_login
 from extensions.decorators import validate_parameters
-from extensions.views import BaseView
+from extensions.views import BaseView, PaginationResponse
 from extensions.schemas import PaginationBaseSchema, BatchIdsSchema
 
 from process.schemas import (
@@ -35,7 +35,11 @@ class ProcessParameterListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterListSchema))
     def get(self, request, cleaned_data):
-        return main_service.get_process_parameter_list(**cleaned_data)
+        total, results = main_service.get_process_parameter_list(
+            company_id=request.user.company_id,
+            **cleaned_data,
+        )
+        return PaginationResponse(total=total, items=results)
 
 
 class ProcessParameterCreateView(BaseView):

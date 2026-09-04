@@ -24,7 +24,7 @@ from utils.db import build_filters, paginate_queryset, parse_ordering
 from datetime import datetime
 from django.db import transaction
 from collections import defaultdict
-from utils.object_utils import safe_get
+from utils.objects import safe_get
 from django.db.models import Value
 from django.db.models.functions import Concat, Substr
 

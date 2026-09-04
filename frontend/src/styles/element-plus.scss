@@ -1,0 +1,79 @@
+/* ============================================================
+ * Element Plus 主题覆盖（CSS 变量方式）
+ *
+ * 设计原则：
+ * - 用 var(--theme-primary) 引用 tokens.scss 的设计令牌
+ * - 保证主题色单一来源（只改 tokens.scss 即可全局生效）
+ * - Element Plus 会基于 --el-color-primary 自动派生 light/dark
+ *
+ * 加载顺序（main.ts）：
+ *   1. element-plus/dist/index.css   默认样式
+ *   2. tokens.scss                    设计令牌定义
+ *   3. element-plus.scss              主题覆盖（用 var 引用令牌）
+ *   4. reset.scss                     全局重置
+ * ============================================================ */
+
+:root {
+  /* ===== 主品牌色（关键：覆盖 Element Plus 默认蓝 #409eff）===== */
+  --el-color-primary: var(--theme-primary);
+  --el-color-primary-light-3: var(--theme-primary-light);
+  --el-color-primary-light-5: #5672a3;
+  --el-color-primary-light-7: #738bb6;
+  --el-color-primary-light-8: #8197c0;
+  --el-color-primary-light-9: #aebdda;
+  --el-color-primary-dark-2: var(--theme-primary-dark);
+
+  /* ===== 功能色（与 Element Plus 默认一致，但显式声明以备主题切换）===== */
+  --el-color-success: var(--color-success);
+  --el-color-warning: var(--color-warning);
+  --el-color-danger: var(--color-danger);
+  --el-color-info: var(--color-info);
+
+  /* ===== 边框色（与 Element Plus 默认一致）===== */
+  --el-border-color-base: var(--color-border-base);
+  --el-border-color-light: var(--color-border-light);
+  --el-border-color-lighter: var(--color-border-lighter);
+  --el-border-color-extra-light: var(--color-border-extra-light);
+}
+
+/* ===== 抹平浏览器的 -webkit-autofill 底色 =====
+ *
+ * 现象：Chrome / Edge / Safari 在被自动填充的 input（账号 / 密码 / 邮箱 等）
+ *       上强加一层浅蓝灰背景（~#e8f0fe），并故意忽略 background-color 覆盖。
+ *
+ * 解法：用大尺寸 inset box-shadow 模拟底色 —— 这是浏览器至今未封堵的唯一
+ *       稳定路径。背景色取 var(--el-fill-color-blank, #fff)，让填充态视觉上
+ *       与空状态对齐，依赖 EL 自身主题变量保持一致；文字色单独覆盖，否则
+ *       浏览器会把输入文字改成偏灰，与页面正文字色割裂。
+ *
+ * 适用范围：全项目所有 <el-input>，包括但不限于登录、注册、改密、个人中心。
+ */
+.el-input__inner {
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus,
+  &:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px var(--el-fill-color-blank, #ffffff) inset !important;
+    -webkit-text-fill-color: var(--el-text-color-primary) !important;
+    /* 让浏览器 ~5s 后清除 autofill 标记时也不闪一下 */
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+/* ===== NProgress 进度条色统一为 Element Plus 主题色 =====
+ *
+ * 默认 NProgress 用 #29d 亮蓝，与项目主题色不一致。
+ * 通过 var(--el-color-primary) 引用主题色，主题切换时进度条颜色也跟随变化。
+ * 覆盖 .bar（进度条主条）和 .peg（进度条右端高光）两部分。
+ */
+#nprogress {
+  .bar {
+    background: var(--el-color-primary) !important;
+  }
+
+  .peg {
+    box-shadow:
+      0 0 10px var(--el-color-primary),
+      0 0 5px var(--el-color-primary) !important;
+  }
+}

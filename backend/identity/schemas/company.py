@@ -77,6 +77,7 @@ class OrganizationListSchema(PaginationBaseSchema):
     org_type: Optional[str] = Field(None, description="组织类型")
     code: Optional[str] = Field(None, description="组织编码")
     level: Optional[int] = Field(None, description="组织层级")
+    tree: Optional[bool] = Field(False, description="是否返回树形结构（用于前端 el-tree-select）")
 
 
 class OrganizationTreeSchema(AbstractBaseSchema):

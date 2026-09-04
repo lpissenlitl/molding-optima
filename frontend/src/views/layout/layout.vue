@@ -1,185 +1,175 @@
+<!--
+  主布局：Sidebar + Navbar + AppMain
+  - 经典三段式布局（现代化包装）
+  - 支持 hamburger 折叠
+    - 桌面端（≥992px）：sidebar 缩窄到 60px
+    - 移动端（<992px）：sidebar 抽屉化（默认隐藏）
+  - 布局专用色硬编码在组件内（不在全局 tokens）
+  - 详见 architecture.md §ADR-004
+-->
 <template>
-  <div :class="classObj" class="app-wrapper">
+  <div :class="['layout', { 'layout--drawer-open': isMobile && !collapsed }]">
+    <!-- 移动端遮罩（仅在抽屉打开时显示）-->
     <div
-      v-if="classObj.mobile && sidebar.opened" 
-      class="drawer-bg" 
-      @click="handleClickOutside"
+      v-if="isMobile && !collapsed"
+      class="layout__mask"
+      @click="collapsed = true"
     ></div>
-    <sidebar 
-      class="sidebar-container" 
-      :collapse="classObj.hideSidebar"
-    ></sidebar>
-    <div class="main-container">
-      <div :class="{ 'fixed-header': fixedHeader }">
-        <navbar />
-      </div>
-      <div v-if="fixedHeader" style="height:40px"></div>
-      <app-main />
-      <right-panel v-if="showSettings">
-        <settings />
-      </right-panel>
-      <!-- <div class="copyright-notice">
-        <a 
-          target="_blank" 
-          style="color: #5c6b77" 
-          href="https://beian.miit.gov.cn/"
-        >
-          鄂ICP备2021009988号-1
-        </a>&nbsp;
-        <span style="color: #5c6b77">@2020-2030 武汉模鼎科技有限公司 版权所有 保留一切权利</span>
-      </div> -->
+
+    <aside
+      :class="[
+        'layout__sidebar',
+        {
+          'is-collapsed-desktop': collapsed && !isMobile,  // 桌面端：60px
+          'is-drawer-open': !collapsed,                    // 移动端：抽屉显隐（仅移动端 CSS 生效）
+        }
+      ]"
+    >
+      <SidebarLogo :collapsed="collapsed && !isMobile" />
+      <Sidebar :collapsed="collapsed && !isMobile" />
+    </aside>
+
+    <div class="layout__main">
+      <header class="layout__navbar">
+        <Navbar :collapsed="collapsed && !isMobile" @toggle-sidebar="toggleSidebar" />
+      </header>
+      <main class="layout__content">
+        <AppMain />
+      </main>
     </div>
   </div>
 </template>
 
-<script lang="ts">
-import { Component, Vue } from "vue-property-decorator"
-import { mixins } from "vue-class-component"
-import ResizeMixin from "./mixin/ResizeHandler"
-import { DeviceType, AppModule } from "@/store/modules/app"
-import { SettingsModule } from "@/store/modules/settings"
-import { Sidebar, Navbar, AppMain } from "./components"
-import RightPanel from "@/components/rightPanel/index.vue"
-import Settings from "./components/settings/index.vue"
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
+import SidebarLogo from './components/sidebar/sidebarLogo.vue'
+import Sidebar from './components/sidebar/index.vue'
+import Navbar from './components/navbar/index.vue'
+import AppMain from './components/appMain.vue'
 
-@Component({
-  components: {
-    Sidebar,
-    Navbar,
-    AppMain,
-    RightPanel,
-    Settings
-  },
-})
-export default class Layout extends mixins(ResizeMixin) {
-  get classObj() {
-    return {
-      hideSidebar: !this.sidebar.opened,
-      openSidebar: this.sidebar.opened,
-      withoutAnimation: this.sidebar.withoutAnimation,
-      mobile: this.device === DeviceType.Mobile,
-    }
+const settingsStore = useSettingsStore()
+
+// 折叠状态（true = 收起；移动端表示抽屉关闭）
+// 初始化时读取用户偏好（仅桌面端生效）
+const collapsed = ref(settingsStore.sidebarDefaultCollapsed)
+// 移动端判断（< 992px = 抽屉模式）
+const isMobile = ref(false)
+const MOBILE_BREAKPOINT = 992
+
+const checkMobile = () => {
+  const wasMobile = isMobile.value
+  isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
+
+  // 桌面 → 移动：强制收起（抽屉默认隐藏）
+  if (!wasMobile && isMobile.value) {
+    collapsed.value = true
   }
-
-  get fixedHeader() {
-    return SettingsModule.fixedHeader
-  }
-
-  get showSettings() {
-    return SettingsModule.showSettings
-  }
-
-  private handleClickOutside() {
-    AppModule.CloseSideBar(false)
+  // 移动 → 桌面：恢复展开
+  else if (wasMobile && !isMobile.value) {
+    collapsed.value = false
   }
 }
+
+const toggleSidebar = () => {
+  collapsed.value = !collapsed.value
+}
+
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 </script>
 
-<style lang="scss" scoped>
-  @import "src/styles/mixin.scss";
-  @import "src/styles/variables.scss";
+<style scoped lang="scss">
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-bg-page);
+  /*
+   * 工业软件后台：最低 1024px 宽度。
+   * 低于此值出现水平滚动条，不重排。
+   * 这样表格/列筛选/批量操作不会在手机上被压缩错位。
+   */
+  min-width: 1024px;
 
-  .app-wrapper {
-    @include clearfix;
-    position: relative;
-    height: 100%;
-    width: 100%;
-  }
-
-  .drawer-bg {
-    background: #000;
-    opacity: 0.3;
-    width: 100%;
-    top: 0;
-    height: 100%;
-    position: absolute;
+  &__mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
     z-index: 999;
   }
 
-  .sidebar-container {
-    transition: width 0.28s;
-    width: $sideBarWidth !important;
-    height: 100%;
-    position: fixed;
-    font-size: 0px;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 1001;
+  // ──────────────────────────────────────
+  // Sidebar：桌面端默认 220px，可折叠到 60px
+  // ──────────────────────────────────────
+  &__sidebar {
+    width: 220px;
+    background: var(--menu-bgcolor);  // 主题切换
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-  }
+    transition: width 0.28s ease;
 
-  .main-container {
-    min-height: 100%;
-    transition: margin-left .28s;
-    margin-left: $sideBarWidth;
-    position: relative;
-  }
-
-  .fixed-header {
-    position: fixed;
-    top: 0;
-    right: 0;
-    z-index: 9;
-    width: calc(100% - #{$sideBarWidth});
-    transition: width 0.28s;
-  }
-
-  /* 隐藏sidebar */
-  .hideSidebar {
-    
-    .sidebar-container {
-      width: $sideBarHideWidth !important;
-    }
-
-    .main-container {
-      margin-left: $sideBarHideWidth;
-    }
-
-    .fixed-header {
-      width: calc(100% - #{$sideBarHideWidth});
+    // 桌面端折叠态：缩窄到 60px（仅桌面端 CSS 生效）
+    &.is-collapsed-desktop {
+      width: 60px;
     }
   }
 
-  /* for mobile response 适配移动端 */
-  .mobile {
-    .main-container {
-      margin-left: 0px;
-    }
+  &__main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
 
-    .fixed-header {
-      width: 100%;
-    }
+  &__navbar {
+    height: 56px;
+    background: var(--color-bg-base);  // 跟随主题
+    box-shadow: 0 1px 4px rgba(0, 21, 41, 0.06);
+    flex-shrink: 0;
+  }
 
-    .sidebar-container {
-      transition: transform .28s;
-      width: $sideBarWidth !important;
-    }
+  &__content {
+    flex: 1;
+    padding: 12px;
+    overflow: auto;
+  }
 
-    &.openSidebar {
+  // ──────────────────────────────────────
+  // 移动端：sidebar 抽屉化
+  // - 默认 transform: translateX(-100%) 隐藏在屏幕左侧
+  // - .is-drawer-open 时 transform: translateX(0) 显示
+  // - 桌面端折叠（is-collapsed-desktop）在移动端被覆盖（始终 220px）
+  // ──────────────────────────────────────
+  @media (max-width: 991px) {
+    &__sidebar {
       position: fixed;
       top: 0;
-    }
+      bottom: 0;
+      left: 0;
+      z-index: 1000;
+      width: 220px;                  // 移动端始终 220px 全宽
+      height: 100vh;
+      transform: translateX(-100%);  // 默认隐藏
+      transition: transform 0.28s ease;
 
-    &.hideSidebar {
-      .sidebar-container {
-        transition-duration: 0.3s;
-        transform: translate3d(-$sideBarWidth, 0, 0);
+      // 覆盖桌面端折叠（移动端不需要 60px 折叠态）
+      &.is-collapsed-desktop {
+        width: 220px;
+      }
+
+      // 抽屉打开
+      &.is-drawer-open {
+        transform: translateX(0);
       }
     }
   }
-
-  .withoutAnimation {
-    .main-container,
-    .sidebar-container {
-      transition: none;
-    }
-  }
-
-  .copyright-notice {
-    text-align: center; 
-    position: fixed; 
-    width: 100%; 
-    bottom: 0px;
-  }
+}
 </style>

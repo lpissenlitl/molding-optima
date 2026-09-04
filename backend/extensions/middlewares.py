@@ -4,7 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from dataclasses import is_dataclass
 
-from utils.request_utils import querydict_to_dict
+from utils.http import querydict_to_dict
 from extensions.json import JsonEncoder
 from extensions.exceptions import BizException
 from datetime import datetime

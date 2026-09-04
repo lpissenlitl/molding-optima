@@ -44,25 +44,25 @@
           :stroke-width="12"
           style="width: 120px; margin-right: 8px"
         />
-        <el-button type="text" size="mini" @click="abortUpload(file)">
+        <el-button type="text" size="small" @click="abortUpload(file)">
           取消
         </el-button>
       </div>
       <!-- 上传失败 -->
       <div v-else-if="file.error" class="action-area">
-        <el-button type="text" size="mini" @click="retryUpload(file)">
+        <el-button type="text" size="small" @click="retryUpload(file)">
           重试
         </el-button>
-        <el-button type="danger" size="mini" @click="handleRemove(file)">
+        <el-button type="danger" size="small" @click="handleRemove(file)">
           删除
         </el-button>
       </div>
       <!-- 上传成功 -->
       <div v-else class="action-area">
-        <el-button type="success" size="mini" @click="handleDownload(file)">
+        <el-button type="success" size="small" @click="handleDownload(file)">
           下载
         </el-button>
-        <el-button type="danger" size="mini" @click="handleRemove(file)">
+        <el-button type="danger" size="small" @click="handleRemove(file)">
           删除
         </el-button>
       </div>

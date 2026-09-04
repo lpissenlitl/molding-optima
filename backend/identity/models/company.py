@@ -4,28 +4,40 @@ from extensions.models import BaseModel
 from datetime import datetime
 from django.core.validators import RegexValidator
 from utils.tenant import generate_tenant_slug
+from utils.identifier import auto_code_from_name, COMPANY_SUFFIXES, ORGANIZATION_SUFFIXES
 
 
 class Company(BaseModel):
     """公司表"""
     name = models.CharField(max_length=255, verbose_name="公司名称")
-    code = models.CharField(null=True, max_length=50, verbose_name="公司编码")
+    code = models.CharField(
+        null=True, blank=True, max_length=30,
+        unique=True,
+        help_text="业务代号（默认基于名称自动生成，可手动调整）",
+        verbose_name="公司代号",
+    )
     is_active = models.BooleanField(default=True, verbose_name="是否激活")
     industry = models.CharField(max_length=255, null=True, verbose_name="所属行业")
     description = models.CharField(max_length=512, null=True, verbose_name="公司描述")
     expires_at = models.DateTimeField(null=True, verbose_name="公司有效期")
     tier_level = models.IntegerField(default=1, verbose_name="公司层级")
     tenant_slug = models.CharField(
-        max_length=32, 
+        max_length=32,
         unique=True,
         default=generate_tenant_slug,
         help_text="租户唯一标识，用于文件存储隔离和外部引用"
     )
-    
+
     def is_accessible(self) -> bool:
         """判断公司是否处于可访问状态"""
         return self.is_active \
             and (self.expires_at is None or self.expires_at > datetime.now())
+
+    def save(self, *args, **kwargs):
+        """保存前自动生成 code（如果未提供）"""
+        if not self.code and self.name:
+            self.code = auto_code_from_name(self.name)
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "公司"
@@ -35,7 +47,11 @@ class Company(BaseModel):
 class Organization(BaseModel):
     """组织表"""
     name = models.CharField(max_length=255, verbose_name="组织名称")
-    code = models.CharField(null=True, max_length=50, verbose_name="组织编码")
+    code = models.CharField(
+        null=True, blank=True, max_length=30,
+        help_text="业务代号（默认基于名称自动生成，可手动调整）",
+        verbose_name="组织代号",
+    )
     company = models.ForeignKey(
         "identity.Company", 
         on_delete=models.CASCADE,
@@ -103,10 +119,23 @@ class Organization(BaseModel):
             return {}
         orgs = cls.objects.filter(name__in=org_names).select_related('manager')
         return {org.name: (org.manager.engineer_name if org.manager else None) for org in orgs}
-    
+
+    def save(self, *args, **kwargs):
+        """保存前自动生成 code（如果未提供）
+
+        Organization 使用公司级 + 组织级后缀剥离，提取核心名称
+        """
+        if not self.code and self.name:
+            self.code = auto_code_from_name(
+                self.name,
+                suffixes=COMPANY_SUFFIXES + ORGANIZATION_SUFFIXES,
+            )
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = "组织"
         verbose_name_plural = "组织"
+        unique_together = [('company', 'code')]
 
 
 class AccessibleOrganization(BaseModel):

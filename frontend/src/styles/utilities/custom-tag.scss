@@ -1,0 +1,120 @@
+/**
+ * 自定义状态标签工具类（Custom Tag Utilities）
+ * 提供列表/详情页统一的状态标签样式（替代 Element Plus el-tag）
+ *
+ * 使用示例：
+ *   <span class="custom-tag tag-success">已完成</span>           <!-- 带圆点 -->
+ *   <span class="custom-tag tag-success custom-tag--plain">     <!-- 无圆点（用于含 icon 的场景） -->
+ *     <AppIcon icon="mdi:check-circle" />已完成
+ *   </span>
+ *
+ * 对应数据：通常通过 const.ts 中的 *_STATUS_MAP 配置 type 字段
+ * 例如：PURCHASE_REQUEST_STATUS_MAP.draft = { label: "草稿", type: "info" }
+ *
+ * 设计要点：
+ *   - inline-flex 居中（避免 inline-block 基线错位）
+ *   - 圆点 6×6 + 胶囊形圆角 50%（标准胶囊视觉）
+ *   - 边框颜色加深（清晰边界，与单元格边框区分）
+ *   - line-height: 1（不受外部行高影响）
+ *   - CSS 变量驱动（深色主题可整体覆盖）
+ *
+ * 修饰符：
+ *   - --plain  无圆点模式（场景：标签内部已包含 icon，避免视觉重复）
+ *
+ * 参考：molding-expert/molding-expert-web/src/styles/utilities/_custom-tag.scss
+ */
+
+// ========================================================================
+// 基础标签（Custom Tag）
+// ========================================================================
+
+.custom-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 11px;
+  background-color: var(--tag-bg);
+  color: var(--tag-color);
+  border: 1px solid var(--tag-border);
+  white-space: nowrap;
+
+  // 左侧状态圆点（视觉锚点，远距离扫视时可识别）
+  &::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--tag-color);
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+}
+
+// ========================================================================
+// 修饰符：无圆点（用于标签内部已包含 icon / svg 的场景）
+// ========================================================================
+//
+// 业务诉求：当 custom-tag 内部已经嵌入 AppIcon / svg 等图标时，
+// ::before 圆点和 icon 在视觉上会重复（两个小色块挤在标签左侧）。
+// 此时使用 --plain 修饰符隐藏圆点，并适当调整 icon 与文字的间距。
+//
+// 与 Element Plus el-tag 的对比：
+//   - el-tag：纯文字，0 视觉元素（最干净，但缺状态识别线索）
+//   - custom-tag 默认：圆点 + 文字（状态识别强，但与 icon 冲突）
+//   - custom-tag--plain：icon + 文字（兼顾状态识别 + 与 icon 复用）
+
+.custom-tag--plain {
+  // 1. 隐藏左侧圆点
+  &::before {
+    display: none;
+  }
+
+  // 2. 调整 icon 与文字的间距（兼容 AppIcon / svg / i.el-icon-x）
+  //    选中直接子元素中的 i / svg，避免侵入子组件结构
+  > i,
+  > svg {
+    margin-right: 4px;
+    font-size: 13px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+}
+
+// ========================================================================
+// 颜色变体（Color Variants）
+// 颜色对齐 Element Plus 主题，但边框色加深以提升边界清晰度
+// ========================================================================
+
+.tag-success {
+  --tag-bg: #f0f9eb;
+  --tag-color: #67c23a;
+  --tag-border: #c2e7b0;
+}
+
+.tag-warning {
+  --tag-bg: #fdf6ec;
+  --tag-color: #e6a23c;
+  --tag-border: #f5dab1;
+}
+
+.tag-danger {
+  --tag-bg: #fef0f0;
+  --tag-color: #f56c6c;
+  --tag-border: #fabeb9;
+}
+
+.tag-info {
+  --tag-bg: #f4f4f5;
+  --tag-color: #909399;
+  --tag-border: #d3d4d6;
+}
+
+.tag-primary {
+  --tag-bg: #ecf5ff;
+  --tag-color: #409eff;
+  --tag-border: #b3d8ff;
+}

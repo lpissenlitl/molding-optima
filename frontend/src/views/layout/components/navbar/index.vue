@@ -1,187 +1,259 @@
+<!--
+  Navbar：顶部栏
+  - 左侧：sidebar 折叠/展开按钮 + 面包屑
+  - 右侧：用户区（占位）
+  - sidebar 按钮用 Element Plus 的 Fold / Expand icon，语义直接
+  - 面包屑从 route.matched 自动生成
+-->
 <template>
   <div class="navbar">
-    <hamburger 
-      id="hamburger-container"
-      class="hamburger-container"
-      :is-active="sidebar.opened" 
-      :toggle-click="toggleSideBar" 
-    />
-    <breadcrumb 
-      id="breadcrumb-container"
-      class="breadcrumb-container"
-    />
-    <div class="right-menu">
-      <el-dropdown
-        class="avatar-container right-menu-item hover-effect"
-        trigger="click"
+    <div class="navbar__left">
+      <button
+        class="navbar__hamburger"
+        :aria-label="collapsed ? '展开侧边栏' : '折叠侧边栏'"
+        @click="$emit('toggle-sidebar')"
       >
-        <div class="avatar-wrapper">
-          {{ organization_name }}
-          <el-button type="text">
-            {{ username }}
-            <i class="el-dropdown-icon-user">
-              <svg-icon 
-                class="user"
-                name="user"
-              /></i>
-          </el-button>
-        </div>
-        <el-dropdown-menu slot="dropdown">
-          <el-dropdown-item>
-            <span 
-              style="display:block;" 
-              @click="showUserSet=true"
-            >
-              修改密码
-            </span>
-          </el-dropdown-item>
-          <el-dropdown-item divided>
-            <span 
-              style="display:block;" 
-              @click="logout"
-            >
-              退出登录
-            </span>
-          </el-dropdown-item>
-        </el-dropdown-menu>
-      </el-dropdown>
+        <el-icon :size="22">
+          <AppIcon v-if="!collapsed" icon="mdi:chevron-left" style="font-size: 22px;" />
+          <AppIcon v-else icon="mdi:chevron-right" style="font-size: 22px;" />
+        </el-icon>
+      </button>
+
+      <nav class="navbar__breadcrumbs">
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item
+            v-for="(item, idx) in breadcrumbs"
+            :key="item.path"
+            :to="idx < breadcrumbs.length - 1 ? { path: item.path } : undefined"
+          >
+            {{ item.title }}
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+      </nav>
     </div>
-    <user-set :show-user-set.sync="showUserSet"></user-set>
+
+    <div class="navbar__right">
+      <!-- 设置入口（点击弹出系统设置抽屉）-->
+      <button
+        class="navbar__action"
+        aria-label="系统设置"
+        @click="settingsOpen = true"
+      >
+        <AppIcon icon="mdi:cog-outline" />
+      </button>
+
+      <!-- 用户区 -->
+      <el-dropdown trigger="click">
+        <span class="navbar__user" :title="userStore.display_name">
+          <AppIcon
+            :icon="userStore.is_admin ? 'mdi:shield-account' : 'mdi:account-circle'"
+            class="navbar__user-icon"
+          />
+          <span>{{ userStore.display_name }}</span>
+        </span>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item @click="settingsOpen = true">
+              <AppIcon icon="mdi:cog-outline" class="navbar__menu-icon" />
+              系统设置
+            </el-dropdown-item>
+            <el-dropdown-item divided @click="handleLogout">
+              <AppIcon icon="mdi:logout" class="navbar__menu-icon" />
+              退出登录
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
+      <!-- 系统设置抽屉 -->
+      <SettingsDrawer v-model="settingsOpen" />
+    </div>
   </div>
 </template>
 
-<script lang="ts">
-import { Component, Vue } from "vue-property-decorator"
-import { AppModule } from "@/store/modules/app"
-import { UserModule } from "@/store/modules/user"
-import Hamburger from "@/components/hamburger/index.vue"
-import Breadcrumb from "@/components/breadcrumb/index.vue"
-import UserSet from "@/components/userSet/index.vue"
+<script setup lang="ts">
+import { ref } from 'vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import SettingsDrawer from '@/components/SettingsDrawer.vue'
 
-@Component({
-  components: {
-    Hamburger,
-    Breadcrumb,
-    UserSet,
-  },
-})
+defineProps<{
+  collapsed?: boolean
+}>()
 
-export default class Navbar extends Vue {
-  private showUserSet: boolean = false
+defineEmits<{
+  (e: 'toggle-sidebar'): void
+}>()
 
-  get sidebar() {
-    return AppModule.sidebar
-  }
+const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
 
-  get device() {
-    return AppModule.device.toString()
-  }
+// 系统设置抽屉状态
+const settingsOpen = ref(false)
 
-  get username() {
-    return UserModule.username
-  }
-
-  get organization_name() {
-    return UserModule.organization_name
-  }
-
-  private toggleSideBar() {
-    AppModule.ToggleSideBar(false)
-  }
-
-  private logout() {
-    UserModule.LogOut().then(() => {
-      this.$router.push({ path: "/login" })
-      // location.reload();  // 为了重新实例化vue-router对象 避免bug
-    })
-  }
+const handleLogout = () => {
+  userStore.clear()
+  router.push('/login')
 }
+
+// 面包屑：从 route.matched 提取有 title 的层级
+const breadcrumbs = computed(() =>
+  route.matched
+    .filter(r => r.meta?.title && r.path !== '/')
+    .map(r => ({
+      path: r.path,
+      title: r.meta?.title as string,
+    }))
+)
 </script>
 
-<style lang="scss" scoped>
+<style scoped lang="scss">
 .navbar {
-  height: 40px;
-  overflow: hidden;
-  position: relative;
-  background: #fff;
-  right: 0;
-  box-shadow: 0 1px 4px rgb(37,67,115);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  // 左侧 padding 缩小，让 hamburger 离 sidebar 更近
+  padding: 0 20px 0 6px;
 
-  .hamburger-container {
-    line-height: 46px;
-    height: 100%;
-    float: left;
-    padding: 0 15px;
+  &__left {
+    display: flex;
+    align-items: center;
+    // 缩小 hamburger 与 breadcrumb 之间的间距
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  // ──────────────────────────────────────
+  // sidebar 折叠/展开按钮（用 Element Plus <Fold> / <Expand> icon）
+  // ──────────────────────────────────────
+  &__hamburger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background .3s;
-    -webkit-tap-highlight-color: transparent;
+    color: var(--color-text-regular);
+    transition: background 0.2s, color 0.2s;
 
     &:hover {
-      background: rgba(0, 0, 0, .025)
+      background: var(--color-bg-page);
+      color: var(--theme-primary);
+    }
+
+    &:active {
+      background: var(--color-bg-mask, rgba(0, 0, 0, 0.05));
     }
   }
 
-  .breadcrumb-container {
-    line-height: 40px;
-    float: left;
-  }
-
-  .errLog-container {
-    display: inline-block;
-    vertical-align: top;
-  }
-
-  .right-menu {
-    float: right;
-    height: 100%;
-    line-height: 30px;
-
-    &:focus {
-      outline: none;
+  // ──────────────────────────────────────
+  // 面包屑
+  // ──────────────────────────────────────
+  // ─────────────────────────────────────
+// 面包屑（Element Plus el-breadcrumb）
+// - 当前页（最后一级）：主色 + 加粗
+// - 中间路径：常规色 + hover 变主题色
+// - 分隔符：次要色 + 50% 透明
+// ─────────────────────────────────────
+&__breadcrumbs {
+    :deep(.el-breadcrumb) {
+      font-size: 14px;
     }
 
-    .right-menu-item {
-      display: inline-block;
-      padding: 5px 8px;
-      height: 100%;
-      font-size: var(--basic-font-size);
-      color: #5a5e66;
-      vertical-align: top;
-
-      &.hover-effect {
-        cursor: pointer;
-        transition: background .3s;
-
-        &:hover {
-          background: rgba(0, 0, 0, .025)
-        }
-      }
+    // 当前页（最后一级）：主色 + 加粗
+    :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+      color: var(--color-text-primary);
+      font-weight: 600;
+      cursor: default;
     }
 
-    .avatar-container {
-      margin-right: 25px;
+    // 中间路径 hover：变主题色，传达可点击
+    :deep(.el-breadcrumb__item:not(:last-child) .el-breadcrumb__inner:hover) {
+      color: var(--theme-primary);
+    }
 
-      .avatar-wrapper {
-        margin: -5px 5px;
-        position: relative;
+    // 分隔符：浅灰半透明
+    :deep(.el-breadcrumb__separator) {
+      color: var(--color-text-secondary);
+      opacity: 0.5;
+    }
+  }
 
-        // .user-avatar {
-        //   cursor: pointer;
-        //   width: 40px;
-        //   height: 40px;
-        //   border-radius: 10px;
-        // }
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
 
-        .el-dropdown-icon-user {
-          cursor: pointer;
-          position: absolute;
-          right: -20px;
-          top: 15px;
-          font-size: 12px;
-        }
-      }
+  // 设置按钮（齿轮）
+  &__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--color-text-regular);
+    font-size: 20px;
+    transition: background 0.2s, color 0.2s;
+
+    &:hover {
+      background: var(--color-bg-page);
+      color: var(--theme-primary);
+    }
+  }
+
+  &__menu-icon {
+    margin-right: 8px;
+    font-size: 16px;
+    vertical-align: middle;
+  }
+
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-regular);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+
+    &:hover {
+      background: var(--color-bg-page);
+    }
+
+    &-icon {
+      font-size: 20px;
+    }
+
+    // 头像首字母（avatar 缺失时使用）
+    &-avatar {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--theme-primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
     }
   }
 }
 </style>
-

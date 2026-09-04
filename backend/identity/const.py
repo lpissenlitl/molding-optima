@@ -179,8 +179,15 @@ PERMISSIONS = [
     # make_perm("试验优化设计", "experimental_optimal_technology", parent_code="assist_tools", sort_order=3, module="tool"),
     # make_perm("比重计算器", "proportion_calculator", parent_code="assist_tools", sort_order=4, module="tool"),
 
-    # ─────────────── 权限管理（用户/角色/部门）───────────────
+    # ─────────────── 权限管理（用户/角色/部门/公司）───────────────
     make_perm("权限管理", "permission_manage", parent_code="system_permission", type="menu", sort_order=10, module="admin"),
+
+    # 公司管理
+    make_perm("公司管理", "company_manage", parent_code="permission_manage", type="menu", sort_order=0, module="admin"),
+    make_perm("查看公司", "review_company", parent_code="company_manage", sort_order=1, module="admin"),
+    make_perm("增加公司", "add_company", parent_code="company_manage", sort_order=2, module="admin"),
+    make_perm("删除公司", "delete_company", parent_code="company_manage", sort_order=3, module="admin"),
+    make_perm("修改公司", "update_company", parent_code="company_manage", sort_order=4, module="admin"),
 
     # 部门管理
     make_perm("部门管理", "department_manage", parent_code="permission_manage", type="menu", sort_order=1, module="admin"),
@@ -208,3 +215,15 @@ PERMISSIONS = [
     # make_perm("缺陷列表", "defect_list", parent_code="defect_manage", sort_order=1, module="defect"),
     # make_perm("新增缺陷", "add_defect", parent_code="defect_manage", sort_order=2, module="defect"),
 ]
+
+
+# =============================================================================
+# 平台级公司常量
+# =============================================================================
+
+# 系统演示公司（用于产品试用/演示）
+# - 所有游客/试用账号归属此公司
+# - 超级管理员可通过「接管」操作其数据
+# - 前端应在公司选择列表中过滤掉此公司（不要让用户切换到它）
+SYSTEM_DEMO_COMPANY_CODE = "system_demo"
+SYSTEM_DEMO_COMPANY_NAME = "系统演示"

@@ -4,7 +4,7 @@ from django.http import HttpRequest
 from extensions.models import AbstractBaseModel, TracedModel, BaseModel
 from extensions.exceptions import BizException, ERROR_ILLEGAL_ARGUMENT
 from utils.validation import validate_permission_codes
-from utils.request_utils import get_client_ip
+from utils.http import get_client_ip
 from extensions.encrypt.pwdutils import hash_pwd
 from datetime import datetime, timedelta
 import logging
@@ -89,18 +89,38 @@ class User(BaseModel):
         self.save(update_fields=["login_count", "last_login_at", "updated_at"])
   
     def get_permissions(self):
-        """获取用户权限,用户后端鉴权,能否操作"""
+        """获取用户权限,用户后端鉴权,能否操作
+
+        权限优先级（从高到低）：
+        1. is_superuser=True：拥有所有权限（平台超级管理员）
+        2. is_tenant_admin=True：通过 company.tier_level 获得所有公司内权限
+        3. 普通用户：通过 roles 关联的 RolePermission 累积权限
+        """
+        # 1. 超级管理员：拥有所有权限
+        if self.is_superuser:
+            return list(
+                Permission.objects.filter(is_active=True)
+                .values_list("code", flat=True)
+            )
+
+        # 2. 租户管理员：拥有该公司 tier 内的所有权限
         if self.is_tenant_admin:
             company_tier = getattr(self.company, 'tier_level', None)
             if company_tier is None:
                 return []
-            return list(Permission.objects.filter(is_active=True,tier_level__lte=self.company.tier_level).values_list("code", flat=True))
-        else:
-            permissions = set()
-            for role in self.roles.all():
-                if role.is_active:  
-                    permissions.update(role.get_permissions())
-            return list(permissions)
+            return list(
+                Permission.objects.filter(
+                    is_active=True,
+                    tier_level__lte=self.company.tier_level,
+                ).values_list("code", flat=True)
+            )
+
+        # 3. 普通用户：通过角色累加权限
+        permissions = set()
+        for role in self.roles.all():
+            if role.is_active:
+                permissions.update(role.get_permissions())
+        return list(permissions)
     
     def get_accessible_organizations(self):
         """获取用户可访问组织"""
@@ -227,6 +247,7 @@ class Role(BaseModel):
     class Meta:
         verbose_name = "角色"
         verbose_name_plural = "角色"
+        unique_together = [('company', 'code')]
 
 
 class RolePermission(TracedModel):
