@@ -77,3 +77,95 @@ export function createValidateAndFocus(vm: any) {
     })
   }
 }
+
+/**
+ * FormItem 辅助函数
+ *
+ * 与 form-types.ts 配合使用：
+ *   - 不抽 BaseFormItem 组件，但共享 helper 函数
+ *   - 业务方在模板里写 v-else-if 链，调用 helper 生成 placeholder / disabled / precision
+ *
+ * 设计哲学：
+ *   - 数据抽象（FormItem）抽 ✅
+ *   - 渲染抽象（BaseFormItem）不抽 ❌
+ *   - 辅助函数（helper）抽 ✅
+ */
+import type { FormItem } from './form-types'
+
+/**
+ * 自动生成 placeholder
+ *
+ * 规则：
+ *   - item.placeholder 存在 → 返回它（优先级最高）
+ *   - select / date / autocomplete → "请选择/选择日期/请输入 + label"
+ *   - radio → 返回空（radio 不需要 placeholder）
+ *   - 其他（input/textarea/number/integer）→ "请输入 + label"
+ *
+ * @example
+ *   getPlaceholder({ type: 'input', label: '项目名称' }) // "请输入项目名称"
+ *   getPlaceholder({ type: 'select', label: '流道类别' }) // "请选择流道类别"
+ */
+export function getPlaceholder(item: FormItem): string {
+  if (item.placeholder) return item.placeholder
+  const label = item.label || ''
+  switch (item.type) {
+    case 'select':
+    case 'number-select':
+      return `请选择${label}`
+    case 'date':
+      return `选择日期`
+    case 'autocomplete':
+      return `请输入${label}`
+    case 'radio':
+      return '' // radio 不需要 placeholder
+    case 'divider':
+      return '' // divider 不需要 placeholder
+    default:
+      return `请输入${label}`
+  }
+}
+
+/**
+ * 解析 disabled（支持函数）
+ *
+ * 业务方可以传布尔或函数：
+ *   { disabled: true }                          // 始终禁用
+ *   { disabled: () => isEdit.value }             // 编辑模式禁用
+ *   { disabled: (item) => item.prop === 'code' } // 动态判断
+ *
+ * @example
+ *   getDisabled({ disabled: true })   // true
+ *   getDisabled({ disabled: () => false }) // false
+ */
+export function getDisabled(item: FormItem): boolean {
+  if (typeof item.disabled === 'function') {
+    return Boolean((item.disabled as (i: FormItem) => boolean)(item))
+  }
+  return Boolean(item.disabled)
+}
+
+/**
+ * 获取数值类型的小数位数
+ *
+ * 规则：
+ *   - integer → 默认 0
+ *   - number → 默认 2
+ *   - item.precision 存在 → 返回它（优先级最高）
+ *
+ * 配合 v-number 指令使用：
+ *   <el-input v-number="getPrecision(item)" />
+ *
+ * @example
+ *   getPrecision({ type: 'integer' })   // 0
+ *   getPrecision({ type: 'number' })    // 2
+ *   getPrecision({ type: 'number', precision: 4 })  // 4
+ */
+export function getPrecision(item: FormItem): number {
+  if (typeof item.precision === 'number') return item.precision
+  return item.type === 'integer' ? 0 : 2
+}
+
+// 注意：autocomplete 的查询建议函数 querySuggestions 暂不提供通用实现。
+// 不同业务方的 autocomplete 数据源差异较大（历史输入 / 后端 endpoint / 本地缓存），
+// 推荐在各 form 内部局部实现，以获得最大灵活度。
+// 详见 FormItem.query 类型定义。

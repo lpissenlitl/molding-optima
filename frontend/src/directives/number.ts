@@ -1,7 +1,7 @@
 import { formatNumber } from "@/utils/number"
 
 export default {
-  bind(el: any, binding: any, vnode: any) {
+  beforeMount(el: any, binding: any, vnode: any) {
     // 获取 input 元素
     const inputEl = el.tagName === "INPUT" ? el : el.querySelector("input")
     if (!inputEl) return
@@ -66,8 +66,8 @@ export default {
         })
 
         // 触发 Vue 更新
-        if (vnode.componentInstance) {
-          vnode.componentInstance.$emit("input", formatted)
+        if (vnode.component) {
+          vnode.component.$emit("input", formatted)
         } else {
           target.dispatchEvent(new Event("input", { bubbles: true }))
         }
@@ -81,8 +81,8 @@ export default {
       const formatted = formatNumber(current, options.fixed, options.allowNegative, true)
       if (formatted !== current) {
         inputEl.value = formatted
-        if (vnode.componentInstance) {
-          vnode.componentInstance.$emit("input", formatted)
+        if (vnode.component) {
+          vnode.component.$emit("input", formatted)
         } else {
           inputEl.dispatchEvent(new Event("input", { bubbles: true }))
         }
@@ -95,7 +95,7 @@ export default {
     el._vNumberHandlers = { handleInput, /* handleBlur */ }
   },
 
-  unbind(el: any) {
+  unmounted(el: any) {
     const inputEl = el.tagName === "INPUT" ? el : el.querySelector("input")
     const handlers = el._vNumberHandlers
     if (inputEl && handlers) {

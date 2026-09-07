@@ -10,7 +10,6 @@
     <!-- 搜索表单（配置驱动，复用 BaseSearchForm） -->
     <ProjectSearchForm
       :query-detail="query"
-      :control-width="200"
       @search="onSearch"
       @reset="onReset"
     />
@@ -109,7 +108,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
-import ProjectSearchForm from './components/ProjectSearchForm.vue'
+import ProjectSearchForm from '../components/ProjectSearchForm.vue'
 import { projectMethod } from '@/api'
 import {
   projectStatusOptions,
@@ -314,7 +313,7 @@ async function batchDelete() {
 
 function goMoldCreate(row: any) {
   // 跳转到模具创建页，带上 project_id 上下文
-  router.push({ path: '/mold/create', query: { project_id: row.id } })
+  router.push({ path: '/mold/new', query: { project_id: row.id } })
 }
 
 // ============================================================================

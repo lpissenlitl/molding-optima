@@ -88,7 +88,23 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 .layout {
   display: flex;
-  min-height: 100vh;
+  /*
+   * 锁死 100vh（不是 min-height） + overflow: hidden
+   *
+   * 原因：
+   * - 之前用 min-height: 100vh，layout 会被内容撑高
+   * - 当表单超长时，layout 超过视窗 → body 出现滚动条
+   * - 侧边栏作为 layout 的子元素，跟着页面一起滚
+   *   → 出现"下拉侧边栏菜单也被滚动"的 bug
+   *
+   * 修复后：
+   * - layout 始终 = 视窗高度，body 不可能滚动
+   * - 侧边栏和主内容区都在 layout 内部独立滚动
+   *   （侧边栏的 .sidebar overflow-y: auto 处理菜单过长）
+   *   （主内容区的 .layout__content overflow: auto 处理表单过长）
+   */
+  height: 100vh;
+  overflow: hidden;
   background: var(--color-bg-page);
   /*
    * 工业软件后台：最低 1024px 宽度。
@@ -127,6 +143,11 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    /*
+     * min-height: 0：flex 子项默认 min-height: auto，会被内容撑开
+     * 设为 0 后，子项可以收缩到比内容更小，overflow:auto 才会触发
+     */
+    min-height: 0;
   }
 
   &__navbar {
@@ -140,6 +161,11 @@ onBeforeUnmount(() => {
     flex: 1;
     padding: 12px;
     overflow: auto;
+    /*
+     * min-height: 0：同上，flex 子项必须允许收缩
+     * overflow:auto 才会在内容超过可视区时出现滚动条
+     */
+    min-height: 0;
   }
 
   // ──────────────────────────────────────

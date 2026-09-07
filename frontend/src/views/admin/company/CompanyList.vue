@@ -173,8 +173,8 @@
         <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{ row }">
             <span class="row-action-buttons">
-              <el-button 
-                type="text" 
+              <el-button
+                type="text"
                 @click="editCompany(row)"
               >
                 <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />

@@ -9,10 +9,10 @@ import '@/styles/themes.scss'
 import '@/styles/element-plus.scss'
 import '@/styles/reset.scss'
 import '@/styles/utilities/custom-tag.scss'
-import '@/styles/utilities/search-form.scss'
-import '@/styles/utilities/form-responsive.scss'
+import '@/styles/utilities/custom-form.scss'
 import ComponentsPlugin from '@/plugins/components'
 import GlobalMethodsPlugin from '@/plugins/global-methods'
+import DirectivesPlugin from '@/plugins/directives'
 
 import App from './App.vue'
 import router from '@/router'
@@ -86,5 +86,9 @@ app.use(ComponentsPlugin)
 // 全局方法插件（$hasPermission / $querySuggestions / $dayjs 等）
 // mold 视图依赖这些全局方法，必须在挂载前注册
 app.use(GlobalMethodsPlugin)
+
+// 全局指令插件（v-number / v-el-drag-dialog）
+// 必须在挂载前注册，模板里的 v-number 才能生效
+app.use(DirectivesPlugin)
 
 app.mount('#app')

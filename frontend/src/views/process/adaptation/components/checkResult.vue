@@ -389,11 +389,9 @@ export default {
     },
     updateInfo(view) {
       if (view == "mold") {
+        // 跳转编辑现有模具（RESTful 风格路径）
         const routedata = this.$router.resolve({
-          path: "/mold/create",
-          query: {
-            id: this.originProcess.basic_mold_info.id
-          }
+          path: `/mold/${this.originProcess.basic_mold_info.id}/edit`
         })
         window.open(routedata.href, "_blank")
       } else if (view == "origin_machine") {

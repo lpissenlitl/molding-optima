@@ -2,7 +2,8 @@
   <BaseSearchForm
     :query="query_params"
     :items="search_items"
-    :expandable="true"
+    :expandable="false"
+    :control-width="200"
     @search="handleSearch"
     @reset="handleReset"
   />

@@ -46,13 +46,20 @@ const routes: RouteRecordRaw[] = [
 
       // 模具管理（alwaysShow：多子菜单分组）
       // 模具表单（新增/编辑）走独立页面，不占用独立菜单项
+      // RESTful 风格路由：
+      // - /mold/new         新建
+      // - /mold/:id/edit    编辑
+      // - /mold/new?project_id=X    从项目跳转创建（带项目上下文）
+      // new / edit 用 hidden=true，在菜单中隐藏（侧边栏过滤）
       {
         path: 'mold',
         component: ParentView,
         redirect: '/mold/list',
         meta: { title: '模具管理', icon: 'mdi:cube-outline', alwaysShow: true },
         children: [
-          { path: 'list', name: 'mold-list', component: () => import('@/views/mold/pages/MoldList.vue'), meta: { title: '模具列表', icon: 'mdi:view-list' } },
+          { path: 'list',      name: 'mold-list',  component: () => import('@/views/mold/pages/MoldList.vue'),  meta: { title: '模具列表', icon: 'mdi:view-list' } },
+          { path: 'new',       name: 'mold-new',   component: () => import('@/views/mold/pages/MoldForm.vue'), meta: { title: '新建模具', hidden: true } },
+          { path: ':id/edit',  name: 'mold-edit',  component: () => import('@/views/mold/pages/MoldForm.vue'), meta: { title: '编辑模具', hidden: true } },
         ],
       },
 
@@ -67,9 +74,9 @@ const routes: RouteRecordRaw[] = [
         redirect: '/project/list',
         meta: { title: '项目管理', icon: 'mdi:briefcase-outline', alwaysShow: true },
         children: [
-          { path: 'list',      name: 'project-list',  component: () => import('@/views/project/index.vue'), meta: { title: '项目列表', icon: 'mdi:view-list' } },
-          { path: 'new',       name: 'project-new',   component: () => import('@/views/project/form.vue'),  meta: { title: '新建项目', hidden: true } },
-          { path: ':id/edit',  name: 'project-edit',  component: () => import('@/views/project/form.vue'),  meta: { title: '编辑项目', hidden: true } },
+          { path: 'list',      name: 'project-list',  component: () => import('@/views/project/pages/ProjectList.vue'), meta: { title: '项目列表', icon: 'mdi:view-list' } },
+          { path: 'new',       name: 'project-new',   component: () => import('@/views/project/pages/ProjectForm.vue'), meta: { title: '新建项目', hidden: true } },
+          { path: ':id/edit',  name: 'project-edit',  component: () => import('@/views/project/pages/ProjectForm.vue'), meta: { title: '编辑项目', hidden: true } },
         ],
       },
 
@@ -130,7 +137,7 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'company',
             name: 'admin-company',
-            component: () => import('@/views/admin/company/index.vue'),
+            component: () => import('@/views/admin/company/CompanyList.vue'),
             meta: {
               title: '公司管理',
               icon: 'mdi:office-building-outline',
@@ -141,7 +148,7 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'organization',
             name: 'admin-organization',
-            component: () => import('@/views/admin/organization/index.vue'),
+            component: () => import('@/views/admin/organization/OrganizationTree.vue'),
             meta: {
               title: '组织架构',
               icon: 'mdi:sitemap-outline',
@@ -152,7 +159,7 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'role',
             name: 'admin-role',
-            component: () => import('@/views/admin/role/index.vue'),
+            component: () => import('@/views/admin/role/RoleList.vue'),
             meta: {
               title: '角色管理',
               icon: 'mdi:shield-account-outline',
@@ -163,7 +170,7 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'user',
             name: 'admin-user',
-            component: () => import('@/views/admin/user/index.vue'),
+            component: () => import('@/views/admin/user/UserList.vue'),
             meta: {
               title: '用户管理',
               icon: 'mdi:account-multiple-outline',

@@ -1,525 +1,395 @@
+<!--
+  MoldList - 模具列表页
+
+  设计要点：
+  - 表格使用 BaseTable（统一列定义、密度切换、列筛选、用户偏好持久化）
+  - 编辑/新建：路由跳转（与 ProjectList 风格一致）—— mold form 字段较多，独立页面空间更充足
+  - 跨模块链接：moldflow / trial / reservation / resume（通过路由跳转）
+  - 操作列：编辑（review_mold）、删除（delete_mold）
+  - 表格偏好（列显隐、密度、pageSize）通过 view-name="mold_list" 自动持久化
+
+  与 project/pages/ProjectList.vue 的差异：
+  - 跨模块入口多出 moldflow / trial / resume
+-->
 <template>
-  <div>
-    <mold-search-form
+  <div class="mold-list">
+    <!-- 搜索表单 -->
+    <MoldSearchForm
       :query-detail="query"
-      @search="getListData"
+      @search="onSearch"
+      @reset="onReset"
     />
-    <div class="row-toolbutton">
-      <div>
-        <change-table-size 
-          :size="table_size" 
-          @update="val => table_size = val"
-        />
-      </div>
-      <div>
-        <el-button-group>
-          <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-plus"
-            @click="toAddMold"
-            :disabled="!$hasPermission('add_mold')"
-          >
-            新增模具
-          </el-button>
-          <el-button
-            size="small"
-            type="success"
-            icon="el-icon-download"
-            @click="exportListToExcel"
-          >
-            导出列表
-          </el-button>
-          <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-setting"
-            @click="show_table_setting = true"
-          >
-            配置表格
-          </el-button>
-        </el-button-group>
-      </div>
-    </div>
-    <el-table
-      :class="[`table-size-${table_size}`]"
-      v-loading="list_loading"
-      size="small"
-      stripe
-      border
-      fit
-      highlight-current-row
-      style="width: 100%;"
+
+    <!-- 表格 -->
+    <BaseTable
       :data="list_data.items"
-      :height="tableHeight"
-      @row-dblclick="editMold"
-      @selection-change="(val) => { selected_rows = val }"
+      :total="list_data.total"
+      :query="query"
+      :columns.sync="table_columns"
+      :loading="list_loading"
+      :table-size.sync="table_size"
+      :height-offset="220"
+      view-name="mold_list"
+      @size-change="(v: number) => { query.page_size = v; query.page_no = 1; fetchList() }"
+      @current-change="(v: number) => { query.page_no = v; fetchList() }"
+      @row-dblclick="goEdit"
+      @selection-change="(rows: any[]) => selected_rows = rows"
     >
-      <el-table-column
-        type="selection"
-        width="40"
-        align="center"
-      >
-      </el-table-column>
-      <el-table-column
-        type="index"
-        label="序号"
-        width="55"
-        align="center"
-      >
-      </el-table-column>
-      <el-table-column
-        v-for="column, index in table_columns.filter(column => column.visible)"
-        :key="index"
-        :prop="column.prop"
-        :label="column.label"
-        :min-width="column.width"
-        :header-align="column.header_align"
-        :align="column.align"
-        :sortable="column.sortable"
-        :show-overflow-tooltip="column.tooltip"
-      >
-        <template #default="scope">
-          <span v-if="column.prop === 'mold_no'">
-            <el-link
-              type="primary" 
-              @click="editMold(scope.row)"
-              :disabled="!$hasPermission('review_mold')"
-            >
-              {{ scope.row[column.prop] }}
-            </el-link>
+      <!-- 顶部工具栏 -->
+      <template #toolbar>
+        <el-button
+          type="primary"
+          :disabled="!hasPermission('add_mold')"
+          @click="goCreate"
+        >
+          <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />
+          新建模具
+        </el-button>
+        <el-button
+          type="danger"
+          :disabled="selected_rows.length === 0"
+          @click="batchDelete"
+        >
+          <AppIcon icon="mdi:delete-outline" style="margin-right: 4px; font-size: 14px;" />
+          批量删除
+          <span v-if="selected_rows.length > 0" style="margin-left: 4px;">
+            ({{ selected_rows.length }})
           </span>
-          <span v-else-if="column.prop === 'reservation'">
-            <el-button 
-              type="primary"
-              size="small"
-              round
-              @click="toAddReservation(scope.row)"
-              :disabled="!$hasPermission('add_reservation')"
-            >
-              预约
-            </el-button>
-          </span>
-          <span v-else-if="column.prop === 'moldflow_data'">
-            <el-link 
-              type="primary" 
-              @click="toMoldflowReport(scope.row)"
-              :disabled="!$hasPermission('review_moldflow')"
-            >
-              查看
-            </el-link>
-          </span>
-          <span v-else-if="column.prop === 'trial_data'">
-            <el-link
-              type="primary" 
-              @click="toTrialData(scope.row)"
-              :disabled="!$hasPermission('trial_view')"
-            >
-              查看
-            </el-link>
-          </span>
-          <span v-else-if="column.prop === 'trial_resume'">
-            <el-link
-              type="primary" 
-              @click="toTrialResume(scope.row)"
-              :disabled="!$hasPermission('review_trial_resume')"
-            >
-              查看
-            </el-link>
-          </span>
-          <span v-else-if="column.prop === 'issue_resume'">
-            <el-link
-              type="primary" 
-              @click="toIssueResume(scope.row)"
-              :disabled="!$hasPermission('review_problem_resume')"
-            >
-              查看
-            </el-link>
-          </span>
-          <span v-else>
-            {{ scope.row[column.prop] }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        fixed="right"
-        label="操作"
-        width="180"
-        align="center"
-      >
-        <template #default="scope">
-          <el-button
-            type="primary"
-            size="small"
-            @click="editMold(scope.row)"
-            plain
-            :disabled="!$hasPermission('review_mold')"
-          >
-            编辑
-          </el-button>
-          <el-button
-            type="danger"
-            size="small"
-            @click="deleteMold(scope.row)"
-            plain
-            :disabled="!$hasPermission('delete_mold')"
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <div class="pagination">
-      <el-pagination
-        layout="total, sizes, prev, pager, next, jumper"
-        :page-sizes="DEFAULT_PAGE_SIZES"
-        :page-size="query.page_size"
-        :current-page="query.page_no"
-        :total="list_data.total"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      >
-      </el-pagination>
-    </div>
-    <el-drawer
-      direction="rtl"
-      size="90%"
-      :title="view_context.title"
-      :with-header="true"
-      :visible.sync="show_mold_info"
-      :wrapper-closable="true"
-      :show-close="false"
-      :destroy-on-close="true"
-    >
-      <template #title>
-        <div class="custom-drawer-header">
-          <el-button 
-            type="text" 
-            icon="el-icon-arrow-left"
-            @click="show_mold_info = false"
-          >
-            返回
-          </el-button>
-          <span class="drawer-title">{{ view_context.title }}</span>
-        </div>
+        </el-button>
       </template>
-      <mold-form 
-        @close="refreshView"
-        :view-context="view_context"
-      />
-    </el-drawer>
-    <TableSetting
-      :table-data="table_columns"
-      v-model:show="show_table_setting"
-      @close="refreshView"
-    /> 
+
+      <!-- 模具编号列：可点击跳编辑 -->
+      <template #cell-mold_no="{ row }">
+        <el-link
+          v-if="row.mold_no"
+          type="primary"
+          @click="goEdit(row)"
+          :disabled="!hasPermission('review_mold')"
+        >
+          {{ row.mold_no }}
+        </el-link>
+        <span v-else style="color: #c0c4cc;">—</span>
+      </template>
+
+      <!-- 预约列：button 触发跨模块路由 -->
+      <template #cell-reservation="{ row }">
+        <el-button
+          v-if="row.id"
+          type="primary"
+          size="small"
+          round
+          @click="goReservation(row)"
+          :disabled="!hasPermission('add_reservation')"
+        >
+          预约
+        </el-button>
+      </template>
+
+      <!-- 模流数据列 -->
+      <template #cell-moldflow_data="{ row }">
+        <el-link
+          v-if="row.id"
+          type="primary"
+          @click="goMoldflow(row)"
+          :disabled="!hasPermission('review_moldflow')"
+        >
+          查看
+        </el-link>
+      </template>
+
+      <!-- 试模数据列 -->
+      <template #cell-trial_data="{ row }">
+        <el-link
+          v-if="row.id"
+          type="primary"
+          @click="goTrialData(row)"
+          :disabled="!hasPermission('trial_view')"
+        >
+          查看
+        </el-link>
+      </template>
+
+      <!-- 试模履历列 -->
+      <template #cell-trial_resume="{ row }">
+        <el-link
+          v-if="row.id"
+          type="primary"
+          @click="goTrialResume(row)"
+          :disabled="!hasPermission('review_trial_resume')"
+        >
+          查看
+        </el-link>
+      </template>
+
+      <!-- 问题履历列 -->
+      <template #cell-issue_resume="{ row }">
+        <el-link
+          v-if="row.id"
+          type="primary"
+          @click="goIssueResume(row)"
+          :disabled="!hasPermission('review_problem_resume')"
+        >
+          查看
+        </el-link>
+      </template>
+
+      <!-- 行操作列 -->
+      <template #append-columns>
+        <el-table-column label="操作" width="180" align="center" fixed="right">
+          <template #default="{ row }">
+            <span class="row-action-buttons">
+              <el-button
+                type="text"
+                @click="goEdit(row)"
+                :disabled="!hasPermission('review_mold')"
+              >
+                <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />
+                编辑
+              </el-button>
+              <el-button
+                type="text"
+                class="text-danger"
+                @click="deleteMold(row)"
+                :disabled="!hasPermission('delete_mold')"
+              >
+                <AppIcon icon="mdi:delete-outline" style="margin-right: 4px; font-size: 14px;" />
+                删除
+              </el-button>
+            </span>
+          </template>
+        </el-table-column>
+      </template>
+    </BaseTable>
   </div>
 </template>
 
-<script>
-import { moldMethod, exportListData } from "@/api"
-import { getReportDownloadUrl } from "@/utils/assert"
-import { loadColumnsSetting, saveColumnsSetting } from "@/utils/columns-setting"
-import { calculateTableHeight } from "@/utils/table-size"
-import ChangeTableSize from "@/components/changeTableSize/index.vue"
-import TableSetting from "@/components/TableSetting.vue"
-import MoldSearchForm from "../components/MoldSearchForm.vue"
-import MoldForm from "./MoldForm.vue"
+<script setup lang="ts">
+/**
+ * MoldList 数据流：
+ * - 编辑/新建：router.push('/mold/new') 或 router.push('/mold/:id/edit')
+ *   MoldForm 自身处理详情加载、保存提交、保存后 router.push('/mold/list') 返回
+ *   列表通过 activated / onMounted 自动重新拉取（若需要可监听 $route）
+ * - 列表字段顺序 / 列显隐 / 密度 / pageSize 通过 view-name="mold_list" 自动持久化
+ */
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { hasPermission } from '@/utils/permission'
+import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
+import MoldSearchForm from '../components/MoldSearchForm.vue'
+import { moldMethod } from '@/api'
 
-// 默认每页大小选项（与 molding-expert 对齐）
-// 历史版本：本值从 Vuex store.modules.app 读取，
-// molding-optima 已迁移到 Pinia 后改为字面量（无个性化配置需求）
-const DEFAULT_PAGE_SIZES = [30, 100, 200]
+// ============================================================================
+// 类型
+// ============================================================================
 
-export default {
-  name: "MoldList",
-  components: { 
-    ChangeTableSize,
-    TableSetting,
-    MoldSearchForm,
-    MoldForm,
-  },
-  data() {
-    return {
-      query: {
-        mold_no: null,
-        mold_name: null,
-        category: null,
-        structure: null,
-        cavity_layout: null,
-        
-        page_no: 1,
-        page_size: 100
-      },
-      list_data: {},
-      list_loading: false,
-      selected_rows: [],
-      view_context: {
-        id: null,
-        is_dialog: null,
-        title: null,
-        mode: null,
-        excel_data: null,
-      },
-      table_columns: [
-        { visible: true, label: "模具编号", prop: "mold_no", width: 120, align: "center", header_align: "center", sortable: true, tooltip: false },
-        { visible: true, label: "模具名称", prop: "mold_name", width: 360, align: "left", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "模具类别", prop: "category", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "制作方式", prop: "manufacturing_method", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "试模约机", prop: "reservation", width: 90, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模流数据", prop: "moldflow_data", width: 90, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "试模数据", prop: "trial_data", width: 90, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "试模履历", prop: "trial_resume", width: 90, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "问题履历", prop: "issue_resume", width: 90, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模具结构", prop: "structure", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模腔布局", prop: "cavity_layout", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "产品大类", prop: "product_category", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "产品小类", prop: "product_model", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "注塑周期[s]", prop: "target_cycle_time", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "推荐成型吨位[Ton]", prop: "recommended_tonnage", width: 150, align: "center", header_align: "center", sortable: false, tooltip: false },
-        { visible: true, label: "模具长度[mm]", prop: "mold_length", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模具宽度[mm]", prop: "mold_width", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模具厚度[mm]", prop: "mold_thickness", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模具重量[kg]", prop: "mold_weight", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "创建日期", prop: "created_at", width: 180, align: "center", header_align: "center", sortable: false, tooltip: false },
-      ],
-      table_size: "normal",
-      show_mold_info: false,
-      show_table_setting: false,
+interface ListData {
+  total: number
+  items: any[]
+}
+
+// ============================================================================
+// 状态
+// ============================================================================
+
+const router = useRouter()
+
+// 查询参数（与 MoldSearchForm 的 queryDetail 字段保持一致）
+const query = reactive({
+  page_no: 1,
+  page_size: 20,
+  mold_no: undefined as string | undefined,
+  mold_name: undefined as string | undefined,
+  category: undefined as string | undefined,
+  structure: undefined as string | undefined,
+  cavity_layout: undefined as string | undefined,
+  manufacturing_method: undefined as string | undefined,
+})
+
+const list_data = ref<ListData>({ total: 0, items: [] })
+const list_loading = ref(false)
+const table_size = ref<'small' | 'default' | 'large'>('default')
+const selected_rows = ref<any[]>([])
+
+// 列定义
+// - visible: true  → 默认显示
+// - visible: false → 默认隐藏（高级列，用户可手动打开列筛选启用）
+// - filterable: true → 启用 BaseTable 列筛选（漏斗）
+const table_columns = ref<BaseTableColumn[]>([
+  { visible: true, label: '模具编号', prop: 'mold_no', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
+  { visible: true, label: '模具名称', prop: 'mold_name', minWidth: 200, align: 'left', header_align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '模具类别', prop: 'category', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '制作方式', prop: 'manufacturing_method', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '试模约机', prop: 'reservation', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '模流数据', prop: 'moldflow_data', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '试模数据', prop: 'trial_data', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '试模履历', prop: 'trial_resume', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '问题履历', prop: 'issue_resume', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '模具结构', prop: 'structure', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '模腔布局', prop: 'cavity_layout', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '产品大类', prop: 'product_category', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '产品小类', prop: 'product_model', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '注塑周期[s]', prop: 'target_cycle_time', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
+  { visible: true, label: '推荐吨位[Ton]', prop: 'recommended_tonnage', minWidth: 150, align: 'center', sortable: true, tooltip: false, filterable: false },
+  // 尺寸列（默认隐藏）
+  { visible: false, label: '模具长度[mm]', prop: 'mold_length', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
+  { visible: false, label: '模具宽度[mm]', prop: 'mold_width', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
+  { visible: false, label: '模具厚度[mm]', prop: 'mold_thickness', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
+  { visible: false, label: '模具重量[kg]', prop: 'mold_weight', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
+  { visible: true, label: '创建日期', prop: 'created_at', minWidth: 170, align: 'center', sortable: true, tooltip: true, filterable: false },
+])
+
+// 抽屉控制已移除：编辑/新建走路由跳转（/mold/new 与 /mold/:id/edit）
+
+// ============================================================================
+// 数据加载
+// ============================================================================
+
+async function fetchList() {
+  list_loading.value = true
+  try {
+    const res: any = await moldMethod.get({
+      page_no: query.page_no,
+      page_size: query.page_size,
+      mold_no: query.mold_no || undefined,
+      mold_name: query.mold_name || undefined,
+      category: query.category,
+      structure: query.structure,
+      cavity_layout: query.cavity_layout || undefined,
+      manufacturing_method: query.manufacturing_method || undefined,
+    } as any)
+    if (res.status === 0) {
+      list_data.value = res.data
+    } else {
+      ElMessage.error(res.msg || '查询失败')
     }
-  },
-  computed: { 
-    tableHeight() {
-      return calculateTableHeight(500, 220)
-    },
-  },
-  watch: {
-    "table_columns": {
-      handler: function() {
-        saveColumnsSetting("mold_list_col_config", this.table_columns)
-      },
-      deep: true
-    },
-  },
-  created() {
-    this.loadViewSetting()
-  },
-  mounted() {
-    this.getListData()
-  },
-  methods: {
-    loadViewSetting() {
-      let table_columns = loadColumnsSetting("mold_list_col_config")
-      if (table_columns) {
-        this.table_columns = table_columns
-      }
-    },
-    async getListData() { 
-      this.list_loading = true
-      const res = await moldMethod.get(this.query)
-      if (res.status === 0) {
-        this.list_data = res.data
-      }
-      this.list_loading = false
-    },
-    toAddMold() {
-      this.$router.push("/mold/create")
-    },
-    copyMold() {
-      // if (this.selected_rows.length == 0) {
-      //   this.$message("无选中项！")
-      //   return
-      // } else if (this.selected_rows.length > 1) {
-      //   this.$message("请从模具列表中选择一条模具信息进行复制！")
-      //   return
-      // }
-
-      // this.$confirm(
-      //   `确认复制以下模具？\r\n ${ this.selected_rows[0].mold_no }`, 
-      //   "复制模具信息", {
-      //     confirmButtonText: "确定",
-      //     cancelButtonText: "取消",
-      //     type: "warning"
-      //   }).then(() => {
-      //   this.view_context = {
-      //     id: this.selected_rows[0].id,
-      //     is_dialog: true,
-      //     title: "复制模具信息",
-      //     mode: "copy"
-      //   }
-      //   this.show_mold_info = true
-      // }).catch(() => {
-      //   this.$message({
-      //     type: "info",
-      //     message: "已取消复制！"
-      //   })
-      // })
-    },
-    uploadMoldFromExcel(data) {
-      // // 从 excel 导入模具
-      // let params = new FormData()
-      // params.append("file", data.file)
-      // params.append("file_type", "mold_template")
-      // importMethod(params).then(res => {
-      //   this.view_context = {
-      //     id: null,
-      //     is_dialog: true,
-      //     title: "从Excel导入数据",
-      //     mode: "import",
-      //     excel_data: res.data.mold
-      //   }
-      //   this.show_mold_info = true  
-      //   if (res.data.error_message) {
-      //     this.$message({
-      //       showClose: true,
-      //       message: res.data.error_message,
-      //       type: "error", 
-      //       dangerouslyUseHTMLString: true
-      //     }) 
-      //   }
-      // })
-      // return 0
-    },
-    exportMoldToExcel() {
-      // if (this.selected_rows.length == 0) {
-      //   this.$message("无选中项！")
-      //   return
-      // } else if (this.selected_rows.length > 1) {
-      //   this.$message("请从模具列表中选择一条模具信息进行导出！")
-      //   return
-      // }
-
-      // this.$confirm(`确认导出当前模具信息？\r\n ${ this.selected_rows[0].mold_no }`, "导出模具信息", {
-      //   confirmButtonText: "确定",
-      //   cancelButtonText: "取消",
-      //   type: "warning"
-      // }).then(() => {
-      //   exportReport({
-      //     "resource": "mold_info",
-      //     "mold_id": this.selected_rows[0].id
-      //   }).then(res => {
-      //     if (res.status === 0 && res.data.url) {
-      //       this.$message({ message: "导出模具信息成功。", type: "success" })
-      //       window.location.href = getFullFileUrl(res.data.url)
-      //     }
-      //   })
-      // }).catch(() => {
-      //   this.$message({
-      //     type: "info",
-      //     message: "已取消导出！"
-      //   })
-      // })
-    },
-    async exportListToExcel() {
-      return this.$message("此按钮功能暂不开放")
-      if (this.selected_rows.length == 0) {
-        return this.$message("无选中项。")
-      }
-      const ids = this.selected_rows.map(item => item.id)
-      const res = await exportListData({ resource: "mold_list", ids })
-      if (res.status === 0 && res.data.url) {
-        window.location.href = getReportDownloadUrl(res.data.url)
-      }
-    },
-    editMold(row) {
-      //编辑模具信息
-      this.view_context = {
-        id: row.id,
-        title: "更新模具信息",
-        mode: "edit"
-      }
-      this.show_mold_info = true
-      this.show_table_setting = false
-    },
-    async deleteMold(row) {
-      try {
-        await this.$confirm(`确认删除以下模具信息？\r\n ${ row.mold_no }`, "删除模具", {
-          confirmButtonText: "确定",        
-          cancelButtonText: "取消",
-          type: "warning"
-        })
-
-        const res = await moldMethod.delete(row.id)
-        if (res.status === 0) {
-          this.$message({ type: "success", message: "删除成功!" })
-          this.getListData()
-        }
-      } catch (error) {
-        this.$message({ type: "info", message: "已取消删除" })
-      }
-    },
-    toMoldflowReport(row) {
-      // 查看模流数据
-      this.$router.push({ 
-        path: "/mold/moldflow/report",
-        query: {
-          mold_id: row.id,
-          mold_no: row.mold_no,
-          category: row.category,
-        } 
-      })
-    },
-    toAddReservation(row) {
-      // 预约试模约机
-      this.$router.push({
-        path: "/schedule/reservation/create",
-        query: { 
-          mold_id: row.id 
-        }
-      })
-    },
-    toTrialData(row) {
-      // 查看试模数据
-      this.$router.push({ 
-        path: "/mold-trial/workflow",
-        query: {
-          mold_id: row.id
-        }
-      })
-    },
-    toTrialResume(row) {
-      // 查看试模履历
-      this.$router.push({ 
-        path: "/mold/resume/trial",
-        query: {
-          mold_id: row.id,
-        }
-      })
-    },
-    toIssueResume(row) {
-      // 查看问题点履历
-      this.$router.push({ 
-        path: "/mold/resume/issue",
-        query: {
-          mold_id: row.id,
-        }
-      })
-    },
-    handleSizeChange(val) {
-      this.query.page_size = val
-      this.getListData()
-    },
-    handleCurrentChange(val) {
-      this.query.page_no = val
-      this.getListData()
-    },
-    refreshView() {
-      this.view_context = {
-        id: null,
-        is_dialog: null,
-        title: null,
-        mode: null,
-        excel_data: null,
-      }
-      this.show_mold_info = false
-      this.show_table_setting = false
-
-      this.getListData()
-    },
+  } catch (err) {
+    console.error('[MoldList] fetchList failed:', err)
+  } finally {
+    list_loading.value = false
   }
 }
+
+function onSearch() {
+  query.page_no = 1
+  fetchList()
+}
+
+function onReset() {
+  query.page_no = 1
+  fetchList()
+}
+
+// ============================================================================
+// 操作
+// ============================================================================
+
+function goCreate() {
+  router.push('/mold/new')
+}
+
+function goEdit(row: any) {
+  router.push(`/mold/${row.id}/edit`)
+}
+
+async function deleteMold(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除以下模具信息？\n${row.mold_no}`,
+      '删除模具',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const res: any = await moldMethod.delete(row.id)
+    if (res.status === 0) {
+      ElMessage.success('删除成功')
+      fetchList()
+    } else {
+      ElMessage.error(res.msg || '删除失败')
+    }
+  } catch (err) {
+    console.error('[MoldList] deleteMold failed:', err)
+  }
+}
+
+async function batchDelete() {
+  const ids = selected_rows.value.map((r) => r.id)
+  if (ids.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${ids.length} 个模具吗？此操作不可恢复！`,
+      '批量删除确认',
+      { type: 'error' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const res: any = await moldMethod.multipleDelete({ ids })
+    if (res.status === 0) {
+      ElMessage.success(`成功删除 ${ids.length} 个模具`)
+      selected_rows.value = []
+      fetchList()
+    } else {
+      ElMessage.error(res.msg || '批量删除失败')
+    }
+  } catch (err) {
+    console.error('[MoldList] batchDelete failed:', err)
+  }
+}
+
+// 跨模块链接（保留 mold 现状的所有跨模块入口）
+function goReservation(row: any) {
+  router.push({ path: '/schedule/reservation/create', query: { mold_id: row.id } })
+}
+function goMoldflow(row: any) {
+  router.push({
+    path: '/mold/moldflow/report',
+    query: { mold_id: row.id, mold_no: row.mold_no, category: row.category },
+  })
+}
+function goTrialData(row: any) {
+  router.push({ path: '/mold-trial/workflow', query: { mold_id: row.id } })
+}
+function goTrialResume(row: any) {
+  router.push({ path: '/mold/resume/trial', query: { mold_id: row.id } })
+}
+function goIssueResume(row: any) {
+  router.push({ path: '/mold/resume/issue', query: { mold_id: row.id } })
+}
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+onMounted(() => {
+  fetchList()
+})
 </script>
 
-<style lang="scss" scope>
+<style scoped lang="scss">
+.mold-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
+/* 操作列按钮紧凑显示（与 project/index.vue 一致） */
+.row-action-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+}
+
+.text-danger {
+  color: #f56c6c;
+}
 </style>
