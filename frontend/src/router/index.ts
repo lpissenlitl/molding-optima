@@ -28,15 +28,13 @@ const routes: RouteRecordRaw[] = [
     meta: { hidden: true, title: '404' },
   },
 
-  // layout 容器（包裹业务页面）
-  // 业务边界：6 个顶级模块
-  // - 模具管理、设备管理、工艺管理、材料管理、权限管理、项目管理
+  // layout 容器
   {
     path: '/',
     component: () => import('@/views/layout/layout.vue'),
     redirect: '/dashboard',
     children: [
-      // 看板（叶子，首页入口）
+      // 看板
       {
         path: 'dashboard',
         name: 'dashboard',
@@ -44,84 +42,218 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '看板', icon: 'mdi:view-dashboard' },
       },
 
-      // 模具管理（alwaysShow：多子菜单分组）
-      // 模具表单（新增/编辑）走独立页面，不占用独立菜单项
-      // RESTful 风格路由：
-      // - /mold/new         新建
-      // - /mold/:id/edit    编辑
-      // - /mold/new?project_id=X    从项目跳转创建（带项目上下文）
-      // new / edit 用 hidden=true，在菜单中隐藏（侧边栏过滤）
+      // 模具管理（项目作为子菜单）
       {
         path: 'mold',
         component: ParentView,
         redirect: '/mold/list',
         meta: { title: '模具管理', icon: 'mdi:cube-outline', alwaysShow: true },
         children: [
-          { path: 'list',      name: 'mold-list',  component: () => import('@/views/mold/pages/MoldList.vue'),  meta: { title: '模具列表', icon: 'mdi:view-list' } },
-          { path: 'new',       name: 'mold-new',   component: () => import('@/views/mold/pages/MoldForm.vue'), meta: { title: '新建模具', hidden: true } },
-          { path: ':id/edit',  name: 'mold-edit',  component: () => import('@/views/mold/pages/MoldForm.vue'), meta: { title: '编辑模具', hidden: true } },
+          {
+            path: 'list',
+            name: 'mold-list',
+            component: () => import('@/views/mold/pages/MoldList.vue'),
+            meta: { title: '模具列表', icon: 'mdi:view-list' },
+          },
+          {
+            path: 'new',
+            name: 'mold-new',
+            component: () => import('@/views/mold/pages/MoldForm.vue'),
+            meta: { title: '新建模具', hidden: true },
+          },
+          {
+            path: ':id/edit',
+            name: 'mold-edit',
+            component: () => import('@/views/mold/pages/MoldForm.vue'),
+            meta: { title: '编辑模具', hidden: true },
+          },
+          {
+            path: 'project/list',
+            name: 'mold-project-list',
+            component: () => import('@/views/project/pages/ProjectList.vue'),
+            meta: { title: '项目列表', icon: 'mdi:briefcase-outline' },
+          },
+          {
+            path: 'project/new',
+            name: 'mold-project-new',
+            component: () => import('@/views/project/pages/ProjectForm.vue'),
+            meta: { title: '新建项目', hidden: true },
+          },
+          {
+            path: 'project/:id/edit',
+            name: 'mold-project-edit',
+            component: () => import('@/views/project/pages/ProjectForm.vue'),
+            meta: { title: '编辑项目', hidden: true },
+          },
         ],
       },
 
-      // 项目管理（独立顶级模块）
-      // 表单页（form.vue）同时处理新建和编辑（RESTful 风格路由）
-      // - /project/new           新建
-      // - /project/:id/edit      编辑
-      // new / edit 用 hidden=true，在菜单中隐藏（侧边栏过滤）
-      {
-        path: 'project',
-        component: ParentView,
-        redirect: '/project/list',
-        meta: { title: '项目管理', icon: 'mdi:briefcase-outline', alwaysShow: true },
-        children: [
-          { path: 'list',      name: 'project-list',  component: () => import('@/views/project/pages/ProjectList.vue'), meta: { title: '项目列表', icon: 'mdi:view-list' } },
-          { path: 'new',       name: 'project-new',   component: () => import('@/views/project/pages/ProjectForm.vue'), meta: { title: '新建项目', hidden: true } },
-          { path: ':id/edit',  name: 'project-edit',  component: () => import('@/views/project/pages/ProjectForm.vue'), meta: { title: '编辑项目', hidden: true } },
-        ],
-      },
-
-      // 工艺管理（核心）
+      // 工艺管理
       {
         path: 'process',
         component: ParentView,
         redirect: '/process/parameter',
         meta: { title: '工艺管理', icon: 'mdi:chart-line' },
         children: [
-          { path: 'parameter',    name: 'process-parameter',    component: BusinessPlaceholder, meta: { title: '工艺列表', icon: 'mdi:tune' } },
-          { path: 'optimization', name: 'process-optimization', component: BusinessPlaceholder, meta: { title: '优化记录', icon: 'mdi:lightbulb-on-outline' } },
-          { path: 'rules',        name: 'process-rules',        component: BusinessPlaceholder, meta: { title: '优化规则', icon: 'mdi:format-list-checks' } },
+          // 工艺参数视图（基于 ProcessCondition 载体）
+          {
+            path: 'parameter',
+            name: 'process-parameter',
+            component: () => import('@/views/process/parameter/pages/ProcessParameterList.vue'),
+            meta: { title: '工艺参数', icon: 'mdi:tune' },
+          },
+          {
+            path: 'parameter/new',
+            name: 'process-parameter-new',
+            component: () => import('@/views/process/parameter/pages/ProcessParameterForm.vue'),
+            meta: { title: '新建工艺', hidden: true },
+          },
+          {
+            path: 'parameter/:id/edit',
+            name: 'process-parameter-edit',
+            component: () => import('@/views/process/parameter/pages/ProcessParameterForm.vue'),
+            meta: { title: '编辑工艺', hidden: true },
+          },
+          {
+            path: 'parameter/:id/detail',
+            name: 'process-parameter-detail',
+            component: () => import('@/views/process/parameter/pages/ProcessParameterForm.vue'),
+            meta: { title: '工艺详情', hidden: true },
+          },
+          {
+            path: 'optimization',
+            name: 'process-optimization',
+            component: BusinessPlaceholder,
+            meta: { title: '优化记录', icon: 'mdi:lightbulb-on-outline' },
+          },
+          {
+            path: 'rules',
+            name: 'process-rules',
+            component: BusinessPlaceholder,
+            meta: { title: '优化规则', icon: 'mdi:format-list-checks' },
+          },
         ],
       },
 
-      // 设备管理
+      // 设备管理（2026-09-09 重构：物理目录拆为 injection/auxiliary，路由统一前缀）
       {
         path: 'equipment',
         component: ParentView,
-        redirect: '/equipment/injection',
-        meta: { title: '设备管理', icon: 'mdi:factory' },
+        redirect: '/equipment/injection/list',
+        meta: { title: '设备管理', icon: 'mdi:factory', alwaysShow: true },
         children: [
-          { path: 'injection', name: 'equipment-injection', component: BusinessPlaceholder, meta: { title: '机器列表', icon: 'mdi:server-outline' } },
-          { path: 'auxiliary', name: 'equipment-auxiliary', component: BusinessPlaceholder, meta: { title: '辅助装置', icon: 'mdi:tools' } },
+          // 注塑机
+          {
+            path: 'injection/list',
+            name: 'equipment-injection-list',
+            component: () => import('@/views/injection/pages/InjectionMachineList.vue'),
+            meta: { title: '注塑机列表', icon: 'mdi:server-outline' },
+          },
+          {
+            path: 'injection/new',
+            name: 'equipment-injection-new',
+            component: () => import('@/views/injection/pages/InjectionMachineForm.vue'),
+            meta: { title: '新建注塑机', hidden: true },
+          },
+          {
+            path: 'injection/:id/edit',
+            name: 'equipment-injection-edit',
+            component: () => import('@/views/injection/pages/InjectionMachineForm.vue'),
+            meta: { title: '编辑注塑机', hidden: true },
+          },
+          {
+            path: 'injection/:id/copy',
+            name: 'equipment-injection-copy',
+            component: () => import('@/views/injection/pages/InjectionMachineForm.vue'),
+            meta: { title: '复制注塑机', hidden: true },
+          },
+          // 辅机
+          {
+            path: 'auxiliary/list',
+            name: 'equipment-auxiliary-list',
+            component: () => import('@/views/auxiliary/pages/AuxiliaryEquipmentList.vue'),
+            meta: { title: '辅机列表', icon: 'mdi:tools' },
+          },
+          {
+            path: 'auxiliary/new',
+            name: 'equipment-auxiliary-new',
+            component: () => import('@/views/auxiliary/pages/AuxiliaryEquipmentForm.vue'),
+            meta: { title: '新建辅机', hidden: true },
+          },
+          {
+            path: 'auxiliary/:id/edit',
+            name: 'equipment-auxiliary-edit',
+            component: () => import('@/views/auxiliary/pages/AuxiliaryEquipmentForm.vue'),
+            meta: { title: '编辑辅机', hidden: true },
+          },
+          {
+            path: 'auxiliary/:id/copy',
+            name: 'equipment-auxiliary-copy',
+            component: () => import('@/views/auxiliary/pages/AuxiliaryEquipmentForm.vue'),
+            meta: { title: '复制辅机', hidden: true },
+          },
         ],
       },
 
-      // 材料管理
+      // 材料管理（2026-09-08 重构：物理目录独立，路由统一前缀）
       {
-        path: 'polymer',
+        path: 'material',
         component: ParentView,
-        redirect: '/polymer/list',
-        meta: { title: '材料管理', icon: 'mdi:flask-outline' },
+        redirect: '/material/polymer/list',
+        meta: { title: '材料管理', icon: 'mdi:flask-outline', alwaysShow: true },
         children: [
-          { path: 'list',   name: 'polymer-list',   component: BusinessPlaceholder, meta: { title: '材料列表', icon: 'mdi:beaker-outline' } },
-          { path: 'filler', name: 'polymer-filler', component: BusinessPlaceholder, meta: { title: '填充物',   icon: 'mdi:grain' } },
+          {
+            path: 'polymer/list',
+            name: 'material-polymer-list',
+            component: () => import('@/views/polymer/pages/PolymerList.vue'),
+            meta: { title: '塑料列表', icon: 'mdi:beaker-outline' },
+          },
+          {
+            path: 'polymer/new',
+            name: 'material-polymer-new',
+            component: () => import('@/views/polymer/pages/PolymerForm.vue'),
+            meta: { title: '新建塑料', hidden: true },
+          },
+          {
+            path: 'polymer/:id/edit',
+            name: 'material-polymer-edit',
+            component: () => import('@/views/polymer/pages/PolymerForm.vue'),
+            meta: { title: '编辑塑料', hidden: true },
+          },
+          {
+            path: 'polymer/:id/copy',
+            name: 'material-polymer-copy',
+            component: () => import('@/views/polymer/pages/PolymerForm.vue'),
+            meta: { title: '复制塑料', hidden: true },
+          },
+          {
+            path: 'filler/list',
+            name: 'material-filler-list',
+            component: () => import('@/views/filler/pages/FillerList.vue'),
+            meta: { title: '填充物列表', icon: 'mdi:grain' },
+          },
+          {
+            path: 'filler/new',
+            name: 'material-filler-new',
+            component: () => import('@/views/filler/pages/FillerForm.vue'),
+            meta: { title: '新建填充物', hidden: true },
+          },
+          {
+            path: 'filler/:id/edit',
+            name: 'material-filler-edit',
+            component: () => import('@/views/filler/pages/FillerForm.vue'),
+            meta: { title: '编辑填充物', hidden: true },
+          },
+          {
+            path: 'filler/:id/copy',
+            name: 'material-filler-copy',
+            component: () => import('@/views/filler/pages/FillerForm.vue'),
+            meta: { title: '复制填充物', hidden: true },
+          },
         ],
       },
 
-      // 权限管理（alwaysShow：4 个子菜单分组）
-      //
-      // meta 规范：
-      // - permission：访问该路由所需的权限码（用于路由守卫）
-      // - breadcrumb：面包屑显示名称（默认 = title）
+      // 权限管理
       {
         path: 'admin',
         component: ParentView,

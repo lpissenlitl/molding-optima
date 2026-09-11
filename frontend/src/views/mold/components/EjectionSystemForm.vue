@@ -13,6 +13,8 @@
 <template>
   <el-form
     :model="ejectionSystem"
+    :rules="rules"
+    ref="formRef"
     class="custom-form"
     label-width="120px"
   >
@@ -35,79 +37,27 @@
           {{ item.label }}
         </el-divider>
 
-        <!-- 常规字段 -->
-        <el-form-item
+        <!-- 常规字段：FormFieldRenderer 统一渲染 -->
+        <FormFieldRenderer
           v-else
-          :label="item.label"
-          :prop="item.prop"
-        >
-          <!-- input：纯文本 -->
-          <el-input
-            v-if="item.type === 'input'"
-            v-model.trim="ejectionSystem[item.prop!]"
-            :placeholder="getPlaceholder(item)"
-            :disabled="getDisabled(item)"
-          >
-            <template #suffix v-if="item.unit">{{ item.unit }}</template>
-          </el-input>
-
-          <!-- number / integer：v-number 限制小数位 -->
-          <el-input
-            v-else-if="item.type === 'number' || item.type === 'integer'"
-            v-model.trim="ejectionSystem[item.prop!]"
-            v-number="getPrecision(item)"
-            :placeholder="getPlaceholder(item)"
-            :disabled="getDisabled(item)"
-          >
-            <template #suffix v-if="item.unit">{{ item.unit }}</template>
-          </el-input>
-
-          <!-- select：单选下拉 -->
-          <el-select
-            v-else-if="item.type === 'select'"
-            v-model="ejectionSystem[item.prop!]"
-            :placeholder="getPlaceholder(item)"
-            :disabled="getDisabled(item)"
-            clearable
-            filterable
-            allow-create
-          >
-            <el-option
-              v-for="(opt, oIdx) in item.options"
-              :key="oIdx"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-
-          <!-- radio：布尔单选（是/否按钮组）-->
-          <el-radio-group
-            v-else-if="item.type === 'radio'"
-            v-model="ejectionSystem[item.prop!]"
-            :disabled="getDisabled(item)"
-          >
-            <el-radio-button :label="true">是</el-radio-button>
-            <el-radio-button :label="false">否</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
+          :item="item"
+          :model="ejectionSystem"
+        />
       </el-col>
     </el-row>
   </el-form>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import type { FormInstance } from 'element-plus'
 import { groupIntoRows } from '@/utils/form-layout'
-import {
-  getPlaceholder,
-  getDisabled,
-  getPrecision,
-} from '@/utils/form-helper'
 import type { FormItem } from '@/utils/form-types'
 import {
   ejectionTypeOptions,
   resetMethodOptions,
 } from '@/constants/mold-const'
+import FormFieldRenderer from './FormFieldRenderer.vue'
 
 /**
  * props 数据双向绑定说明：
@@ -118,6 +68,14 @@ import {
 const props = defineProps<{
   ejectionSystem: Record<string, any>
 }>()
+
+/**
+ * 验证规则（与 GatingSystemForm / CoolingSystemForm 一致的架构：可被 MoldForm 统一验证）
+ * - 当前未定义任何必填规则，后续按业务需求补充
+ */
+const rules = {}
+
+const formRef = ref<FormInstance>()
 
 /**
  * 字段定义（flat items，6 个字段，4 列布局 → 自动分行 2 行）
@@ -143,6 +101,9 @@ const formItems: FormItem[] = [
 
 // 自动分行（4 列布局：6 字段 ÷ 4 列 = 2 行）
 const rows = computed(() => groupIntoRows(formItems, { columns: 4 }))
+
+// 暴露给父组件 MoldForm 统一验证
+defineExpose({ formRef })
 </script>
 
 <style scoped lang="scss">

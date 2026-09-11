@@ -1,185 +1,123 @@
-﻿<template>
-  <div>
-    <polymer-search-form
+﻿<!--
+  PolymerList - 聚合物列表页
+
+  设计要点：
+    - 与 ProjectList / MoldList 保持统一规范
+    - Composition API + <script setup>
+    - BaseTable 组件封装（分页/选择/大小/列配置统一管理）
+    - 顶部 toolbar 插槽（新建 + 批量操作 + 导出 + 配置表格）
+    - 行操作：编辑 + 复制 + 删除（el-button type="text" 紧凑风格）
+-->
+<template>
+  <div class="polymer-list">
+    <!-- 搜索表单（配置驱动，复用 PolymerSearchForm） -->
+    <PolymerSearchForm
       :query-detail="query"
-      @search="getListData"
+      @search="onSearch"
+      @reset="onReset"
     />
-    <div class="row-toolbutton">
-      <div>
-        <change-table-size 
-          :size="table_size" 
-          @update="val => table_size = val"
-        />
-      </div>
-      <div>
-        <el-button-group>
-          <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-plus"
-            @click="toAddPolymer"
-          >
-            添加材料
-          </el-button>
-          <!-- <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-document-copy"
-            style="margin: 0"
-            @click="copyPolymer"
-          >
-            复制材料
-          </el-button>
-          <el-upload 
-            style="display:inline-block" 
-            action="" 
-            :show-file-list="false" 
-            :http-request="uploadPolymerFromExcel"
-          >
-            <el-button 
-              type="primary" 
-              size="small" 
-              icon="el-icon-folder-opened"
-            >
-              导入材料
-            </el-button>
-          </el-upload>
-          <el-button
-            size="small" 
-            type="success"
-            icon="el-icon-document"
-            @click="exportPolymerToExcel" 
-          >
-            导出材料
-          </el-button> -->
-          <el-button
-            size="small"
-            type="success"
-            icon="el-icon-download"
-            @click="exportListToExcel"
-          >
-            导出列表
-          </el-button>
-          <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-setting"
-            @click="show_table_setting = true"
-          >
-            配置表格
-          </el-button>
-        </el-button-group>
-      </div>
-    </div>
-    <el-table
-      :class="[`table-size-${table_size}`]"
-      v-loading="list_loading"
-      size="small"
-      stripe
-      border
-      fit
-      highlight-current-row
+
+    <!-- 表格 -->
+    <BaseTable
       :data="list_data.items"
-      :height="tableHeight"
-      @row-dblclick="updatePolymer"
-      @selection-change="(val) => { selected_rows = val }"
+      :total="list_data.total"
+      :query="query"
+      :columns.sync="table_columns"
+      :loading="list_loading"
+      :table-size.sync="table_size"
+      :height-offset="260"
+      view-name="polymer_list"
+      :external-unique-values="externalUniqueValues"
+      @size-change="(v: number) => { query.page_size = v; query.page_no = 1; fetchList() }"
+      @current-change="(v: number) => { query.page_no = v; fetchList() }"
+      @row-dblclick="goEdit"
+      @selection-change="(rows: any[]) => selected_rows = rows"
     >
-      <el-table-column
-        type="selection"
-        width="40"
-      >
-      </el-table-column>
-      <el-table-column
-        type="index"
-        label="序号"
-        width="55"
-        align="center"
-      >
-      </el-table-column>
-      <el-table-column
-        v-for="column, index in table_columns.filter(column => column.visible)"
-        :key="index"
-        :prop="column.prop"
-        :label="column.label"
-        :min-width="column.width"
-        :header-align="column.header_align"
-        :align="column.align"
-        :sortable="column.sortable"
-        :show-overflow-tooltip="column.tooltip"
-      >
-        <template #default="scope">
-          <div v-if="column.prop === 'abbreviation'">
-            <el-link 
-              type="primary"
-              size="small"            
-              @click="updatePolymer(scope.row)"
-            >
-              {{ scope.row[column.prop] }}
-            </el-link>
-          </div>
-          <template v-else-if="column.formatter">
-            {{ column.formatter(scope.row) }}
-          </template>
-          <div v-else>
-            {{ scope.row[column.prop] }}
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column
-        fixed="right"
-        label="操作"
-        width="180"
-        align="center"
-      >
-        <template #default="scope">
-          <el-button
-            type="primary"
-            size="small"
-            @click="updatePolymer(scope.row)"
-            plain
-          >
-            编辑
-          </el-button>
-          <el-button
-            type="danger"
-            size="small"
-            @click="deletePolymer(scope.row)"
-            plain
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <div class="pagination">
-      <el-pagination
-        layout="total, sizes, prev, pager, next, jumper"
-        :current-page="query.page_no"
-        :page-size="query.page_size"
-        :page-sizes="$store.state.app.pageSizeArray"
-        :total="list_data.total"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      >
-      </el-pagination>
-    </div>
-    <el-drawer
-      :title="view_context.title"
-      :with-header="true"
-      :visible.sync="show_polymer_drawer"
-      direction="rtl"
-      size="90%"
-    >
-      <template #title>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span>{{ view_context.title }}</span>
-        </div>
+      <!-- 顶部工具栏 -->
+      <template #toolbar>
+        <el-button type="primary" @click="goCreate">
+          <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />
+          新建材料
+        </el-button>
+        <el-button
+          type="danger"
+          :disabled="selected_rows.length === 0"
+          @click="batchDelete"
+        >
+          <AppIcon icon="mdi:delete-outline" style="margin-right: 4px; font-size: 14px;" />
+          批量删除
+          <span v-if="selected_rows.length > 0" style="margin-left: 4px;">
+            ({{ selected_rows.length }})
+          </span>
+        </el-button>
+        <el-button
+          type="success"
+          :disabled="selected_rows.length === 0"
+          @click="exportListToExcel"
+        >
+          <AppIcon icon="mdi:download" style="margin-right: 4px; font-size: 14px;" />
+          导出列表
+        </el-button>
+        <el-button type="primary" plain @click="show_table_setting = true">
+          <AppIcon icon="mdi:settings-outline" style="margin-right: 4px; font-size: 14px;" />
+          配置表格
+        </el-button>
       </template>
-      <polymer-form 
-        @close="refreshView"
-        :view-context="view_context"
-      />
-    </el-drawer>
+
+      <!-- 塑料简称列：可点击跳转编辑 -->
+      <template #cell-abbreviation="{ row }">
+        <el-link type="primary" @click="goEdit(row)">{{ row.abbreviation }}</el-link>
+      </template>
+
+      <!-- 塑料牌号列：可点击跳转编辑 -->
+      <template #cell-grade="{ row }">
+        <el-link type="primary" @click="goEdit(row)">{{ row.grade }}</el-link>
+      </template>
+
+      <!-- 干燥温度范围 -->
+      <template #cell-drying_temp="{ row }">
+        <span v-if="row.drying_temp_min != null && row.drying_temp_max != null">
+          {{ row.drying_temp_min }} - {{ row.drying_temp_max }} ℃
+        </span>
+        <span v-else-if="row.drying_temp_min != null">{{ row.drying_temp_min }} ℃</span>
+        <span v-else-if="row.drying_temp_max != null">{{ row.drying_temp_max }} ℃</span>
+        <span v-else style="color: #c0c4cc;">—</span>
+      </template>
+
+      <!-- 干燥时间范围 -->
+      <template #cell-drying_time="{ row }">
+        <span v-if="row.drying_time_min != null && row.drying_time_max != null">
+          {{ row.drying_time_min }} - {{ row.drying_time_max }} h
+        </span>
+        <span v-else-if="row.drying_time_min != null">{{ row.drying_time_min }} h</span>
+        <span v-else-if="row.drying_time_max != null">{{ row.drying_time_max }} h</span>
+        <span v-else style="color: #c0c4cc;">—</span>
+      </template>
+
+      <!-- 行操作列 -->
+      <template #append-columns>
+        <el-table-column label="操作" width="200" align="center" fixed="right">
+          <template #default="{ row }">
+            <span class="row-action-buttons">
+              <el-button type="text" @click="goCopy(row)">
+                <AppIcon icon="mdi:content-copy" style="margin-right: 4px; font-size: 14px;" />
+                复制
+              </el-button>
+              <el-button type="text" @click="goEdit(row)">
+                <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />
+                编辑
+              </el-button>
+              <el-button type="text" class="text-danger" @click="deletePolymer(row)">
+                <AppIcon icon="mdi:delete-outline" style="margin-right: 4px; font-size: 14px;" />
+                删除
+              </el-button>
+            </span>
+          </template>
+        </el-table-column>
+      </template>
+    </BaseTable>
+
+    <!-- 表格列设置抽屉 -->
     <TableSetting
       :table-data="table_columns"
       v-model:show="show_table_setting"
@@ -188,268 +126,245 @@
   </div>
 </template>
 
-<script>
-import { polymerMethod, importMethod, exportListData  } from "@/api"
-import { getReportDownloadUrl } from "@/utils/assert"
-import { loadColumnsSetting, saveColumnsSetting } from "@/utils/columns-setting"
-import { calculateTableHeight } from "@/utils/table-size"
-import ChangeTableSize from "@/components/changeTableSize/index.vue"
-import TableSetting from "@/components/TableSetting.vue"
-import PolymerSearchForm from "./components/PolymerSearchForm.vue"
-import PolymerForm from "@/views/polymer/pages/PolymerForm.vue"
+<script setup lang="ts">
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
+import TableSetting from '@/components/TableSetting.vue'
+import PolymerSearchForm from '../components/PolymerSearchForm.vue'
+import { polymerMethod, exportListData } from '@/api'
+import { getReportDownloadUrl } from '@/utils/assert'
 
-const rangeFormatter = (minValue, maxValue) => {
-  return minValue != null && maxValue != null 
-    ? `${minValue} - ${maxValue}` 
-    : minValue ?? maxValue ?? ""
+// ============================================================================
+// 列表数据
+// ============================================================================
+
+interface ListData {
+  total: number
+  items: any[]
 }
 
-export default {
-  components: { 
-    ChangeTableSize,
-    TableSetting,
-    PolymerSearchForm, 
-    PolymerForm, 
-  },
-  data() {
-    return {
-      query: {
-        manufacturer: null,
-        abbreviation: null,
-        grade: null,
-        category: null,
-        data_source: null,
-        level_code: null,
-        vendor_code: null,
+const router = useRouter()
 
-        page_no: 1,
-        page_size: 100,
-      },
-      list_data: {},
-      list_loading: false,
-      selected_rows: [],
-      view_context: {
-        id: null,
-        is_dialog: null,
-        title: null,
-        mode: null,
-        excel_data: null,
-      },
-      table_columns: [
-        { visible: true, label: "塑料厂商", prop: "manufacturer", width: 120, align: "center", header_align: "center", sortable: true, tooltip: false }, 
-        { visible: true, label: "塑料简称", prop: "abbreviation", width: 120, align: "center", header_align: "center", sortable: true, tooltip: false }, 
-        { visible: true, label: "塑料牌号", prop: "grade", width: 180, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "塑料类别", prop: "category", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "数据来源", prop: "data_source", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "等级代码", prop: "level_code", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "供应商代码", prop: "vendor_code", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "推荐成型温度(℃)", prop: "recommended_melt_temp", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "塑料降解温度(℃)", prop: "degradation_temp", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "推荐模具温度(℃)", prop: "recommended_mold_temp", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "推荐顶出温度(℃)", prop: "ejection_temp", width: 100, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "推荐剪切线速度(mm/s)", prop: "recommended_shear_line_speed", width: 140, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "推荐注射速率(cm³/s)", prop: "recommend_injection_rate", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "推荐背压(MPa)", prop: "recommend_back_pressure", width: 100, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "干燥方式", prop: "drying_method", width: 100, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "干燥温度(℃)", formatter: (row) => rangeFormatter(row.drying_temp_min, row.drying_temp_max), width: 100, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "干燥时间(h)", formatter: (row) => rangeFormatter(row.drying_time_min, row.drying_time_max), width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "更新日期", prop: "updated_at", width: 170, align: "center", header_align: "center", sortable: false, tooltip: false },
-      ],
-      table_size: "default",
-      show_polymer_drawer: false,
-      show_table_setting: false, // 显示表格设置界面
+const query = reactive({
+  page_no: 1,
+  page_size: 20,
+  manufacturer: undefined as string | undefined,
+  abbreviation: undefined as string | undefined,
+  grade: undefined as string | undefined,
+  category: undefined as string | undefined,
+  data_source: undefined as string | undefined,
+  level_code: undefined as string | undefined,
+  vendor_code: undefined as string | undefined,
+})
+
+const list_data = ref<ListData>({ total: 0, items: [] })
+const list_loading = ref(false)
+const table_size = ref<'small' | 'default' | 'large'>('default')
+const selected_rows = ref<any[]>([])
+const show_table_setting = ref(false)
+
+// 列定义
+const table_columns = ref<BaseTableColumn[]>([
+  { visible: true, label: '塑料厂商', prop: 'manufacturer', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '塑料简称', prop: 'abbreviation', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '塑料牌号', prop: 'grade', minWidth: 180, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '塑料类别', prop: 'category', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '数据来源', prop: 'data_source', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '等级代码', prop: 'level_code', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '供应商代码', prop: 'vendor_code', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '推荐成型温度(℃)', prop: 'recommended_melt_temp', minWidth: 130, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '塑料降解温度(℃)', prop: 'degradation_temp', minWidth: 130, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '推荐模具温度(℃)', prop: 'recommended_mold_temp', minWidth: 130, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '推荐顶出温度(℃)', prop: 'ejection_temp', minWidth: 120, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '推荐剪切线速度(mm/s)', prop: 'recommended_shear_line_speed', minWidth: 160, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '推荐注射速率(cm³/s)', prop: 'recommend_injection_rate', minWidth: 140, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '推荐背压(MPa)', prop: 'recommend_back_pressure', minWidth: 120, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '干燥方式', prop: 'drying_method', minWidth: 100, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '干燥温度(℃)', prop: 'drying_temp', minWidth: 120, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '干燥时间(h)', prop: 'drying_time', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '更新日期', prop: 'updated_at', minWidth: 170, align: 'center', sortable: false, tooltip: false, filterable: false },
+])
+
+const externalUniqueValues = ref<Record<string, any[]>>({})
+
+// ============================================================================
+// API
+// ============================================================================
+
+async function fetchList() {
+  list_loading.value = true
+  try {
+    const res: any = await polymerMethod.get({
+      page_no: query.page_no,
+      page_size: query.page_size,
+      manufacturer: query.manufacturer || undefined,
+      abbreviation: query.abbreviation || undefined,
+      grade: query.grade || undefined,
+      category: query.category,
+      data_source: query.data_source,
+      level_code: query.level_code || undefined,
+      vendor_code: query.vendor_code || undefined,
+    } as any)
+    if (res.status === 0) {
+      list_data.value = res.data
+      syncExternalUniqueValues()
+    } else {
+      ElMessage.error(res.msg || '查询失败')
     }
-  },
-  computed: { 
-    tableHeight() { 
-      return calculateTableHeight(500, 220)
-    },
-  },
-  watch: {
-    "table_columns": {
-      handler: function() {
-        saveColumnsSetting("poly_list_col_config", this.table_columns)
-      },
-      deep: true
-    },
-  },
-  created() {
-    this.loadViewSetting()
-  },
-  mounted() {
-    this.getListData()
-  },
-  methods: {
-    loadViewSetting() {
-      let table_columns = loadColumnsSetting("poly_list_col_config")
-      if (table_columns) {
-        this.table_columns = table_columns
-      }
-    },
-    async getListData() {
-      this.list_loading = true
-      const res = await polymerMethod.get(this.query)
-      if (res.status === 0) {
-        this.list_data = res.data
-      }
-      this.list_loading = false
-    },
-    toAddPolymer() {
-      if (!this.$hasPermission("add_polymer")) {
-        return this.$message("无创建材料权限")
-      }
-      this.$router.push("/polymer/create")
-    },
-    copyPolymer() {
-      if (this.selected_rows.length == 0) {
-        return this.$message("无选中项。")
-      }
-      if (this.selected_rows.length > 1) {
-        return this.$message("请从模具列表中选择一条材料信息进行复制！")
-      }
-
-      this.$confirm(`确认复制以下材料信息？\r\n ${ this.selected_rows[0].grade }`, "复制材料", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }).then(() => {
-        this.view_context = {
-          id: this.selected_rows[0].id,
-          is_dialog: true,
-          title: "复制材料信息",
-          mode: "copy"
-        }
-        this.show_polymer_drawer = true
-      }).catch(() => {
-        this.$message({
-          type: "info",
-          message: "已取消复制",
-        })
-      })
-    },
-    uploadPolymerFromExcel(data) {
-      let params = new FormData()
-      params.append("file", data.file)
-      params.append("file_type", "polymer_template")
-      importMethod(params).then(res => {
-        if (res.data.error_message !== "") {
-          this.$message({
-            showClose: true,
-            message: res.data.error_message,
-            type: "error", 
-            duration: 0,
-            dangerouslyUseHTMLString: true
-          })
-        } 
-        this.view_context = {
-          id: null,
-          is_dialog: true,
-          title: "从Excel导入数据",
-          mode: "import",
-          excel_data: res.data.polymer
-        }
-        this.show_polymer_drawer = true
-      })
-      return 0
-    },
-    exportPolymerToExcel() {
-      // if (this.selected_rows.length == 0) {
-      //   return this.$message("无选中项。")
-      // }
-      // if (this.selected_rows.length > 1) {
-      //   return this.$message("请从模具列表中选择一条材料信息进行导出！")
-      // }
-
-      // this.$confirm(`确认导出以下材料？\r\n ${ this.selected_rows[0].grade }`, "导出材料", {
-      //   confirmButtonText: "确定",
-      //   cancelButtonText: "取消",
-      //   type: "warning",
-      // }).then(() => {
-      //   exportReport({
-      //     "resource": "polymer_info",
-      //     "polymer_id": this.selected_rows[0].id
-      //   }).then(res => {
-      //     if (res.status === 0 && res.data.url) {
-      //       this.$message({ message: "导出成功。", type: "success" })
-      //       window.location.href = getReportDownloadUrl(res.data.url)
-      //     }
-      //   })
-      // }).catch(() => {
-      //   this.$message({
-      //     type: "info",
-      //     message: "已取消导出",
-      //   })
-      // })  
-    },
-    async exportListToExcel() {
-      if (this.selected_rows.length == 0) {
-        return this.$message("无选中项。")
-      }
-      const ids = this.selected_rows.map(item => item.id)
-      const res = await exportListData({ resource: "polymer_list", ids })
-      if (res.status === 0 && res.data.url) {
-        window.location.href = getReportDownloadUrl(res.data.url)
-      }
-    },
-    updatePolymer(row) {
-      if (!this.$hasPermission("review_polymer")) {
-        return this.$message("无该材料详细信息的查看权限")
-      }
-      this.view_context = {
-        id: row.id,
-        is_dialog: true,
-        title: "编辑材料信息",
-        mode: "edit"
-      }
-
-      this.show_polymer_drawer = true
-      this.show_table_setting = false
-    },
-    async deletePolymer(row) {
-      if (!this.$hasPermission("delete_polymer")) {
-        return this.$message("无材料删除权限")
-      }
-      try {
-        await this.$confirm(`确认删除以下材料？\r\n ${ row.grade }`, "删除材料", {
-          confirmButtonText: "确定",        
-          cancelButtonText: "取消",
-          type: "warning"
-        })
-
-        const res = await polymerMethod.delete(row.id)
-        if (res.status === 0) {
-          this.$message({ type: "success", message: "删除成功!" })
-          this.getListData()
-        }
-      } catch (error) {
-        this.$message({ type: "info", message: "已取消删除" })
-      }
-    },
-    handleSizeChange(val) {
-      this.query.page_size = val
-      this.getListData()
-    },
-    handleCurrentChange(val) {
-      this.query.page_no = val
-      this.getListData()
-    },
-    refreshView() {
-      this.view_context = {
-        id: null,
-        is_dialog: null,
-        title: null,
-        mode: null,
-        excel_data: null,
-      }
-      this.show_table_setting = false
-      this.show_polymer_drawer = false
-
-      this.getListData()
-    },
-  },
+  } catch (err) {
+    console.error('[PolymerList] fetchList failed:', err)
+  } finally {
+    list_loading.value = false
+  }
 }
+
+function onSearch() {
+  query.page_no = 1
+  fetchList()
+}
+
+function onReset() {
+  query.page_no = 1
+  fetchList()
+}
+
+function syncExternalUniqueValues() {
+  const items = list_data.value.items || []
+  const collect = (prop: string) => {
+    const set = new Set<any>()
+    items.forEach((row: any) => {
+      const v = row[prop]
+      if (v !== null && v !== undefined) set.add(v)
+    })
+    return Array.from(set)
+  }
+  externalUniqueValues.value = {
+    category: collect('category'),
+    data_source: collect('data_source'),
+    drying_method: collect('drying_method'),
+  }
+}
+
+// ============================================================================
+// 操作
+// ============================================================================
+
+function goCreate() {
+  router.push('/material/polymer/new')
+}
+
+function goEdit(row: any) {
+  router.push(`/material/polymer/${row.id}/edit`)
+}
+
+function goCopy(row: any) {
+  router.push(`/material/polymer/${row.id}/copy`)
+}
+
+async function deletePolymer(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除以下材料信息？\n${row.grade}`,
+      '删除材料',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const res: any = await polymerMethod.delete(row.id)
+    if (res.status === 0) {
+      ElMessage.success('删除成功')
+      fetchList()
+    } else {
+      ElMessage.error(res.msg || '删除失败')
+    }
+  } catch (err) {
+    console.error('[PolymerList] deletePolymer failed:', err)
+  }
+}
+
+async function batchDelete() {
+  const ids = selected_rows.value.map((r) => r.id)
+  if (ids.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${ids.length} 条材料信息？此操作不可恢复！`,
+      '批量删除确认',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const res: any = await polymerMethod.multipleDelete({ ids })
+    if (res.status === 0) {
+      ElMessage.success(`成功删除 ${ids.length} 条材料`)
+      selected_rows.value = []
+      fetchList()
+    } else {
+      ElMessage.error(res.msg || '批量删除失败')
+    }
+  } catch (err) {
+    console.error('[PolymerList] batchDelete failed:', err)
+  }
+}
+
+async function exportListToExcel() {
+  if (selected_rows.value.length === 0) {
+    ElMessage.warning('请先选择要导出的材料')
+    return
+  }
+  const ids = selected_rows.value.map((item) => item.id)
+  try {
+    const res: any = await exportListData({ resource: 'polymer_list', ids })
+    if (res.status === 0 && res.data.url) {
+      window.location.href = getReportDownloadUrl(res.data.url)
+      ElMessage.success('导出成功')
+    } else {
+      ElMessage.error(res.msg || '导出失败')
+    }
+  } catch (err) {
+    console.error('[PolymerList] exportListToExcel failed:', err)
+  }
+}
+
+function refreshView() {
+  show_table_setting.value = false
+  fetchList()
+}
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+onMounted(() => {
+  fetchList()
+})
 </script>
 
-<style lang="scss" scope>
+<style scoped lang="scss">
+.polymer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
+/* 操作列按钮紧凑显示 */
+.row-action-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+}
+
+.text-danger {
+  color: #f56c6c;
+}
 </style>

@@ -26,7 +26,6 @@ class FillerDetailView(BaseView):
         )
 
     @method_decorator(require_login)
-    @method_decorator(validate_parameters(FillerSchema))
     def delete(self, request, filler_id):
         """删除填充物信息"""
         return filler_service.delete_filler(

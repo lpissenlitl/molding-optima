@@ -76,6 +76,7 @@ export interface UserInfo {
 
   // 会话
   token: string
+  token_expires_at: string         // token 过期时间（ISO 8601），路由守卫做本地过期判断
 
   // 审计字段
   login_count: number
@@ -102,6 +103,7 @@ export const EMPTY_USER_INFO: UserInfo = {
   roles: [],
   permissions: [],
   token: '',
+  token_expires_at: '',
   login_count: 0,
   last_login_at: '',
   expires_at: '',

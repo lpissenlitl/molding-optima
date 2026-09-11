@@ -57,9 +57,9 @@ class Polymer(BusinessBaseModel):
 
 class PolymerRheology(AbstractBaseModel):
     """流变属性"""
-    polymer = models.OneToOneField(
-        "masterdata.Polymer", 
-        related_name="rheology",
+    polymer = models.ForeignKey(
+        "masterdata.Polymer",
+        related_name="rheology_set",
         on_delete=models.CASCADE
     )
     
@@ -104,9 +104,9 @@ class PolymerRheology(AbstractBaseModel):
 
 class PolymerPVT(AbstractBaseModel):
     """PVT 属性"""
-    polymer = models.OneToOneField(
-        "masterdata.Polymer", 
-        related_name="pvt",
+    polymer = models.ForeignKey(
+        "masterdata.Polymer",
+        related_name="pvt_set",
         on_delete=models.CASCADE
     )
     
@@ -131,9 +131,9 @@ class PolymerPVT(AbstractBaseModel):
 
 class PolymerMechanical(AbstractBaseModel):
     """机械属性"""
-    polymer = models.OneToOneField(
-        "masterdata.Polymer", 
-        related_name="mechanical",
+    polymer = models.ForeignKey(
+        "masterdata.Polymer",
+        related_name="mechanical_set",
         on_delete=models.CASCADE
     )
     
@@ -152,9 +152,9 @@ class PolymerMechanical(AbstractBaseModel):
 
 class PolymerShrinkage(AbstractBaseModel):
     """收缩属性"""
-    polymer = models.OneToOneField(
-        "masterdata.Polymer", 
-        related_name="shrinkage",
+    polymer = models.ForeignKey(
+        "masterdata.Polymer",
+        related_name="shrinkage_set",
         on_delete=models.CASCADE
     )
     

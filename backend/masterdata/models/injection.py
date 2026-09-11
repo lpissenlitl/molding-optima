@@ -183,7 +183,8 @@ class InjectionMoldingMachine(BusinessBaseModel):
         null=True,
         choices=[
             ('spring', '弹簧锁模'),
-            ('hydraulic', '液压锁模'),
+            ('hydraulic', '液压锁模（直压式）'),
+            ('hydraulic_toggle', '肘杆式液压锁模'),
             ('servo', '伺服锁模'),
         ],
         verbose_name="锁模类型",
@@ -209,6 +210,7 @@ class InjectionMoldingMachine(BusinessBaseModel):
         null=True,
         choices=[
             ('single_center', '单中心顶出'),
+            ('double_side_symmetric', '双侧对称顶出'),
             ('four_corner_symmetric', '四角对称顶出'),
             ('none', '无自动顶出'),
         ],

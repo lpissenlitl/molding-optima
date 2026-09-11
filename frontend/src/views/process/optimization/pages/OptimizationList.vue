@@ -102,7 +102,7 @@
       <el-pagination
         layout="total, sizes, prev, pager, next, jumper"
         :current-page="query.page_no"
-        :page-sizes="$store.state.app.pageSizeArray"
+        :page-sizes="$pageSizeArray"
         :page-size="query.page_size"
         :total="list_data.total"
         @size-change="handleSizeChange"
@@ -167,7 +167,7 @@ export default {
         page_no: 1 ,
         page_size: 100,
       },
-      list_data: {},
+      list_data: { items: [], total: 0 },
       list_loading: false,
       selected_rows: [],
       view_context: {

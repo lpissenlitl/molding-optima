@@ -1,11 +1,3 @@
-export const auxiliaryForm = {
-  id: null,
-  equipment_name: null,
-  device_no: null,
-  total_count: null,
-  avaliable_count: null,
-  remarks: null,
-}
 
 export const injectionUnitForm = {
   id: null,
@@ -422,7 +414,8 @@ export const nozzleSphereRadiusOptions = [
   { label: "90", value: 90 }
 ]
 
-// 最大注射段数
+// 最大注射段数（2026-09-09 扩展到 10 段）
+// 90% 场景 1-6 段；少数高端机 7-10 段；超过 10 段需 allow-create 输入
 export const maxInjectionStagesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
@@ -430,26 +423,41 @@ export const maxInjectionStagesOptions = [
   { label: "4", value: 4 },
   { label: "5", value: 5 },
   { label: "6", value: 6 },
+  { label: "7", value: 7 },
+  { label: "8", value: 8 },
+  { label: "9", value: 9 },
+  { label: "10", value: 10 },
 ]
 
-// 最大保压短时
+// 最大保压短时（2026-09-09 扩展到 10 段，覆盖罕见高端机）
 export const maxHoldingStagesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
   { label: "3", value: 3 },
   { label: "4", value: 4 },
   { label: "5", value: 5 },
+  { label: "6", value: 6 },
+  { label: "7", value: 7 },
+  { label: "8", value: 8 },
+  { label: "9", value: 9 },
+  { label: "10", value: 10 },
 ]
 
-// 最大储料段数
+// 最大储料段数（2026-09-09 扩展到 10 段）
 export const maxMeteringStagesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
   { label: "3", value: 3 },
   { label: "4", value: 4 },
+  { label: "5", value: 5 },
+  { label: "6", value: 6 },
+  { label: "7", value: 7 },
+  { label: "8", value: 8 },
+  { label: "9", value: 9 },
+  { label: "10", value: 10 },
 ]
 
-// 最大温控区域
+// 最大温控区域（2026-09-09 扩展到 16 段，覆盖极端场景）
 export const maxTempZonesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
@@ -461,6 +469,9 @@ export const maxTempZonesOptions = [
   { label: "8", value: 8 },
   { label: "9", value: 9 },
   { label: "10", value: 10 },
+  { label: "12", value: 12 },
+  { label: "14", value: 14 },
+  { label: "16", value: 16 },
 ]
 
 // 锁模类型（按行业通用术语整理，去重并标准化）

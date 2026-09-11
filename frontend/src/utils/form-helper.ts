@@ -91,6 +91,7 @@ export function createValidateAndFocus(vm: any) {
  *   - 辅助函数（helper）抽 ✅
  */
 import type { FormItem } from './form-types'
+import { getCurrentInstance } from 'vue'
 
 /**
  * 自动生成 placeholder
@@ -165,7 +166,73 @@ export function getPrecision(item: FormItem): number {
   return item.type === 'integer' ? 0 : 2
 }
 
-// 注意：autocomplete 的查询建议函数 querySuggestions 暂不提供通用实现。
-// 不同业务方的 autocomplete 数据源差异较大（历史输入 / 后端 endpoint / 本地缓存），
-// 推荐在各 form 内部局部实现，以获得最大灵活度。
-// 详见 FormItem.query 类型定义。
+/**
+ * 解析 autocomplete 的 fetch-suggestions 函数（辅助函数）
+ *
+ * 支持 query 两种形式：
+ *   - object（如 { table, column }）：调用全局 mixin `$querySuggestions` 拉取后端建议
+ *   - function：自定义查询函数（直接返回）
+ *
+ * 注意：
+ *   - 在 <script setup> 中调用，通过 `getCurrentInstance().proxy` 访问 mixin
+ *   - mixin 返回的函数会调用后端 `/selection-options` 接口（见 `data-fetcher.ts`）
+ *   - 业务方在 FormItem.query 中定义数据源：
+ *
+ * @example
+ *   ```ts
+ *   // FormItem 定义
+ *   {
+ *     label: '塑料厂商',
+ *     prop: 'manufacturer',
+ *     type: 'autocomplete',
+ *     query: { table: 'polymer', column: 'manufacturer' },
+ *   }
+ *
+ *   // 模板里使用
+ *   <el-autocomplete
+ *     v-model="polymer_info[item.prop!]"
+ *     :fetch-suggestions="querySuggestions(item.query)"
+ *   />
+ *   ```
+ *
+ * @param query - FormItem.query：object | function
+ * @param options - 可选的 select options（用于后端返回 value 映射为 label）
+ * @returns 返回符合 `el-autocomplete` `:fetch-suggestions` 签名的函数 (input, cb) => cb(suggestions)
+ */
+export function querySuggestions(
+  query:
+    | string
+    | object
+    | ((input: string, cb: (suggestions: any[]) => void) => void)
+    | null
+    | undefined,
+  options?: any[]
+) {
+  // function 形式：直接返回（业务方自定义查询逻辑）
+  if (typeof query === 'function') {
+    return query
+  }
+
+  // string 形式（预留，当前未使用）：不返回后端建议，返回空函数
+  if (typeof query === 'string') {
+    return (_input: string, _cb: (suggestions: any[]) => void) => {
+      _cb([])
+    }
+  }
+
+  // object 形式（如 { table, column }）：从全局 mixin 调用后端接口
+  if (typeof query === 'object' && query !== null) {
+    // 在 <script setup> 中，getCurrentInstance() 返回的 instance 仅用于访问 mixin，
+    // 不保留引用（Vue 文档明确推荐用法）。
+    const instance = getCurrentInstance()
+    const mixinFn = (instance?.proxy as any)?.$querySuggestions
+    if (typeof mixinFn === 'function') {
+      return mixinFn(query, options ?? null)
+    }
+  }
+
+  // 兜底：返回空函数（避免 el-autocomplete 报错）
+  return (_input: string, _cb: (suggestions: any[]) => void) => {
+    _cb([])
+  }
+}

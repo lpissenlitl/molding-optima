@@ -19,6 +19,8 @@
     :label="item.label"
     :prop="item.prop"
     :label-width="labelWidth"
+    :required="item.required"
+    :rules="item.rules"
   >
     <!-- 文本输入 -->
     <el-input
@@ -41,6 +43,16 @@
       <template #suffix v-if="item.unit">{{ item.unit }}</template>
     </el-input>
 
+    <!-- 多行文本输入 -->
+    <el-input
+      v-else-if="item.type === 'textarea'"
+      v-model="(model as any)[item.prop!]"
+      type="textarea"
+      :rows="item.rows ?? 4"
+      :placeholder="getPlaceholder(item)"
+      :disabled="getDisabled(item)"
+    />
+
     <!-- 下拉选择 -->
     <el-select
       v-else-if="item.type === 'select' || item.type === 'number-select'"
@@ -49,7 +61,7 @@
       :disabled="getDisabled(item)"
       clearable
       filterable
-      allow-create
+      :allow-create="item.allowCreate !== false"
     >
       <el-option
         v-for="(opt, oIdx) in item.options"

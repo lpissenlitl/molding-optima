@@ -90,13 +90,13 @@ def _mock_resolved_rule(rule_id, rule_str, level, polymer=None, product=None, pr
     # 直接构造 ResolvedRule（绕过 rule_query_service 包的 Django 依赖）
     from collections import namedtuple
     ResolvedRule = namedtuple('ResolvedRule', [
-        'rule_id', 'rule_str', 'level', 'polymer_category', 'product_category', 'priority', 'library_code',
+        'rule_id', 'rule_str', 'level', 'polymer_abbreviation', 'product_category', 'priority', 'library_code',
     ])
     return ResolvedRule(
         rule_id=rule_id,
         rule_str=rule_str,
         level=level,
-        polymer_category=polymer,
+        polymer_abbreviation=polymer,
         product_category=product,
         priority=priority,
         library_code='mock_lib',

@@ -63,7 +63,6 @@ def get_list_of_rule_keyword(
     name=None,
     keyword_type=None,
     show_on_page=None,
-    subrule_no=None,
     page_no=1,
     page_size=30,
     sort="-id",
@@ -77,8 +76,6 @@ def get_list_of_rule_keyword(
         qs = qs.filter(keyword_type=keyword_type)
     if show_on_page is not None:
         qs = qs.filter(show_on_page=show_on_page)
-    if subrule_no:
-        qs = qs.filter(subrule_no=subrule_no)
 
     qs = qs.order_by(*parse_ordering(sort or "-id"))
     pagination = paginate_queryset(qs, page_no, page_size)
@@ -135,10 +132,8 @@ def delete_rule_method(rule_method_id):
 
 
 def get_list_of_rule_method(
-    defect_name=None,
-    subrule_no=None,
-    rule_type=None,
-    enable=None,
+    defect_label=None,
+    is_active=None,
     page_no=1,
     page_size=30,
     sort="-priority",
@@ -146,14 +141,10 @@ def get_list_of_rule_method(
     """获取规则方法列表"""
     qs = RuleMethod.objects.filter(is_deleted=False)
 
-    if defect_name:
-        qs = qs.filter(defect_name__icontains=defect_name)
-    if subrule_no:
-        qs = qs.filter(subrule_no=subrule_no)
-    if rule_type:
-        qs = qs.filter(rule_type=rule_type)
-    if enable is not None:
-        qs = qs.filter(enable=enable)
+    if defect_label:
+        qs = qs.filter(defect_label__icontains=defect_label)
+    if is_active is not None:
+        qs = qs.filter(is_active=is_active)
 
     qs = qs.order_by(*parse_ordering(sort or "-priority"))
     pagination = paginate_queryset(qs, page_no, page_size)
@@ -169,18 +160,7 @@ def get_rules_by_defect(defect_name):
     """根据缺陷名获取所有启用的规则（按优先级排序）"""
     rules = RuleMethod.objects.filter(
         defect_name=defect_name,
-        enable=1,
+        is_active=True,
         is_deleted=False,
     ).order_by("-priority")
     return [r.to_dict() for r in rules]
-
-
-def get_keywords_by_subrule(subrule_no, keyword_type=None):
-    """根据子规则编号获取所有关键字"""
-    qs = RuleKeyword.objects.filter(
-        subrule_no=subrule_no,
-        is_deleted=False,
-    )
-    if keyword_type:
-        qs = qs.filter(keyword_type=keyword_type)
-    return [k.to_dict() for k in qs.order_by("name")]

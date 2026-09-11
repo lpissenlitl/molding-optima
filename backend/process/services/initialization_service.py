@@ -861,7 +861,7 @@ class ProcessInitializationService:
         Step 4: 输出后处理 - 创建 ProcessParameter 挂到 condition
         """
         from django.db import transaction
-        from process.models.process_condition import ProcessCondition
+        from process.models.condition import ProcessCondition
 
         with transaction.atomic():
             # Step 1: 入口适配
@@ -922,7 +922,7 @@ class ProcessInitializationService:
         from masterdata.models.mold import Mold
         from masterdata.models.injection import InjectionMoldingMachine
         from masterdata.models.material import Polymer
-        from process.models.process_condition import ProcessCondition
+        from process.models.condition import ProcessCondition
 
         with transaction.atomic():
             # Step 1: 入口适配
@@ -1004,7 +1004,7 @@ class ProcessInitializationService:
 
         接收 infer_initial_params 的返回 dict（4 维输出）。
         """
-        from process.models.process_parameter import ProcessParameter
+        from process.models.parameter import ProcessParameter
 
         proc_dict = params_result['process']
         flat = {

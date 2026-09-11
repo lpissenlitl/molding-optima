@@ -1,406 +1,352 @@
-﻿<template>
-  <div>
-    <parameter-search-form
+<!--
+  ProcessParameterList - 工艺参数列表页
+
+  路由：/process/parameter（菜单"工艺参数"）
+  数据源：后端 ProcessCondition 表（一次试模的完整上下文：模具/机器/材料/工艺参数）。
+  业务说明：
+    ProcessCondition 是"试模上下文"的通用载体，不同业务视图（参数/优化/调机）
+    都基于该载体展示不同视角。这里展示的是"工艺参数"视角。
+
+  架构（2026-09-11 重写）：
+    - 搜索：ProcessSearchForm（Vue 3 setup + BaseSearchForm）
+    - 列表：BaseTable 组件（接管 el-table + el-pagination + 列筛选 + 偏好持久化）
+    - 列定义：12 列，含状态/起源/模具/产品/机台/材料/创建时间等
+    - 顶部 toolbar：新建工艺、批量删除、导出
+    - 行操作：编辑 / 删除
+    - 跨模块入口：调整记录（占位，后续接入）
+-->
+<template>
+  <div class="process-condition-list">
+    <!-- 搜索表单 -->
+    <ProcessSearchForm
       :query-detail="query"
-      @search="getListData"
+      @search="onSearch"
+      @reset="onReset"
     />
-    <div class="row-toolbutton">
-      <div>
-        <change-table-size 
-          :size="table_size" 
-          @update="val => table_size = val"
-        />
-      </div>
-      <div>
-        <el-button-group>
-          <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-plus"
-            @click="toProcessParameter"
-          >
-            录入工艺
-          </el-button>
-          <!-- <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-document-copy"
-            @click="copyProcessRecord"
-          >
-            复制工艺
-          </el-button>
-          <el-button
-            size="small" 
-            type="success"
-            icon="el-icon-document"
-            @click="exportProcessRecordToExcel" 
-          >
-            导出工艺
-          </el-button> -->
-          <el-button
-            size="small"
-            type="success"
-            icon="el-icon-download"
-            @click="exportListToExcel"
-          >
-            导出列表
-          </el-button>
-          <el-button
-            size="small"
-            type="primary"
-            icon="el-icon-setting"
-            @click="show_table_setting = true"
-          >
-            配置表格
-          </el-button>
-        </el-button-group>
-      </div>
-    </div>
-    <el-table
-      :class="[`table-size-${table_size}`]"
-      v-loading="list_loading"
-      size="small"
-      stripe
-      border
-      fit
-      highlight-current-row
-      style="width: 100%"
+
+    <!-- 列表 -->
+    <BaseTable
       :data="list_data.items"
-      :height="tableHeight"
-      @row-dblclick="editParameter"
-      @selection-change="(val) => { selected_rows = val }"
+      :total="list_data.total"
+      :query="query"
+      :columns.sync="table_columns"
+      :loading="list_loading"
+      :table-size.sync="table_size"
+      :height-offset="220"
+      view-name="process_parameter_list"
+      :show-selection="true"
+      :show-index="true"
+      :stripe="true"
+      @size-change="(v: number) => { query.page_size = v; query.page_no = 1; fetchList() }"
+      @current-change="(v: number) => { query.page_no = v; fetchList() }"
+      @row-dblclick="goEdit"
+      @selection-change="(rows: any[]) => selected_rows = rows"
     >
-      <el-table-column
-        type="selection"
-        width="40"
-        :selectable="isRowSelectable"
-      >
-      </el-table-column>
-      <el-table-column
-        type="index"
-        label="序号"
-        width="55"
-        align="center"
-      >
-      </el-table-column>
-      <el-table-column
-        v-for="column, index in table_columns.filter(column => column.visible)"
-        :key="index"
-        :prop="column.prop"
-        :label="column.label"
-        :min-width="column.width"
-        :header-align="column.header_align"
-        :align="column.align"
-        :sortable="column.sortable"
-        :show-overflow-tooltip="column.tooltip"
-      >
-        <template #default="scope">
-          <span v-if="column.prop === 'condition_code'">
-            <el-link
-              type="primary"
-              @click="editParameter(scope.row)"
-            >
-              {{ scope.row[column.prop] }}
-            </el-link>
+      <template #toolbar>
+        <el-button type="primary" @click="goCreate">
+          <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />
+          新建工艺
+        </el-button>
+        <el-button
+          type="danger"
+          :disabled="selected_rows.length === 0"
+          @click="batchDelete"
+        >
+          <AppIcon icon="mdi:delete-outline" style="margin-right: 4px; font-size: 14px;" />
+          批量删除
+          <span v-if="selected_rows.length > 0" style="margin-left: 4px;">
+            ({{ selected_rows.length }})
           </span>
-          <span v-else>
-            {{ scope.row[column.prop] }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        fixed="right"
-        label="操作"
-        width="180"
-        align="center"
-      >
-        <template #default="scope">
-          <el-button
-            type="primary"
-            size="small"
-            @click="editParameter(scope.row)"
-            plain
-          >
-            编辑
-          </el-button>
-          <el-button
-            type="danger"
-            size="small"
-            @click="deleteParameter(scope.row)"
-            plain
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <div class="pagination">
-      <el-pagination
-        layout="total, sizes, prev, pager, next, jumper"
-        :current-page="query.page_no"
-        :page-sizes="$store.state.app.pageSizeArray"
-        :page-size="query.page_size"
-        :total="list_data.total"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      >
-      </el-pagination>
-    </div>
-    <el-drawer
-      :title="view_context.title"
-      :visible.sync="show_parameter_info"
-      direction="rtl"
-      size="90%"
-    >
-      <process-parameter-form
-        @close="refreshView"
-        :view-context="view_context"
-      />
-    </el-drawer>
-    <TableSetting
-      :table-data="table_columns"
-      v-model:show="show_table_setting"
-      @close="refreshView"
-    />
+        </el-button>
+      </template>
+
+      <!-- 工艺条件编号列：可点击跳编辑 -->
+      <template #cell-condition_no="{ row }">
+        <el-link
+          v-if="row.condition_no"
+          type="primary"
+          @click="goEdit(row)"
+        >
+          {{ row.condition_no }}
+        </el-link>
+        <span v-else style="color: #c0c4cc;">—</span>
+      </template>
+
+      <!-- 状态列：标签式渲染 -->
+      <template #cell-status="{ row }">
+        <el-tag
+          v-if="row.status"
+          :type="row.status === 'active' ? 'success' : 'info'"
+          size="small"
+        >
+          {{ statusLabel(row.status) }}
+        </el-tag>
+        <span v-else style="color: #c0c4cc;">—</span>
+      </template>
+
+      <!-- 起源类型列：标签式渲染 -->
+      <template #cell-origin_type="{ row }">
+        <span v-if="row.origin_type">{{ originLabel(row.origin_type) }}</span>
+        <span v-else style="color: #c0c4cc;">—</span>
+      </template>
+
+      <!-- 行操作列 -->
+      <template #append-columns>
+        <el-table-column label="操作" width="180" align="center" fixed="right">
+          <template #default="{ row }">
+            <span class="row-action-buttons">
+              <el-button type="text" @click="goEdit(row)">
+                <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />
+                编辑
+              </el-button>
+              <el-button type="text" class="text-danger" @click="deleteOne(row)">
+                <AppIcon icon="mdi:delete-outline" style="margin-right: 4px; font-size: 14px;" />
+                删除
+              </el-button>
+            </span>
+          </template>
+        </el-table-column>
+      </template>
+    </BaseTable>
   </div>
 </template>
 
-<script>
-import { processParameterMethod, exportListData } from "@/api"
-import { getReportDownloadUrl } from "@/utils/assert"
-import { loadColumnsSetting, saveColumnsSetting } from "@/utils/columns-setting"
-import { calculateTableHeight } from "@/utils/table-size"
-import ChangeTableSize from "@/components/changeTableSize/index.vue"
-import TableSetting from "@/components/TableSetting.vue"
-import ParameterSearchForm from "./components/ParameterSearchForm.vue"
-import ProcessParameterForm from "@/views/process/parameter/pages/ProcessParameterCreate.vue"
+<script setup lang="ts">
+/**
+ * 工艺条件列表数据流：
+ * - 编辑/新建：路由跳转（/process/parameter/new、/process/parameter/:id/edit）
+ * - 列表字段顺序/列显隐/密度/pageSize 通过 view-name="process_condition_list" 持久化
+ * - 列表查询走 processParameterMethod（BaseRequest 实例），URL = /api/processes/parameter/
+ *
+ * 后端响应结构（main_service.get_process_parameter_list）：
+ *   {
+ *     id, condition_no, status, origin_type,
+ *     mold_no, mold_name, mold_type, cavity_layout, product_category,
+ *     machine_brand, machine_model, machine_device_code,
+ *     polymer_abbreviation, polymer_grade,
+ *     shot_index, injection_index,
+ *     created_at, updated_at
+ *   }
+ */
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
+import ProcessSearchForm from '../components/ProcessSearchForm.vue'
+import { processParameterMethod, processParameterBatchDelete } from '@/api'
 
-export default {
-  name: "ProcessParameterList",
-  components: { 
-    ChangeTableSize,
-    TableSetting,
-    ParameterSearchForm, 
-    ProcessParameterForm, 
-  },
-  data() {
-    return {
-      query: {
-        origin_type: "manual_creation",
-        status: null,
-        mold_no: null,
-        machine_model: null,
-        polymer_abbreviation: null,
-        start_date: null,
-        end_date: null,
+// ============================================================================
+// 类型
+// ============================================================================
 
-        page_no: 1 ,
-        page_size: 100,
-      },
-      list_data: {},
-      list_loading: false,
-      selected_rows: [],
-      view_context: {
-        id: null,
-        is_dialog: null,
-        dialog_title: null,
-        mode: null,
-        excel_data: null,
-      },
-      table_columns: [
-        { visible: true, label: "工艺编号", prop: "condition_code", width: 240, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "模具编号", prop: "mold_no", width: 160, align: "center", header_align: "center", sortable: false, tooltip: false },
-        { visible: true, label: "模具名称", prop: "mold_name", width: 110, align: "center", header_align: "center", sortable: false, tooltip: false },
-        { visible: true, label: "模具类别", prop: "mold_type", width: 110, align: "center", header_align: "center", sortable: false, tooltip: false },
-        { visible: true, label: "模腔布局", prop: "cavity_layout", width: 100, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-        { visible: true, label: "制品类别", prop: "product_category", width: 120, align: "center", header_align: "center", sortable: false, tooltip: false },
-        { visible: true, label: "注塑机品牌", prop: "machine_brand", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "注塑机型号", prop: "machine_model", width: 150, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "注塑机编号", prop: "machine_device_code", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "塑料简称", prop: "polymer_abbreviation", width: 120, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "塑料牌号", prop: "polymer_grade", width: 150, align: "center", header_align: "center", sortable: false, tooltip: true }, 
-        { visible: true, label: "创建日期", prop: "created_at", width: 170, align: "center", header_align: "center", sortable: false, tooltip: false }, 
-      ],
-      table_size: "default",
-      show_parameter_info: false,
-      show_table_setting: false,
+interface ListData {
+  total: number
+  items: any[]
+}
+
+// ============================================================================
+// 路由
+// ============================================================================
+
+const router = useRouter()
+
+// ============================================================================
+// 状态
+// ============================================================================
+
+const query = reactive({
+  page_no: 1,
+  page_size: 20,
+  status: null as string | null,
+  origin_type: null as string | null,
+  mold_no: null as string | null,
+  machine_model: null as string | null,
+  polymer_abbreviation: null as string | null,
+  start_date: null as string | null,
+  end_date: null as string | null,
+})
+
+const list_data = ref<ListData>({ total: 0, items: [] })
+const list_loading = ref(false)
+const table_size = ref<'small' | 'default' | 'large'>('default')
+const selected_rows = ref<any[]>([])
+
+// ============================================================================
+// 列定义
+// ============================================================================
+
+const table_columns = ref<BaseTableColumn[]>([
+  { visible: true, label: '工艺编号', prop: 'condition_no', minWidth: 160, align: 'center', sortable: true, tooltip: true, filterable: false },
+  { visible: true, label: '状态', prop: 'status', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '起源', prop: 'origin_type', minWidth: 110, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '模具编号', prop: 'mold_no', minWidth: 140, align: 'center', sortable: true, tooltip: true, filterable: false },
+  { visible: true, label: '模具名称', prop: 'mold_name', minWidth: 180, align: 'left', header_align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '产品大类', prop: 'product_category', minWidth: 120, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '设备品牌', prop: 'machine_brand', minWidth: 110, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '设备型号', prop: 'machine_model', minWidth: 150, align: 'center', sortable: true, tooltip: true, filterable: false },
+  { visible: true, label: '设备编号', prop: 'machine_device_code', minWidth: 140, align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '塑料简称', prop: 'polymer_abbreviation', minWidth: 110, align: 'center', sortable: true, tooltip: true, filterable: false },
+  { visible: true, label: '塑料牌号', prop: 'polymer_grade', minWidth: 150, align: 'left', header_align: 'center', sortable: false, tooltip: true, filterable: false },
+  { visible: true, label: '创建时间', prop: 'created_at', minWidth: 170, align: 'center', sortable: true, tooltip: true, filterable: false },
+])
+
+// ============================================================================
+// 标签转换
+// ============================================================================
+
+const STATUS_MAP: Record<string, string> = {
+  active: '使用中',
+  archived: '已归档',
+}
+
+const ORIGIN_MAP: Record<string, string> = {
+  manual_creation: '手工新建',
+  template_based: '基于模板',
+  ai_recommendation: 'AI 推荐',
+  doe_experiment: 'DOE 实验',
+  legacy_import: '历史导入',
+  equipment_capture: '设备捕获',
+  process_transplant: '工艺移植',
+}
+
+function statusLabel(s: string) {
+  return STATUS_MAP[s] ?? s
+}
+
+function originLabel(o: string) {
+  return ORIGIN_MAP[o] ?? o
+}
+
+// ============================================================================
+// 数据加载
+// ============================================================================
+
+async function fetchList() {
+  list_loading.value = true
+  try {
+    const res: any = await processParameterMethod.get({
+      page_no: query.page_no,
+      page_size: query.page_size,
+      status: query.status || undefined,
+      origin_type: query.origin_type || undefined,
+      mold_no: query.mold_no || undefined,
+      machine_model: query.machine_model || undefined,
+      polymer_abbreviation: query.polymer_abbreviation || undefined,
+      start_date: query.start_date || undefined,
+      end_date: query.end_date || undefined,
+    } as any)
+    if (res?.status === 0) {
+      list_data.value = res.data ?? { total: 0, items: [] }
+    } else {
+      ElMessage.error(res?.msg || '查询失败')
     }
-  },
-  computed: { 
-    tableHeight() { 
-      return calculateTableHeight(500, 220)
-    },
-  },
-  watch: {
-    "table_columns": {
-      handler: function() {
-        saveColumnsSetting("process_parameter_list_col_config", this.table_columns)
-      },
-      deep: true
-    },
-  },
-  created() {
-    this.loadViewSetting()
-  },
-  mounted() {
-    this.getListData()
-  },
-  methods: {
-    loadViewSetting() {
-      let table_columns = loadColumnsSetting("process_parameter_list_col_config")
-      if (table_columns) {
-        this.table_columns = table_columns
-      }
-    },
-    async getListData() {
-      this.list_loading = true
-      const res = await processParameterMethod.get(this.query)
-      if (res.status === 0) {
-        this.list_data = res.data
-      }
-      this.list_loading = false
-    },
-    toProcessParameter() {
-      if (!this.$hasPermission("process_entry")) {
-        return this.$message("无权限录入工艺")
-      }
-      this.$router.push({ path: "/process/parameter/create", })
-    },
-    copyProcessRecord() {
-      if (this.selected_rows.length == 0) {
-        this.$message("无选中项！")
-        return
-      }
-      if (this.selected_rows.length > 1) {
-        this.$message("请从工艺列表中选择一条工艺信息进行复制！")
-        return
-      }
-
-      this.$confirm(`确认复制以下工艺？\r\n ${ this.selected_rows[0].process_no }`, "复制工艺", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }).then(() => {
-        this.view_context = {
-          id: this.selected_rows[0].id,
-          is_dialog: true,
-          dialog_title: "复制工艺信息",
-          mode: "copy"
-        }
-        this.show_parameter_info = true
-      }).catch(() => {
-        this.$message({
-          type: "info",
-          message: "已取消复制！",
-        })
-      })
-    },
-    exportProcessRecordToExcel() {
-      // if (this.selected_rows.length == 0) {
-      //   this.$message("无选中项。")
-      //   return
-      // }
-      // if (this.selected_rows.length > 1) {
-      //   this.$message("请选中一条进行导出")
-      //   return
-      // }
-
-      // this.$confirm(`确认导出以下工艺？\r\n ${ this.selected_rows[0].process_no }`, "导出工艺", {
-      //   confirmButtonText: "确定",
-      //   cancelButtonText: "取消",
-      //   type: "warning",
-      // }).then(() => {
-      //   exportReport({
-      //     "resource": "process_info",
-      //     "process_id": this.selected_rows[0].id
-      //   }).then(res => {
-      //     // console.log(res)
-      //     if (res.status === 0 && res.data.url) {
-      //       this.$message({ message: "导出成功。", type: "success" })
-      //       window.location.href = getReportDownloadUrl(res.data.url)
-      //     }
-      //   })
-      // }).catch((error) => {
-      //   this.$message({
-      //     type: "info",
-      //     message: "已取消导出",
-      //   })
-      // })
-    },
-    async exportListToExcel() {
-      if (this.selected_rows.length == 0) {
-        return this.$message("无选中项。")
-      }
-      const ids = this.selected_rows.map(item => item.id)
-      const res = await exportListData({ resource: "process_list", ids })
-      if (res.status === 0 && res.data.url) {
-        window.location.href = getReportDownloadUrl(res.data.url)
-      }
-    },
-    isRowSelectable(row, index) {
-      // if (this.$hasPermission('project_delete')) {
-      //   return true;
-      // } else {
-      //   return false;
-      // }
-      return true
-    },
-    editParameter(row) {
-      if (!this.$hasPermission("process_list")) {
-        return this.$message("无权限查看工艺详细信息")
-      }
-      this.view_context = {
-        id: row.id,
-        is_dialog: true,
-        dialog_title: "更新工艺信息",
-        mode: "edit"
-      }
-      this.show_parameter_info = true
-      this.show_table_setting = false
-    },
-    async deleteParameter(row) {
-      try {
-        await this.$confirm("确认删除选中工艺记录", "删除工艺记录", {
-          confirmButtonText: "确定",        
-          cancelButtonText: "取消",
-          type: "warning"
-        })
-
-        const res = await processParameterMethod.delete(row.id)
-        if (res.status === 0) {
-          this.$message({ type: "success", message: "删除成功！" })
-          this.getListData()
-        }
-      } catch (error) {
-        this.$message({ type: "info", message: "已取消删除！" })
-      }
-    },
-    handleSizeChange(val) {
-      this.query.page_size = val
-      this.getListData()
-    },
-    handleCurrentChange(val) {
-      this.query.page_no = val
-      this.getListData()
-    },
-    refreshView() {
-      this.view_context = {
-        id: null,
-        is_dialog: null,
-        dialog_title: null,
-        mode: null,
-        excel_data: null,
-      }
-      this.show_parameter_info = false
-      this.show_table_setting = false
-
-      this.getListData()
-    },
+  } catch (err) {
+    console.error('[ProcessParameterList] fetchList failed:', err)
+  } finally {
+    list_loading.value = false
   }
 }
+
+function onSearch() {
+  query.page_no = 1
+  fetchList()
+}
+
+function onReset() {
+  query.page_no = 1
+  fetchList()
+}
+
+// ============================================================================
+// 操作
+// ============================================================================
+
+function goCreate() {
+  router.push('/process/parameter/new')
+}
+
+function goEdit(row: any) {
+  router.push(`/process/parameter/${row.id}/edit`)
+}
+
+async function deleteOne(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除该工艺？\n${row.condition_no ?? row.id}`,
+      '删除工艺',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const res: any = await processParameterMethod.delete(row.id)
+    if (res?.status === 0) {
+      ElMessage.success('删除成功')
+      fetchList()
+    } else {
+      ElMessage.error(res?.msg || '删除失败')
+    }
+  } catch (err) {
+    console.error('[ProcessParameterList] deleteOne failed:', err)
+  }
+}
+
+async function batchDelete() {
+  const ids = selected_rows.value.map((r) => r.id)
+  if (ids.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${ids.length} 条工艺吗？此操作不可恢复！`,
+      '批量删除确认',
+      { type: 'error' },
+    )
+  } catch {
+    return
+  }
+  try {
+    // 后端用 processParameterBatchDelete（POST /api/processes/parameter/batch_delete/）
+    const res: any = await processParameterBatchDelete(ids)
+    if (res?.status === 0) {
+      ElMessage.success(`成功删除 ${ids.length} 条工艺`)
+      selected_rows.value = []
+      fetchList()
+    } else {
+      ElMessage.error(res?.msg || '批量删除失败')
+    }
+  } catch (err) {
+    console.error('[ProcessParameterList] batchDelete failed:', err)
+  }
+}
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+onMounted(() => {
+  fetchList()
+})
 </script>
 
-<style>
+<style scoped lang="scss">
+.process-condition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
+.row-action-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+}
+
+.text-danger {
+  color: #f56c6c;
+}
 </style>
-

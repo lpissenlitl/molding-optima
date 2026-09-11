@@ -18,6 +18,20 @@ import App from './App.vue'
 import router from '@/router'
 import '@/permission' // 路由守卫（登录态、未授权跳转）
 
+// 抑制 element-plus deprecation warning（仅 DEV）。
+// 项目 element-plus ^2.5.6（实际 2.14.5），3.x 未发布，warning 里"3.0.0"是预埋的未来弃用提示。
+// 2.x 范围内永远合法，仅过滤"is about to be deprecated in version"提示，保留其他 warning。
+// 升级 element-plus 3.x 时移除本块（届时 type="text" 等会真的非法）。
+if (import.meta.env.DEV) {
+  const _origWarn = console.warn
+  console.warn = function (...args: unknown[]) {
+    const first = args[0]
+    const msg = first instanceof Error ? first.message : String(first ?? '')
+    if (msg.includes('is about to be deprecated in version')) return
+    _origWarn.apply(console, args as never)
+  }
+}
+
 // =============================================================================
 // 同步应用主题与字号（在 mount 之前，避免 FOUC 闪烁）
 // 直接读 localStorage 是因为此时 Pinia 还没初始化，store 不能用

@@ -5,7 +5,7 @@ RuleQueryService - 模糊推理规则路由层
 
 设计原则（见 fuzzy-engine-reference.md §6）：
 - RuleLibrary 顶层隔离（library_code）
-- library 库内三级特异性匹配：polymer_category × product_category
+- library 库内三级特异性匹配：polymer_abbreviation × product_category
 - parent_library 支持跨层复用
 - 双层分流：rule_level = factory / fallback
 
@@ -34,15 +34,15 @@ class RuleQueryContext:
     ----------
     defect_name : str
         缺陷名称，如 'SHORTSHOT'
-    polymer_category : Optional[str]
-        当前聚合物的类别名（精确路径，如 'PE'）。None 表示不指定
+    polymer_abbreviation : Optional[str]
+        当前聚合物的缩写（如 'PE'）。None 表示不指定
     product_category : Optional[str]
         当前产品的类别名（精确路径，如 '酒瓶'）。None 表示不指定
     rule_library_code : Optional[str]
         用户指定的规则库编码。None 表示按上下文自动解析
     """
     defect_name: str
-    polymer_category: Optional[str] = None
+    polymer_abbreviation: Optional[str] = None
     product_category: Optional[str] = None
     rule_library_code: Optional[str] = None
 
@@ -161,8 +161,8 @@ class RuleQueryService:
         # L3 部分-product：polymer=None + product 匹配
         # L4 默认：polymer=None + product=None
         specificity_filters = [
-            (1, context.polymer_category, context.product_category),
-            (2, context.polymer_category, None),
+            (1, context.polymer_abbreviation, context.product_category),
+            (2, context.polymer_abbreviation, None),
             (3, None, context.product_category),
             (4, None, None),
         ]
@@ -174,10 +174,10 @@ class RuleQueryService:
             for specificity, polymer, product in specificity_filters:
                 qs = RuleMethod.objects.filter(
                     rule_library=lib,
-                    polymer_category=polymer,
+                    polymer_abbreviation=polymer,
                     product_category=product,
-                    defect_name=context.defect_name,
-                    enable=True,
+                    defect_code=context.defect_name,
+                    is_active=True,
                     is_deleted=False,
                 ).order_by('-priority', 'id')
                 for rm in qs:

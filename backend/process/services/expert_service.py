@@ -94,19 +94,17 @@ def suggest_expert_adjustment(condition_id: int, defect_feedback: dict) -> dict:
     matched_rules = []
     for label in defect_labels:
         rules = RuleMethod.objects.filter(
-            defect_name=label,
-            enable=1,
+            defect_label=label,
+            is_active=True,
             is_deleted=False,
         ).order_by("-priority")
 
         for rule in rules:
             matched_rules.append({
                 "id": rule.id,
-                "rule_type": rule.rule_type,
                 "rule_description": rule.rule_description,
                 "rule_explanation": rule.rule_explanation,
-                "defect_name": rule.defect_name,
-                "subrule_no": rule.subrule_no,
+                "defect_label": rule.defect_label,
                 "priority": rule.priority,
             })
 

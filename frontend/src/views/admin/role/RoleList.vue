@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   角色管理 - 列表页
   - 搜索（角色名称、状态）
   - 列表（名称、编码、描述、状态）
@@ -118,8 +118,7 @@
           <template #default="{ row }">
             <span class="row-action-buttons">
               <el-button type="text" @click="editRole(row)"><AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />编辑</el-button>
-              <el-button
-                type="text"
+              <el-button type="text"
                 class="text-danger"
                 @click="deleteRole(row)"
               >
@@ -178,7 +177,7 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '角色名称', prop: 'name', minWidth: 140, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '角色编码', prop: 'code', minWidth: 140, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '描述', prop: 'description', minWidth: 240, align: 'center', sortable: false, tooltip: true, filterable: false },
-  { visible: true, label: '启用', prop: 'is_active', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '启用', prop: 'is_active', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
 ])
 
 /** 外部数据库唯一值（用于列筛选项） */

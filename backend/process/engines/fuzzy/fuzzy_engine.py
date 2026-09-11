@@ -61,7 +61,7 @@ class FuzzyEngine(AIEngineBase):
                 'machine': {...},
                 # --- FuzzyEngine 扩展上下文 ---
                 'defect_name': 'SHORTSHOT',    # 当前缺陷名（必填）
-                'polymer_category': 'PE',
+                'polymer_abbreviation': 'PE',
                 'product_category': '酒瓶',
                 'rule_library_code': 'packaging',  # 可选
             }
@@ -85,7 +85,7 @@ class FuzzyEngine(AIEngineBase):
         # 1) 拉规则
         query_ctx = RuleQueryContext(
             defect_name=defect_name,
-            polymer_category=context.get('polymer_category'),
+            polymer_abbreviation=context.get('polymer_abbreviation'),
             product_category=context.get('product_category'),
             rule_library_code=context.get('rule_library_code'),
         )

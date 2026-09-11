@@ -100,20 +100,23 @@ class AbstractBaseModel(models.Model):
 
         # 3. 处理 Reverse Relation
         if include_rvs:
-            # 处理 多对一 关系
+            # 3.1 优先走 prefetch cache（多对多 / ForeignKey 反向）
             if hasattr(self, '_prefetched_objects_cache'):
                 for rel_name, qs in self._prefetched_objects_cache.items():
                     data[rel_name] = [obj.to_dict(include_rvs=True) for obj in qs]
-            
-            # 处理 一对一 关系            
+
+            # 3.2 处理 OneToOneField 反向关系（None 兜底为空实例）
             for rel in self._meta.related_objects:
-                if rel.one_to_one:
-                    # 获取反向的 related field 对象
+                if rel.one_to_one and not rel.one_to_many:
                     related_model = rel.related_model
+                    related_obj = None
                     try:
                         related_obj = getattr(self, rel.name)
                     except related_model.DoesNotExist:
                         # 当关系不存在时，Django 可能抛出 DoesNotExist 异常
+                        related_obj = None
+                    except AttributeError:
+                        # prefetch cache 中不存在（已被 3.1 处理时跳过）
                         related_obj = None
 
                     if related_obj is None:
@@ -121,7 +124,7 @@ class AbstractBaseModel(models.Model):
                         related_obj = related_model()
 
                     data[rel.name] = related_obj.to_dict()
-            
+
         return data
     
     @classmethod

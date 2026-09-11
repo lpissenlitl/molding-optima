@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   用户管理 - 列表页
   - 搜索（用户名、姓名、状态）
   - 列表（账号、姓名、邮箱、电话、状态、租户管理员、超级管理员、最后登录）
@@ -135,8 +135,7 @@
             <span class="row-action-buttons">
               <el-button type="text" @click="editUser(row)"><AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />编辑</el-button>
               <el-button type="text" @click="resetPwd(row)"><AppIcon icon="mdi:key-variant" style="margin-right: 4px; font-size: 14px;" />重置密码</el-button>
-              <el-button
-                type="text"
+              <el-button type="text"
                 class="text-danger"
                 @click="deleteUser(row)"
               >
@@ -231,9 +230,9 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '姓名', prop: 'engineer_name', minWidth: 100, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '邮箱', prop: 'email', minWidth: 180, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '电话', prop: 'phone', minWidth: 120, align: 'center', sortable: false, tooltip: true, filterable: false },
-  { visible: true, label: '启用', prop: 'is_active', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '租户管理员', prop: 'is_tenant_admin', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '超级管理员', prop: 'is_superuser', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '启用', prop: 'is_active', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '租户管理员', prop: 'is_tenant_admin', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '超级管理员', prop: 'is_superuser', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '最后登录', prop: 'last_login_at', minWidth: 180, align: 'center', sortable: true, tooltip: true, filterable: false },
 ])
 

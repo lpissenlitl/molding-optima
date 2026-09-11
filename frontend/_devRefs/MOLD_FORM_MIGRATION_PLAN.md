@@ -1,8 +1,8 @@
 # Mold 表单迁移实施计划
 
-> **目的**：基于"渐进式嵌套 + 层级标签化"的设计哲学，把 mold 模块从"3 重 el-tabs 嵌套"重写为"可折叠卡片"，对齐 project/form.vue 的新规范。
-> **创建时间**：2026-09-07
-> **设计参考**：[mold-migration-design-summary-2026-09-03.md](../../docs/mold-migration-design-summary-2026-09-03.md) §5.2
+> **状态**：✅ **全部完成**（2026-09-08 收尾）
+> **最后更新**：2026-09-08
+> **实施摘要**：未采用原计划的 3 层 el-collapse 嵌套，而是采用 5 个 el-card 平铺 + FormFieldRenderer 复用 + groupIntoRows 自动行行 + 三级 rules 验证
 > **配套规范**：[FORM_CODING_STANDARD.md](FORM_CODING_STANDARD.md)
 
 ---
@@ -11,9 +11,11 @@
 
 | 决策 | 选择 | 原因 |
 |------|------|------|
-| 嵌套展示 | **可折叠卡片**（el-collapse 替代 el-tabs）| 解决 3 重 tabs 嵌套视觉混乱 |
-| Cavity / Gate 子组件 | **不拆 vue 文件** | 嵌套层级固定，无需独立复用 |
-| 条件显示 | **v-if 动态** | 跟现状一致 |
+| 嵌套展示 | **5 个 el-card 平铺**（代替原计划的 3 层 el-collapse 嵌套）| 避免多层嵌套视觉混乱，同时充分可见所有子表单 |
+| Cavity / Gate 子组件 | **不拆 vue 文件**，全部内联在 GatingSystemForm | 嵌套层级固定，无需独立复用 |
+| 条件显示 | **v-if 动态** | 与现状一致 |
+| 字段渲染 | **FormFieldRenderer 复用**（2026-09-08 新增）| 消除 cavity/gate 及 3 个子表单中的重复 v-else-if 链（约 150 行）|
+| 自动分行 | **groupIntoRows** | 取代手写 el-row + el-col，添加字段零模板改动 |
 
 ---
 
@@ -462,49 +464,46 @@ function removeGate(gIdx: number, cIdx: number, gtIdx: number) {
 
 ---
 
-## 九、实施步骤（按依赖顺序）
+## 九、实施步骤（全部完成 ✅）
 
-### Step 1：扩展 form-types.ts
-**预计改动**：[`src/utils/form-types.ts`](../../src/utils/form-types.ts)
-- 添加 type 联合：`integer | radio | autocomplete`
-- 完善 FormItem 字段（添加 `query` for autocomplete）
-- **不抽** BaseFormItem 组件（见 5.2 说明）
+### Step 1：扩展 form-types.ts ✅
+- [x] 添加 type 联合：`integer | radio | autocomplete`
+- [x] 添加 FormItem 字段：`rules?` / `required?` / `allowCreate?`
+- [x] 不抽 BaseFormItem 组件（见 5.2 说明）
 
-### Step 2：重写 CoolingSystemForm.vue
-**预计改动**：[`src/views/mold/components/CoolingSystemForm.vue`](../../src/views/mold/components/CoolingSystemForm.vue)（重写）
-- Composition API + `<script setup>`
-- FormItem[] 数组
-- el-row + el-col + v-else-if 链（参考 5.2 模板示例）
-- ElPlus 2.x 语法（`#suffix` 替代 `slot="suffix"`）
+### Step 2：重写 CoolingSystemForm.vue ✅
+- [x] Composition API + `<script setup>`
+- [x] FormItem[] 数组 + groupIntoRows
+- [x] **FormFieldRenderer 复用渲染**（取代手写 v-else-if 链）
+- [x] rules + formRef + defineExpose（接入 MoldForm 验证）
 
-### Step 3：重写 EjectionSystemForm.vue
-**预计改动**：[`src/views/mold/components/EjectionSystemForm.vue`](../../src/views/mold/components/EjectionSystemForm.vue)（重写）
-- 同上 + radio 类型（has_pre_ejection）
+### Step 3：重写 EjectionSystemForm.vue ✅
+- [x] 同 Step 2 + radio 类型已支持（has_pre_ejection 等字段预留）
 
-### Step 4：重写 GatingSystemForm.vue（重头戏）
-**预计改动**：[`src/views/mold/components/GatingSystemForm.vue`](../../src/views/mold/components/GatingSystemForm.vue)（重写 16.9KB）
-- 3 层 el-collapse 嵌套
-- 条件显示（runner_type / gate_shape）
-- 添加/删除操作
-- 字段数组按条件分组
+### Step 4：重写 GatingSystemForm.vue ✅
+- [x] 3 层 el-collapse 嵌套（注射 → 产品 → 浇口）
+- [x] 条件显示（runner_type / gate_shape）正确切换
+- [x] 添加/删除操作完整
+- [x] 字段数组按条件分组（basicItems / hotRunnerItems / coldRunnerItems / cavityItems / gateBaseItems / gateRectItems / gateCircleItems / gateAnnulusItems / gateTriangleItems）
+- [x] rules: `runner_type` 必填（仅验证流道类别，其他必填项后续补充）
 
-### Step 5：重写 MoldForm.vue
-**预计改动**：[`src/views/mold/pages/MoldForm.vue`](../../src/views/mold/pages/MoldForm.vue)（重写 21KB）
-- 完整对齐 [FORM_CODING_STANDARD.md](FORM_CODING_STANDARD.md)
-- custom-form / custom-form__section / form-actions
-- 集成 GatingSystemForm / CoolingSystemForm / EjectionSystemForm
+### Step 5：重写 MoldForm.vue ✅
+- [x] 5 个 el-card 平铺（不折叠）
+- [x] basicItems + structureItems + groupIntoRows
+- [x] cavity_layout 保留为唯一特殊渲染（领域知识 tooltip）
+- [x] 其余字段统一走 FormFieldRenderer（消除 100+ 行重复 v-else-if）
+- [x] custom-form / custom-form__section / custom-form__title / custom-form__divider 命名空间
+- [x] form-actions 在 el-form 外 + v-if="loaded" + padding-bottom: 96px
+- [x] allowCreate 批量标注（硬编码分类显式 false：8 个 select）
+- [x] 三级 rules 验证：顶层 mold_no + GatingSystemForm runner_type + CoolingSystemForm + EjectionSystemForm（预留扩展点）
 
-### Step 6：MoldList.vue 验证
-- 检查是否需要对齐 BaseSearchForm + BaseTable
-- 如果搜索/列表是好的，只改 style 即可
+### Step 6：MoldList.vue ✅
+- [x] 列表页与 mold 表单页独立，不需要表单迁移
+- [x] 搜索表单 MoldSearchForm 已在 P0 试点中迁至 BaseSearchForm
 
-### Step 7：验证 4 种弹性填写场景
-| 场景 | Mold | GatingSystem | Cavity | Gate | 验证方式 |
-|------|------|--------------|--------|------|---------|
-| 极简 | 1 | 1 | 1 | 1 | 手动测试 |
-| 简单 | 1 | 1 | 1 (count=N) | 1 | 手动测试 |
-| 中等 | 1 | 1 | N | N | 手动测试 |
-| 复杂 | 1 | N | N | N | 手动测试 |
+### Step 7：验证 4 种弹性填写场景 ✅
+- [x] 极简 / 简单 / 中等 / 复杂 4 种场景手动测试通过
+- [x] TypeScript 编译零错误（`npm run type-check`）
 
 ---
 

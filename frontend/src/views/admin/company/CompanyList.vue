@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   公司管理 - 列表页
   - 搜索（公司名称、所属行业、状态）
   - 列表（公司名称、编码、行业、层级、状态、创建时间）
@@ -173,15 +173,13 @@
         <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{ row }">
             <span class="row-action-buttons">
-              <el-button
-                type="text"
+              <el-button type="text"
                 @click="editCompany(row)"
               >
                 <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />
                 编辑
               </el-button>
-              <el-button
-                type="text"
+              <el-button type="text"
                 class="text-danger"
                 @click="deleteCompany(row)"
               >
@@ -247,7 +245,7 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '所属行业', prop: 'industry', minWidth: 130, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '权限等级', prop: 'tier_level', minWidth: 80, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '描述', prop: 'description', minWidth: 220, align: 'center', sortable: false, tooltip: true, filterable: false },
-  { visible: true, label: '启用', prop: 'is_active', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '启用', prop: 'is_active', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '切换身份', prop: 'is_assumed', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '创建时间', prop: 'created_at', minWidth: 160, align: 'center', sortable: true, tooltip: true, filterable: false },
 ])

@@ -30,6 +30,9 @@ export const useAppStore = defineStore('app', {
 
     // 系统状态（normal = 正常 / degraded = 降级 / down = 停服）
     status: 'normal' as SystemStatus,
+
+    // 分页大小选项（替代旧 Vuex store/modules/app.ts 的 pageSizeArray）
+    pageSizeArray: [30, 100, 200] as number[],
   }),
 
   getters: {
@@ -49,6 +52,9 @@ export const useAppStore = defineStore('app', {
       }
       return map[state.status]
     },
+
+    /** 列表页 page-sizes 选项（供 $pageSizeArray 全局方法透出）*/
+    pageSizeOptions: (state): number[] => state.pageSizeArray,
   },
 
   actions: {

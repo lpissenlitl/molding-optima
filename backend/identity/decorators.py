@@ -19,7 +19,7 @@ def _authenticate_request(request: HttpRequest):
     if not token:
         raise BizException(ERROR_USER_TOKEN_NOT_EXISTS, "Authorization token is missing.")
     
-    user = get_user_by_token(token)
+    user = get_user_by_token(request, token)
     if not user:
         raise BizException(ERROR_USER_TOKEN_NOT_EXISTS, "Authorization token is invalid.")
     

@@ -2,6 +2,7 @@
 
 > **目的**：基于项目历史踩坑经验，给出"大表单（数据录入）"与"搜索表单（查询筛选）"的布局方案选择依据。
 > **创建时间**：2026-09-07
+> **最后更新**：2026-09-08
 > **适用范围**：molding-optima 前端所有 el-form 页面
 
 ---
@@ -10,7 +11,7 @@
 
 | 场景 | 推荐方案 | 一句话理由 |
 |------|---------|----------|
-| **大表单**（数据录入，字段 ≥ 6 或含长字段）| `el-form + el-row + el-col` | 行内精确填满 24 栅格，长短字段混排不浪费 |
+| **大表单**（数据录入，字段 ≥ 6 或含长字段）| `el-form + el-row + el-col` + `groupIntoRows` | 行内精确填满 24 栅格，长短字段混排不浪费 |
 | **搜索表单**（字段 ≤ 5 且都是短字段）| `el-form + :inline="true"` | 简洁、字段短时无视觉问题 |
 
 ---
@@ -75,9 +76,12 @@ inline 本质是 `flex-wrap: wrap`——浏览器"放不下就换行"，**但不
 
 | 文件 | 方案 | 评估 |
 |------|------|------|
-| `components/BaseSearchForm.vue` | `:inline="true"` | ✅ 所有 SearchForm（7 个）都基于它，字段短，方案合适 |
-| `views/project/form.vue` | `el-form + el-row + el-col` | ✅ 大表单范例，已迁移完成 |
-| `views/mold/pages/MoldForm.vue` | `:inline="true"`（旧代码）| ⚠️ 字段多且复杂，**待迁移** |
+| `components/BaseSearchForm.vue` | `:inline="true"` | ✅ 所有 SearchForm（2 个）都基于它，字段短，方案合适 |
+| `views/project/form.vue` | `el-form + el-row + el-col` + groupIntoRows | ✅ 大表单范例，已迁移完成 |
+| `views/mold/pages/MoldForm.vue` | `el-form + el-row + el-col` + groupIntoRows + FormFieldRenderer | ✅ **2026-09-08 完成**，5 个 el-card 平铺 + 三级 rules 验证 |
+| `views/mold/components/CoolingSystemForm.vue` | 同上 | ✅ **2026-09-08 完成** |
+| `views/mold/components/EjectionSystemForm.vue` | 同上 | ✅ **2026-09-08 完成** |
+| `views/mold/components/GatingSystemForm.vue` | 同上 + 3 层 el-collapse | ✅ **2026-09-08 完成** |
 | `views/polymer/pages/PolymerForm.vue` | `:inline="true"`（旧代码）| ⚠️ 同上，**待迁移** |
 | `views/equipment/pages/InjectionMachineForm.vue` | `:inline="true"`（旧代码）| ⚠️ 同上，**待迁移** |
 
@@ -85,11 +89,12 @@ inline 本质是 `flex-wrap: wrap`——浏览器"放不下就换行"，**但不
 
 ## 五、迁移建议
 
-1. **大表单优先迁移**到 `el-row + el-col`——`project/form.vue` 已是范例
+1. **大表单优先迁移**到 `el-row + el-col`——`project/form.vue` / `mold/pages/MoldForm.vue` 都是范例
    - 复用 `src/utils/form-types.ts` 的 `FormItem` / `FormCard` 类型
    - 复用 `src/utils/form-layout.ts` 的 `groupIntoRows` 自动分行算法
+   - **复用 `FormFieldRenderer`**（2026-09-08 新增）消除手写 v-else-if 链（推荐）
 2. **保留 inline 仅用于搜索表单**——`BaseSearchForm.vue` 的架构无需变动
-3. **mold 表单**由于嵌套结构（`Mold → GatingSystem → Cavity → Gate`），将真正考验 `el-row + el-col` 的灵活度，是迁移计划中的关键里程碑
+3. **mold 表单**已采用“5 个 el-card 平铺 + FormFieldRenderer + groupIntoRows + 三级 rules 验证”架构完成迁移，是嵌套表单迁移的参考范例
 
 ---
 

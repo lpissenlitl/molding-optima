@@ -30,7 +30,7 @@ export const polymerInfoForm = {
   max_shear_rate: null,
   max_shear_stress: null,
 
-  recommend_injection_rate: null,    
+  recommend_injection_rate: null,
   recommend_back_pressure: null,
 
   drying_method: null,
@@ -38,6 +38,10 @@ export const polymerInfoForm = {
   drying_temp_max: null,
   drying_time_min: null,
   drying_time_max: null,
+  // 填充物组成（2026-09-08 Phase 2）
+  // - JSONField 类型，存储 [{filler_id, percentage, note}]
+  // - 开关控制：默认仅靠厂商信息；用户主动打开后详细配置
+  polymer_filler_compositions: [],
   // 流变属性
   rheology: {
     model_type: null,

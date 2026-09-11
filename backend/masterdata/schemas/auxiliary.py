@@ -16,7 +16,7 @@ class AuxiliaryEquipmentSchema(BaseSchema):
     equipment_type: str = Field(..., description="类型")
     specification: str = Field(None, description="规格")
     total_count: int = Field(None, description="数量")
-    avaliable_count: int = Field(None, description="可用数量")
+    available_count: int = Field(None, description="可用数量")
     remarks: str = Field(None, description="备注")
 
 

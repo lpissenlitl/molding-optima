@@ -99,7 +99,7 @@
 
 <script>
 import ProcessSelector from "./components/ProcessSelector.vue"
-import ProcessCondition from "@/components/process/ProcessCondition.vue"
+import ProcessCondition from "@/views/process/_shared/ProcessCondition.vue"
 import ProcessParameter from "./components/ProcessParameter.vue"
 import { injectionProcessForm } from "@/constants/process-const"
 import { getProcessParameterFrontend, saveProcessParameterFrontend, transplantProcessParameter } from "@/api"

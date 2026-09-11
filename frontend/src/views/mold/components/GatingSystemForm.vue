@@ -22,7 +22,9 @@
 -->
 <template>
   <el-form
+    ref="formRef"
     :model="gatingSystem"
+    :rules="rules"
     class="custom-form"
     label-width="120px"
   >
@@ -112,8 +114,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, ref } from 'vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
   getPlaceholder,
   getDisabled,
@@ -144,12 +146,32 @@ const props = defineProps<{
   gatingSystem: Record<string, any>
 }>()
 
+/**
+ * 表单验证规则（2026-09-08 引入 rules 架构）
+ * - 详细规则优先使用 Element Plus rules 语法
+ * - FormItem.required=true 仅控制是否显示红色星号
+ * - 提交时调 formRef.value.validate() 触发验证
+ * - 后续逐步补充其他必填字段（流道类别先定为必填）
+ */
+const rules: FormRules = {
+  runner_type: [
+    { required: true, message: '请选择流道类别', trigger: 'change' },
+  ],
+}
+
+/**
+ * 暴露 formRef 给父组件 MoldForm（让顶层保存按钮能调所有子表单的 validate）
+ * - 当前只有 GatingSystemForm 实现，其他子组件（CoolingSystemForm / EjectionSystemForm）后续跟进
+ */
+const formRef = ref<FormInstance>()
+defineExpose({ formRef })
+
 // ============================================================================
 // 字段定义（按层级 + 条件显示分组）
 // ============================================================================
 
 const basicItems: FormItem[] = [
-  { label: '流道类别', prop: 'runner_type', type: 'select', options: runnerTypeOptions },
+  { label: '流道类别', prop: 'runner_type', type: 'select', options: runnerTypeOptions, required: true },
   { label: '制品总重量', prop: 'total_product_weight', type: 'number', unit: 'g', precision: 2 },
 ]
 
@@ -166,22 +188,22 @@ const hotRunnerItems: FormItem[] = [
 ]
 
 const coldRunnerItems: FormItem[] = [
-  { label: '料把重量', prop: 'runner_weight', type: 'number', unit: 'g', precision: 2 },
-  { label: '料把长度', prop: 'runner_length', type: 'number', unit: 'mm', precision: 2 },
+  { label: '流道重量', prop: 'runner_weight', type: 'number', unit: 'g', precision: 2 },
+  { label: '流道长度', prop: 'runner_length', type: 'number', unit: 'mm', precision: 2 },
   { label: '浇口套外径 D1', prop: 'sprue_bushing_outer_dia', type: 'select', options: sprueBushingOuterDiaOptions, unit: 'mm' },
   { label: '浇口套孔径 D2', prop: 'sprue_bushing_bore_dia', type: 'select', options: sprueBushingBoreDiaOptions, unit: 'mm' },
   { label: '球面半径 R', prop: 'sprue_bushing_radius', type: 'select', options: sprueBushingRadiusOptions, unit: 'mm' },
 ]
 
 const cavityItems: FormItem[] = [
-  { label: '每射成型腔数', prop: 'cavity_count_per_shot', type: 'integer', unit: '腔', precision: 0 },
+  { label: '成型腔数', prop: 'cavity_count_per_shot', type: 'integer', unit: '腔', precision: 0 },
   { label: '制品名称', prop: 'product_name', type: 'input' },
   { label: '制品编号', prop: 'product_code', type: 'input' },
-  { label: '单腔注射重量', prop: 'estimated_weight_per_cavity', type: 'number', unit: 'g', precision: 2 },
+  { label: '单腔重量', prop: 'estimated_weight_per_cavity', type: 'number', unit: 'g', precision: 2 },
   { label: '最大壁厚', prop: 'max_wall_thickness', type: 'number', unit: 'mm', precision: 2 },
   { label: '最小壁厚', prop: 'min_wall_thickness', type: 'number', unit: 'mm', precision: 2 },
   { label: '平均壁厚', prop: 'ave_wall_thickness', type: 'number', unit: 'mm', precision: 2 },
-  { label: '最大流动长度', prop: 'max_flow_length', type: 'number', unit: 'mm', precision: 2 },
+  { label: '最大流长', prop: 'max_flow_length', type: 'number', unit: 'mm', precision: 2 },
   /*
    * 单腔投影面积（projected_area_per_cavity）
    * - 状态：UI 暂时隐藏（2026-09-07），保留数据结构以备恢复

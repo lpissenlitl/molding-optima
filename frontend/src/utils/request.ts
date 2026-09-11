@@ -8,6 +8,7 @@
  */
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import router from '@/router'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 
@@ -28,12 +29,39 @@ service.interceptors.request.use(
   error => Promise.reject(error)
 )
 
-// 响应拦截器：统一错误处理 + 401 自动登出
-// 与后端 const.py 中未授权状态码对齐
-const UNAUTHORIZED_STATUS = [101001, 1004, 1005, 1007, 1009]
+// 响应拦截器：统一错误处理 + 认证错误自动跳登录页 + token 滑动续期同步
+// 与后端 identity/exceptions.py 中 BizErrorCode 严格对齐
+// ⚠️ 只放真正的认证错误码，混进业务错误会导致业务错误被误判跳登录页
+//   历史上 1004(ERROR_DATA_NOT_FOUND) / 1005(ERROR_DATA_FOUND) / 1007(ERROR_FOLDER_NAME_NOT_ALLOWED)
+//   / 1009(不存在) 都被错误列入，现在仅保留 101001
+const UNAUTHORIZED_STATUS = [101001]  // ERROR_USER_TOKEN_NOT_EXISTS（token 缺失/无效/过期）
 
 service.interceptors.response.use(
-  response => response.data,
+  response => {
+    // ============================
+    // Token 滑动续期同步
+    // ============================
+    // 后端 ApiMiddleware 会在每次鉴权成功的响应里带上 X-Token-Expires-At 头
+    // （值为 ISO 8601 字符串）。这里读取并同步到 store，让路由守卫的
+    // "本地过期判断" 能感知到后端的滑动窗口续期，避免活跃用户突然被踢。
+    //
+    // 注意：
+    // - axios 会把 header 名规范化为小写，所以用 'x-token-expires-at' 读取
+    // - 仅在值变化时赋值（避免 Pinia 持久化无谓写入）
+    // - pinia 还未初始化时跳过（如 ssr 场景）
+    const newExpiresAt = response.headers?.['x-token-expires-at']
+    if (newExpiresAt) {
+      try {
+        const userStore = useUserStore()
+        if (userStore.token_expires_at !== newExpiresAt) {
+          userStore.token_expires_at = newExpiresAt
+        }
+      } catch {
+        // pinia 还未初始化时跳过
+      }
+    }
+    return response.data
+  },
   error => {
     const data = error.response?.data
     const hasResponse = !!error.response
@@ -78,11 +106,19 @@ service.interceptors.response.use(
     })
 
     // 未授权：清空 user store + 跳登录页
+    // 用 router.push 而非 window.location.replace：
+    //   1. 避免整页刷新（丢失 Pinia 状态、Vue 状态）
+    //   2. 跳转到 /login 后路由守卫会看到 is_logged_in === false，不再二次跳转
+    //   3. 带 redirect 参数，登录后跳回原路径
     if (data && UNAUTHORIZED_STATUS.indexOf(data.status) !== -1) {
-      if (window.location.href.indexOf('/login') === -1) {
+      const currentPath = window.location.pathname
+      if (currentPath !== '/login') {
         const userStore = useUserStore()
         userStore.clear()
-        window.location.replace('/login')
+        router.push({
+          path: '/login',
+          query: { redirect: currentPath },
+        })
       }
     }
 

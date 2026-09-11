@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="upload-files">
     <!-- 上传触发区 -->
     <el-upload

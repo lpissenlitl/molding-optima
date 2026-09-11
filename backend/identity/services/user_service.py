@@ -68,12 +68,19 @@ def authenticate_user(username: str, password: str):
 
 
 def create_token(
-    request: HttpRequest, 
+    request: HttpRequest,
     user: User,
     expire_hours: int = DEFAULT_TOKEN_EXPIRY_HOURS,
     allow_multi_login: bool = True
 ):
-    """创建Token"""
+    """
+    创建 Token
+
+    Returns:
+        (raw_token, expires_at) 元组
+        - raw_token: 原始 token（用于返回给客户端，存到 X-Auth-Token header）
+        - expires_at: 过期时间（datetime），用于客户端做本地过期判断
+    """
     # 限制用户多端登录
     if not allow_multi_login:
         Token.objects.filter(
@@ -84,13 +91,21 @@ def create_token(
             is_revoked=True,
             revoked_at=datetime.now()
         )
-    
+
     raw_token, hash_token = Token.create(user, request, expire_hours)
-    return raw_token
+    # Token.create() 已写入 expires_at，这里取回 DB 中实际值（确保时间戳准确）
+    expires_at = hash_token.expires_at
+    return raw_token, expires_at
 
 
-def get_user_by_token(raw_token: str):
-    """根据 Token 获取用户信息"""
+def get_user_by_token(request: HttpRequest, raw_token: str):
+    """根据 Token 获取用户信息
+
+    Args:
+        request: Django 请求对象，用于在滑动续期后回传新的过期时间给前端
+            （写入 request.token_expires_at，由 ApiMiddleware 写入响应头 X-Token-Expires-At）
+        raw_token: 原始 token 字符串
+    """
 
     # 验证 token 格式
     if not raw_token or not isinstance(raw_token, str):
@@ -101,13 +116,13 @@ def get_user_by_token(raw_token: str):
     if len(raw_token) > 255 or len(raw_token) < 32:
         logging.warning(f"Token 值长度异常：{raw_token}")
         return None
-        
+
     try:
         hash_token = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     except Exception:
         logging.warning(f"Token 值格式异常：{raw_token}")
         return None
-    
+
     # 验证 login token
     token = Token.objects.filter(
         token=hash_token,
@@ -120,12 +135,15 @@ def get_user_by_token(raw_token: str):
         "user__company",
         "user__organization"
     ).first()
-    
+
     if token:
         token.flush_token()
+        # 滑动续期后，把最新过期时间挂到 request，让前端同步本地 token_expires_at
+        # 无论本次是否真的触发了续期都写，前端仅在 header 存在时更新（差异比较在 request.ts 里）
+        request.token_expires_at = token.expires_at
         return token.user
-    
-    # 验证 redirect token
+
+    # 验证 redirect token（SSO 跳转令牌，不做滑动续期）
     token = RedirectToken.objects.filter(
         token=hash_token,
         expires_at__gt=datetime.now(),
@@ -137,10 +155,10 @@ def get_user_by_token(raw_token: str):
         "user__company",
         "user__organization"
     ).first()
-    
+
     if token:
         return token.user
-    
+
     return None
 
 
@@ -232,17 +250,20 @@ def register_user(
 def login(request: HttpRequest, username: str, password: str, **kwargs):
     """用户登录：认证 + 权限校验 + 用户信息组装"""
     user = authenticate_user(username, password)
-    
+
     # 构建脱敏用户信息
     user_dict = user.construct_user_info()
-    
-    # 创建Token
-    token = create_token(request, user)
-    user_dict.update({"token": token})
-    
+
+    # 创建Token（同时返回过期时间，供前端做本地过期判断）
+    raw_token, token_expires_at = create_token(request, user)
+    user_dict.update({
+        "token": raw_token,
+        "token_expires_at": token_expires_at,
+    })
+
     # --- 记录登录信息 ---
     user.record_login()
-    
+
     return user_dict
 
 

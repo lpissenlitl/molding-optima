@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   MoldList - 模具列表页
 
   设计要点：
@@ -138,16 +138,14 @@
         <el-table-column label="操作" width="180" align="center" fixed="right">
           <template #default="{ row }">
             <span class="row-action-buttons">
-              <el-button
-                type="text"
+              <el-button type="text"
                 @click="goEdit(row)"
                 :disabled="!hasPermission('review_mold')"
               >
                 <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />
                 编辑
               </el-button>
-              <el-button
-                type="text"
+              <el-button type="text"
                 class="text-danger"
                 @click="deleteMold(row)"
                 :disabled="!hasPermission('delete_mold')"
@@ -214,21 +212,21 @@ const selected_rows = ref<any[]>([])
 // 列定义
 // - visible: true  → 默认显示
 // - visible: false → 默认隐藏（高级列，用户可手动打开列筛选启用）
-// - filterable: true → 启用 BaseTable 列筛选（漏斗）
+// - filterable: true  → 启用 BaseTable 列筛选（漏斗），从 BaseTableColumn.filterable 读取
 const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '模具编号', prop: 'mold_no', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
   { visible: true, label: '模具名称', prop: 'mold_name', minWidth: 200, align: 'left', header_align: 'center', sortable: false, tooltip: true, filterable: false },
-  { visible: true, label: '模具类别', prop: 'category', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '制作方式', prop: 'manufacturing_method', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '模具类别', prop: 'category', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '制作方式', prop: 'manufacturing_method', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '试模约机', prop: 'reservation', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '模流数据', prop: 'moldflow_data', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '试模数据', prop: 'trial_data', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '试模履历', prop: 'trial_resume', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '问题履历', prop: 'issue_resume', minWidth: 90, align: 'center', sortable: false, tooltip: false, filterable: false },
-  { visible: true, label: '模具结构', prop: 'structure', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '模腔布局', prop: 'cavity_layout', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '产品大类', prop: 'product_category', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '产品小类', prop: 'product_model', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '模具结构', prop: 'structure', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '模腔布局', prop: 'cavity_layout', minWidth: 100, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '产品大类', prop: 'product_category', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '产品小类', prop: 'product_model', minWidth: 120, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '注塑周期[s]', prop: 'target_cycle_time', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
   { visible: true, label: '推荐吨位[Ton]', prop: 'recommended_tonnage', minWidth: 150, align: 'center', sortable: true, tooltip: false, filterable: false },
   // 尺寸列（默认隐藏）

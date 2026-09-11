@@ -27,6 +27,11 @@
     <!-- 5 个 section（el-card 平铺，始终可见，层次清晰） -->
     <div v-else class="mold-cards">
       <!-- ============ 1. 基本信息 ============ -->
+      <!--
+        架构：flat items 数组 + groupIntoRows 自动分行 + FormFieldRenderer 复用渲染
+        - cavity_layout 是特殊字段（带 tooltip），单独渲染
+        - 其余字段统一走 FormFieldRenderer（去重 ~50 行 v-else-if 链）
+      -->
       <el-card class="custom-form__section" shadow="never">
         <template #header>
           <span class="custom-form__title">基本信息</span>
@@ -38,19 +43,23 @@
           class="custom-form"
           label-width="120px"
         >
-          <el-row :gutter="24">
+          <el-row
+            v-for="(row, rIdx) in basicRows"
+            :key="`basic_row_${rIdx}`"
+            :gutter="24"
+          >
             <el-col
-              v-for="(item, iIdx) in basicItems"
-              :key="`basic_${iIdx}`"
-              :span="item.span || 6"
+              v-for="(item, iIdx) in row"
+              :key="`basic_${rIdx}_${iIdx}`"
+              :span="item.span"
             >
-              <el-form-item :label="item.label" :prop="item.prop">
-                <!-- cavity_layout 带 tooltip -->
-                <el-tooltip
-                  v-if="item.prop === 'cavity_layout'"
-                  effect="dark"
-                  placement="top"
-                >
+              <!-- 特殊字段：cavity_layout 带领域知识 tooltip -->
+              <el-form-item
+                v-if="item.prop === 'cavity_layout'"
+                :label="item.label"
+                :prop="item.prop"
+              >
+                <el-tooltip effect="dark" placement="top">
                   <template #content>
                     1: 单色模具, 单腔, 共1个制品<br>
                     1+1: 单色模具, 两腔, 共2个制品, 制品参数不同<br>
@@ -59,68 +68,18 @@
                     1&1+1: 双色模具, 1射单腔, 成型1个制品, 2射双腔, 成型2个制品, 制品参数不同
                   </template>
                   <el-input
-                    v-model.trim="mold_info[item.prop!]"
-                    :placeholder="getPlaceholder(item)"
-                    :disabled="getDisabled(item)"
-                  >
-                    <template #suffix v-if="item.unit">{{ item.unit }}</template>
-                  </el-input>
-                </el-tooltip>
-
-                <el-input
-                  v-else-if="item.type === 'input'"
-                  v-model.trim="mold_info[item.prop!]"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                >
-                  <template #suffix v-if="item.unit">{{ item.unit }}</template>
-                </el-input>
-
-                <el-input
-                  v-else-if="item.type === 'number' || item.type === 'integer'"
-                  v-model.trim="mold_info[item.prop!]"
-                  v-number="getPrecision(item)"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                >
-                  <template #suffix v-if="item.unit">{{ item.unit }}</template>
-                </el-input>
-
-                <el-input
-                  v-else-if="item.type === 'textarea'"
-                  v-model="mold_info[item.prop!]"
-                  type="textarea"
-                  :rows="item.rows || 3"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                />
-
-                <el-select
-                  v-else-if="item.type === 'select' || item.type === 'number-select'"
-                  v-model="mold_info[item.prop!]"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                  clearable
-                  filterable
-                  allow-create
-                >
-                  <el-option
-                    v-for="(opt, oIdx) in item.options"
-                    :key="oIdx"
-                    :label="opt.label"
-                    :value="opt.value"
+                    v-model.trim="mold_info.cavity_layout"
+                    placeholder="输入或点击查看格式说明"
                   />
-                </el-select>
-
-                <el-radio-group
-                  v-else-if="item.type === 'radio'"
-                  v-model="mold_info[item.prop!]"
-                  :disabled="getDisabled(item)"
-                >
-                  <el-radio-button :label="true">是</el-radio-button>
-                  <el-radio-button :label="false">否</el-radio-button>
-                </el-radio-group>
+                </el-tooltip>
               </el-form-item>
+
+              <!-- 常规字段：FormFieldRenderer 统一渲染 -->
+              <FormFieldRenderer
+                v-else
+                :item="item"
+                :model="mold_info"
+              />
             </el-col>
           </el-row>
         </el-form>
@@ -132,7 +91,7 @@
           <span class="custom-form__title">浇注系统</span>
         </template>
         <el-alert
-          title="浇注系统支持多次注射（由基本信息中的注射次数控制）。每次注射可独立配置流道类型、产品参数与浇口。"
+          title="每次注射可独立配置流道类型、产品参数与浇口"
           type="info"
           show-icon
           :closable="false"
@@ -160,7 +119,7 @@
                 </span>
               </span>
             </template>
-            <GatingSystemForm :gating-system="gating" />
+            <GatingSystemForm ref="gatingFormRefs" :gating-system="gating" />
           </el-tab-pane>
         </el-tabs>
       </el-card>
@@ -170,7 +129,7 @@
         <template #header>
           <span class="custom-form__title">冷却系统</span>
         </template>
-        <CoolingSystemForm :cooling-system="cooling_system" />
+        <CoolingSystemForm ref="coolingFormRef" :cooling-system="cooling_system" />
       </el-card>
 
       <!-- ============ 4. 顶出系统 ============ -->
@@ -178,10 +137,15 @@
         <template #header>
           <span class="custom-form__title">顶出系统</span>
         </template>
-        <EjectionSystemForm :ejection-system="ejection_system" />
+        <EjectionSystemForm ref="ejectionFormRef" :ejection-system="ejection_system" />
       </el-card>
 
       <!-- ============ 5. 其他参数 ============ -->
+      <!--
+        架构：flat items 数组 + groupIntoRows 自动分行 + FormFieldRenderer 复用渲染
+        - 所有字段均为常规字段（无特殊装饰），统一走 FormFieldRenderer
+        - 末尾 辅助装置 为领域知识 tooltip + 多选，独立渲染
+      -->
       <el-card class="custom-form__section" shadow="never">
         <template #header>
           <span class="custom-form__title">其他参数</span>
@@ -191,97 +155,45 @@
           class="custom-form"
           label-width="120px"
         >
-          <el-row :gutter="24">
+          <el-row
+            v-for="(row, rIdx) in structureRows"
+            :key="`struct_row_${rIdx}`"
+            :gutter="24"
+          >
             <el-col
-              v-for="(item, iIdx) in structureItems"
-              :key="`struct_${iIdx}`"
-              :span="item.span || 6"
+              v-for="(item, iIdx) in row"
+              :key="`struct_${rIdx}_${iIdx}`"
+              :span="item.span"
             >
-              <el-form-item :label="item.label" :prop="item.prop">
-                <el-input
-                  v-if="item.type === 'input'"
-                  v-model.trim="mold_info[item.prop!]"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                >
-                  <template #suffix v-if="item.unit">{{ item.unit }}</template>
-                </el-input>
-
-                <el-input
-                  v-else-if="item.type === 'number' || item.type === 'integer'"
-                  v-model.trim="mold_info[item.prop!]"
-                  v-number="getPrecision(item)"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                >
-                  <template #suffix v-if="item.unit">{{ item.unit }}</template>
-                </el-input>
-
-                <el-input
-                  v-else-if="item.type === 'textarea'"
-                  v-model="mold_info[item.prop!]"
-                  type="textarea"
-                  :rows="item.rows || 3"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                />
-
-                <el-select
-                  v-else-if="item.type === 'select' || item.type === 'number-select'"
-                  v-model="mold_info[item.prop!]"
-                  :placeholder="getPlaceholder(item)"
-                  :disabled="getDisabled(item)"
-                  clearable
-                  filterable
-                  allow-create
-                >
-                  <el-option
-                    v-for="(opt, oIdx) in item.options"
-                    :key="oIdx"
-                    :label="opt.label"
-                    :value="opt.value"
-                  />
-                </el-select>
-
-                <el-radio-group
-                  v-else-if="item.type === 'radio'"
-                  v-model="mold_info[item.prop!]"
-                  :disabled="getDisabled(item)"
-                >
-                  <el-radio-button :label="true">是</el-radio-button>
-                  <el-radio-button :label="false">否</el-radio-button>
-                </el-radio-group>
-              </el-form-item>
+              <FormFieldRenderer :item="item" :model="mold_info" />
             </el-col>
           </el-row>
 
-          <!-- 辅助装置（多选） -->
+          <!-- 辅助装置（多选）：领域知识用 tooltip，按需 hover 查看 -->
           <el-divider content-position="left" class="custom-form__divider">
             辅助装置
           </el-divider>
-          <el-alert
-            title="辅助装置指安装在模具上的功能性附加设备，例如：液压抽芯油缸、气动阀、热流道温控箱、模内传感器等。可从下拉中选择，或直接输入自定义名称。"
-            type="info"
-            show-icon
-            :closable="false"
-            style="margin-bottom: 12px;"
-          />
-          <el-select
-            v-model="checked_assist_equipments"
-            multiple
-            filterable
-            allow-create
-            default-first-option
-            placeholder="请选择或输入辅助装置"
-            style="width: 100%;"
+          <el-tooltip
+            content="辅助装置是安装在模具上的功能性附加设备，例如：液压抽芯油缸、气动阀、热流道温控箱、模内传感器等。"
+            placement="top"
           >
-            <el-option
-              v-for="item in assistEquipmentOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+            <el-select
+              v-model="checked_assist_equipments"
+              multiple
+              filterable
+              :allow-create="true"
+              default-first-option
+              placeholder="请选择或输入辅助装置（如液压抽芯、热流道温控箱）"
+              style="width: 100%;"
+            >
+              <el-option
+                v-for="item in assistEquipmentOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-tooltip>
         </el-form>
       </el-card>
     </div>
@@ -325,17 +237,13 @@ import {
   mediumOptionsMap,
   minorOptionsMap,
 } from '@/utils/product-category'
-import {
-  getPlaceholder,
-  getDisabled,
-  getPrecision,
-} from '@/utils/form-helper'
-import type { FormItem } from '@/utils/form-types'
-import { hasPermission } from '@/utils/permission'
-
 import GatingSystemForm from '../components/GatingSystemForm.vue'
 import CoolingSystemForm from '../components/CoolingSystemForm.vue'
 import EjectionSystemForm from '../components/EjectionSystemForm.vue'
+import FormFieldRenderer from '../components/FormFieldRenderer.vue'
+import type { FormItem } from '@/utils/form-types'
+import { groupIntoRows } from '@/utils/form-layout'
+import { hasPermission } from '@/utils/permission'
 
 // ============================================================================
 // 路由（核心：通过 useRoute 区分新建/编辑模式，与 project 保持一致）
@@ -365,6 +273,20 @@ const project_id_from_route = computed(() => {
 
 const mold_info = ref<any>(structuredClone(moldInfoForm))
 const formRef = ref<FormInstance>()
+/**
+ * 所有浇注系统子表单的引用数组（2026-09-08 引入）
+ * - 每个 GatingSystemForm 暴露自己的 formRef
+ * - 保存时遍历调用所有 formRef.validate()，实现跨表单统一验证
+ */
+const gatingFormRefs = ref<any[]>([])
+/**
+ * 冷却系统子表单引用（1:1）
+ */
+const coolingFormRef = ref<any>(null)
+/**
+ * 顶出系统子表单引用（1:1）
+ */
+const ejectionFormRef = ref<any>(null)
 const loading = ref(false)
 const submitting = ref(false)
 const loaded = ref(false)
@@ -417,32 +339,34 @@ const checked_assist_equipments = computed({
 // 字段定义
 // ============================================================================
 
+// 硬编码分类 select：显式 allowCreate: false，禁止用户创建无意义的自定义值
 const basicItems: FormItem[] = [
   { label: '模具编号', prop: 'mold_no', type: 'input' },
   { label: '模具名称', prop: 'mold_name', type: 'input' },
-  { label: '模具类型', prop: 'mold_type', type: 'select', options: moldTypeOptions },
-  { label: '模具类别', prop: 'category', type: 'select', options: moldCategoryOptions },
-  { label: '模具结构', prop: 'structure', type: 'select', options: moldStructureOptions },
-  { label: '注射次数', prop: 'shot_count', type: 'select', options: shotCountOptions },
+  { label: '模具类型', prop: 'mold_type', type: 'select', options: moldTypeOptions, allowCreate: false },
+  { label: '模具类别', prop: 'category', type: 'select', options: moldCategoryOptions, allowCreate: false },
+  { label: '模具结构', prop: 'structure', type: 'select', options: moldStructureOptions, allowCreate: false },
+  { label: '注射次数', prop: 'shot_count', type: 'select', options: shotCountOptions, allowCreate: false },
   { label: '模腔布局', prop: 'cavity_layout', type: 'input' },
   { label: '目标成型周期', prop: 'target_cycle_time', type: 'number', unit: 's', precision: 2 },
   { label: '客户机吨位', prop: 'recommended_tonnage', type: 'number', unit: 'Ton', precision: 0 },
   // "总注射重量" 故意不展示：多射下不同材料相加无意义，重量已在 GatingSystem 按射维护
   // 如需恢复：取消下一行注释
   // { label: '总注射重量', prop: 'total_injection_weight', type: 'number', unit: 'g', precision: 2 },
-  { label: '产品大类', prop: 'product_category', type: 'select', options: productMajorOptions },
-  { label: '产品中类', prop: 'product_subcategory', type: 'select', options: [] },  // 联动 mediumOptionsMap[product_category]
-  { label: '产品小类', prop: 'product_model', type: 'select', options: [] },  // 联动 minorOptionsMap[product_subcategory]
+  { label: '产品大类', prop: 'product_category', type: 'select', options: productMajorOptions, allowCreate: false },
+  { label: '产品中类', prop: 'product_subcategory', type: 'select', options: [], allowCreate: false },  // 联动 mediumOptionsMap[product_category]
+  { label: '产品小类', prop: 'product_model', type: 'select', options: [], allowCreate: false },  // 联动 minorOptionsMap[product_subcategory]
   { label: '产品描述', prop: 'product_description', type: 'textarea', span: 24, rows: 3 },
 ]
 
+// 硬编码分类 select 显式 allowCreate: false；规格值字段（定位圈外径等）保留 true
 const structureItems: FormItem[] = [
   { label: '模具长度', prop: 'mold_length', type: 'number', unit: 'mm', precision: 2 },
   { label: '模具宽度', prop: 'mold_width', type: 'number', unit: 'mm', precision: 2 },
   { label: '模具厚度', prop: 'mold_thickness', type: 'number', unit: 'mm', precision: 2 },
   { label: '模具重量', prop: 'mold_weight', type: 'number', unit: 'kg', precision: 2 },
-  { label: '吊装类型', prop: 'handling_type', type: 'select', options: liftingTypeOptions },
-  { label: '吊环规格', prop: 'handling_thread_size', type: 'select', options: liftingEyeBoltOptions },
+  { label: '吊装类型', prop: 'handling_type', type: 'select', options: liftingTypeOptions, allowCreate: false },
+  { label: '吊环规格', prop: 'handling_thread_size', type: 'select', options: liftingEyeBoltOptions, allowCreate: false },
   { label: '吊装点数量', prop: 'handling_point_count', type: 'integer', unit: '个', precision: 0 },
   { label: '定模定位圈外径', prop: 'locating_ring_outer_dia', type: 'number-select', options: locatingRingOuterDiaOptions, unit: 'mm' },
   { label: '定模定位圈内径', prop: 'locating_ring_inner_dia', type: 'number', unit: 'mm', precision: 2 },
@@ -450,11 +374,15 @@ const structureItems: FormItem[] = [
   { label: '动模定位圈外径', prop: 'mov_half_locating_ring_outer_dia', type: 'number-select', options: movingLocatingRingOuterDiaOptions, unit: 'mm' },
   { label: '动模定位圈内径', prop: 'mov_half_locating_ring_inner_dia', type: 'number', unit: 'mm', precision: 2 },
   { label: '动模定位圈高度', prop: 'mov_half_locating_ring_height', type: 'number', unit: 'mm', precision: 2 },
-  { label: '取件方式', prop: 'part_removal_action', type: 'select', options: partRemovalActionOptions },
+  { label: '取件方式', prop: 'part_removal_action', type: 'select', options: partRemovalActionOptions, allowCreate: false },
   { label: '开模行程', prop: 'recommended_opening_stroke', type: 'number', unit: 'mm', precision: 2 },
   { label: '流道分离距离', prop: 'runner_separation_distance', type: 'number', unit: 'mm', precision: 2 },
   { label: '最小锁模力', prop: 'min_clamping_force', type: 'number', unit: 'Ton', precision: 0 },
 ]
+
+// 自动分行（4 列布局，divider 自动占满一行）
+const basicRows = computed(() => groupIntoRows(basicItems, { columns: 4 }))
+const structureRows = computed(() => groupIntoRows(structureItems, { columns: 4 }))
 
 // ============================================================================
 // 验证规则
@@ -519,9 +447,33 @@ function goBack() {
 }
 
 async function handleSave() {
-  if (!formRef.value) return
+  // 1. 顶层表单验证（mold_no 等）
   try {
-    await formRef.value.validate()
+    await formRef.value?.validate()
+  } catch {
+    ElMessage.warning('请检查必填项')
+    return
+  }
+
+  // 2. 所有 GatingSystemForm 子表单验证（流道类别等）
+  for (const gatingForm of gatingFormRefs.value) {
+    try {
+      await gatingForm?.formRef?.validate()
+    } catch {
+      ElMessage.warning('请检查必填项')
+      return
+    }
+  }
+
+  // 3. 冷却系统 / 顶出系统子表单验证（预留扩展点，rules 当前为空）
+  try {
+    await coolingFormRef.value?.formRef?.validate()
+  } catch {
+    ElMessage.warning('请检查必填项')
+    return
+  }
+  try {
+    await ejectionFormRef.value?.formRef?.validate()
   } catch {
     ElMessage.warning('请检查必填项')
     return

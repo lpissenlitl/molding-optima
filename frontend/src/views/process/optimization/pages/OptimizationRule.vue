@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div>
     <el-card class="box-card">
       <div slot="header" class="clearfix">
@@ -110,7 +110,7 @@
           :current-page="keywordQuery.page_no"
           :page-size="keywordQuery.page_size"
           :total="keywordQuery.total"
-          :page-sizes="$store.state.app.pageSizeArray"
+          :page-sizes="$pageSizeArray"
           @size-change="handleKeywordSizeChange"
           @current-change="handleKeywordCurrentChange"
         />
@@ -277,8 +277,7 @@
                     </el-button>
                   </div>
                   <div v-else-if="item.prop === 'enable'">
-                    <el-button 
-                      type="text" 
+                    <el-button type="text" 
                       size="small" 
                       :style="scope.row[item.prop] === 1 ? 'color: lime' : 'color: gray'"
                       @click="updateRuleMethodEnable(scope.row.id, scope.row[item.prop])"
@@ -298,7 +297,7 @@
             :current-page="methodQuery.page_no"
             :page-size="methodQuery.page_size"
             :total="methodQuery.total"
-            :page-sizes="$store.state.app.pageSizeArray"
+            :page-sizes="$pageSizeArray"
             @size-change="handleMethodSizeChange"
             @current-change="handleMethodCurrentChange"
           />

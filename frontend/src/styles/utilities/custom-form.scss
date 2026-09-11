@@ -113,7 +113,7 @@
  * - 全局响应式必须用 !important 才能覆盖业务方可能写的局部样式
  * - 仅在 @media 内生效，不污染默认布局
  * ============================================================ */
-@media (max-width: 1199px) {
+@media (max-width: 1299px) {
   /*
    * 中屏：CSS Grid auto-fit 接管
    *
@@ -148,8 +148,6 @@
     grid-template-columns: 1fr !important;
   }
 }
-
-
 
 /* ============================================================
  * 3. 大表单底部操作栏（fixed bottom）
@@ -306,5 +304,101 @@
      * - 不要全局覆盖为 cavity 背景，会破坏白底页面的默认表现
      * - cavity-block 内的 divider 在 GatingCavityPanel.vue 用 :deep() 局部覆盖
      */
+  }
+
+  /*
+   * 强调样式的 icon（notice=true）— 2026-09-09 引入
+   * - 纯装饰，左边框 + 整行背景由 .custom-form__notice-col :has() 控制
+   * - 这样所有 notice 分组的字段都共享同一块背景，不只在 divider 行
+   * - aria-hidden 仅装饰
+   */
+  &-icon {
+    display: inline-block;
+    margin-right: 6px;
+    color: var(--el-color-primary);
+    font-size: 14px;
+  }
+}
+
+/*
+ * divider 下方的说明 alert
+ * - 注意：alert 是 divider 的兄弟（都在 el-col 内），不是后代，不能嵌套在 .custom-form__divider 里
+ * - margin-bottom: 20px 与下方字段保持呼吸
+ * - 上方间距交给 el-divider 自带 margin（.custom-form__divider 设了 24px）
+ */
+.custom-form__divider-alert {
+  margin: 0 0 20px;
+}
+
+/*
+ * notice section（独立 div 包裹，整组带背景）— 2026-09-09 引入
+ *
+ * 参考 mold 的 .cavity-block（GatingCavityPanel.vue）设计语言：
+ * - 边框 + 浅背景色 + 圆角，区别于普通 divider 仅为“标题”
+ * - 不嵌套 el-card（项目统一规范：仅顶层 section 使用 el-card）
+ * - 业务方在 divider 上设 notice: true 即可，无需重构 grid 算法
+ *
+ * 视觉规范：
+ * - border + 背景色：var(--color-border-light) + var(--color-bg-overlay)
+ *   （项目 design token，与 mold cavity-block 一致）
+ * - 圆角 6px（与 mold cavity-block 一致）
+ * - 内边距 16px（与 mold cavity-block 一致）
+ * - el-divider 文字背景覆盖：默认白色与浅背景不一致，需覆盖为同色
+ */
+.custom-form__notice-section {
+  margin: 16px 0;
+  padding: 16px;
+  background-color: var(--color-bg-overlay, #f5f7fa);
+  border: 1px solid var(--color-border-light, #e4e7ed);
+  border-radius: 6px;
+
+  /*
+   * 覆盖 divider text 背景色（默认白色，与浅背景突兀）
+   * 参考 GatingCavityPanel.vue :deep(.custom-form__divider .el-divider__text) 的实现
+   * 但本文件是全局 SCSS，不需要 :deep()
+   */
+  .custom-form__divider {
+    margin-top: 0;
+    margin-bottom: 16px;
+
+    .el-divider__text {
+      background-color: var(--color-bg-overlay, #f5f7fa);
+    }
+  }
+
+  .custom-form__divider-alert {
+    margin-top: -4px;
+    margin-bottom: 16px;
+  }
+
+  /*
+   * 强调图标（★）— 主题色装饰，与 cavity-block 的图标风格一致
+   */
+  .custom-form__divider-icon {
+    display: inline-block;
+    margin-right: 6px;
+    color: var(--el-color-primary);
+    font-size: 14px;
+  }
+}
+
+/*
+ * notice section 内的字段网格 — 4 列响应式布局
+ * - 默认 4 列（> 1299px）
+ * - auto-fit 适应中屏（600-1299px）
+ * - 单列适应窄屏（< 600px）
+ * 与项目内其他表单网格保持一致的设计语言
+ */
+.custom-form__notice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0 24px;
+
+  @media (max-width: 1299px) {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  @media (max-width: 599px) {
+    grid-template-columns: 1fr;
   }
 }

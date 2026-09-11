@@ -2,8 +2,8 @@
   ProjectForm - 项目表单页（新建 + 编辑共用）
 
   路由：
-    - /project/new           新建模式
-    - /project/:id/edit      编辑模式（自动加载详情）
+    - /mold/project/new           新建模式
+    - /mold/project/:id/edit      编辑模式（自动加载详情）
 
   设计要点：
     - 单文件处理两种模式（避免 create / edit 两份重复代码）
@@ -308,12 +308,12 @@ async function loadDetail() {
       loaded.value = true
     } else {
       ElMessage.error(res.msg || '加载项目详情失败')
-      router.push('/project/list')
+      router.push('/mold/project/list')
     }
   } catch (err: any) {
     console.error('[ProjectForm] loadDetail failed:', err)
     ElMessage.error(err?.message || '加载项目详情异常')
-    router.push('/project/list')
+    router.push('/mold/project/list')
   } finally {
     loading.value = false
   }
@@ -324,7 +324,7 @@ async function loadDetail() {
 // ============================================================================
 
 function goBack() {
-  router.push('/project/list')
+  router.push('/mold/project/list')
 }
 
 async function handleSubmit() {
@@ -351,7 +351,7 @@ async function handleSubmit() {
 
     if (res.status === 0) {
       ElMessage.success(is_edit.value ? '保存成功' : '创建成功')
-      router.push('/project/list')
+      router.push('/mold/project/list')
     } else {
       ElMessage.error(res.msg || (is_edit.value ? '保存失败' : '创建失败'))
     }

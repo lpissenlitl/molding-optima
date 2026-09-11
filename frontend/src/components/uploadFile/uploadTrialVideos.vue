@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="upload-trial-videos">
     <!-- 上传触发区 -->
     <el-upload
@@ -48,8 +48,7 @@
           :stroke-width="12"
           style="width: 120px; margin-right: 8px"
         />
-        <el-button
-          type="text"
+        <el-button type="text"
           size="small"
           @click="abortUpload(file)"
         >
@@ -58,8 +57,7 @@
       </div>
       <!-- 上传失败状态 -->
       <div v-else-if="file.error" class="action-area">
-        <el-button
-          type="text"
+        <el-button type="text"
           size="small"
           @click="retryUpload(file)"
         >

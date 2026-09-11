@@ -40,8 +40,7 @@ DEMO_RULES = [
     # --- 工厂级：PE 酒瓶精确规则 ---
     {
         'library_code': 'packaging',
-        'rule_code': 'demo_shortshot_PE_bottle_factory',
-        'subrule_no': 'packaging/shortshot',
+        'rule_no': 'RM-DEMO-001',
         'priority': 10.0,    # L1 精确协议
         'rule_level': 'factory',
         'defect_name': 'SHORTSHOT',
@@ -70,8 +69,7 @@ DEMO_RULES = [
     # --- 工厂级：PE 通用（不限定产品）的短射规则 ---
     {
         'library_code': 'packaging',
-        'rule_code': 'demo_shortshot_PE_factory',
-        'subrule_no': 'packaging/shortshot',
+        'rule_no': 'RM-DEMO-002',
         'priority': 5.0,    # L2 部分-polymer 协议
         'rule_level': 'factory',
         'defect_name': 'SHORTSHOT',
@@ -100,8 +98,7 @@ DEMO_RULES = [
     # --- 兜底层：跨产品通用兜底规则 ---
     {
         'library_code': 'general',
-        'rule_code': 'demo_shortshot_general_fallback',
-        'subrule_no': 'general/shortshot',
+        'rule_no': 'RM-DEMO-003',
         'priority': 1.0,    # L4 默认协议
         'rule_level': 'fallback',
         'defect_name': 'SHORTSHOT',
@@ -129,8 +126,7 @@ DEMO_RULES = [
     # --- 工厂级：飞边通用规则 ---
     {
         'library_code': 'general',
-        'rule_code': 'demo_flash_general_factory',
-        'subrule_no': 'general/flash',
+        'rule_no': 'RM-DEMO-004',
         'priority': 10.0,
         'rule_level': 'factory',
         'defect_name': 'FLASH',
@@ -195,28 +191,28 @@ class Command(BaseCommand):
             library_code = rule_data.pop('library_code')
             library = RuleLibrary.objects.get(library_code=library_code)
 
-            rule_code = rule_data['rule_code']
+            rule_no = rule_data['rule_no']
             exists = RuleMethod.objects.filter(
                 rule_library=library,
-                rule_code=rule_code,
+                rule_no=rule_no,
             ).exists()
 
             if exists:
                 if force_update:
-                    rm = RuleMethod.objects.get(rule_library=library, rule_code=rule_code)
+                    rm = RuleMethod.objects.get(rule_library=library, rule_no=rule_no)
                     for k, v in rule_data.items():
                         setattr(rm, k, v)
                     rm.save()
                     updated += 1
-                    self.stdout.write(self.style.WARNING(f'  更新: {rule_code}'))
+                    self.stdout.write(self.style.WARNING(f'  更新: {rule_no}'))
                 else:
                     skipped += 1
-                    self.stdout.write(f'  跳过(已存在): {rule_code}')
+                    self.stdout.write(f'  跳过(已存在): {rule_no}')
                 continue
 
             RuleMethod.objects.create(rule_library=library, **rule_data)
             imported += 1
-            self.stdout.write(self.style.SUCCESS(f'  新增: {rule_code}'))
+            self.stdout.write(self.style.SUCCESS(f'  新增: {rule_no}'))
 
         # 3) 提示用户配置 RuleKeyword.step
         self.stdout.write('\n=== 后续操作提示 ===')
@@ -244,6 +240,6 @@ class Command(BaseCommand):
                 defect_name=defect,
                 polymer_category=polymer,
                 product_category=product,
-                enable=True,
+                is_active=True,
             )
             self.stdout.write(f'  {label}: 命中 {qs.count()} 条')

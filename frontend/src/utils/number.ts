@@ -44,6 +44,7 @@ export function formatNumber(
     } else if (/\d/.test(char)) {
       clean += char
     }
+    // 非数字非小数点字符静默丢弃（含中文、字母、特殊符号等）
   }
 
   if (clean === "") return strict ? "0" : defaultBlankRet

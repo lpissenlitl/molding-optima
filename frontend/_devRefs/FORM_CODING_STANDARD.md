@@ -369,7 +369,11 @@ const cardRows = computed(() => formCards.map((card) => ({
 | 文件 | 状态 | 备注 |
 |------|------|------|
 | `views/project/form.vue` | ✅ **已迁移**，作为标准范例 | 完整落地所有规范 |
-| `views/mold/pages/MoldForm.vue` | ⚠️ 待迁移 | 嵌套结构（`Mold → GatingSystem → Cavity`），将考验规范灵活度 |
+| `views/mold/pages/MoldForm.vue` | ✅ **已迁移**（嵌套结构考验规范灵活度）| 5 个 el-card 平铺 + groupIntoRows + FormFieldRenderer + 三级 rules 验证 |
+| `views/mold/components/GatingSystemForm.vue` | ✅ **已迁移** | FormFieldRenderer + 3 层 el-collapse + 流道类别必填 |
+| `views/mold/components/CoolingSystemForm.vue` | ✅ **已迁移** | FormFieldRenderer + groupIntoRows + formRef/rules/expose |
+| `views/mold/components/EjectionSystemForm.vue` | ✅ **已迁移** | FormFieldRenderer + groupIntoRows + formRef/rules/expose |
+| `views/mold/components/FormFieldRenderer.vue` | ✅ **新增**（2026-09-08）| 通用字段渲染器，消除 cavity/gate 及各表单中的重复 v-else-if 链 |
 | `views/polymer/pages/PolymerForm.vue` | ⚠️ 待迁移 | 旧 `:inline="true"` 写法 |
 | `views/equipment/pages/InjectionMachineForm.vue` | ⚠️ 待迁移 | 旧 `:inline="true"` 写法 |
 | `views/admin/pages/RoleCreate.vue` 等 | ✅ 无 page-header h2 | 与本规范一致 |

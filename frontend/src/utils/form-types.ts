@@ -50,6 +50,12 @@
  *   placeholder 占位文本（可选；推荐用 helper.getPlaceholder 自动生成）
  *   disabled    禁用（布尔或函数；用于“项目编号在编辑模式禁用”等场景）
  *   rules       Element Plus 验证规则数组（可选；动态汇总到顶层 rules）
+ *                 示例：[{ required: true, message: '请输入', trigger: 'blur' }]
+ *                 详细形式：覆盖 required 简化形式（如需 pattern / validator）
+ *   required    是否必填（简化形式；FormFieldRenderer 渲染时自动给 el-form-item 加红色星号）
+ *                 - true: el-form-item 显示必填星号 + 触发空值验证（与 rules: [{required:true,...}] 等效）
+ *                 - undefined/false: 非必填
+ *                 注意：required 只是视觉提示，真正的规则需配合 rules 属性才能产生错误提示
  *   rows        textarea 行数（type=textarea 时可选，默认 4）
  *   default     字段默认值（可选；用于 form 初始化）
  *   unit        后缀单位（type=number/integer 可选；显示在输入框右侧 suffix）
@@ -78,13 +84,57 @@ export interface FormItem {
   placeholder?: string
   disabled?: boolean | ((item: FormItem) => boolean)
   rules?: any[]
+  /**
+   * 是否必填（简化形式，2026-09-08 引入）
+   * - 由 FormFieldRenderer 渲染时传给 el-form-item 的 required 属性
+   * - 视觉上显示红色星号
+   * - 真正的验证需要 rules：[{ required: true, message: '...', trigger: '...' }]
+   * - 仅 required=true 时 el-form-item 不会自动产生验证错误提示
+   */
+  required?: boolean
+  /**
+   * select 是否允许创建新选项（默认 true，2026-09-08 引入）
+   * - false: 只能从 options 中选（如注射次数、模具结构等硬编码分类）
+   * - true: 允许用户输入自定义值（如规格、备注等场景）
+   * - 设计原则：硬编码分类应显式设 false，避免误创建无意义的数据
+   */
+  allowCreate?: boolean
   rows?: number
   default?: any
   unit?: string
   min?: number
   max?: number
   precision?: number
-  query?: string | ((queryString: string, cb: (suggestions: any[]) => void) => void)
+  /**
+   * 自动补全数据源（type=autocomplete 必填）
+   * - object（如 { table, column }）：传给后端 `/selection-options` 接口的参数（默认）
+   * - function：自定义查询函数（(queryString, cb) => cb(suggestions)）
+   * - string：后端查询 endpoint（预留，暂未使用）
+   *
+   * 推荐使用 object 形式，配合 helper `querySuggestions(item.query)` 自动调用全局 mixin。
+   */
+  query?: string | object | ((queryString: string, cb: (suggestions: any[]) => void) => void)
+  /**
+   * 动态单位（2026-09-09 引入）
+   * - 用于从模型另一字段读取单位作为后缀显示
+   * - 例如 dynamicUnit: 'pressure_unit' 表示后缀显示 injectionUnit[pressure_unit] 的值
+   * - 与 unit 互斥：有 unit 时优先用 unit；都没有时不显示后缀
+   * - 用例：HMI 可设定范围字段随单位系统字段联动
+   */
+  dynamicUnit?: string
+  /**
+   * divider 分组说明文字（2026-09-09 引入）
+   * - 仅 divider 类型生效：在 divider 下方渲染 el-alert 提示
+   * - 用于向使用者解释该分组的语义（如“为什么有设备参数 vs 面板参数”）
+   */
+  description?: string
+  /**
+   * divider 是否需要“强调样式”（2026-09-09 引入）
+   * - 仅 divider 类型生效：true 时用浅色背景 + 左边框包裹该分组
+   * - 用于突出显示“参数难获取”或“使用频率高”的分组
+   * - 视觉上与普通 divider 分组区分，引导用户注意
+   */
+  notice?: boolean
 }
 
 /**

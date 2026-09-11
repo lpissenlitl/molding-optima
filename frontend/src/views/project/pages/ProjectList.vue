@@ -1,9 +1,9 @@
-<!--
+﻿<!--
   项目管理 - 列表页
   - 搜索表单：复用 BaseSearchForm（与 mold 模块的 MoldSearchForm 风格统一）
   - 列表（编号、状态、来源、名称、关联模具、客户、行业、量产地、项目经理、创建日期）
   - 操作列：编辑、删除、新增关联模具
-  - 新建项目（跳转 /project/new）
+  - 新建项目（跳转 /mold/project/new）
 -->
 <template>
   <div class="project-list">
@@ -80,7 +80,7 @@
 
       <!-- 行操作列 -->
       <template #append-columns>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <span class="row-action-buttons">
               <el-button type="text" @click="goMoldCreate(row)">
@@ -145,12 +145,12 @@ const selected_rows = ref<any[]>([])
 // 列定义
 const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '项目编号', prop: 'project_code', minWidth: 180, align: 'center', sortable: true, tooltip: false, filterable: false },
-  { visible: true, label: '项目状态', prop: 'status', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: true },
-  { visible: true, label: '项目来源', prop: 'source', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '项目状态', prop: 'status', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: false },
+  { visible: true, label: '项目来源', prop: 'source', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '项目名称', prop: 'project_name', minWidth: 200, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '关联模具', prop: 'mold_no', minWidth: 140, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '客户名称', prop: 'initiator', minWidth: 160, align: 'left', header_align: 'center', sortable: false, tooltip: true, filterable: false },
-  { visible: true, label: '应用行业', prop: 'application_industry', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: true },
+  { visible: true, label: '应用行业', prop: 'application_industry', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '量产地', prop: 'manufacturing_location', minWidth: 130, align: 'center', sortable: false, tooltip: true, filterable: false },
   { visible: true, label: '项目经理', prop: 'project_manager', minWidth: 110, align: 'center', sortable: false, tooltip: false, filterable: false },
   { visible: true, label: '创建日期', prop: 'created_at', minWidth: 170, align: 'center', sortable: true, tooltip: true, filterable: false },
@@ -255,11 +255,11 @@ function syncExternalUniqueValues() {
 // ============================================================================
 
 function goCreate() {
-  router.push('/project/new')
+  router.push('/mold/project/new')
 }
 
 function goEdit(row: any) {
-  router.push(`/project/${row.id}/edit`)
+  router.push(`/mold/project/${row.id}/edit`)
 }
 
 async function deleteProject(row: any) {

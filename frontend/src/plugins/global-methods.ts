@@ -37,6 +37,9 @@ import { querySuggestions } from '@/utils/data-fetcher'
 // 日期库
 import dayjs from 'dayjs'
 
+// App Store（仅需 pageSizeArray，其它 AppStore 字段不挂在全局）
+import { useAppStore } from '@/stores/app'
+
 /**
  * 安装全局方法（Vue 3 风格）
  */
@@ -63,4 +66,8 @@ export default function installGlobalMethods(app: App) {
 
   // 日期库
   app.config.globalProperties.$dayjs = dayjs
+
+  // 分页大小选项（兼容旧 $store.state.app.pageSizeArray）
+  // 代替旧 Vuex store/modules/app.ts，配置在 Pinia app store 中
+  app.config.globalProperties.$pageSizeArray = useAppStore().pageSizeArray
 }

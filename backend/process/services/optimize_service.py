@@ -37,7 +37,7 @@ DEFECT_OPTIMIZATION_HINTS = {
 }
 
 
-# 中文缺陷名 → 英文 defect_name 译文表（与 RuleMethod.defect_name 对齐）
+# 中文缺陷名 → 英文 defect_code 译文表（与 RuleMethod.defect_code 对齐）
 DEFECT_NAME_MAP = {
     "短射": "SHORTSHOT",
     "缩水": "SINK_MARK",
@@ -82,7 +82,7 @@ PROCESS_PARAM_FIELDS = (
 
 
 def translate_defect_name(chinese_name: str) -> str:
-    """中文缺陷名 → 英文 defect_name（供 FuzzyEngine 查询 RuleMethod）。"""
+    """中文缺陷名 → 英文 defect_code（供 FuzzyEngine 查询 RuleMethod）。"""
     if not chinese_name:
         return ""
     if chinese_name in DEFECT_NAME_MAP:
@@ -167,16 +167,15 @@ def add_process_optimization(
     matched_rules = []
     if target_defect:
         rules = RuleMethod.objects.filter(
-            defect_name=target_defect,
-            enable=1,
+            defect_label=target_defect,
+            is_active=True,
             is_deleted=False,
         ).order_by("-priority")
         for rule in rules:
             matched_rules.append({
                 "id": rule.id,
-                "rule_type": rule.rule_type,
                 "rule_description": rule.rule_description,
-                "defect_name": rule.defect_name,
+                "defect_label": rule.defect_label,
                 "priority": rule.priority,
             })
 
@@ -293,7 +292,7 @@ def _infer_via_fuzzy_engine(
     except Exception as e:  # noqa: BLE001
         _logger.warning("[optimize_service] iteration_trend 分析失败: %s", e)
 
-    # 4. 从 process_context_snapshot 读取 polymer_category / product_category
+    # 4. 从 process_context_snapshot 读取 polymer_abbreviation / product_category
     overrides = {}
     snapshot = getattr(condition, 'process_context_snapshot', None) or {}
     if isinstance(snapshot, dict):
@@ -304,7 +303,7 @@ def _infer_via_fuzzy_engine(
         "defect_feedbacks": [{"defect_name": defect_name_en}],
         "process_parameter": parameter_snapshot,
         "iteration_trend": trend_dict,
-        "polymer_category": overrides.get("polymer_category"),
+        "polymer_abbreviation": overrides.get("polymer_abbreviation"),
         "product_category": overrides.get("product_category"),
         "rule_library_code": overrides.get("rule_library_code"),
     }

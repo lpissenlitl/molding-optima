@@ -30,7 +30,7 @@ def _get_injection_machine(injection_machine_id: int) -> InjectionMoldingMachine
     injection_machine_id = validate_pk(injection_machine_id, "注塑机ID")
     injection_machine = InjectionMoldingMachine.objects.filter(
         pk=injection_machine_id
-    ).select_related("time_standard").prefetch_related(
+    ).prefetch_related(
         "injection_units"
     ).first()
     if not injection_machine:

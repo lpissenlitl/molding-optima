@@ -52,28 +52,39 @@ class ApiMiddleware(MiddlewareMixin):
         return None
     
     def process_response(
-        self, 
-        request: HttpRequest, 
+        self,
+        request: HttpRequest,
         response: Union[ HttpResponse, dict, list, str, int, float, bool, None ]
     ):
         """记录请求结束时间，封装响应数据"""
         # 获取请求结束时间（毫秒）
         request.outgoing_ts = int(datetime.now().timestamp() * 1000)
-        
+
         if request.DATA and request.DATA != {}:
             delta_ts = request.outgoing_ts - request.incoming_ts
             # _LOGGER.info(f"URL: {request.method.upper()}:{request.path}, Duration:{delta_ts}ms, params:{request.DATA}")
 
+        # 透传 token 滑动续期后的最新过期时间（get_user_by_token 鉴权成功时会设置）
+        # 前端 request.ts 拦截器读取后同步到 userStore.token_expires_at
+        # 仅在 ISO 格式有效时设置，避免 None / 其他异常值被透传
+        token_expires_at = getattr(request, "token_expires_at", None)
+        token_expires_header = token_expires_at.isoformat() if token_expires_at else None
+
         if isinstance(response, (dict, list, str)) or is_dataclass(response):
-            return JsonResponse({
+            json_response = JsonResponse({
                 "status": 0,
                 "msg": "OK",
                 "timestamp": datetime.now().timestamp(),
                 "data": response
             }, encoder=JsonEncoder)
+            if token_expires_header:
+                json_response["X-Token-Expires-At"] = token_expires_header
+            return json_response
         elif response is None:
             return HttpResponse("")
         else:
+            if token_expires_header:
+                response["X-Token-Expires-At"] = token_expires_header
             return response
     
     def process_exception(self, request: HttpRequest, exception: Exception):

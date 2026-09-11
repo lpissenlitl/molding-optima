@@ -1,13 +1,81 @@
 # MoldingX 前端代码规范
 
-> **版本**: 1.0.0  
-> **更新时间**: 2026-06-10  
-> **适用范围**: molding-expert-web 项目
+> **版本**: 1.1.0  
+> **更新时间**: 2026-09-08  
+> **适用范围**: molding-expert-web / molding-optima 项目  
+> **变更**: 1.1.0 合并原 `CODING_STANDARDS_QUICK_REF.md`，新增顶部「快速参考」区
+
+---
+
+## ⏩ 快速参考（速查表）
+
+> 💡 **快速查找关键规范** · 详细内容请查看对应章节
+
+### 命名规范（一句话）
+
+| 类型 | 规则 | 示例 |
+|------|------|------|
+| **Data / Computed 变量** | 下划线（snake_case） | `mold_no`, `query_params`, `is_expanded` |
+| **Methods 方法** | 驼峰（camelCase） | `handleSearch`, `handleReset`, `toggleExpand` |
+| **组件文件名** | PascalCase | `MoldSearchForm.vue`, `BaseSearchForm.vue` |
+| **Props / Events** | Props 简洁通用；Events kebab-case | `query`, `@expand-change` |
+| **常量** | 全大写下划线 | `MAX_RETRY_COUNT`, `MOLD_CATEGORY_OPTIONS` |
+
+### 组件结构顺序（Vue SFC）
+
+```vue
+<template>...</template>
+
+<script>
+// 1. imports → 2. name → 3. components → 4. props → 5. data
+// 6. computed → 7. watch → 8. lifecycle → 9. methods
+</script>
+
+<style lang="scss" scoped>...
+```
+
+### 样式三原则
+
+1. **始终使用 `scoped`**（避免污染）
+2. **优先使用 CSS 变量**（如 `var(--spacing-4)`）
+3. **全局样式在 `index.scss`**
+
+### API 调用模板
+
+```javascript
+// src/api/mold.js
+export function getMoldList(params) {
+  return request({ url: '/api/molds/', method: 'get', params })
+}
+```
+
+### 关键最佳实践
+
+| 场景 | 正确做法 | 错误做法 |
+|------|---------|---------|
+| 模板中复杂逻辑 | 使用 `computed` | `v-if="items.filter(...).length > 0"` |
+| 异步操作 | `async/await` + `try/catch` | `.then().catch()` |
+| 可选属性 | `this.mold_info?.mold_name` | 长链 `&&` 判断 |
+| 定时器 | `beforeDestroy` 中清理 | 不清理导致内存泄漏 |
+| 常量管理 | `src/constants/mold-const.js` | 在组件中硬编码 |
+
+### ⚠️ 常见错误表
+
+| 错误 | 正确做法 |
+|------|---------|
+| `queryParams`（驼峰 data） | `query_params`（下划线） |
+| `handle_search()`（下划线 method） | `handleSearch()`（驼峰） |
+| `mold-search-form.vue`（kebab） | `MoldSearchForm.vue`（Pascal） |
+| 模板中写复杂逻辑 | 使用 `computed` |
+| 直接修改 props | 通过 `$emit` 通知父组件 |
+| 忘记清理定时器 | `beforeDestroy` 中清理 |
+| 样式不加 scoped | 始终使用 scoped |
 
 ---
 
 ## 📋 目录
 
+- [⏩ 快速参考](#⏩-快速参考速查表)
 - [1. 命名规范](#1-命名规范)
 - [2. 组件开发规范](#2-组件开发规范)
 - [3. Vue 组件结构规范](#3-vue-组件结构规范)
@@ -823,8 +891,9 @@ data() {
 | 版本 | 日期 | 更新内容 | 作者 |
 |------|------|---------|------|
 | 1.0.0 | 2026-06-10 | 初始版本，包含命名规范、组件规范、样式规范等 | MoldingX Team |
+| 1.1.0 | 2026-09-08 | 合并 `CODING_STANDARDS_QUICK_REF.md` 到顶部「快速参考」区；适用范围扩展至 molding-optima | MoldingX Team |
 
 ---
 
-**最后更新**: 2026-06-10  
+**最后更新**: 2026-09-08  
 **维护者**: MoldingX Team
