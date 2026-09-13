@@ -1,0 +1,167 @@
+/* ============================================================
+ * Subsection Block - 子区块容器样式（全局 utility）
+ *
+ * 用途：
+ *   作为 el-card > el-form 下的二级分组容器
+ *   例：基本信息 / 工艺参数 / 浇注系统 / 制品 / 浇口
+ *
+ * 用法：
+ *   <div class="subsection-block">
+ *     <div class="subsection-block__header">
+ *       <span class="subsection-block__title">
+ *         <AppIcon icon="mdi:info" />
+ *         标题
+ *       </span>
+ *     </div>
+ *     <el-row :gutter="24" class="subsection-block__content">
+ *       <el-col :md="6"><DerivedField ... /></el-col>
+ *       ...
+ *     </el-row>
+ *   </div>
+ *
+ * 命名空间（BEM）：
+ *   .subsection-block               L3 一级子区块（白底 + 边框 + 圆角）
+ *   .subsection-block--nested       L4 嵌套变体（透明背景 + 左边线）
+ *   .subsection-block--deep-nested  L5 深层嵌套（更浅边线 + 更小间距）
+ *
+ * 设计要点：
+ *   - L3 / L4 / L5 三层视觉差异通过"边线粗细 + 缩进"表达
+ *     而不是用 border 框 → 避免层叠时视觉噪声过重
+ *   - 相邻 subsection-block 之间使用 & + &（相邻兄弟选择器）
+ *     自动获得 16px 间距，无需在每个 area 单独设置 margin-top
+ *   - 移动端嵌套变体的 margin-left 归零，避免在窄屏上挤压
+ *
+ * 引入位置：src/main.ts（全局）
+ * ============================================================ */
+
+
+/*
+* 三个 area（模具 / 注塑机 / 材料）之间的间距
+* - 首个 area 不需要上方间距（紧跟 card body padding）
+* - 仅对"前一个兄弟也是 .area-section"的元素生效
+*/
+.area-section + .area-section {
+  margin-top: 24px;
+}
+
+
+/*
+* L3 一级子区块（最常见）
+* - 白底 + 浅边框 + 圆角
+* - 与 area 平铺背景形成"卡片 / 子卡片"的层次
+*/
+.subsection-block {
+  border: 1px solid var(--color-border-light, #e4e7ed);
+  border-radius: 6px;
+  padding: 16px;
+  background-color: #ffffff;
+
+  /*
+  * 相邻 subsection-block 间的间距
+  * 使用相邻兄弟选择器（& + &）：只对"上一个兄弟元素也是 .subsection-block"的元素生效
+  * 避免给首个 subsection-block 添加多余顶部外边距（通常下面有主选）
+  */
+  & + & {
+    margin-top: 16px;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  &__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--el-text-color-primary, #303133);
+  }
+
+  /*
+  * 标题后的次要说明（如"（第 1 射）"、"（中石化）"）
+  * - 与主标题区分：灰色 + 小号 + 不加粗
+  */
+  &__shot {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--el-text-color-regular, #606266);
+    margin-left: 4px;
+  }
+
+  /*
+  * 内容容器（el-row 包装）
+  * - 保持透明背景，避免与父级白底冲突
+  */
+  &__content {
+    background-color: transparent;
+  }
+
+  /*
+  * subsection 内部的小分隔线（行间分组用）
+  * - 浅色 + 紧凑 margin
+  */
+  &__divider {
+    margin: 14px 0;
+    background-color: var(--color-border-extra-light, #ebeef5);
+  }
+
+  /*
+  * L4 嵌套变体：左缩进 + 主题色左边线
+  * - 用于"制品信息"嵌套于"浇注系统"内（制品是浇注系统下的子选择）
+  * - 无背景 / 无边框 / 只保留左侧 3px 主题色竖条
+  * - 视觉上看是"在父容器内的内嵌区域"，与 L3 的"独立卡片"形成层次
+  */
+  &--nested {
+    margin-top: 16px;
+    margin-left: 16px;
+    padding: 12px 16px;
+    background-color: transparent;
+    border: none;
+    border-left: 3px solid var(--el-color-primary-light-5, #c0d8f0);
+    border-radius: 0;
+
+    .subsection-block__header {
+      margin-bottom: 8px;
+    }
+
+    .subsection-block__title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+  }
+
+  /*
+  * L5 深层嵌套变体：更浅边线 + 更小间距
+  * - 用于"浇口"嵌套于"制品信息"内（浇口是制品下的子详情）
+  * - 比 L4 进一步缩进 + 边线更浅，传达"再下一级"
+  */
+  &--deep-nested {
+    margin-top: 12px;
+    margin-left: 32px;
+    padding: 10px 16px;
+    border-left: 2px solid var(--el-color-primary-light-7, #d8e8f8);
+  }
+}
+
+
+/*
+* 响应式优化：移动端取消嵌套变体的左缩进
+* - 避免在窄屏上嵌套层级把内容挤到屏幕外
+* - 边线保留（视觉层次仍可识别）
+*/
+@media (max-width: 768px) {
+  .subsection-block {
+    &--nested {
+      margin-left: 0;
+      padding-left: 12px;
+    }
+
+    &--deep-nested {
+      margin-left: 0;
+      padding-left: 12px;
+    }
+  }
+}

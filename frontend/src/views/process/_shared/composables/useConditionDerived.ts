@@ -33,7 +33,7 @@ import type {
   CavitySummary,
   GateSummary,
   InjectionUnitSummary,
-} from '../ProcessCondition.vue'
+} from '../types'
 
 export interface ConditionDerived {
   // === 索引（0 索引，从 condition.* 直接取） ===

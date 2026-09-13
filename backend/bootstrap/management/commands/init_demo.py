@@ -786,7 +786,8 @@ DEMO_FILLERS = [
 
 
 # ----------------------------------------------------------------------------
-# 注塑机（injection_molding_machine）—— 简化版（不展开嵌套 injection_units）
+# 注塑机（injection_molding_machine）—— 含嵌套 injection_units（射台信息）
+# 射台规格见下方 DEMO_INJECTION_UNITS，按 device_no 关联
 # ----------------------------------------------------------------------------
 DEMO_INJECTION_MACHINES = [
     {
@@ -975,6 +976,62 @@ DEMO_INJECTION_MACHINES = [
 ]
 
 
+# ----------------------------------------------------------------------------
+# 注射单元（injection_unit）—— 按注塑机 device_no 映射
+# 设计：
+# - 键为注塑机的 device_no，值为该机器每个射台的规格列表
+# - 列表顺序即为射台编号（idx=0 对应第 1 射台）
+# - 列表长度应与对应机器的 unit_count 一致
+# - unit_code 自动生成："{device_no}-U{idx+1}"（idx 为 0-based）
+# 规格选型参考：
+# - 螺杆直径按吨位近似（160T→Φ36、200T→Φ40、双射台一大一小）
+# - 注射行程/射胶量与螺杆直径对应（行程 ~5.5×Φ，重量按 PS 密度换算）
+# ----------------------------------------------------------------------------
+DEMO_INJECTION_UNITS = {
+    # 160T 海天 MA1600/540 —— 液压、单射台、肘杆锁模
+    "IMM-DEMO-001": [
+        {
+            "nozzle_type": "直通式",
+            "screw_type": "通用型",
+            "screw_diameter": 36.0,
+            "max_injection_stroke": 200.0,
+            "max_injection_weight": 240.0,
+            "plasticizing_capacity": 80.0,
+        },
+    ],
+    # 200T 长飞亚 Zeres 200T —— 全电动、单射台、伺服锁模
+    "IMM-DEMO-002": [
+        {
+            "nozzle_type": "针阀式",
+            "screw_type": "混炼型",
+            "screw_diameter": 40.0,
+            "max_injection_stroke": 220.0,
+            "max_injection_weight": 320.0,
+            "plasticizing_capacity": 100.0,
+        },
+    ],
+    # 200T 伊之密 UN200A —— 液压、双射台
+    "IMM-DEMO-003": [
+        {  # 第 1 射台（大）
+            "nozzle_type": "直通式",
+            "screw_type": "通用型",
+            "screw_diameter": 36.0,
+            "max_injection_stroke": 200.0,
+            "max_injection_weight": 240.0,
+            "plasticizing_capacity": 80.0,
+        },
+        {  # 第 2 射台（小）
+            "nozzle_type": "针阀式",
+            "screw_type": "通用型",
+            "screw_diameter": 32.0,
+            "max_injection_stroke": 180.0,
+            "max_injection_weight": 200.0,
+            "plasticizing_capacity": 70.0,
+        },
+    ],
+}
+
+
 class Command(BaseCommand):
     help = "molding-optima demo 数据初始化（基于 system_demo 公司）"
 
@@ -1034,7 +1091,7 @@ class Command(BaseCommand):
         """
         from masterdata.models import (
             Project, Mold, Polymer, Filler,
-            InjectionMoldingMachine, AuxiliaryEquipment,
+            InjectionMoldingMachine, InjectionUnit, AuxiliaryEquipment,
         )
         from masterdata.services import (
             project_service, mold_service, polymer_service,
@@ -1172,22 +1229,49 @@ class Command(BaseCommand):
         self.stdout.write("\n  [5/6] 注塑机...")
         for item in DEMO_INJECTION_MACHINES:
             try:
+                # 准备 demo 射台规格（按 device_no 映射，unit_code 自动生成）
+                unit_specs_template = DEMO_INJECTION_UNITS.get(item["device_no"], [])
+                injection_units_payload = [
+                    {
+                        "unit_code": '%s-U%d' % (item["device_no"], idx + 1),
+                        **spec,
+                    }
+                    for idx, spec in enumerate(unit_specs_template)
+                ]
+
                 existing = InjectionMoldingMachine.objects.filter(
                     company_id=company.id,
                     device_no=item["device_no"],
                     is_deleted=False,
                 ).first()
                 if existing:
-                    self.stdout.write(f"    - 已存在: {item['device_no']}")
+                    # 主表已存在：仅按需补齐缺失的 Unit（不重建主表）
+                    # 场景：旧版 init_demo 跳过了射台生成
+                    existing_unit_codes = set(
+                        existing.injection_units.values_list("unit_code", flat=True)
+                    )
+                    added_units = 0
+                    for unit_payload in injection_units_payload:
+                        if unit_payload["unit_code"] not in existing_unit_codes:
+                            InjectionUnit.create_with_check(
+                                machine=existing,
+                                **unit_payload,
+                            )
+                            added_units += 1
+                    suffix = f"（已补 {added_units} 个 Unit）" if added_units else ""
+                    self.stdout.write(f"    - 已存在: {item['device_no']}{suffix}")
                     skipped_total += 1
                     continue
 
                 injection_service.create_injection_machine(
                     company_id=company.id,
                     organization_id=root_org_id,
+                    injection_units=injection_units_payload,
                     **item,
                 )
-                self.stdout.write(self.style.SUCCESS(f"    [OK] {item['device_no']}"))
+                self.stdout.write(self.style.SUCCESS(
+                    f"    [OK] {item['device_no']}（含 {len(injection_units_payload)} 个 Unit）"
+                ))
                 created_total += 1
             except Exception as e:
                 self.stdout.write(self.style.ERROR(
@@ -1244,15 +1328,17 @@ class Command(BaseCommand):
         - 除 guest 外的所有 system_demo 角色
         - 除 group 外的所有 system_demo 组织（保留根节点）
         - 6 个基础数据模块的业务数据（project/mold/polymer/filler/injection/auxiliary）
+        - 注塑机下的注射单元（injection_unit，外键随主表清理）
 
         清理顺序考虑依赖关系：
         - mold 依赖 project（先清子 mold，后清父 project）
+        - injection_unit 依赖 injection_molding_machine（先清 Unit，后清主表）
         """
         from identity.models.user import User, Role
         from identity.models.company import Organization
         from masterdata.models import (
             Mold, Project, Polymer, Filler,
-            InjectionMoldingMachine, AuxiliaryEquipment,
+            InjectionMoldingMachine, InjectionUnit, AuxiliaryEquipment,
         )
 
         self.stdout.write(self.style.WARNING(
@@ -1309,6 +1395,16 @@ class Command(BaseCommand):
             is_deleted=False,
         ).update(is_deleted=True, updated_at=now, deleted_at=now)
         self.stdout.write(f"  - 删除填充物: {deleted_filler_count}")
+
+        # 注塑机下的注射单元（先清子表，避免悬挂 Unit）
+        # 注意：InjectionUnit 继承 AbstractBaseModel，没有 is_deleted 字段，
+        #       采用物理删除（demo 数据，无需软删除恢复）
+        qs_units = InjectionUnit.objects.filter(
+            machine__company_id=company.id,
+        )
+        deleted_unit_count = qs_units.count()
+        qs_units.delete()
+        self.stdout.write(f"  - 删除射台 Unit: {deleted_unit_count}")
 
         deleted_imm_count = InjectionMoldingMachine.objects.filter(
             company_id=company.id,
