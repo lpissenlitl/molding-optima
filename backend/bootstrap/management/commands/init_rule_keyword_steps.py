@@ -16,9 +16,9 @@ Django management command: 从老 fuzzykit 迁移 RuleKeyword.step
   - 缺省时用 (col4-col3) / fuzzy_level 作为兜底
 
 使用方法：
-  python manage.py init_fuzzy_ranges  # 从默认路径
-  python manage.py init_fuzzy_ranges --csv /custom/path.csv
-  python manage.py init_fuzzy_ranges --dry-run
+  python manage.py init_rule_keyword_steps  # 从默认路径
+  python manage.py init_rule_keyword_steps --csv /custom/path.csv
+  python manage.py init_rule_keyword_steps --dry-run
 """
 
 import csv
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = '从老 fuzzykit 的 process_ranges.csv 迁移 RuleKeyword.step'
+    help = '从老 fuzzykit 的 process_ranges.csv 迁移 RuleKeyword.step（每个参数的推理步长）'
 
     def add_arguments(self, parser):
         parser.add_argument(

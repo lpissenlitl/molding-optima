@@ -29,12 +29,13 @@
       @current-change="(v: number) => { query.page_no = v; getListData() }"
     >
       <template #toolbar>
-        <el-button type="primary" @click="toAddFiller">
+        <el-button type="success" @click="toAddFiller">
           <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />
           新增填充物
         </el-button>
         <el-button
           type="success"
+          plain
           :disabled="selected_rows.length === 0"
           @click="exportListToExcel"
         >

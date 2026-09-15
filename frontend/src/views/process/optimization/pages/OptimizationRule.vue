@@ -318,7 +318,7 @@
       </rule-keyword-detail>
     </el-dialog>
     <el-dialog
-      title="优化规则"
+      title="工艺方法"
       :visible.sync="showMethod"
       width="55%"
       @closeDialog="closeMethodDialog"

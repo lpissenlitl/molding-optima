@@ -69,7 +69,7 @@
       <!-- 顶部工具栏 -->
       <template #toolbar>
         <el-button
-          type="primary"
+          type="success"
           @click="addRole"
         >
           <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />

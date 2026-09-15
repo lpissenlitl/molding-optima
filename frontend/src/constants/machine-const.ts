@@ -355,6 +355,14 @@ export const temperatureUnitOptions = [
   { value: "℉",  label: "℉" }
 ]
 
+// 重量单位（用于 RuleKeyword.weight 类型）
+export const weightUnitOptions = [
+  { value: 'g',  label: 'g' },
+  { value: 'kg', label: 'kg' },
+  { value: 'mg', label: 'mg' },
+  { value: 'lb', label: 'lb' },
+]
+
 // 开合模/顶针速度单位
 export const openingAndClampingMoldVeloUnitOptions = [
   { value: "mm/s",  label: "mm/s" },

@@ -1,0 +1,20 @@
+﻿no env specified settings loaded, use default.
+=== 导入 RuleKeyword 主数据 ===
+JSON 文件: process\refs\rule_keyword_extracted.json
+读取到 1614 条原始数据
+去重后: 327 条
+排除不导入: 17 条
+待导入: 310 条
+  新增: BT1 (parameter/temperature/℃)
+  新增: BT2 (parameter/temperature/℃)
+  新增: BT3 (parameter/temperature/℃)
+  新增: BT4 (parameter/temperature/℃)
+  新增: BT5 (parameter/temperature/℃)
+  新增: BT6 (parameter/temperature/℃)
+  新增: BT7 (parameter/temperature/℃)
+  新增: BT8 (parameter/temperature/℃)
+  新增: BT9 (parameter/temperature/℃)
+  新增: CT (parameter/time/s)
+  新增: DDAM (parameter/position/mm)
+  新增: DDBM (parameter/position/mm)
+  新增: DPAM (parameter/pressure/MPa)

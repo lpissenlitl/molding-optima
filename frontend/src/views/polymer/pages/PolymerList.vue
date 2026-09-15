@@ -35,7 +35,7 @@
     >
       <!-- 顶部工具栏 -->
       <template #toolbar>
-        <el-button type="primary" @click="goCreate">
+        <el-button type="success" @click="goCreate">
           <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />
           新建材料
         </el-button>

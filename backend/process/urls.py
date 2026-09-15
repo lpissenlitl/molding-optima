@@ -48,6 +48,18 @@ from .views.processes import (
     RuleMethodDetailView,
     RuleByDefectView,
 )
+from .views.rule_libraries import (
+    RuleLibraryListView,
+    RuleLibraryDetailView,
+)
+from .views.rule_methods import (
+    RuleMethodListByLibraryView,
+    RuleMethodDetailView,
+)
+from .views.expert_rules import (
+    ExpertRuleListByLibraryView,
+    ExpertRuleDetailView,
+)
 
 
 urlpatterns = [
@@ -85,4 +97,17 @@ urlpatterns = [
     path("processes/expert/suggestion/", ProcessExpertSuggestionView.as_view()),
     path("processes/expert/defect-template/", ProcessExpertDefectTemplateView.as_view()),
     path("processes/expert/create/", ProcessExpertCreateView.as_view()),
+
+    # ========== 规则中心（v2：2026-09-14 重构，拆为规则库 + 规则方法 + 专家规则）==========
+    # 规则库（Section 1 卡片视图）
+    path("processes/rule-libraries/", RuleLibraryListView.as_view()),
+    path("processes/rule-libraries/<int:rule_library_id>/", RuleLibraryDetailView.as_view()),
+    # 库下规则方法（详情页 Tab 1）
+    path("processes/rule-libraries/<int:rule_library_id>/methods/", RuleMethodListByLibraryView.as_view()),
+    # 规则方法详情（独立 URL，便于更新/删除）
+    path("processes/rule-methods/<int:rule_method_id>/", RuleMethodDetailView.as_view()),
+    # 库下专家规则（详情页 Tab 2）
+    path("processes/rule-libraries/<int:rule_library_id>/expert-rules/", ExpertRuleListByLibraryView.as_view()),
+    # 专家规则详情（独立 URL，避免与库路径冲突）
+    path("processes/expert-rules/<int:expert_rule_id>/", ExpertRuleDetailView.as_view()),
 ]

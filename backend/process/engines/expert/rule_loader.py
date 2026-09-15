@@ -27,7 +27,7 @@ class InitRuleLoader:
     def _load_rules(self):
         """从规则文件加载规则"""
         rules_dir = Path(__file__).parent / 'expert_rules'
-        rule_file = rules_dir / 'init_rules.json'
+        rule_file = rules_dir / 'expert_rules.json'
 
         if not rule_file.exists():
             logger.warning(f"规则文件不存在: {rule_file}")

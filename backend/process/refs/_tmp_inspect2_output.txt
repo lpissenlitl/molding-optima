@@ -1,0 +1,85 @@
+﻿======================================================================
+== 缺陷 (17 条) - 看是否真有质量描述 ==
+======================================================================
+  [SHORTSHOT           ] 短射
+  [SHRINKAGE           ] 缩水
+  [FLASH               ] 飞边
+  [GASVEINS            ] 气纹
+  [WELDLINE            ] 熔接痕
+  [MATERIALFLOWER      ] 料花
+  [AIRTRAP             ] 困气
+  [ABERRATION          ] 色差
+  [BURN                ] 烧焦
+  [WATERRIPPLE         ] 水波纹
+  [HARDDEMOLDING       ] 脱模不良
+  [TOPWHITE            ] 顶白
+  [WARPING             ] 变形
+  [OVERSIZE            ] 尺寸偏大
+  [UNDERSIZE           ] 尺寸偏小
+  [GATEMARK            ] 浇口印
+  [SHADING             ] 阴阳面
+
+======================================================================
+== 缺陷位置 (110 条) - 看是否描述位置信息 ==
+======================================================================
+  [DLSHORTSHOT1             ] 短射在1段
+  [DLSHORTSHOT2             ] 短射在2段
+  [DLSHORTSHOT3             ] 短射在3段
+  [DLSHORTSHOT4             ] 短射在4段
+  [DLSHORTSHOT5             ] 短射在5段
+  [DLSHORTSHOT6             ] 短射在6段
+  [DLSHRINKAGE1             ] 缩水在1段
+  [DLSHRINKAGE2             ] 缩水在2段
+  [DLSHRINKAGE3             ] 缩水在3段
+  [DLSHRINKAGE4             ] 缩水在4段
+  [DLSHRINKAGE5             ] 缩水在5段
+  [DLSHRINKAGE6             ] 缩水在6段
+  [DLFLASH1                 ] 飞边在1段
+  [DLFLASH2                 ] 飞边在2段
+  [DLFLASH3                 ] 飞边在3段
+  ... 还有 95 条
+
+======================================================================
+== 非工艺参数 (36 条) - 看是否真的不属于工艺 ==
+======================================================================
+  [injectstage1             ] 注射1段
+  [injectstage2             ] 注射2段
+  [injectstage3             ] 注射3段
+  [injectstage4             ] 注射4段
+  [injectstage5             ] 注射5段
+  [injectstage6             ] 注射6段
+  [holdingstage1            ] 保压1段
+  [holdingstage2            ] 保压2段
+  [holdingstage3            ] 保压3段
+  [holdingstage4            ] 保压4段
+  [holdingstage5            ] 保压5段
+  [meteringstage1           ] 计量1段
+  [meteringstage2           ] 计量2段
+  [meteringstage3           ] 计量3段
+  [meteringstage4           ] 计量4段
+  [HOLDEXIST                ] 保压参数存在
+  [VALVEEXIST               ] 热流道存在
+  [BT                       ] 料筒温度
+  [ET                       ] 下料口温度
+  [CLAMP                    ] 锁模力
+  [IPOS                     ] 注射位置
+  [CUSION                   ] 残留量
+  [DMBM0                    ] 储前松退模式为否
+  [DMBM1                    ] 储前松退模式为距离
+  [DMBM2                    ] 储前松退模式为时间
+  [DMAM0                    ] 储后松退模式为否
+  [DMAM1                    ] 储后松退模式为距离
+  [DMAM2                    ] 储后松退模式为时间
+  [VPTM0                    ] 切换方式为位置
+  [VPTM1                    ] 切换方式为时间
+  [VPTM2                    ] 换方式为位置和时间
+  [VPTM3                    ] 切换方式为压力
+  [VPTM4                    ] 切换方式为速度
+  [DMAM                     ] 储后松退模式
+  [DMBM                     ] 储前松退模式
+  [HRN                      ] 热流道段数
+
+======================================================================
+== 其他 (1 条) ==
+======================================================================
+  [IL                       ] 注射位置

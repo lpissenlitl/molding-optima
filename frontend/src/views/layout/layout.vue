@@ -109,9 +109,17 @@ onBeforeUnmount(() => {
   /*
    * 工业软件后台：最低 1024px 宽度。
    * 低于此值出现水平滚动条，不重排。
-   * 这样表格/列筛选/批量操作不会在手机上被压缩错位。
+   * 这样表格/列筛选、批量操作不会在手机上被压缩错位。
    */
   min-width: 1024px;
+  /*
+   * 侧边栏宽度变量（供子组件 fixed 元素定位使用）
+   * - 默认 220px（桌面端展开）
+   * - 折叠态 60px（is-collapsed-desktop）
+   * - 移动端 0px（抽屉化不占主内容空间）
+   * 子组件可用：left: var(--sidebar-width, 220px);
+   */
+  --sidebar-width: 220px;
 
   &__mask {
     position: fixed;
@@ -135,6 +143,8 @@ onBeforeUnmount(() => {
     // 桌面端折叠态：缩窄到 60px（仅桌面端 CSS 生效）
     &.is-collapsed-desktop {
       width: 60px;
+      // 同步侧边栏宽度变量，供 fixed 元素重新计算位置
+      --sidebar-width: 60px;
     }
   }
 
@@ -185,6 +195,8 @@ onBeforeUnmount(() => {
       height: 100vh;
       transform: translateX(-100%);  // 默认隐藏
       transition: transform 0.28s ease;
+      // 移动端 sidebar 抽屉化，不占主内容空间
+      --sidebar-width: 0px;
 
       // 覆盖桌面端折叠（移动端不需要 60px 折叠态）
       &.is-collapsed-desktop {

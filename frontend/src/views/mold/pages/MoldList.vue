@@ -38,7 +38,7 @@
       <!-- 顶部工具栏 -->
       <template #toolbar>
         <el-button
-          type="primary"
+          type="success"
           :disabled="!hasPermission('add_mold')"
           @click="goCreate"
         >

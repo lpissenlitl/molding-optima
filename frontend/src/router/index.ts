@@ -129,8 +129,14 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'rules',
             name: 'process-rules',
-            component: BusinessPlaceholder,
-            meta: { title: '优化规则', icon: 'mdi:format-list-checks' },
+            component: () => import('@/views/process/rule/pages/RuleLibraryList.vue'),
+            meta: { title: '规则中心', icon: 'mdi:format-list-checks' },
+          },
+          {
+            path: 'rules/:libraryId(\\d+)',
+            name: 'process-rules-detail',
+            component: () => import('@/views/process/rule/pages/RuleLibraryDetail.vue'),
+            meta: { title: '规则库详情', hidden: true, activeMenu: '/process/rules' },
           },
         ],
       },

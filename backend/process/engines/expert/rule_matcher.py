@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ========== 内置兜底默认值 ==========
 # 数据库与 JSON 都没数据时使用的硬编码兜底，
-# 与 init_rules.json 的 DEFAULT 规则保持完全一致。
+# 与 expert_rules.json 的 DEFAULT 规则保持完全一致。
 _BUILTIN_DEFAULTS: Dict[str, Any] = {
     'injection': {
         'inj_pres_ratio': 0.65,
@@ -31,7 +31,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'inj_velo_ratio_thick': 0.42,
         'inj_ratio_threshold': 100,
         'inj_ratio_coef': 500.0,
-        # 注射时间物理化默认值（与 init_rules.json DEFAULT 保持一致）
+        # 注射时间物理化默认值（与 expert_rules.json DEFAULT 保持一致）
         'thickness_bucket_thresholds': [1.5, 3.0],
         'default_thickness_bucket': 'medium',
         'default_time_window': [0.6, 2.5],
@@ -58,7 +58,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'pres_switch_ratio': 0.85,   # mode=2 时 vps_pres = inj_pres × pres_switch_ratio
     },
     'holding': {
-        # 保压压力物理化默认值（与 init_rules.json DEFAULT 保持一致）
+        # 保压压力物理化默认值（与 expert_rules.json DEFAULT 保持一致）
         # 四维半经验物理方法：材料 × 壁厚 × 浇口 × 流道
         'family_hold_ratio': {
             'PP': 0.50, 'PE': 0.50, 'PS': 0.55, 'ABS': 0.60, 'AS': 0.55,
@@ -441,7 +441,7 @@ class InitRuleMatcher:
         inj_pres = max_inj_pres * coeffs['injection']['inj_pres_ratio']
     """
 
-    def __init__(self, library_code: str = 'init_rules'):
+    def __init__(self, library_code: str = 'expert_rules'):
         self.library_code = library_code
         self._cached_rules: Optional[List[Dict[str, Any]]] = None
         # 最近一次 match 命中的规则代码列表（按 priority 顺序）

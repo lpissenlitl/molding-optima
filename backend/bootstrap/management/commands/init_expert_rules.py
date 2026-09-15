@@ -1,40 +1,42 @@
 """
-Django management command: 导入初始化规则到数据库
+Django management command: 导入专家规则（ExpertRule）到数据库
 
 使用方法：
-    python manage.py import_init_rules
+    python manage.py init_expert_rules
 """
 import json
 
 from django.core.management.base import BaseCommand
 
+from identity.const import SYSTEM_DEMO_COMPANY_CODE
+from identity.models.company import Company
 from process.models.rules import RuleLibrary, ExpertRule
 
 
 class Command(BaseCommand):
-    help = '导入初始化规则到数据库'
+    help = '导入专家规则（ExpertRule）到数据库'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--json',
             type=str,
-            help='规则JSON文件路径（可选，默认使用内置路径）',
+            help='专家规则 JSON 文件路径（可选，默认使用内置路径）',
         )
         parser.add_argument(
             '--force',
             action='store_true',
-            help='强制覆盖现有规则',
+            help='强制覆盖已有规则',
         )
 
     def handle(self, *args, **options):
         json_path = options.get('json')
         force_update = options.get('force', False)
 
-        self.stdout.write(self.style.NOTICE('=== 导入初始化规则 ===\n'))
+        self.stdout.write(self.style.NOTICE('=== 导入专家规则（ExpertRule） ===\n'))
 
-        # 默认 JSON 路径
+        # 默认 JSON 路径（专家规则数据文件，与 rule_loader.py 共享）
         if json_path is None:
-            json_path = 'process/engines/expert/expert_rules/init_rules.json'
+            json_path = 'process/engines/expert/expert_rules/expert_rules.json'
 
         # 读取 JSON 文件
         try:
@@ -47,17 +49,33 @@ class Command(BaseCommand):
         rules = data.get('rules', [])
         self.stdout.write(f'读取到 {len(rules)} 条规则')
 
-        # 创建或获取规则库
+        # 系统库归属到 system_demo 公司（通过 code 反查 id，不能硬编码）
+        system_company = Company.objects.filter(code=SYSTEM_DEMO_COMPANY_CODE).first()
+        if not system_company:
+            self.stdout.write(self.style.ERROR(
+                f'系统演示公司（code={SYSTEM_DEMO_COMPANY_CODE}）不存在，请先执行 init_platform'
+            ))
+            return
+
+        # 创建或获取规则库（专家规则库标识，语义清晰，避免与其他类型规则混淆）
         library, created = RuleLibrary.objects.get_or_create(
-            library_code='init_rules',
+            library_code='expert_rules',
             defaults={
                 'library_name': '工艺初始化规则库',
                 'description': '工艺参数初始化专家规则库',
                 'owner_type': 'system',
                 'priority': 100,
                 'is_active': True,
+                'company_id': system_company.id,
             }
         )
+        # 修复历史数据：如果库已存在但 company_id 为 None，补齐到 system_demo
+        if not created and library.company_id is None:
+            library.company_id = system_company.id
+            library.save(update_fields=['company_id'])
+            self.stdout.write(self.style.WARNING(
+                f'修复库归属: {library.library_name} → company_id={system_company.id}'
+            ))
         if created:
             self.stdout.write(self.style.SUCCESS(f'创建规则库: {library.library_name}'))
         else:

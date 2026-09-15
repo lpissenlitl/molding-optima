@@ -6,7 +6,7 @@
 - parameter.py: 工艺参数模型
 - tuning_record.py: 调参记录模型
 - recommendation.py: 推荐结果模型
-- rules.py: 规则库模型（RuleLibrary/RuleKeyword/RuleMethod/MinedRule/ExpertRule）
+- rules.py: 规则库模型（RuleLibrary/RuleKeyword/RuleMethod/ExpertRule）
 """
 
 from .condition import ProcessCondition

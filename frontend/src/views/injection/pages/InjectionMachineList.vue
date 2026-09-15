@@ -34,11 +34,11 @@
       @selection-change="(rows: any[]) => selected_rows = rows"
     >
       <template #toolbar>
-        <el-button type="primary" @click="toAddMachine">
+        <el-button type="success" @click="toAddMachine">
           <AppIcon icon="mdi:plus" style="margin-right: 4px; font-size: 14px;" />
           添加机器
         </el-button>
-        <el-button type="success" @click="exportListToExcel">
+        <el-button type="success" plain @click="exportListToExcel">
           <AppIcon icon="mdi:download" style="margin-right: 4px; font-size: 14px;" />
           导出列表
         </el-button>

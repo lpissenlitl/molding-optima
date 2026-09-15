@@ -55,6 +55,22 @@ class RuleLibrary(BusinessBaseModel):
     ]
     owner_type = models.CharField(max_length=20, choices=OWNER_TYPES, verbose_name="归属类型")
 
+    # --- 库类型（决定库内允许的规则种类）---
+    # 专家规则库（library_type='expert'）：只允许 ExpertRule（工艺参数初始化系数）
+    # 模糊规则库（library_type='fuzzy'）：只允许 RuleMethod（缺陷→参数调整规则）
+    # 一个库不允许同时存在两类规则，语义不同（ExpertMatcher vs FuzzyEngine）
+    LIBRARY_TYPES = [
+        ('expert', '专家规则库'),
+        ('fuzzy', '模糊规则库'),
+    ]
+    library_type = models.CharField(
+        max_length=20,
+        choices=LIBRARY_TYPES,
+        default='expert',
+        verbose_name='库类型',
+        help_text='专家规则库：仅允许 ExpertRule；模糊规则库：仅允许 RuleMethod',
+    )
+
     # --- 规则库元数据 ---
     priority = models.IntegerField(default=0, verbose_name="优先级")
     # 高优先级规则库可覆盖低优先级规则库
@@ -84,6 +100,39 @@ class RuleKeyword(BusinessBaseModel):
 
     keyword_alias = models.CharField(max_length=100, verbose_name="关键词别名")
     # 示例: '注射压力1', '保压压力1'
+
+    # --- 业务分类（决定在 if-then 规则中的角色）---
+    CATEGORIES = [
+        ('parameter', '参数'),          # 主参数 + 辅机 + 模式（统一）
+        ('defect', '缺陷'),            # IF 条件变量
+        ('defect_position', '缺陷位置'),  # IF 条件变量
+    ]
+    category = models.CharField(
+        max_length=30,
+        choices=CATEGORIES,
+        default='parameter',
+        verbose_name='业务分类',
+        help_text='决定该关键词在 if-then 规则中能扮演的角色：参数（IF/THEN） / 缺陷（IF） / 缺陷位置（IF）',
+    )
+
+    # --- 属性值（区分设定/实际/其它）---
+    # 表达该关键词在工艺上下文中的属性维度
+    # - 设定值：面板输入目标
+    # - 实际值：设备通讯采集或手填实测
+    # - 其它：不需要区分属性（缺陷/缺陷位置等）
+    # mode（离散模式选择）属于设定值的一种特殊形式，不独立
+    PARAMETER_KINDS = [
+        ('setpoint', '设定值'),
+        ('actual', '实际值'),
+        ('enum', '其它'),
+    ]
+    parameter_kind = models.CharField(
+        max_length=20,
+        choices=PARAMETER_KINDS,
+        default='setpoint',
+        verbose_name='属性值',
+        help_text='设定值：面板输入目标；实际值：设备通讯采集或手填实测；其它：不需要区分属性（缺陷/缺陷位置等）',
+    )
 
     # --- 通用默认值/推荐范围（无设备数据时的参考值）---
     range_min = models.FloatField(verbose_name="默认最小值")
@@ -188,6 +237,14 @@ class RuleMethod(BusinessBaseModel):
     class Meta:
         verbose_name = "规则方法"
         verbose_name_plural = "规则方法"
+        indexes = [
+            # 列表查询高频路径：按缺陷名 + 启用状态过滤，按优先级降序
+            models.Index(fields=['defect_label', 'is_active', 'is_deleted']),
+            # 库内规则排序（rule_query_service.fuzzy_engine 查询路径）
+            models.Index(fields=['rule_library', 'priority']),
+            # 通用过滤
+            models.Index(fields=['is_active', 'is_deleted']),
+        ]
 
 
 class ExpertRule(BusinessBaseModel):

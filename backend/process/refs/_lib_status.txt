@@ -1,0 +1,18 @@
+﻿no env specified settings loaded, use default.
+python : usage: manage.py shell [-h] [--no-startup] [-i {ipython,bpython,python}]
+所在位置 行:1 字符: 66
++ ... lding-optima\backend; chcp 65001 > $null; python manage.py shell -c "
++                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (usage: manage.p...python,python}]:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+                       [-c COMMAND] [--version] [-v {0,1,2,3}]
+                       [--settings SETTINGS] [--pythonpath PYTHONPATH]
+                       [--traceback] [--no-color] [--force-color]
+manage.py shell: error: unrecognized arguments: count={lib[\count\]}')
+print()
+print('=== Experts by RuleLibrary ===')
+for lib in RuleLibrary.objects.all():
+ ec = ExpertRule.objects.filter(rule_library=lib).count()
+ print(f' library={lib.library_code:<25} name={lib.library_name:<20} rules={ec}')
+

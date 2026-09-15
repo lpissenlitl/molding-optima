@@ -223,7 +223,13 @@ class RuleKeywordListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(PaginationBaseSchema))
     def get(self, request, cleaned_data):
-        return rule_service.get_list_of_rule_keyword(**cleaned_data)
+        # 默认按当前用户公司过滤；平台超管未接管时可看全部
+        result = rule_service.get_list_of_rule_keyword(
+            company_id=getattr(request.user, "company_id", None),
+            is_superuser=getattr(request.user, "is_superuser", False),
+            **cleaned_data,
+        )
+        return PaginationResponse(total=result["total"], items=result["items"])
 
     @method_decorator(require_login)
     def post(self, request):
