@@ -12,13 +12,15 @@
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint . --ext .ts,.vue",
     "lint:fix": "eslint . --ext .ts,.vue --fix",
-    "format": "prettier --write \"src/**/*.{ts,vue,scss}\""
+    "format": "prettier --write \"src/**/*.{ts,vue,scss}\"",
+    "extract-icons": "node scripts/extract-mdi-used-icons.js"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "@iconify-json/mdi": "^1.2.3",
     "@iconify/vue": "^5.0.1",
     "@types/nprogress": "^0.2.3",
+    "@types/three": "^0.186.0",
     "axios": "^1.6.7",
     "dayjs": "^1.11.10",
     "echarts": "^5.5.0",
@@ -29,6 +31,7 @@
     "pinia": "^2.1.7",
     "pinia-plugin-persistedstate": "^3.2.1",
     "sortablejs": "^1.15.2",
+    "three": "^0.186.0",
     "uuid": "^9.0.1",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0",
