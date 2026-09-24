@@ -30,3 +30,6 @@ package-lock.json
 
 #Electron-builder output
 /dist_electron
+
+# Vite/esbuild 中间产物（vite-tsconfig-paths 或类似插件生成）
+*.timestamp-*.mjs

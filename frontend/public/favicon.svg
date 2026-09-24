@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!--
+    Molding Optima Favicon
+    - 深蓝色 (#254373) 圆角方块 = 项目主色（与 --theme-primary 一致）
+    - 白色 M 字母 = Molding Optima 品牌首字母
+    - 64x64 viewBox 保证任意尺寸缩放清晰
+  -->
+  <rect width="64" height="64" rx="14" fill="#254373"/>
+  <!--
+      实心 M 字母外轮廓：
+      - 左竖 + 右竖 + 中间 V 凹陷
+      - V 底位置 y=36（M 高度的 56%，接近 Helvetica 风格）
+  -->
+  <path d="M14 16 V48 H50 V16 H42 L32 36 L22 16 Z" fill="#ffffff"/>
+</svg>
