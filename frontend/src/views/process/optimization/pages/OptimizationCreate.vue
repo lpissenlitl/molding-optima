@@ -1,1265 +1,1006 @@
+<!--
+  OptimizationCreate - 工艺优化（工作台）
+  - 工艺优化 = 基于工艺条件 + 缺陷反馈，迭代优化工艺参数
+  - 工艺条件复用 shared/ProcessCondition
+  - 工作台：入口单一，无返回按钮
+-->
 <template>
-  <div>
-    <el-card class="box-card">
-      <div slot="header" class="clearfix">
-        <span>基本信息</span>
-      </div>
-      <basic-mold-info
-        :basic-mold-info="detail_info.basic_mold_info"
+  <div class="optimization-create">
+    <div v-if="!loaded" v-loading="true" class="loading-placeholder" />
+
+    <template v-else>
+      <!-- 工艺条件卡（复用） -->
+      <ProcessCondition
+        ref="conditionRef"
+        :process-condition="form.condition"
+        mode="edit"
+        :default-expanded="!hasConditionData"
+        :disabled="hasInitialProcess"
+      />
+
+      <!-- 工艺优化工作台 -->
+      <el-card class="box-card optimization-card" style="margin-top: 16px">
+        <template #header>
+          <span class="custom-form__title">
+            <AppIcon icon="mdi:tune-vertical" class="custom-form__title-icon" />
+            工艺优化
+          </span>
+        </template>
+
+        <div class="optimization-workspace">
+          <!-- 左侧：调机过程时间线 -->
+          <aside class="optimization-workspace__timeline">
+            <RoundTimeline
+              v-model:active-id="form.active_round_id"
+              :rounds="form.rounds"
+            />
+          </aside>
+
+          <!-- 右侧：当前轮次详情 -->
+          <main class="optimization-workspace__detail">
+            <template v-if="activeRound">
+              <!-- 工艺参数展示 -->
+              <div class="round-detail-block round-detail-block--embedded">
+                <div class="round-detail-block__title">
+                  <AppIcon icon="mdi:cog-outline" />
+                  <span>工艺参数</span>
+                  <el-switch
+                    v-model="isProcessReadonly"
+                    class="round-detail-block__action"
+                    inline-prompt
+                    active-text="只读"
+                    inactive-text="编辑"
+                    size="small"
+                  />
+                </div>
+                <ProcessSettings
+                  :setting-process="activeRound.parameter"
+                  :readonly="isProcessReadonly"
+                />
+              </div>
+
+              <!--
+                详情区顺序：工艺参数 → 上一轮建议 → 工艺实测 → 缺陷反馈
+                - 参数（事实）/ 上一轮建议（回顾）/ 工艺实测（验证）/ 缺陷反馈（结果）
+                - 缺陷反馈永远在最后；中间可插入模温机 / 热流道等反馈类
+              -->
+              <div class="round-detail-block">
+                <div class="round-detail-block__title">
+                  <AppIcon icon="mdi:lightbulb-on-outline" />
+                  上一轮调整建议
+                </div>
+                <PreviousSuggestion :suggestion="previousSuggestion" />
+              </div>
+
+              <!--
+                工艺实测：默认折叠（理论上大部分场景用不上，避免误导必填）
+                - 展开后 chevron 旋转 + body 高度过渡
+                - 折叠状态跨轮次粘性保留
+              -->
+              <div
+                class="round-detail-block round-detail-block--collapsible"
+                :class="{ 'is-collapsed': !observationExpanded }"
+              >
+                <el-tooltip
+                  placement="top"
+                  :show-after="200"
+                  :hide-after="0"
+                  popper-class="round-detail-block__tooltip"
+                >
+                  <template #content>
+                    反馈实际工艺参数（重量/压力/时间等），辅助后端推理；参数可选填<br>
+                    <small style="opacity: 0.7;">功能待完善，此处占位</small>
+                  </template>
+                  <div
+                    class="round-detail-block__title round-detail-block__title--clickable"
+                    role="button"
+                    tabindex="0"
+                    @click="observationExpanded = !observationExpanded"
+                    @keydown.enter.prevent="observationExpanded = !observationExpanded"
+                    @keydown.space.prevent="observationExpanded = !observationExpanded"
+                  >
+                    <AppIcon icon="mdi:gauge" />
+                    <span>工艺实测</span>
+                    <AppIcon
+                      class="round-detail-block__chevron"
+                      :icon="observationExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down'"
+                    />
+                  </div>
+                </el-tooltip>
+                <Transition name="round-detail">
+                  <div v-show="observationExpanded" class="round-detail-block__body">
+                    <ProcessActualFeedback
+                      v-model="activeRound.feedback.observations"
+                      :machine-unit="machineUnit"
+                    />
+                  </div>
+                </Transition>
+              </div>
+
+              <!-- 缺陷反馈（永远位于最下方，作为本轮试模的最终结果） -->
+              <div class="round-detail-block">
+                <div class="round-detail-block__title">
+                  <AppIcon icon="mdi:alert-circle-outline" />
+                  缺陷反馈
+                </div>
+                <DefectFeedback
+                  v-model="activeRound.feedback.defect"
+                  :defect-keywords="defectKeywords"
+                  :position-keywords="positionKeywords"
+                  :keywords-loaded="keywordsLoaded"
+                />
+              </div>
+            </template>
+            <!-- 默认轮次不需 empty，但若 activeRound 缺失则兜底 -->
+            <el-empty
+              v-else
+              description="点击 [获取初始工艺] 开始调机"
+              :image-size="80"
+            />
+          </main>
+        </div>
+      </el-card>
+    </template>
+
+    <!-- 底部操作 -->
+    <div v-if="loaded" class="form-actions">
+      <!--
+        配色原则（2026-09-23）：
+        - 获取初始工艺：success 绿 — 创建成功（开新工艺）
+        - 获取优化工艺：warning 黄 — 迭代优化（每次都是新决策）
+        - 重置 / 折叠：plain — 中性辅助操作
+        - 保存：primary 蓝 — 主操作（提交唯一入口）
+
+        状态联动（业务流互斥）：
+        - 获取初始工艺：有初始工艺后需重置才能重调
+        - 获取优化工艺：必须先有工艺（任意轮次 parameter_id 存在）
+      -->
+      <el-button
+        type="success"
+        :loading="initial_loading"
+        :disabled="hasInitialProcess"
+        @click="getInitialProcess"
       >
-      </basic-mold-info>
-      <basic-injection-info
-        :basic-injection-info="detail_info.basic_machine_info"
+        <AppIcon icon="mdi:auto-fix" style="margin-right: 4px;" />
+        获取初始工艺
+      </el-button>
+      <el-button
+        type="warning"
+        :loading="optimize_loading"
+        :disabled="!hasAnyProcess"
+        @click="getOptimizedProcess"
       >
-      </basic-injection-info>
-      <el-tabs 
-        class="molding-tabs"
-        v-if="detail_info.injection_station_details.length > 1"
-        v-model="actived_tab_index"
-      >
-        <el-tab-pane
-          v-for="(station_info, index) in detail_info.injection_station_details"
-          :key="index"
-          :label="'射台-#'+(index+1)"
-          :name="String(index)"
-        >
-          <injection-station-detail
-            ref="injection_station_detail"
-            :class="{ 'disabled-area': station_info.casting_system.inject_part == null }"
-            :disabled="true"
-            :station-index="index"
-            :injection-station-detail="station_info"
-            :machine-info="detail_info.basic_machine_info"
-          ></injection-station-detail>
-        </el-tab-pane>
-      </el-tabs>  
-      <div v-else-if="detail_info.injection_station_details.length == 1">
-        <injection-station-detail
-          ref="injection_station_detail"
-          :station-index="0"
-          :injection-station-detail="detail_info.injection_station_details[0]"
-          :machine-info="detail_info.basic_machine_info"
-        ></injection-station-detail>
-      </div>
-    </el-card>
-    <el-dialog
-      title="提示！"
-      :visible.sync="dialog_visible"
-      width="30%"
-    >
-      <el-form size="small">
-        <el-form-item 
-          :label="'当前射台为：射台#' + (Number(actived_tab_index) + 1) + '，请选择目标射台'"
-        >
-          <el-select v-model="switch_station">
-            <el-option 
-              v-for="(item, index) in detail_info.injection_station_details.length"
-              :key="item"
-              :label="'射台' + item"
-              :value="index"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <span slot="footer" class="dialog-footer">
-        <el-button 
-          size="small" 
-          type="danger" 
-          @click="dialog_visible = false"
-        >
-          取 消
-        </el-button>
-        <el-button 
-          size="small" 
-          type="primary" 
-          @click="onStationChanged"
-        >
-          确 定
-        </el-button>
-      </span>
-    </el-dialog>
-    <div 
-      v-if="!view_context.is_dialog" 
-      class="buttonGroup"
-    >
-      <el-button-group>
-        <el-button
-          type="warning"
-          size="small"
-          @click="resetView"
-        >
-          重置参数
-        </el-button>
-        <el-button
-          v-if="detail_info.injection_station_details.length > 1"
-          type="primary"
-          size="small"
-          @click="dialog_visible = true"
-        >
-          切换射台
-        </el-button>
-        <el-button
-          type="success"
-          size="small"
-          @click="initProcessPara"
-        >
-          创建首模工艺
-        </el-button>
-        <el-button
-          type="danger"
-          size="small"
-          @click="optimizeProcessPara"
-        >
-          缺陷修正
-        </el-button>
-        <el-button
-          type="primary"
-          size="small"
-          @click="saveCurrentProcess"
-          :loading="save_loading"
-        >
-          保存当前工艺
-        </el-button>
-      </el-button-group>
+        <AppIcon icon="mdi:tune" style="margin-right: 4px;" />
+        获取优化工艺
+      </el-button>
+      <el-button @click="toggleCondition">
+        <AppIcon
+          :icon="conditionExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down'"
+          style="margin-right: 4px;"
+        />
+        {{ conditionExpanded ? '折叠条件' : '展开条件' }}
+      </el-button>
+      <el-button @click="resetForm">重置</el-button>
+      <el-button type="primary" :loading="save_loading" @click="onSubmit">
+        保存
+      </el-button>
     </div>
   </div>
 </template>
 
-<script>
-import { machineMethod, initialProcessAlgorithm, processOptimizeMethod,
-  optimizeProcessAlgorithm, projectMethod, processIndexMethod, 
-  processRecordMethod } from "@/api"
-import { UserModule } from "@/store/modules/user"
-import { initArray } from "@/utils/array-utils"
-import { datetimeTodayStr } from "@/utils/datetime"
-import { isValidData, updateObjectProperties, syncArray } from "@/utils/function"
-import BasicMoldInfo from "./subView/basicMoldInfo.vue"
-import BasicInjectionInfo from "./subView/basicInjectionInfo.vue"
-import InjectionStationDetail from "./subView/injectionStationOptimizeDetail.vue"
+<script setup lang="ts">
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { settingProcessForm } from '@/constants/process-const'
+import { listRuleKeywords } from '@/api/rule'
+import { processInitializationFromMasterdata, processOptimizationInfer } from '@/api/index'
+import type { RuleKeyword } from '@/types/rule'
+import type { Suggestion } from '@/types/optimization'
+import {
+  setSessionStorage,
+  getSessionStorage,
+  removeSessionStorage,
+  createSessionStorageKey,
+} from '@/utils/storage-session'
+import ProcessCondition from '@/views/process/shared/ProcessCondition.vue'
+import ProcessSettings from '@/views/process/shared/ProcessSettings.vue'
+import RoundTimeline from '../components/RoundTimeline.vue'
+import DefectFeedback from '../components/DefectFeedback.vue'
+import ProcessActualFeedback from '../components/ProcessActualFeedback.vue'
+import PreviousSuggestion from '../components/PreviousSuggestion.vue'
 
-const initialDetailInfo = {
-  company_id: null,
-  project_id: null,
-  process_id: null,
-  basic_mold_info: {
-    id: null,
-    // 基本信息
-    mold_no: null,
-    mold_type: null,
-    mold_name: null,
-    cavity_num: null,
-    inject_cycle_require: null,
-    // 制品信息
-    product_industry: null,
-    product_category: null,
-    product_type: null,
-    product_name: null,
-    product_no: null,
-    product_total_weight: null,
-    product_projected_area: null,
-    // 结构参数
-    mold_weight: null,
-    hanging_mold_hole_specification: null,
-    size_horizon: null,
-    mold_width: null,
-    size_thickness: null,
-    mold_opening_stroke: null,
-    min_clamping_force: null,
-    drain_distance: null,
-    // 冷却系统
-    cavity_cooling_circuit_number: null,
-    cavity_water_nozzle_specification: null,
-    cavity_cooling_water_diameter: null,
-    core_cooling_circuit_number: null,
-    core_water_nozzle_specification: null,
-    core_cooling_water_diameter: null,
-    // 顶出系统
-    ejection_method: null,
-    ejector_hole_position: null,
-    ejector_hole_diameter: null,
-    ejector_rod_number: null,
-    ejector_rod_hole_distribute: null,
-    ejector_rod_hole_spacing: null,
-    ejector_rod_hole_diameter: null,
-    ejector_times: null,
-    ejector_stroke: null,
-    ejector_force: null,
-    reset_method: null,
-  },
-  basic_machine_info: {
-    id: null,
-    // 注塑机描述
-    data_source: null,
-    manufacturer: null,
-    trademark: null,
-    serial_no: null,
-    asset_no: null,
-    machine_type: null,
-    drive_system: null,
-    // 操作界面单位
-    pressure_unit: "MPa",
-    velocity_unit: "mm/s",
-    position_unit: "mm",
-    time_unit: "s",
-    back_pressure_unit: "MPa",
-    screw_rotation_unit: "rpm",
-    temperature_unit: "℃",
-    clamping_force_unit: "Ton",
-    // 开合模机构
-    min_mold_size_horizon: null,
-    max_mold_size_horizon: null,
-    min_mold_width: null,
-    max_mold_width: null,
-    min_mold_thickness: null,
-    max_mold_thickness: null,
-    min_platen_opening: null,
-    max_platen_opening: null,
-    locate_hole_diameter: null,
-    // 拉杆机构
-    pull_rod_size: null,
-    pull_rod_diameter: null,
-    pull_rod_distance_horizon: null,
-    pull_rod_distance_vertical: null,
-    // 锁模机构
-    clamping_method: null,
-    max_clamping_force: null,
-    max_mold_open_stroke: null,
-    // 顶出参数
-    max_ejection_force: null,
-    max_ejection_stroke: null,
-    ejection_hole_num: null,
-    core_pulling: null,
-    core_pulling_group: null,
-  },
-  injection_station_details: [{
-    // 模具信息
-    casting_system: {
-      inject_part: null,
-      // 结构信息
-      locate_ring_diameter: null,
-      sprue_sphere_radius: null,
-      sprue_hole_diameter: null,
-      runner_type: null,
-      // 结构信息--热流道
-      hot_nozzle_type: null,
-      hot_nozzle_number: null,
-      need_hotrunner_wiring_adapter: null,
-      hotrunner_valve_number: null,
-      need_sequence_valve: null,
-      valve_needle_drive_mode: null,
-      // 结构信息--冷流道
-      runner_weight: null,
-      runner_length: null,
-      total_gate_number: null,
-      // 浇口信息
-      gate_details: [{
-        gate_type: null,
-        gate_shape: null,
-        gate_number: null,
-        gate_length: null,
-        gate_width: null,
-        gate_radius: null,
-        gate_area: null
-      }],
-      // 制品信息
-      product_details: [{
-        product_desc: null,
-        product_number: null,
-        product_flow_length: null,
-        product_max_thickness: null,
-        product_min_thickness: null,
-        product_ave_thickness: null,
-        product_single_volume: null,
-        product_single_weight: null,
-      }]
-    },
-    injection_detail: {
-      id: null,
-      title: "注射部件-#1",
-      name: "0",
-      serial_no: null,
-      // 喷嘴参数
-      nozzle_type: null,
-      nozzle_protrusion: null,
-      nozzle_hole_diameter: null,
-      nozzle_sphere_radius: null,
-      nozzle_contact_force: null,
-      // 螺杆、料筒、油缸参数
-      screw_type: null,
-      screw_diameter: null,
-      screw_length_to_diameter_ratio: null,
-      screw_cross_sectional_area: null,
-      screw_circumference: null,
-      screw_compression_ratio: null,
-      screw_enhancement_ratio: null,
-      plasticizing_capacity: null,
-      max_injection_stroke: null,
-      max_injection_volume: null,
-      max_injection_weight: null,
-      barrel_heating_power: null,
-      // 注塑机界面最大可设定段数
-      max_stage: null,
-      max_stage: null,
-      max_stage: null,
-      max_stage: null,
-      // 注塑机界面单位
-      pressure_unit: "MPa",
-      velocity_unit: "mm/s",
-      position_unit: "mm",
-      time_unit: "s",
-      back_pressure_unit: "MPa",
-      screw_rotation_unit: "rpm",
-      temperature_unit: "℃",
-      // 成型参数（标准单位）
-      max_injection_pressure: null,
-      max_injection_velocity: null,
-      max_holding_pressure: null,
-      max_holding_velocity: null,
-      max_metering_pressure: null,
-      max_screw_rotation_speed: null,
-      max_metering_back_pressure: null,
-      max_decompression_pressure: null,
-      max_decompression_velocity: null,
-      // 注塑机界面最大可设定成型参数
-      max_set_injection_pressure: null,
-      max_set_injection_velocity: null,
-      max_set_holding_pressure: null,
-      max_set_holding_velocity: null,
-      max_set_metering_pressure: null,
-      max_set_screw_rotation_speed: null,
-      max_set_metering_back_pressure: null,
-      max_set_decompression_pressure: null,
-      max_set_decompression_velocity: null,
-    },
-    // 材料信息
-    polymer_detail: {
-      id: null,
-      title: "射台-#1",
-      name: "0",
-      // 基本信息
-      manufacturer: null,
-      abbreviation: null,
-      trademark: null,
-      category: null,
-      // PVT属性
-      melt_density: null,
-      solid_density: null,
-      // 推荐工艺
-      max_melt_temperature: null,
-      min_melt_temperature: null,
-      recommend_melt_temperature: null,
-      max_mold_temperature: null,
-      min_mold_temperature: null,
-      recommend_mold_temperature: null,
-      max_shear_linear_speed: null,
-      min_shear_linear_speed: null,
-      recommend_shear_linear_speed: null,
-      recommend_injection_rate: null,
-      recommend_back_pressure: null,
-      degradation_temperature: null,
-      ejection_temperature: null,
-      barrel_residence_time: null,
-      max_shear_rate: null,
-      max_shear_stress: null,
-      dry_temperature: null,
-      dry_time: null,
-      dry_method: null,
-      // 填充物
-      filler: null,
-      filler_percentage: null,
-    },
-    optimize_list: [{
-      title: null,
-      name: null,
-      setting_process: {
-        injection: {
-          max_stage: 6,
-          stage: 1,
-          table_data: [
-            { label: "压力", unit: "MPa", sections: initArray(6, null) },
-            { label: "速度", unit: "mm/s", sections: initArray(6, null) },
-            { label: "位置", unit: "mm", sections: initArray(6, null) }
-          ],
-          injection_time: null,
-          delay_time: null,
-          cooling_time: null
-        },
-        vp_switch: {
-          mode: "位置",
-          position: null,
-          time: null,
-          pressure: null,
-          velocity: null,
-        },
-        holding: {
-          max_stage: 5,
-          stage: 1,
-          table_data: [
-            { label: "压力", unit: "MPa", sections: initArray(5, null) },
-            { label: "速度", unit: "mm/s", sections: initArray(5, null) },
-            { label: "时间", unit: "s", sections: initArray(5, null) }
-          ]
-        },
-        metering: {
-          max_stage: 4,
-          stage: 1,
-          table_data: [
-            { label: "压力", unit: "MPa", sections: initArray(4, null) },
-            { label: "螺杆转速", unit: "rpm", sections: initArray(4, null) },
-            { label: "背压", unit: "MPa", sections: initArray(4, null) },
-            { label: "位置", unit: "mm", sections: initArray(4, null) }
-          ],
-          pre_decompress_mode: "否",
-          post_decompress_mode: "距离",
-          decompress_table_data: [
-            { label: "储前", pressure: null, velocity: null, time: null, distance: null },
-            { label: "储后", pressure: null, velocity: null, time: null, distance: null }
-          ],
-          delay_time: null,
-          ending_position: null
-        },
-        barrel_temperature: {
-          max_stage: 10,
-          stage: 5,
-          table_data: [
-            { label: "温度", unit: "℃", sections: initArray(10, null) },
-          ],
-        }
-      },
-      defect_feedback: {
-        short_shot: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        flash: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        shrinkage: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        weld_line: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        aberration: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        air_trap: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        gas_veins: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-        material_flower: { level: "无缺陷", position: "缺陷位置不指定", count: 0, feedback: null, remarks: null },
-      },
-      realtime_info: {
-        actual_product_weight: null,
-        peak_pressure: null,
-      },
-      optimize_record: {
-        last_defect_name: null,
-        last_defect_level: null,
-        last_defect_position: null,
-        
-        rule_id: null,
-        rule_description: null,
-        rule_activation: null,
-        rule_result_key: null,
-        rule_result_value: null,
+// ============================================================================
+// sessionStorage 持久化（避免切页面后丢失未提交的工艺数据）
+// ============================================================================
 
-        adjust_name: null,
-        adjust_value: null,
-      }
-    }]
-  }]
+/**
+ * sessionStorage key（带软件版本号）
+ * - 保存：form / conditionExpanded / observationExpanded
+ * - 不保存：loaded / *_loading / defectKeywords / previousSuggestion（mock） / conditionSyncTimer
+ */
+const STORAGE_KEY = createSessionStorageKey('optimization-create-draft')
+
+/** debounce 延迟（ms）；输入框每键都触发 reactive，节流到 300ms 足够实时 */
+const PERSIST_DEBOUNCE_MS = 300
+
+/** 防抖定时器句柄（form / conditionExpanded / observationExpanded 共用） */
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+function schedulePersist() {
+  if (persistTimer) clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    persistDraft()
+  }, PERSIST_DEBOUNCE_MS)
 }
 
-export default {
-  name: "CreateProcessOptimize",
-  components: { 
-    BasicMoldInfo, 
-    BasicInjectionInfo, 
-    InjectionStationDetail 
-  },
-  props: {
-    viewContext: {
-      type: Object,
-      default: () => ({
-        id: null,
-        is_dialog: false,
-        mode: null,
-        excel_data: null
-      })
-    }
-  },
-  data() {
-    return {
-      detail_info: structuredClone(initialDetailInfo),
-      view_context: this.viewContext,
-      actived_tab_index: "0",
-      save_loading: false,
-      dialog_visible: false,
-      switch_station: 0,
-      default_station_distribute: true
-    }
-  },
-  watch: {
-    "detail_info.basic_mold_info.id" () {
-      this.updateViewData()
-    },
-    "detail_info.basic_machine_info.id" () {
-      this.updateViewData()
-    },
-    "detail_info": {
-      handler: function() {
-        sessionStorage.setItem("process_optimize", JSON.stringify(this.detail_info))
-      },
-      deep: true
-    },
-    viewContext: {
-      handler: function () {
-        this.view_context = this.viewContext
-        this.initializeView()
-      },
-      deep: true,
-      immediate: true
-    },
-  },
-  created() {
-    // sessionStorage
-    let checkData = sessionStorage.getItem("process_optimize")
-    if (isValidData(checkData)) {
-      this.detail_info = JSON.parse(checkData)
-    }
-  },
-  mounted() {
-    this.initializeView()
-  },
-  methods: {
-    async initializeView() {
-      this.detail_info.process_id = null
-      if (this.view_context.id) {
-        // 弹框进入界面
-        this.detail_info.process_id = this.view_context.id
-      } else if (this.$route.query.id) {
-        // 跳转进入界面，读取工艺记录
-        const res = await processRecordMethod.get({ "process_id": this.$route.query.id })
-        if (res.status === 0 && isValidData(res.data)) {
-          this.detail_info.company_id = res.data.company_id
-          this.detail_info.project_id = res.data.project_id
-          this.detail_info.process_id = res.data.process_id
-          this.detail_info.basic_mold_info = res.data.basic_mold_info
-          this.detail_info.basic_machine_info = res.data.basic_machine_info
-          syncArray(this.detail_info.injection_station_details, res.data.injection_station_details, initialDetailInfo.injection_station_details[0])
-          this.detail_info.injection_station_details.forEach((injection_station, index) => {
-            updateObjectProperties(injection_station, res.data.injection_station_details[index])
-          })
-        } else {
-          this.$message({ message: "数据丢失，未读取到相关内容！", type: "warning" })
-        }
-        return
-      }
+/**
+ * 序列化并保存当前状态
+ * - 走 JSON 序列化不走 structuredClone：Vue 3 的 reactive Proxy 在 Chrome 的
+ *   structuredClone 路径上会抛 DataCloneError（form 嵌套了 mold_info / machine_info
+ *   等 API 响应对象）。JSON 路径兼容性最好（足够处理表单数据）
+ * - setSessionStorage 内部已 try-catch，失败静默
+ */
+function persistDraft() {
+  let plain: unknown
+  try {
+    plain = JSON.parse(JSON.stringify(form))
+  } catch (err) {
+    // 极端情况（循环引用 / BigInt）：跳过本次写入
+    console.warn('[OptimizationCreate] persistDraft 序列化失败，已跳过:', err)
+    return
+  }
+  setSessionStorage(STORAGE_KEY, {
+    form: plain,
+    conditionExpanded: conditionExpanded.value,
+    observationExpanded: observationExpanded.value,
+  })
+}
 
-      if (!this.detail_info.process_id) return
+/** 清理防抖 + 立即写入（重置前调用，避免被 debounce 延迟的写覆盖重置结果） */
+function flushPersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+  persistDraft()
+}
 
-      // 读取工艺优化记录
-      const res = await processOptimizeMethod.get({ "process_id": this.detail_info.process_id })
-      if (res.status === 0 && isValidData(res.data)) {
-        updateObjectProperties(this.detail_info, res.data)
-      } else {
-        this.$message({ message: "数据丢失，未读取到相关内容！", type: "warning" })
-        this.$emit("close")
-      }
-    },
-    async updateViewData() {
-      // 1. 需要确定机台信息
-      if (this.detail_info.basic_machine_info.id) {
-        const res = await machineMethod.getDetail(this.detail_info.basic_machine_info.id)
-        if (res.status === 0 && res.data) {
-          // 读取注塑机基本参数
-          updateObjectProperties(this.detail_info.basic_machine_info, res.data)
-          // 读取注塑机射台参数
-          if (isValidData(res.data.injection_details)) {
-            // 根据注塑机信息调整射台数量
-            syncArray(this.detail_info.injection_station_details, res.data.injection_details, initialDetailInfo.injection_station_details[0])
-            // 更新每个注射部件的参数
-            this.detail_info.injection_station_details.forEach((injection_station, index) => {
-              updateObjectProperties(injection_station.injection_detail, res.data.injection_details[index])
-              // 调整界面的单位
-              injection_station.optimize_list.forEach((optimize_detail) => {
-                // 注射参数
-                optimize_detail.setting_process.injection.table_data[0].unit = res.data.pressure_unit
-                optimize_detail.setting_process.injection.table_data[1].unit = res.data.velocity_unit
-                // 保压参数
-                optimize_detail.setting_process.holding.table_data[0].unit = res.data.pressure_unit
-                optimize_detail.setting_process.holding.table_data[1].unit = res.data.velocity_unit
-                // 计量参数
-                optimize_detail.setting_process.metering.table_data[0].unit = res.data.pressure_unit
-                optimize_detail.setting_process.metering.table_data[1].unit = res.data.screw_rotation_unit
-                optimize_detail.setting_process.metering.table_data[2].unit = res.data.back_pressure_unit
-              })
-            })
-          }
-        }
-      }
+/**
+ * 从 sessionStorage 恢复草稿
+ * - 恢复失败 / schema 异常 → 返回 false，调用方走默认初始化
+ * - schema 校验：rounds 非空数组 + condition 为 plain object，防止 storage 中的
+ *   过期 / 损坏数据引起崩溃
+ */
+function restoreDraft(): boolean {
+  const cached = getSessionStorage<{
+    form: typeof form
+    conditionExpanded: boolean
+    observationExpanded: boolean
+  }>(STORAGE_KEY)
+  if (!cached) return false
 
-      // 2. 需要确定模具信息
-      if (this.detail_info.basic_mold_info.id) {
-        const res = await projectMethod.getDetail(this.detail_info.basic_mold_info.id)
-        if (res.status === 0 && res.data) {
-          updateObjectProperties(this.detail_info.basic_mold_info, res.data.mold_info)
-          if (isValidData(res.data.mold_info.casting_systems)) {
-            const casting_systems = res.data.mold_info.casting_systems
-            // 更新每个射台对应的模具浇注信息
-            this.detail_info.injection_station_details.forEach((injection_station, index) => {
-              // 确保数据有效
-              if (index < casting_systems.length) {
-                updateObjectProperties(injection_station.casting_system, casting_systems[index])
-                // 移除浇口信息 id
-                injection_station.casting_system.gate_details.forEach(gate => {
-                  delete gate.id
-                  delete gate.casting_system_id
-                })
+  const c = cached.form
+  if (!c || typeof c !== 'object') return false
+  if (!Array.isArray(c.rounds) || c.rounds.length === 0) return false
+  if (typeof c.condition !== 'object' || c.condition === null) return false
 
-                // 移除制品信息 id
-                injection_station.casting_system.product_details.forEach(product => {
-                  delete product.id
-                  delete product.casting_system_id
-                })
-              }
-            })
-          }
-        }
-      }
+  // 覆盖默认值（不调 resetForm，那里会清 storage）
+  Object.assign(form, c)
+  form.active_round_id = c.active_round_id ?? c.rounds[0]?.id ?? null
+  conditionExpanded.value = cached.conditionExpanded ?? true
+  observationExpanded.value = cached.observationExpanded ?? false
+  return true
+}
 
-      // // 强制界面渲染
-      // this.detail_info.injection_station_details = structuredClone(this.detail_info.injection_station_details);
-      // console.log(this.detail_info.injection_station_details)
-    },
-    showWarningMsg(msg) {      
-      this.$message({ type: "warning", message: msg })
-    },
-    loadProcessPara(setting_process, params) {
-      // 注射参数
-      setting_process.injection.stage = params["stage"]
-      for (let i = 0; i < params["stage"]; i++) {
-        setting_process.injection.table_data[0].sections[i] = params["IP" + i]
-        setting_process.injection.table_data[1].sections[i] = params["IV" + i]
-        setting_process.injection.table_data[2].sections[i] = params["IL" + i]
-      }
-      setting_process.injection.injection_time = params["IT"]
-      setting_process.injection.delay_time = params["ID"]
-      setting_process.injection.cooling_time = params["CT"]
+// ============================================================================
+// 状态
+// ============================================================================
 
-      // 切换方式
-      setting_process.vp_switch.mode = params["VPTM"]
-      setting_process.vp_switch.position = params["VPTL"]
-      setting_process.vp_switch.time = params["VPTT"]
-      setting_process.vp_switch.pressure = params["VPTP"]
-      setting_process.vp_switch.velocity = params["VPTV"]
-      
-      // 保压参数
-      setting_process.holding.stage = params["stage"]
-      for (let i = 0; i < params["stage"]; i++) {
-        setting_process.holding.table_data[0].sections[i] = params["PP" + i]
-        setting_process.holding.table_data[1].sections[i] = params["PV" + i]
-        setting_process.holding.table_data[2].sections[i] = params["PT" + i]
-      }
-
-      // 计量参数
-      setting_process.metering.stage = params["stage"]
-      for (let i = 0; i < params["stage"]; i++) {
-        setting_process.metering.table_data[0].sections[i] = params["MP" + i]
-        setting_process.metering.table_data[1].sections[i] = params["MSR" + i]
-        setting_process.metering.table_data[2].sections[i] = params["MBP" + i]
-        setting_process.metering.table_data[3].sections[i] = params["ML" + i]
-      }
-
-      // 储料切换方式
-      setting_process.metering.pre_decompress_mode = params["DMBM"]
-      setting_process.metering.post_decompress_mode = params["DMAM"]
-
-      // 储前参数
-      setting_process.metering.decompress_table_data[0].pressure = params["DPBM"]
-      setting_process.metering.decompress_table_data[0].velocity = params["DVBM"]
-      setting_process.metering.decompress_table_data[0].distance = params["DDBM"]
-      setting_process.metering.decompress_table_data[0].time = params["DTBM"]
-
-      // 储后参数
-      setting_process.metering.decompress_table_data[1].pressure = params["DPAM"]
-      setting_process.metering.decompress_table_data[1].velocity = params["DVAM"]
-      setting_process.metering.decompress_table_data[1].distance = params["DDAM"]
-      setting_process.metering.decompress_table_data[1].time = params["DTAM"]
-
-      setting_process.metering.delay_time = params["MD"]
-      setting_process.metering.ending_position = params["MEL"]
-
-      // 料筒温度
-      setting_process.barrel_temperature.stage = params["stage"]
-      for (let i = 0; i < params["stage"]; i++) {
-        if ( i === 0) {
-          setting_process.barrel_temperature.table_data[0].sections[i] = params["NT"]
-        } else {
-          setting_process.barrel_temperature.table_data[0].sections[i] = params["BT" + i]
-        }
-      }
-    },
-    checkProcessValid(setting_process) {
-      if (!this.detail_info.basic_machine_info.drive_system) {
-        return this.showWarningMsg("注塑机信息不完整 - 动力方式为空, 请补充相关信息")
-      }
-      let injection = setting_process.injection
-      for (let i = 0; i < injection.stage; ++i) {
-        if (injection.table_data[0].sections[i] == null) {
-          return this.showWarningMsg("注射" + (i + 1) + "段压力不能为空")
-        }
-        if (injection.table_data[1].sections[i] == null) {
-          return this.showWarningMsg("注射" + (i + 1) + "段速度不能为空")
-        }
-        if (injection.table_data[2].sections[i] == null) {
-          return this.showWarningMsg("注射" + (i + 1) + "段位置不能为空")
-        }
-      }
-      if (injection.injection_time == null) {
-        return this.showWarningMsg("注射时间不能为空")
-      }
-      if (injection.cooling_time == null) {
-        return this.showWarningMsg("冷却时间不能为空")
-      }
-      let vp_switch = setting_process.vp_switch
-      if (vp_switch.mode == null) {
-        return this.showWarningMsg("VP切换模式不能为空")
-      } else {
-        if (vp_switch.mode == "位置" && vp_switch.position == null) {
-          return this.showWarningMsg("位置切换模式时，切换位置不能为空")
-        }
-        if (vp_switch.mode == "时间" && vp_switch.time == null) {
-          return this.showWarningMsg("时间切换模式时，切换时间不能为空")
-        }
-        if (vp_switch.mode == "时间&位置" 
-        && vp_switch.position == null && vp_switch.time == null) {
-          return this.showWarningMsg("时间&位置切换模式时，切换位置和切换时间不能为空")
-        }
-        if (vp_switch.mode == "压力" && vp_switch.pressure == null) {
-          return this.showWarningMsg("压力切换模式时，切换压力不能为空")
-        }
-        if (vp_switch.mode == "速度" && vp_switch.velocity == null) {
-          return this.showWarningMsg("速度切换模式时，切换速度不能为空")
-        }
-      }
-
-      let holding = setting_process.holding
-      for (let i = 0; i < holding.stage; ++i) {
-        if (holding.table_data[0].sections[i] == null) {
-          return this.showWarningMsg("保压" + (i + 1) + "段压力不能为空")
-        }
-        if (holding.table_data[1].sections[i] == null) {
-          return this.showWarningMsg("保压" + (i + 1) + "段速度不能为空")
-        }
-        if (holding.table_data[2].sections[i] == null) {
-          return this.showWarningMsg("保压" + (i + 1) + "段时间不能为空")
-        }
-      }
-
-      let metering = setting_process.metering
-      for (let i = 0; i < metering.stage; ++i) {
-        if (metering.table_data[0].sections[i] == null) {
-          if (this.detail_info.basic_machine_info.drive_system != "电动机")
-            return this.showWarningMsg("计量" + (i + 1) + "段压力不能为空")
-        }
-        if (metering.table_data[1].sections[i] == null) {
-          return this.showWarningMsg("计量" + (i + 1) + "段螺杆转速不能为空")
-        }
-        if (metering.table_data[2].sections[i] == null) {
-          return this.showWarningMsg("计量" + (i + 1) + "段背压不能为空")
-        }
-        if (metering.table_data[3].sections[i] == null) {
-          return this.showWarningMsg("计量" + (i + 1) + "段位置不能为空")
-        }
-      }
-
-      if (metering.post_decompress_mode == "距离") {
-        if (metering.decompress_table_data[1].pressure == null) {
-          return this.showWarningMsg("储后压力不能为空")
-        }
-        if (metering.decompress_table_data[1].velocity == null) {
-          return this.showWarningMsg("储后速度不能为空")
-        }
-        if (metering.decompress_table_data[1].distance == null) {
-          return this.showWarningMsg("储后距离不能为空")
-        }
-      } else if (metering.post_decompress_mode == "时间") {
-        if (metering.decompress_table_data[1].pressure == null) {
-          return this.showWarningMsg("储后压力不能为空")
-        }
-        if (metering.decompress_table_data[1].velocity == null) {
-          return this.showWarningMsg("储后速度不能为空")
-        }
-        if (metering.decompress_table_data[1].time == null) {
-          return this.showWarningMsg("储后时间不能为空")
-        }
-      }
-
-      if (metering.ending_position == null) {
-        return this.showWarningMsg("储料终止位置不能为空") 
-      }
-
-      return true
-    },
-    async saveProcessOptimizeDetail() {
-      if (this.detail_info.process_id == null) {
-        // 插入工艺索引
-        let mold_info = this.detail_info.basic_mold_info
-        let machine_info = this.detail_info.basic_machine_info
-        let polys_infos = [[], [], [], [], [], []]
-        for (let i = 0; i < this.detail_info.injection_station_details.length; ++i) {
-          let polymer_detail = this.detail_info.injection_station_details[i].polymer_detail
-          polys_infos[0].push(polymer_detail.id)
-          polys_infos[1].push(polymer_detail.data_source)
-          polys_infos[2].push(polymer_detail.manufacturer)
-          polys_infos[3].push(polymer_detail.abbreviation)
-          polys_infos[4].push(polymer_detail.trademark)
-          polys_infos[5].push(polymer_detail.category)
-        }
-
-        await processIndexMethod.add({
-          company_id: UserModule.company_id,
-          organization_id: UserModule.organization_id,
-          project_id: this.detail_info.basic_mold_info.id,
-          // 标记信息
-          type: "optimize",
-          status: 1,
-          data_source: "手工录入",
-          process_no: "P" + datetimeTodayStr(),
-          // 模具信息
-          mold_no: mold_info.mold_no,
-          mold_type: mold_info.mold_type,
-          mold_name: mold_info.mold_name,
-          cavity_num: mold_info.cavity_num,
-          inject_cycle_require: mold_info.inject_cycle_require,
-          product_industry: mold_info.product_industry,
-          product_category: mold_info.product_category,
-          product_type: mold_info.product_type,
-          product_name: mold_info.product_name,
-          product_no: mold_info.product_no,
-          product_total_weight: mold_info.product_total_weight,
-          product_projected_area: mold_info.product_projected_area,
-          // 注塑机信息
-          mac_id: machine_info.id,
-          mac_manufacturer: machine_info.manufacturer,
-          mac_trademark: machine_info.trademark,
-          mac_serial_no: machine_info.serial_no,
-          mac_data_source: machine_info.data_source,
-          mac_machine_type: machine_info.machine_type,
-          // 材料信息
-          polys_id: polys_infos[0].join("&"),
-          polys_data_source: polys_infos[1].join("&"),
-          polys_manufacturer: polys_infos[2].join("&"),
-          polys_abbreviation: polys_infos[3].join("&"),
-          polys_trademark: polys_infos[4].join("&"),
-          polys_category: polys_infos[5].join("&"),
-        }).then(res => {
-          if (res.status === 0 && isValidData(res.data)) {
-            this.detail_info.process_id = res.data.id
-            this.$message({ message: "工艺参数索引新增成功！", type: "success" })
-          }
-        })
-      }
-      // 如果有工艺索引，则保存优化记录
-      if (!this.detail_info.process_id) return
-      await processOptimizeMethod.add({
-        company_id: UserModule.company_id,
-        organization_id: UserModule.organization_id,
-        project_id: this.detail_info.basic_mold_info.id,
-        process_id: this.detail_info.process_id,
-        basic_mold_info: this.detail_info.basic_mold_info,
-        basic_machine_info: this.detail_info.basic_machine_info,
-        injection_station_details: this.detail_info.injection_station_details
-      }).then(res => {
-        if (res.status === 0) {
-          this.$message({ message: "工艺优化记录已上传！", type: "success" })
-        }
-      })
-    },
-    async initProcessPara() {
-      let mold_info = this.detail_info.basic_mold_info
-      let machine_info = this.detail_info.basic_machine_info
-      let injection_station_detail = this.detail_info.injection_station_details[Number(this.actived_tab_index)]
-      let polymer_info = injection_station_detail.polymer_detail
-      let casting_system = injection_station_detail.casting_system
-      let init_process = injection_station_detail.optimize_list[0].setting_process
-      // 查找横截面积最大的浇口信息
-      let max_gate_area = 0
-      let gate_detail = casting_system.gate_details[0]
-      for (let i = 0; i < casting_system.gate_details.length; ++i) {
-        if (casting_system.gate_details[i].gate_area > max_gate_area) {
-          max_gate_area = casting_system.gate_details[i].gate_area
-          gate_detail = casting_system.gate_details[i]
-        }
-      }
-      // 获取制品信息，制品的总质量求和，最大壁厚、平均壁厚取最大值，最小壁厚取最小值
-      let product_total_weight = 0
-      let product_flow_length = 0
-      let product_max_thickness = 0
-      let product_min_thickness = 10000
-      let product_ave_thickness = 0
-      for (let i = 0; i < casting_system.product_details.length; ++i) {
-        let product_detail = casting_system.product_details[i]
-        product_total_weight += Number(product_detail.product_single_weight)
-        if (product_detail.product_flow_length > product_flow_length) {
-          product_flow_length = product_detail.product_flow_length
-        }
-        if (product_detail.product_max_thickness > product_max_thickness) {
-          product_max_thickness = product_detail.product_max_thickness
-        }
-        if (product_detail.product_min_thickness < product_min_thickness) {
-          product_min_thickness = product_detail.product_min_thickness
-        }
-        if (product_detail.product_ave_thickness > product_ave_thickness) {
-          product_ave_thickness = product_detail.product_ave_thickness
-        }
-      }
-      // 调用初始工艺算法
-      const res = await initialProcessAlgorithm({
-        // 模具信息
-        mold_id: mold_info.id,
-        mold_no: mold_info.mold_no,
-        cavity_num: mold_info.cavity_num,
-        inject_cycle_require: mold_info.inject_cycle_require,
-        // 制品类别
-        product_industry: mold_info.product_industry,
-        product_category: mold_info.product_category,
-        product_type: mold_info.product_type,
-        // 流道参数
-        runner_type: casting_system.runner_type,
-        runner_weight: casting_system.runner_weight,
-        runner_length: casting_system.runner_length,
-        hot_nozzle_type: casting_system.hot_nozzle_type,
-        hot_nozzle_number: casting_system.hot_nozzle_number,
-        hotrunner_valve_number: casting_system.hotrunner_valve_number,
-        // 浇口参数
-        gate_type: gate_detail.gate_type,
-        gate_shape: gate_detail.gate_shape,
-        gate_number: gate_detail.gate_number,
-        gate_area: gate_detail.gate_area,
-        // 制品参数
-        product_total_weight: product_total_weight,
-        product_flow_length: product_flow_length,
-        product_max_thickness: product_max_thickness,
-        product_min_thickness: product_min_thickness,
-        product_ave_thickness: product_ave_thickness,
-        // 注塑机信息
-        machine_id: machine_info.id,
-        mac_manufacturer: machine_info.mac_manufacturer,
-        mac_trademark: machine_info.trademark,
-        mac_serial_no: machine_info.serial_no,
-        mac_data_source: machine_info.data_source,
-        mac_machine_type: machine_info.machine_type,
-        injection_name: this.actived_tab_index,
-        // 塑料信息
-        polymer_id: polymer_info.id,
-        poly_manufacture: polymer_info.manufacturer,
-        poly_abbreviation: polymer_info.abbreviation,
-        poly_trademark: polymer_info.trademark,
-        poly_category: polymer_info.category,
-        // 注塑机初始设定
-        stage: init_process.injection.stage,
-        VP_switch_mode: init_process.vp_switch.mode,
-        stage: init_process.holding.stage,
-        stage: init_process.metering.stage,
-        pre_decompress_mode: init_process.metering.pre_decompress_mode,
-        post_decompress_mode: init_process.metering.post_decompress_mode,
-        stage: init_process.barrel_temperature.stage
-      })
-      // 处理初始化之后的操作
-      if (res.status === 0 && isValidData(res.data)) {
-        // 读取数据
-        this.loadProcessPara(init_process, res.data)
-        // 强制界面渲染
-        this.detail_info.injection_station_details = structuredClone(this.detail_info.injection_station_details)
-        // 由于是初始化工艺
-        injection_station_detail.optimize_list.length = 1
-        this.detail_info.process_id = null
-        // 保存界面数据
-        this.saveProcessOptimizeDetail()
-      } else {
-        this.$message({ message: "工艺参数初始化失败！", type: "error" })
-      }
-    },
-    async optimizeProcessPara() {
-      const setCurrentOptimizeTab = (tab_index) => {
-        if (this.$refs["injection_station_detail"] instanceof Array) {
-          this.$refs["injection_station_detail"][Number(this.actived_tab_index)].actived_tab_index = String(tab_index)
-        } else {
-          this.$refs["injection_station_detail"].actived_tab_index = String(tab_index)
-        }
-      }
-
-      // 获取当前界面显示的工艺信息，构建提交给后端的参数信息
-      let mold_info = this.detail_info.basic_mold_info
-      let machine_info = this.detail_info.basic_machine_info
-      let injection_station_detail = this.detail_info.injection_station_details[Number(this.actived_tab_index)]
-      let optimize_list = injection_station_detail.optimize_list
-      let opt_idx = 0
-      if (this.$refs["injection_station_detail"] instanceof Array) {
-        opt_idx = Number(this.$refs["injection_station_detail"][Number(this.actived_tab_index)].actived_tab_index)
-      } else {
-        opt_idx = Number(this.$refs["injection_station_detail"].actived_tab_index)
-      }
-      let optimize_detail = optimize_list[opt_idx]
-      let process_detail = optimize_detail.setting_process
-
-      // 校验工艺参数
-      if (this.checkProcessValid(process_detail) != true) return
-
-      // 校验缺陷反馈信息
-      let target_defect = null
-      for (let defect in optimize_detail.defect_feedback) {
-        if (optimize_detail.defect_feedback[defect].level != "无缺陷") {
-          target_defect = defect
-          break
-        }
-      }
-      if (target_defect == null) {
-        return this.showWarningMsg("无缺陷反馈信息，请填写！")
-      }
-
-      // 构建注射重量
-      let casting_system = injection_station_detail.casting_system
-      let product_weight = 0
-      if (casting_system.runner_type in ["冷流道", "热转冷"]) {
-        product_weight = Number(casting_system.runner_weight)
-      }
-      for (let i = 0; i < casting_system.product_details.length; ++i) {
-        product_weight += Number(casting_system.product_details[i].product_single_weight)
-      }
-      // 获取材料参数
-      let polymer_detail = injection_station_detail.polymer_detail
-      // 构建优化数据结构
-      let process_params = {
-        "opt_idx": opt_idx,
-        "process_id": this.detail_info.process_id,
-        "machine_id": machine_info.id,
-        "injection_name": this.actived_tab_index,
-        "polymer_abbreviation": polymer_detail.abbreviation,
-        "product_type": mold_info.product_type,
-        "product_weight": product_weight
-      }
-      // 注射参数
-      let injection = process_detail.injection
-      process_params["stage"] = injection.stage
-      for (let i = 0; i < injection.stage; i++) {
-        process_params["IP" + i] = injection.table_data[0].sections[i]
-        process_params["IV" + i] = injection.table_data[1].sections[i]
-        process_params["IL" + i] = injection.table_data[2].sections[i]
-      }
-      process_params["IT"] = injection.injection_time
-      process_params["ID"] = injection.delay_time
-      process_params["CT"] = injection.cooling_time
-      // VP切换参数
-      let vp_switch = process_detail.vp_switch
-      process_params["VPTM"] = vp_switch.mode
-      process_params["VPTT"] = vp_switch.time
-      process_params["VPTL"] = vp_switch.position
-      process_params["VPTP"] = vp_switch.pressure
-      process_params["VPTV"] = vp_switch.velocity
-      // 保压参数
-      let holding = process_detail.holding
-      process_params["stage"] = holding.stage
-      for (let i = 0; i < holding.stage; i++) {
-        process_params["PP" + i] = holding.table_data[0].sections[i]
-        process_params["PV" + i] = holding.table_data[1].sections[i]
-        process_params["PT" + i] = holding.table_data[2].sections[i]
-      }
-      // 计量参数
-      let metering = process_detail.metering
-      process_params["stage"] = metering.stage
-      for (let i = 0; i < metering.stage; i++) {
-        process_params["MP" + i] = metering.table_data[0].sections[i]
-        process_params["MSR" + i] = metering.table_data[1].sections[i]
-        process_params["MBP" + i] = metering.table_data[2].sections[i]
-        process_params["ML" + i] = metering.table_data[3].sections[i]
-      }
-      // 储前射退参数
-      process_params["DMBM"] = metering.pre_decompress_mode
-      process_params["DPBM"] = metering.decompress_table_data[0].pressure
-      process_params["DVBM"] = metering.decompress_table_data[0].velocity
-      process_params["DDBM"] = metering.decompress_table_data[0].distance
-      process_params["DTBM"] = metering.decompress_table_data[0].time
-      // 储后射退参数
-      process_params["DMAM"] = metering.post_decompress_mode
-      process_params["DPAM"] = metering.decompress_table_data[1].pressure
-      process_params["DVAM"] = metering.decompress_table_data[1].velocity
-      process_params["DDAM"] = metering.decompress_table_data[1].distance
-      process_params["DTAM"] = metering.decompress_table_data[1].time
-
-      process_params["MD"] = metering.delay_time
-      process_params["MEL"] = metering.ending_position
-
-      // 温度参数
-      let barrel_temperature = process_detail.barrel_temperature
-      process_params["stage"] = barrel_temperature.stage
-      for (let i = 0; i < barrel_temperature.stage; i++) {
-        if (i === 0) {
-          process_params["NT"] = barrel_temperature.table_data[0].sections[i]
-        } else {
-          process_params["BT" + i] = barrel_temperature.table_data[0].sections[i]
-        }
-      }
-      // 其它参数
-      process_params["defect_feedback"] = optimize_detail.defect_feedback
-      process_params["realtime_info"] = optimize_detail.realtime_info
-      process_params["optimize_record"] = optimize_detail.optimize_record
-      // 调用工艺优化算法
-      const res = await optimizeProcessAlgorithm(process_params)
-      if (res.status === 0 && isValidData(res.data)) {
-        let optimize_detail = structuredClone(initialDetailInfo.injection_station_details[0].optimize_list[0])
-        // 读取工艺参数
-        this.loadProcessPara(optimize_detail.setting_process, res.data)
-        // 其它数据
-        optimize_detail.optimize_record = res.data.optimize_record
-        let last_defect = res.data.optimize_record.last_defect_name
-        optimize_detail.defect_feedback[last_defect].feedback = "上一模修正效果佳"
-        if (opt_idx < optimize_list.length - 1) {
-          // 重新优化参数
-          optimize_list[opt_idx + 1] = optimize_detail
-          setCurrentOptimizeTab(opt_idx + 1)
-        } else {
-          // 插入优化参数
-          optimize_list.push(optimize_detail)
-          setCurrentOptimizeTab(optimize_list.length - 1)
-        }
-      }
-
-      // 保存界面数据
-      this.saveProcessOptimizeDetail()
-    },
-    async saveCurrentProcess() {
-      // 保存当前界面的工艺
-      let mold_info = this.detail_info.basic_mold_info
-      let machine_info = this.detail_info.basic_machine_info
-      let polys_infos = [[], [], [], [], [], []]
-      for (let i = 0; i < this.detail_info.injection_station_details.length; ++i) {
-        let polymer_detail = this.detail_info.injection_station_details[i].polymer_detail
-        polys_infos[0].push(polymer_detail.id)
-        polys_infos[1].push(polymer_detail.data_source)
-        polys_infos[2].push(polymer_detail.manufacturer)
-        polys_infos[3].push(polymer_detail.abbreviation)
-        polys_infos[4].push(polymer_detail.trademark)
-        polys_infos[5].push(polymer_detail.category)
-      }
-
-      let process_id = null
-      await processIndexMethod.add({
-        company_id: UserModule.company_id,
-        organization_id: UserModule.organization_id,
-        project_id: this.detail_info.basic_mold_info.id,
-        // 标记 信息
-        type: "record",
-        data_source: "自动生成",
-        status: 1,
-        process_no: "P" + datetimeTodayStr(),
-        // 模具信息
-        mold_no: mold_info.mold_no,
-        mold_type: mold_info.mold_type,
-        mold_name: mold_info.mold_name,
-        cavity_num: mold_info.cavity_num,
-        inject_cycle_require: mold_info.inject_cycle_require,
-        product_industry: mold_info.product_industry,
-        product_category: mold_info.product_category,
-        product_type: mold_info.product_type,
-        product_name: mold_info.product_name,
-        product_no: mold_info.product_no,
-        product_total_weight: mold_info.product_total_weight,
-        product_projected_area: mold_info.product_projected_area,
-        // 注塑机信息
-        mac_id: machine_info.id,
-        mac_data_source: machine_info.data_source,
-        mac_manufacturer: machine_info.manufacturer,
-        mac_trademark: machine_info.trademark,
-        mac_serial_no: machine_info.serial_no,
-        mac_machine_type: machine_info.machine_type,
-        // 材料信息
-        polys_id: polys_infos[0].join("&"),
-        polys_data_source: polys_infos[1].join("&"),
-        polys_manufacturer: polys_infos[2].join("&"),
-        polys_abbreviation: polys_infos[3].join("&"),
-        polys_trademark: polys_infos[4].join("&"),
-        polys_category: polys_infos[5].join("&"),
-      }).then(res => {
-        if (res.status === 0 && isValidData(res.data)) {
-          process_id = res.data.id
-          this.$message({ message: "工艺参数索引新增成功！", type: "success" })
-        }
-      })
-      if (!process_id) return
-      // 构建每射台工艺参数
-      let injection_station_details = []
-      if (this.$refs["injection_station_detail"] instanceof Array) {
-        for (let i = 0; i < this.$refs["injection_station_detail"].length; ++i) {
-          let select_idx = Number(this.$refs["injection_station_detail"][i].actived_tab_index)
-          let station_detail = this.detail_info.injection_station_details[i]
-          injection_station_details.push({
-            "casting_system": station_detail.casting_system,
-            "injection_detail": station_detail.injection_detail,
-            "polymer_detail": station_detail.polymer_detail,
-            "setting_process": station_detail.optimize_list[select_idx].setting_process
-          })
-        }
-      } else {
-        let select_idx = Number(this.$refs["injection_station_detail"].actived_tab_index)
-        let station_detail = this.detail_info.injection_station_details[0]
-        injection_station_details.push({
-          "casting_system": station_detail.casting_system,
-          "injection_detail": station_detail.injection_detail,
-          "polymer_detail": station_detail.polymer_detail,
-          "setting_process": station_detail.optimize_list[select_idx].setting_process
-        })
-      }
-      // 记录详细的工艺参数相关信息
-      await processRecordMethod.add({
-        "company_id": UserModule.company_id,
-        "organization_id": UserModule.organization_id,
-        "project_id": mold_info.id,
-        "process_id": process_id,
-        "basic_mold_info": mold_info,
-        "basic_machine_info": machine_info,
-        "injection_station_details": injection_station_details
-      }).then(res => {
-        if (res.status === 0) {
-          this.$message({ message: "工艺参数详细数据已保存！", type: "success" })
-        }
-      })
-    },
-    onStationChanged() {
-      // 交换射台模具参数
-      this.dialog_visible = false
-      let cur_tab_index = Number(this.actived_tab_index)
-      let tar_tab_index = Number(this.switch_station)
-      let cur_casting_system = structuredClone(this.detail_info.injection_station_details[cur_tab_index].casting_system)
-      this.detail_info.injection_station_details[cur_tab_index].casting_system = structuredClone(this.detail_info.injection_station_details[tar_tab_index].casting_system)
-      this.detail_info.injection_station_details[tar_tab_index].casting_system = cur_casting_system
-      this.actived_tab_index = String(tar_tab_index)
-    },
-    resetView() {
-      this.detail_info = structuredClone(initialDetailInfo)
-      this.actived_tab_index = "0"
+/**
+ * 创建一个调机轮次
+ * - id/created_at 用时间戳避免重复
+ * - parameter 深克隆 settingProcessForm，表数据 / max_stage 字段齐全
+ * - feedback 初值：defect=空数组，tuning_result/observations=null；预留 mold_temp / hot_runner
+ * - parameter_id：初始为 null，被【获取初始工艺】填充（后端 ProcessParameter.id）
+ * - seq_idx：初始为 null，被【获取初始工艺】填充（业务编号，condition 内全局递增）
+ *   下一次 infer 需传作 parent_seq_idx
+ *   注：不在 parameter 内部存储，保持 settingProcessForm 纯度
+ */
+function makeRound(type: 'initial' | 'optimized' | 'manual' = 'initial') {
+  const now = Date.now()
+  return {
+    id: now,
+    type,
+    created_at: new Date(now).toISOString(),
+    parameter_id: null as number | null,
+    seq_idx: null as number | null,
+    parameter: structuredClone(settingProcessForm) as any,
+    feedback: {
+      defect: [] as any,
+      tuning_result: null as any,
+      observations: [] as any,
+      // mold_temp / hot_runner：未来接入模温机 / 热流道反馈
     },
   }
 }
+
+const form = reactive({
+  condition: {} as Record<string, any>,
+  rounds: [makeRound('initial')] as Array<ReturnType<typeof makeRound>>,
+  active_round_id: null as number | null,
+})
+
+/** 页面初始化后默认选中首个轮次 */
+form.active_round_id = form.rounds[0]?.id ?? null
+
+const activeRound = computed(() =>
+  form.rounds.find((r) => r.id === form.active_round_id) ?? null,
+)
+
+/** 工艺条件是否已有数据：有数据默认折叠（用户重心已上优化），无数据默认展开（需填条件） */
+const hasConditionData = computed(() => {
+  const c: any = form.condition ?? {}
+  return Boolean(c.mold_id || c.injection_machine_id || c.polymer_id || c.condition_no)
+})
+
+/**
+ * 工艺按钮启用状态（业务流互斥，2026-09-23 加）：
+ * - hasInitialProcess：已创建初始工艺（condition_id 存在）。此时 [获取初始工艺]
+ *   应 disabled，需走 [重置] 才能重调（避免覆盖已生成的 condition/parameter）
+ * - hasAnyProcess：已有任意轮次落库（任意 round.parameter_id 存在）。此时
+ *   [获取优化工艺] 可用 —— infer 需 parent_seq_idx，而 parent_seq_idx 必须
+ *   有上一轮已落库的 parameter 才能反查
+ */
+const hasInitialProcess = computed(() => Boolean(form.condition?.id))
+const hasAnyProcess = computed(() =>
+  form.rounds.some((r) => r.parameter_id != null),
+)
+
+/** 机器单位映射（供 ProcessActualFeedback 使用）；重量无机器信息，默认 g */
+const machineUnit = computed(() => {
+  const m: any = form.condition?.machine_info ?? {}
+  return {
+    pressure: m.pressure_unit,
+    time: m.time_unit,
+    length: m.position_unit,
+  }
+})
+
+const conditionExpanded = ref(true)
+
+/** 工艺实测块是否展开（粘性状态：跨调机轮次保持）；默认折叠避免误导必填 */
+const observationExpanded = ref(false)
+
+/** 工艺参数区是否只读（用户手动切换，跨调机轮次保留） */
+const isProcessReadonly = ref(false)
+
+/** 子组件内部 toggle 不会通知父组件，定时 poll 同步 */
+let conditionSyncTimer: ReturnType<typeof setInterval> | null = null
+
+const loaded = ref(false)
+const save_loading = ref(false)
+const initial_loading = ref(false)
+const optimize_loading = ref(false)
+const conditionRef = ref<InstanceType<typeof ProcessCondition> | null>(null)
+
+// ============================================================================
+// 缺陷 keyword 列表（DefectFeedback 需要）
+// ============================================================================
+
+/**
+ * 缺陷类 keyword 列表
+ * - 后端 listRuleKeywords 未实现 category 过滤，前端拉全部后 filter
+ * - TODO（后端支持后可改为参数过滤）
+ */
+const defectKeywords = ref<RuleKeyword[]>([])
+const positionKeywords = ref<RuleKeyword[]>([])
+const keywordsLoaded = ref(false)
+
+async function loadDefectKeywords() {
+  keywordsLoaded.value = false
+  try {
+    // 兼容两种响应格式：{ status, msg, data: { total, items } } 或 res.items
+    const res = await listRuleKeywords({ page_size: 500 }) as any
+    const items: RuleKeyword[] = res?.data?.items ?? res?.items ?? []
+    defectKeywords.value = items.filter(k => k.category === 'defect')
+    positionKeywords.value = items.filter(k => k.category === 'defect_position')
+  } catch (err: any) {
+    ElMessage.error(err?.message || '缺陷 keyword 加载失败')
+    defectKeywords.value = []
+    positionKeywords.value = []
+  } finally {
+    keywordsLoaded.value = true
+  }
+}
+
+// ============================================================================
+// 上一轮调整建议（开发阶段 mock，后续接入算法响应）
+// ============================================================================
+
+/** 上一轮算法 / 工艺员调整建议；生产环境来源：上一轮 infer 接口的 suggestion 字段 */
+const previousSuggestion = ref<Suggestion | null>({
+  source_round_id: 0,
+  adopted: null,  // 未确认
+  groups: [
+    {
+      category: '工艺调整',
+      icon: 'mdi:tune-variant',
+      items: [
+        {
+          description: '降低注射一段压力 5 MPa',
+          direction: 'decrease',
+          rule_refs: ['M001', 'M005'],
+        },
+        {
+          description: '延长保压时间 0.5 s',
+          direction: 'increase',
+          rule_refs: ['M003'],
+        },
+        {
+          description: '检查产品壁厚均匀性',
+          direction: 'check',
+        },
+      ],
+    },
+    {
+      category: '模温调整',
+      icon: 'mdi:thermometer',
+      items: [
+        {
+          description: '提高动模温度 10 ℃',
+          direction: 'increase',
+        },
+        {
+          description: '定模温度保持不变',
+          direction: 'hold',
+        },
+      ],
+    },
+  ],
+})
+
+function toggleCondition() {
+  conditionRef.value?.toggle()
+  syncConditionExpanded()
+}
+
+/** 同步子组件折叠状态（如点 header）→ 修正按钮文字 */
+function syncConditionExpanded() {
+  const cur = conditionRef.value?.isExpanded?.()
+  if (typeof cur === 'boolean' && cur !== conditionExpanded.value) {
+    conditionExpanded.value = cur
+  }
+}
+
+// ============================================================================
+// 数据加载
+// ============================================================================
+
+/**
+ * 加载表单：优先从 sessionStorage 恢复草稿，失败走默认初始化
+ * - 静默恢复，符合「切页面自动接着填」的预期
+ * - 不在 setup 顶部调 restoreDraft：form 还未定义；改为 loaded=false 阶段调
+ * - restore 成功后才挂 watch，否则 setup 顶部 reactive 后立即 watch 会触发
+ *   「初始写」覆盖 restoreDraft 读到的旧数据
+ */
+async function loadForm() {
+  loaded.value = false
+  try {
+    const restored = restoreDraft()
+    if (!restored) {
+      Object.assign(form, {
+        condition: {},
+        rounds: [makeRound('initial')],
+        active_round_id: null,
+      })
+      form.active_round_id = form.rounds[0]?.id ?? null
+      conditionExpanded.value = true
+      observationExpanded.value = false
+    }
+    loaded.value = true
+  } catch (err: any) {
+    ElMessage.error(err?.message || '加载失败')
+    loaded.value = true
+  }
+}
+
+// ============================================================================
+// 操作
+// ============================================================================
+
+/**
+ * 重置表单（用户主动清空数据）
+ * - 二次确认避免误操作
+ * - flushPersist 清掉任何 pending debounce 写，避免覆盖重置结果
+ *
+ * 重要：不能替换 form.condition / form.rounds 的整个引用——
+ *   - ProcessCondition.vue 在 setup 时 reactive(props.processCondition) 包装了**第一次**的引用
+ *   - 后续替换 form.condition 不会重包装，子组件 UI 会停留在旧数据
+ *   - 改用 mutate（delete / splice）保留引用，触发 reactive set/deleteProperty
+ */
+async function resetForm() {
+  try {
+    await ElMessageBox.confirm(
+      '确定要重置当前页面吗？所有未保存的工艺数据、轮次、缺陷反馈将被清除。',
+      '重置确认',
+      {
+        type: 'warning',
+        confirmButtonText: '重置',
+        cancelButtonText: '取消',
+        // 数据丢失风险高：禁用 ESC / 点遮罩关闭，强制明确操作
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+      },
+    )
+  } catch {
+    return  // 用户取消
+  }
+
+  flushPersist()
+  removeSessionStorage(STORAGE_KEY)
+
+  // 清空 form.condition 所有字段（保留对象引用，让子组件 reactive proxy 能跟上）
+  if (form.condition) {
+    for (const key of Object.keys(form.condition)) {
+      delete (form.condition as Record<string, any>)[key]
+    }
+  }
+
+  // 重置 rounds：splice 保留数组引用，computed activeRound 能感知
+  form.rounds.splice(0, form.rounds.length, makeRound('initial'))
+  form.active_round_id = form.rounds[0]?.id ?? null
+
+  conditionExpanded.value = true
+  observationExpanded.value = false
+
+  ElMessage.success('页面已重置')
+}
+
+// ============================================================================
+// 后端推理响应 → 前端表单（原子应用）
+// ============================================================================
+// 背景：
+//   后端 /initialization/from-masterdata/ 返回扁平工艺字段（inj_pres_steps 等），
+//   前端 settingProcessForm 是嵌套结构（injection / holding / metering / ...）。
+//   这里负责两层映射 + 一步原子应用。
+//
+// 原子语义：
+//   后端 Condition + Parameter 落库在同一事务（要么都成功，要么都回滚）。
+//   前端 JS 单线程：响应进入应用函数后，同步顺序执行所有赋值，要么都写入，
+//   要么一个都不写入（抛错时由调用方的 catch 统一回滚）。
+//   设计上所有写入集中在一个函数，不允许在调用点散落赋值，避免出现「cond
+//   已更新但 param 未更新」的中间状态。
+
+/** 把后端 steps 数组补齐到 max 长度，缺的填 null（前端 UI 需要固定长度） */
+function padSteps(steps: Array<number | null | undefined> | null | undefined, max: number): Array<number | null> {
+  if (!Array.isArray(steps)) return new Array(max).fill(null)
+  // 后端 steps 元素本身不会传 undefined，过滤保持类型严谨
+  const padded: Array<number | null> = (steps as Array<number | null>).slice()
+  while (padded.length < max) padded.push(null)
+  return padded.slice(0, max)
+}
+
+/**
+ * 把后端推理 result.process（扁平 ProcessParams.to_dict）映射到前端 settingProcessForm
+ *
+ * 后端字段参考：backend/process/engines/expert/param_types.py:ProcessParams
+ * 前端结构参考：frontend/src/constants/process-const.ts:settingProcessForm
+ */
+function mapInferResultToParameter(result: any): typeof settingProcessForm {
+  const p = result?.process ?? {}
+  void result?.mold_temp
+  // hot_runner 暂不映射（前端 ProcessSettings 未提供阀口时间设置）
+  return {
+    injection: {
+      ...settingProcessForm.injection,
+      stage: p.inj_stg ?? 1,
+      table_data: [
+        { label: '压力', unit: 'MPa', sections: padSteps(p.inj_pres_steps, 6) },
+        { label: '速度', unit: 'mm/s', sections: padSteps(p.inj_spd_steps, 6) },
+        { label: '位置', unit: 'mm', sections: padSteps(p.inj_pos_steps, 6) },
+      ],
+      injection_time: p.inj_t ?? null,
+      delay_time: p.inj_dly_t ?? null,
+      cooling_time: p.cool_t ?? null,
+    },
+    vp_switch: {
+      ...settingProcessForm.vp_switch,
+      mode: p.vps_mode ?? 0,
+      position: p.vps_pos ?? null,
+      time: p.vps_t ?? null,
+      pressure: p.vps_pres ?? null,
+      velocity: p.vps_spd ?? null,
+    },
+    holding: {
+      ...settingProcessForm.holding,
+      stage: p.hold_stg ?? 1,
+      table_data: [
+        { label: '压力', unit: 'MPa', sections: padSteps(p.hold_pres_steps, 5) },
+        { label: '速度', unit: 'mm/s', sections: padSteps(p.hold_spd_steps, 5) },
+        { label: '时间', unit: 's', sections: padSteps(p.hold_time_steps, 5) },
+      ],
+    },
+    metering: {
+      ...settingProcessForm.metering,
+      stage: p.met_stg ?? 1,
+      table_data: [
+        { label: '压力', unit: 'MPa', sections: padSteps(p.met_pres_steps, 4) },
+        { label: '螺杆转速', unit: 'rpm', sections: padSteps(p.met_rot_spd_steps, 4) },
+        { label: '背压', unit: 'MPa', sections: padSteps(p.met_back_pres_steps, 4) },
+        { label: '位置', unit: 'mm', sections: padSteps(p.met_pos_steps, 4) },
+      ],
+      delay_time: p.met_lim_t ?? null,
+      ending_position: p.met_end_pos ?? null,
+    },
+    barrel_temperature: {
+      ...settingProcessForm.barrel_temperature,
+      stage: p.brl_temp_stg ?? 5,
+      table_data: [
+        { label: '温度', unit: '℃', sections: padSteps(p.brl_temp_steps, 10) },
+      ],
+    },
+  }
+}
+
+/**
+ * 把后端推理响应原子地应用到前端表单
+ *
+ * 设计要点：
+ *   - 全部字段在一个同步函数里赋值（JS 单线程，默认原子）
+ *   - 缺字段跳过（如只拿到 condition_id 没拿到 parameter_id 不处理参数部分）
+ *   - 不主动 throw（任何异常都让调用方 catch 统一处理）
+ *   - 后端用 {status, msg, timestamp, data: ...} 包裹，axios 拦截器返回整个 body，
+ *     所以这里从 result.data 取业务数据
+ *
+ * 依赖：调用方在赋值前确保 form / activeRound 已初始化。
+ */
+function applyInferResultToForm(result: any) {
+  const data = result?.data
+  if (!data) return
+
+  // 1) 工艺条件（ProcessCondition）
+  if (data.condition_id) form.condition.id = data.condition_id
+  if (data.condition_no) form.condition.condition_no = data.condition_no
+
+  // 2) 当前轮次工艺参数（ProcessParameter）
+  if (!activeRound.value) return
+
+  if (data.parameter_id != null) {
+    activeRound.value.parameter_id = data.parameter_id
+  }
+  if (data.seq_idx != null) {
+    activeRound.value.seq_idx = data.seq_idx
+  }
+  if (data.process) {
+    activeRound.value.parameter = mapInferResultToParameter(data)
+  }
+}
+
+/**
+ * 获取初始工艺：调用后端 /initialization/from-masterdata/ 生成初始参数
+ *
+ * 业务约束：
+ * - 模具 / 注塑机 / 材料 / shot_index / injection_index 5 项必填
+ *   （由 ProcessCondition.checkFormDataValid 统一校验）
+ * - 响应写入 form.condition.id（condition_id）和 activeRound.parameter_id（parameter_id）
+ * - 响应写入 activeRound.parameter（工艺参数嵌套结构，详见 mapInferResultToParameter）
+ *
+ * 关联文档：
+ * docs/process-get-initial-frontend-integration-2026-09-23.md
+ * docs/process-frontend-param-mapping-atomic-2026-09-23.md
+ */
+async function getInitialProcess() {
+  // Step 1: 5 项必填校验（ProcessCondition 组件复用校验逻辑）
+  const isValid = await conditionRef.value?.checkFormDataValid()
+  if (!isValid) return
+
+  initial_loading.value = true
+  try {
+    // Step 2: 调用后端
+    const result: any = await processInitializationFromMasterdata({
+      mold_id: form.condition.mold_id,
+      polymer_id: form.condition.polymer_id,
+      injection_machine_id: form.condition.injection_machine_id,
+      shot_index: form.condition.shot_index ?? 0,
+      injection_index: form.condition.injection_index ?? 0,
+    })
+
+    // Step 3: 响应处理（集中到 applyInferResultToForm，保证原子性）
+    applyInferResultToForm(result)
+
+    // Step 4: 成功提示（toast 摘要）
+    const ruleHint = Array.isArray(result?.data?.matched_rules) && result.data.matched_rules.length > 0
+      ? `（命中 ${result.data.matched_rules.length} 条规则）`
+      : ''
+    ElMessage.success(
+      `初始工艺已生成 condition_id=${result?.data?.condition_id ?? '-'}, `
+      + `parameter_id=${result?.data?.parameter_id ?? '-'}, `
+      + `seq_idx=${result?.data?.seq_idx ?? '-'}${ruleHint}`,
+    )
+  } catch (err: any) {
+    // request.ts 拦截器已 ElMessage.warning 显示了后端响应 data.msg
+    // （含 BizException 详情，如 "工艺参数输入字段不足 - 缺少字段: gate_type, ..."）
+    // 这里仅保留袌底，不重复 toast（避免双重提示）
+    console.error('[getInitialProcess] 调用后端失败:', err)
+  } finally {
+    initial_loading.value = false
+  }
+}
+
+/**
+ * 获取优化工艺：调后端 /optimization/infer/ 生成新轮次
+ *
+ * 业务约束：
+ * - 必须先调 getInitialProcess（前置依赖：form.condition.id + activeRound.seq_idx）
+ * - infer 后创建新轮次（不替换当前轮次），保持调机树语义
+ * - previousSuggestion 由 infer 响应的 suggestion 字段填充
+ *   （替换原 mock 数据，这是 docs 原则 6 / 8 的实现）
+ *
+ * 响应处理：
+ * - new_parameter.parameter_id / seq_idx → 新轮次
+ * - suggestion.groups → previousSuggestion.groups（供 UI 展示"上一轮调整建议"）
+ *
+ * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
+ */
+async function getOptimizedProcess() {
+  // Step 1: 前置校验
+  if (!form.condition?.id) {
+    ElMessage.warning('请先点击【获取初始工艺】生成工艺条件')
+    return
+  }
+  if (!activeRound.value?.seq_idx) {
+    ElMessage.warning('当前轮次缺少 seq_idx，请重置后重试')
+    return
+  }
+
+  optimize_loading.value = true
+  try {
+    // Step 2: 调用后端
+    const result: any = await processOptimizationInfer({
+      condition_id: form.condition.id,
+      parent_seq_idx: activeRound.value.seq_idx,
+      feedback: activeRound.value.feedback,
+    })
+
+    // Step 3: 创建新轮次（optimized）+ 切换 active
+    const newRound = makeRound('optimized')
+    // 后端响应包装：{status, msg, timestamp, data: {...}}；业务数据在 .data 下
+    const inferData = result?.data ?? result ?? {}
+    if (inferData.new_parameter) {
+      newRound.parameter_id = inferData.new_parameter.parameter_id ?? null
+      newRound.seq_idx = inferData.new_parameter.seq_idx ?? null
+    }
+    form.rounds.push(newRound)
+    form.active_round_id = newRound.id
+
+    // Step 4: 更新 previousSuggestion（上一轮调整建议）
+    if (inferData.suggestion && Array.isArray(inferData.suggestion.groups)) {
+      previousSuggestion.value = {
+        source_round_id: activeRound.value.id,  // 上一轮 round.id
+        adopted: null,  // 未确认（待本轮填 effective/ineffective 后自动变更）
+        groups: inferData.suggestion.groups,
+      }
+    }
+
+    // Step 5: 成功提示（toast 摘要）
+    const groupCount = Array.isArray(inferData.suggestion?.groups)
+      ? inferData.suggestion.groups.length
+      : 0
+    ElMessage.success(
+      `优化工艺已生成 seq_idx=${inferData.new_parameter?.seq_idx ?? '-'}, `
+      + `parameter_id=${inferData.new_parameter?.parameter_id ?? '-'}, `
+      + `建议 ${groupCount} 类`,
+    )
+  } catch (err: any) {
+    // request.ts 拦截器已 ElMessage.warning 显示了后端响应 data.msg
+    // （含 BizException 详情，含 infer 错误或字段缺失提示）
+    // 这里仅保留袌底，不重复 toast（避免双重提示）
+    console.error('[getOptimizedProcess] 调用后端失败:', err)
+  } finally {
+    optimize_loading.value = false
+  }
+}
+
+/** 提交保存。TODO：调保存接口 */
+async function onSubmit() {
+  save_loading.value = true
+  try {
+    // TODO: 提交保存
+    ElMessage.success('保存成功')
+  } catch (err: any) {
+    ElMessage.error(err?.message || '保存失败')
+  } finally {
+    save_loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadForm()
+  loadDefectKeywords()
+  syncConditionExpanded()
+  conditionSyncTimer = setInterval(syncConditionExpanded, 250)
+
+  /*
+   * 持久化 watch —— 挂载后才挂（不 immediate）
+   * - 挂载前 form 已被 restoreDraft / loadForm 默认初始化填好，避免初始写覆盖读到的旧数据
+   * - 为什么 3 个 watch 而不是 1 个数组 watch：
+   *   - form 深嵌套（rounds[i].parameter 含 table_data），深 watch 开销大但不可避
+   *   - conditionExpanded / observationExpanded 是普通 boolean ref，独立 watch 减少依赖追踪
+   *   - 三个回调统一走 schedulePersist，共用同一个 debounce 定时器，不会多次写
+   */
+  watch(
+    () => form,
+    () => schedulePersist(),
+    { deep: true },
+  )
+  watch(conditionExpanded, () => schedulePersist())
+  watch(observationExpanded, () => schedulePersist())
+})
+
+onBeforeUnmount(() => {
+  if (conditionSyncTimer) {
+    clearInterval(conditionSyncTimer)
+    conditionSyncTimer = null
+  }
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+})
 </script>
 
 <style lang="scss" scoped>
-  .el-input {
-    width: 10rem;
-  }
-  .el-select  {
-    width: 10rem;
-  }
-  .el-autocomplete  {
-    width: 10rem;
-  }
-  .buttonGroup {
-    z-index: 999;
-    position: fixed;
-    text-align: center;
-    width: 100%;
-    bottom: 10px;
-    font-size: 11px;
-    line-height: 32px;
-    margin: 0;
-    height: 40px;
-    .el-button {
-      width: 8rem;
-    }
-  }
-  .disabled-area {
-    opacity: 0.6; /* 减少透明度 */
-    pointer-events: none; /* 阻止鼠标交互 */
+.optimization-create {
+  padding: 16px 16px 96px;
+}
+
+.loading-placeholder {
+  height: 400px;
+}
+
+/*
+ * 工艺优化工作台布局（左侧时间线 + 右侧详情）
+ * - 280px 给左侧（约 1/4 ~ 1/3），1fr 给右侧
+ * - 详情区超过 600px 时出现纵向滚动
+ */
+.optimization-workspace {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  min-height: 400px;
+
+  &__timeline {
+    border: 1px solid var(--color-border-extra-light, #ebeef5);
+    border-radius: 4px;
+    background: #fff;
+    height: 100%;
+    min-height: 0;  // 避免 grid/flex 子项无法收缩
+    overflow-y: auto;
   }
 
+  &__detail {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+/* 详情区每个区块：浅色背景条 + 图标，与左侧时间线 header 视觉呼应 */
+.round-detail-block {
+  background: #fff;
+  border: 1px solid var(--color-border-extra-light, #ebeef5);
+  border-radius: 4px;
+
+  // 上下 12 / 16，与上下其他 block 节奏一致；避免表单/子组件紧贴标题
+  padding: 12px 16px 16px;
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px 6px;
+    background: var(--color-bg-overlay, #f5f7fa);
+    border-bottom: 1px solid var(--color-border-extra-light, #ebeef5);
+    font-weight: 600;
+    font-size: 14px;
+    // 负 margin 抵消外层 padding，让背景条仍贴左右边缘
+    margin: -12px -16px 12px;
+
+    &--clickable {
+      cursor: pointer;
+      user-select: none;
+      outline: none;
+      transition: background-color 0.15s ease;
+
+      &:hover {
+        background: #ebeef5;
+      }
+
+      &:focus-visible {
+        box-shadow: inset 0 0 0 2px var(--el-color-primary-light-5, #409eff);
+      }
+    }
+  }
+
+  /* chevron：推到最右侧 + 胶囊型「呼吸背景」提示可交互 */
+  &__chevron {
+    margin-left: auto;
+    color: var(--el-text-color-secondary, #909399);
+    padding: 2px 6px;
+    border-radius: 10px;
+    transition: transform 0.25s ease, background-color 0.25s ease;
+  }
+
+  /* 动作区（如「只读 / 编辑」switch）：推到最右侧，与 chevron 复用同一原则 */
+  &__action {
+    margin-left: auto;
+  }
+
+  // 折叠态 chevron 呼吸提示（透明度 0.04~0.18，可见但不眨眼；仅 is-collapsed 生效）
+  &--collapsible.is-collapsed &__chevron {
+    animation: chevron-breathe 2.4s ease-in-out infinite;
+  }
+
+  @keyframes chevron-breathe {
+    0%, 100% { background-color: rgba(64, 158, 255, 0.08); }
+    50%      { background-color: rgba(64, 158, 255, 0.36); }
+  }
+
+  /* body 容器：仅占位，无内边距，由子组件自行处理 */
+  &__body {
+    display: block;
+  }
+
+  /*
+   * 嵌入态：当块内嵌 ProcessSettings 时让其外层 wrapper 透明化
+   * - 避免外层 border 与 wrapper 的 box-shadow/padding 叠加形成三层视觉重量
+   * - 仅影响本页面嵌入场景；ProcessSettings 默认态不变
+   * - 3 个 process-card 仍保留 border（作为 ProcessSettings 内部状态分隔）
+   */
+  &--embedded :deep(.process-settings-wrapper) {
+    background-color: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  /* 折叠块：去掉底部内边距 + title 下 margin / 下边框（避免 body display:none 后的残留空白） */
+  &--collapsible {
+    transition: padding-bottom 0.25s ease;
+
+    .round-detail-block__title {
+      transition: margin-bottom 0.25s ease, border-bottom-color 0.25s ease;
+    }
+
+    &.is-collapsed {
+      padding-bottom: 0;
+
+      .round-detail-block__title {
+        margin-bottom: 0;
+        border-bottom-color: transparent;
+      }
+    }
+  }
+}
+
+/*
+ * round-detail 过渡：opacity 与 max-height 同 duration 紧（避免「先淡后塌」）
+ * - max-height 240px（接近 4 行表单项实际高度 200px），避免 600px 过大导致动画前 1/3「空转」
+ */
+.round-detail-enter-active,
+.round-detail-leave-active {
+  transition: opacity 0.25s ease, max-height 0.25s ease;
+  overflow: hidden;
+}
+.round-detail-enter-from,
+.round-detail-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.round-detail-enter-to,
+.round-detail-leave-from {
+  opacity: 1;
+  max-height: 240px;
+}
 </style>

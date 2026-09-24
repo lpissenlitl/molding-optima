@@ -2,8 +2,10 @@
 
 包含：
 - 4 个推理输入：MachineInfoSchema / PolymerInfoSchema / MoldInfoSchema / ProcessSetSchema
-- 3 个推理/初始化请求：ProcessInferSchema / ProcessInitializationFromConditionSchema /
-                      ProcessInitializationFromMasterdataSchema
+- 3 个推理/初始化请求：
+    ProcessInferSchema                              （/infer/ 纯推理，不查库不落库）
+    ProcessInitializationFromSourceConditionSchema  （Mode C：从历史合格工艺复制）
+    ProcessInitializationFromMasterdataSchema       （Mode B：基于 masterdata ID 调推理）
 """
 from typing import Optional
 
@@ -160,31 +162,31 @@ class ProcessInferSchema(BaseSchema):
     )
 
 
-class ProcessInitializationFromConditionSchema(BaseSchema):
-    """【Mode A】基于已有 condition_id 的工艺初始化请求
+class ProcessInitializationFromSourceConditionSchema(BaseSchema):
+    """【Mode C】基于源 condition_id 复制初始工艺参数请求
 
-    POST /api/processes/initialization/
+    POST /api/processes/initialization/from-source-condition/
 
-    Step 1 入口适配：condition_id
-    Step 2 数据前处理：process_context（可选，含关联 ID 与字段覆盖）
-    Step 3+4 推理算法 + 落库：在已有 condition 上创建新 ProcessParameter
+    业务场景：
+      工艺记录中已有“合格工艺”（condition + 其下的 ProcessParameter），
+      复用该工艺作为新工艺的起点，不调用推理算法。
+      为保证数据不过时，service 层会重新检索当前 masterdata 重构快照。
 
-    status / origin_type 由后端固定为 draft / ai_recommendation。
+    请求体：
+    {
+        "source_condition_id": 100,   # 源工艺条件 ID（必填）
+        "process_set": {...}           # 可选：工艺设置覆盖
+    }
+
+    status / origin_type 由后端固定为 draft / legacy_import。
+    process_context 由后端自动写入（调用入参快照）。
     """
 
-    condition_id: int = Field(
-        ..., description="工艺条件 ID（必填）",
+    source_condition_id: int = Field(
+        ..., description="源工艺条件 ID（历史合格工艺，必填）",
     )
-    # process_context 可选：关联 ID + 字段覆盖（Step 2 的补充输入）
-    process_context: Optional[dict] = Field(
-        None,
-        description="业务上下文覆盖（dict）。含两类："
-                    "1) 关联 ID（gating_system_id / cavity_id / gate_id / injection_unit_id）指定 1:N 中的具体子项；"
-                    "2) 字段覆盖（任意键）覆盖 ORM 默认值。",
-    )
-    # process_set 与 process_context 职责分离：与设备/模具/材料无关的"工艺元数据"
     process_set: Optional[ProcessSetSchema] = Field(
-        None, description="工艺设置（段数与模式）",
+        None, description="工艺设置（段数与模式），不传则用 schema 默认值",
     )
 
 
@@ -193,9 +195,20 @@ class ProcessInitializationFromMasterdataSchema(BaseSchema):
 
     POST /api/processes/initialization/from-masterdata/
 
-    Step 1 入口适配：3 个 masterdata ID
-    Step 2 数据前处理：process_context（可选）
-    Step 3+4 推理算法 + 落库：创建 Condition + ProcessParameter
+    业务语义：
+      "基于 masterdata ID 创建一个新的工艺条件（ProcessCondition），
+       并基于该条件生成初始工艺参数（ProcessParameter）"
+
+    Step 1 入口适配：3 个 masterdata ID + shot_index + injection_index
+    Step 2 数据前处理：service 层从 ORM 构建完整快照 (process_context_snapshot)
+    Step 3+4 推理算法 + 落库：创建 Condition（存完整快照）+ ProcessParameter
+
+    shot_index / injection_index 的角色：
+      - shot_index       = 模具的"第几射"（多射模具：0=第一射, 1=第二射, ...）
+      - injection_index  = 注塑机的"第几个射台"（多射台机：0=第一射台, 1=第二射台, ...）
+      - 两个索引一旦确定，本次工艺条件对应的"哪台机哪个射台打哪个产品"也就确定
+      - service 层会用它们从 mold.gating_systems[shot_index] 与 machine.injection_units[injection_index]
+        精确选取子项，构建完整快照
 
     status / origin_type / condition_no 由后端自动生成。
     """
@@ -204,13 +217,16 @@ class ProcessInitializationFromMasterdataSchema(BaseSchema):
     polymer_id: int = Field(..., description="材料 ID（必填）")
     injection_machine_id: int = Field(..., description="注塑机 ID（必填）")
 
-    process_context: Optional[dict] = Field(
-        None,
-        description="业务上下文覆盖（dict）。含关联 ID + 字段覆盖。",
+    # 索引字段（把旧版藏在 process_context 里的关联 ID 提升为显式入参）
+    shot_index: int = Field(
+        0, ge=0,
+        description="模具的第几射（0-based，默认 0）。多射模具按此索引从 gating_systems 选取具体浇注系统。",
     )
+    injection_index: int = Field(
+        0, ge=0,
+        description="注塑机的第几个射台（0-based，默认 0）。多射台注塑机按此索引从 injection_units 选取具体射台。",
+    )
+
     process_set: Optional[ProcessSetSchema] = Field(
-        None, description="工艺设置（段数与模式）",
-    )
-    condition_no: Optional[str] = Field(
-        None, description="工艺条件编号（None 时后端自动生成 C-{mold}-S{shot}-{ts}）",
+        None, description="工艺设置（段数与模式），不传则用 schema 默认值",
     )

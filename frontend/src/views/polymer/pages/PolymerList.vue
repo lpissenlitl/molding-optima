@@ -59,7 +59,7 @@
           导出列表
         </el-button>
         <el-button type="primary" plain @click="show_table_setting = true">
-          <AppIcon icon="mdi:settings-outline" style="margin-right: 4px; font-size: 14px;" />
+          <AppIcon icon="mdi:cog-outline" style="margin-right: 4px; font-size: 14px;" />
           配置表格
         </el-button>
       </template>

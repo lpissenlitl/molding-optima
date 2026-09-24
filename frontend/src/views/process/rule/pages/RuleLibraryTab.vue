@@ -83,61 +83,14 @@
       @current-change="onLibraryPageChange"
     />
 
-    <!-- 新建/编辑规则库抽屉（工业软件用右侧抽屉，方便查看上下文卡片） -->
-    <el-drawer
-      v-model="createLibraryVisible"
-      :title="libraryDialogMode === 'edit' ? '编辑规则库' : '新建规则库'"
-      direction="rtl"
-      size="540px"
-      :close-on-click-modal="false"
-      destroy-on-close
-    >
-      <el-form :model="libraryForm" label-width="100px">
-        <el-form-item label="库编码" required>
-          <el-input
-            v-model="libraryForm.library_code"
-            placeholder="英文编码，如 general"
-            :disabled="libraryDialogMode === 'edit'"
-          />
-          <div v-if="libraryDialogMode === 'edit'" class="field-tip">
-            库编码为唯一标识，保存后不可修改
-          </div>
-        </el-form-item>
-        <el-form-item label="库名称" required>
-          <el-input v-model="libraryForm.library_name" placeholder="中文名，如 通用规则库" />
-        </el-form-item>
-        <el-form-item label="归属" required>
-          <el-radio-group v-model="libraryForm.owner_type" :disabled="libraryDialogMode === 'edit'">
-            <el-radio value="tenant">租户级</el-radio>
-            <el-radio value="system">系统级</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="库类型" required>
-          <el-radio-group v-model="libraryForm.library_type" :disabled="libraryDialogMode === 'edit'">
-            <el-radio value="expert">专家规则库</el-radio>
-            <el-radio value="fuzzy">模糊规则库</el-radio>
-          </el-radio-group>
-          <div class="field-tip">
-            决定库内允许的规则种类；编辑时不可修改（类型决定库下数据语义）
-          </div>
-        </el-form-item>
-        <el-form-item label="优先级">
-          <el-input v-model="libraryForm.priority" v-number="0" placeholder="如 100（0-1000，数值越大越优先）" />
-        </el-form-item>
-        <el-form-item label="版本号">
-          <el-input v-model="libraryForm.version" v-number="0" placeholder="如 1（从 1 开始）" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="libraryForm.description" type="textarea" :rows="2" placeholder="可选" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createLibraryVisible = false">取消</el-button>
-        <el-button type="primary" :loading="createLibrarySubmitting" @click="submitCreateLibrary">
-          保存
-        </el-button>
-      </template>
-    </el-drawer>
+    <!-- 新建/编辑规则库抽屉（子组件封装：RuleLibraryFormDrawer） -->
+    <RuleLibraryFormDrawer
+      v-model:visible="createLibraryVisible"
+      :mode="libraryDialogMode"
+      :form="libraryForm"
+      :submitting="createLibrarySubmitting"
+      @submit="submitCreateLibrary"
+    />
   </div>
 </template>
 
@@ -146,11 +99,11 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import RuleLibraryCard from '../components/RuleLibraryCard.vue'
+import RuleLibraryFormDrawer, { type RuleLibraryFormData } from '../components/RuleLibraryFormDrawer.vue'
 import { listRuleLibraries, createRuleLibrary, updateRuleLibrary, deleteRuleLibrary } from '@/api/rule'
 import type {
   RuleLibrary,
   RuleLibraryCreatePayload,
-  LibraryType,
 } from '@/types/rule'
 
 const props = defineProps<{
@@ -220,13 +173,14 @@ const createLibraryVisible = ref(false)
 const createLibrarySubmitting = ref(false)
 const libraryDialogMode = ref<'create' | 'edit'>('create')
 const libraryEditId = ref<number>(0)
-const libraryForm = reactive({
+const libraryForm = reactive<RuleLibraryFormData>({
   library_code: '',
   library_name: '',
-  owner_type: 'tenant' as 'system' | 'tenant',
-  library_type: 'expert' as LibraryType,
+  owner_type: 'tenant',
+  library_type: 'expert',
   priority: 100,
   version: 1,
+  is_active: true,
   description: '',
 })
 
@@ -239,6 +193,7 @@ function showCreateLibraryDialog() {
   libraryForm.library_type = 'expert'
   libraryForm.priority = 100
   libraryForm.version = 1
+  libraryForm.is_active = true
   libraryForm.description = ''
   createLibraryVisible.value = true
 }
@@ -252,25 +207,25 @@ function showEditLibraryDialog(lib: RuleLibrary) {
   libraryForm.library_type = lib.library_type
   libraryForm.priority = lib.priority
   libraryForm.version = lib.version
+  libraryForm.is_active = lib.is_active
   libraryForm.description = lib.description || ''
   createLibraryVisible.value = true
 }
 
 async function submitCreateLibrary() {
-  if (!libraryForm.library_code || !libraryForm.library_name) {
-    ElMessage.warning('请填写库编码和库名称')
-    return
-  }
   createLibrarySubmitting.value = true
   try {
     if (libraryDialogMode.value === 'create') {
       await createRuleLibrary({ ...libraryForm })
       ElMessage.success('规则库创建成功')
     } else {
+      // 编辑模式：库编码 / 归属 / 库类型在子组件里被 disabled，不可改
+      // 这里只提交子组件允许编辑的字段
       const payload: Partial<RuleLibraryCreatePayload> = {
         library_name: libraryForm.library_name,
         priority: libraryForm.priority,
         version: libraryForm.version,
+        is_active: libraryForm.is_active,
         description: libraryForm.description,
       }
       await updateRuleLibrary(libraryEditId.value, payload)
@@ -334,16 +289,7 @@ watch(() => props.activeTab, (val, oldVal) => {
 </script>
 
 <!--
-  本组件 scoped style（仅 .field-tip）：
-  - 复用父组件 RuleLibraryList.vue 提供的共享样式类
-  - .field-tip 用于表单字段说明文字（与 RuleKeywordTab 保持一致）
-  - 后续可考虑提升到全局 custom-form.scss 复用
+  本组件不写 scoped style：表单字段提示样式（.field-tip）已在子组件 RuleLibraryFormDrawer 内定义。
 -->
-<style lang="scss" scoped>
-.field-tip {
-  font-size: 12px;
-  color: var(--el-text-color-secondary, #909399);
-  line-height: 1.4;
-  margin-top: 4px;
-}
+<style lang="scss">
 </style>

@@ -7,17 +7,19 @@ from extensions.models import BusinessBaseModel
 
 class TuningRecord(BusinessBaseModel):
     """
-    工艺调参记录 - 记录一次调参与试模结果
+    工艺调整记录 - 记录一次工艺调整与试模结果
 
     用于追踪工艺调整过程，包含：
     - 缺陷反馈（一次试模可能多个缺陷）
-    - 试模结果（迭代状态，支持多轮调参）
-    - 当次参数快照（冗余存储，方便查询）
+    - 调整记录（规范化训练样本）
+    - 试模结果（迭代状态）
+    - 调整前参数快照（独立存储）
 
     设计说明：
-    - 一个 ProcessParameter 可对应多条 TuningRecord（多轮迭代）
+    - 与 ProcessParameter 1:1 同步创建（业务层保证，FK 不加 unique）
     - 缺陷反馈以 JSON 数组存储，支持多个缺陷
-    - parameter_snapshot 冗余存储，避免关联查询
+    - adjustments 是规范化训练样本，系统自动生成，用户不可定义结构
+    - previous_parameter 存储调整前 OLD parameter 的参数
     - 迭代状态：pending → improved/worse → qualified/unqualified
     """
 
@@ -31,15 +33,18 @@ class TuningRecord(BusinessBaseModel):
     # --- 缺陷反馈（JSON 数组）---
     # [
     #     {
-    #         "defect_type": "短射",
-    #         "level": "medium",
-    #         "position": "产品边缘",
-    #         "image_url": "..."
+    #         "keyword_id": 15,
+    #         "keyword_name": "短射",
+    #         "level": "high",
+    #         "position": "DLWELDLINE3",
+    #         "position_3d": null
     #     },
     #     {
-    #         "defect_type": "飞边",
-    #         "level": "light",
-    #         "position": "分型线"
+    #         "keyword_id": 22,
+    #         "keyword_name": "飞边",
+    #         "level": "medium",
+    #         "position": "DLFLASH2",
+    #         "position_3d": null
     #     }
     # ]
     defect_feedbacks = models.JSONField(
@@ -48,11 +53,31 @@ class TuningRecord(BusinessBaseModel):
         help_text="一次试模可能包含多个缺陷，JSON数组格式"
     )
 
-    # --- 调参备注 ---
-    note = models.CharField(
-        max_length=500,
+    # --- 调整记录（JSON，系统自动生成）---
+    # adjustments 是规范化训练样本，由系统计算 OLD vs NEW diff 生成
+    # 字段名补充说明：取代原 note 字段
+    # 用户不能定义其结构（保证格式一致）
+    # {
+    #     "defects": ["短射", "飞边"],
+    #     "changes": [
+    #         {
+    #             "param": "inj_pres_1",
+    #             "before": 50,
+    #             "after": 60,
+    #             "direction": "increase",
+    #             "rule_ref": "rule_001"
+    #         }
+    #     ],
+    #     "tuning_context": {
+    #         "iteration": 3,
+    #         "previous_result": "worse"
+    #     }
+    # }
+    adjustments = models.JSONField(
+        default=dict,
         null=True, blank=True,
-        verbose_name="调参备注",
+        verbose_name="调整记录",
+        help_text="规范化调参内容，由系统自动生成（OLD vs NEW diff）"
     )
 
     # --- 试模结果（迭代状态）---
@@ -82,11 +107,13 @@ class TuningRecord(BusinessBaseModel):
         help_text="具体描述本次调整的效果"
     )
 
-    # --- 参数快照（冗余存储）---
-    # 存储当次试模使用的完整参数，方便查询
-    parameter_snapshot = models.JSONField(
+    # --- 调整前参数快照（OLD parameter.parameters）---
+    # 表示"这是从哪个工艺调整过来的"
+    # 独立存储一份快照，避免联表查询，同时避免依赖 OLD parameter 的不可变性
+    previous_parameter = models.JSONField(
         null=True, blank=True,
-        verbose_name="参数快照",
+        verbose_name="调整前参数快照",
+        help_text="调整前的工艺参数快照（OLD parameter.parameters）"
     )
 
     class Meta:

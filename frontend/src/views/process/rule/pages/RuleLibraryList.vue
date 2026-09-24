@@ -217,19 +217,23 @@ watch(
 
 /* ==========================================================================
    分页器（fixed 贴视窗底部，水平居中）
+   - 嵌套在 .rule-library-list 内，避免污染其他页面的同名类
+     （例如 ExpertRuleSection / RuleMethodSection 也用了 class="pagination"）
    - left 使用 layout 暴露的 --sidebar-width 变量，避免覆盖侧边栏
    - 桌面端展开 220px / 折叠 60px / 移动端 0px（响应式自动适配）
    ========================================================================== */
-.pagination {
-  display: flex;
-  justify-content: center;
-  position: fixed;
-  left: var(--sidebar-width, 220px);
-  right: 0;
-  bottom: 0;
-  z-index: 100;
-  padding: 12px 0;
-  border-top: 1px solid #ebeef5;
+.rule-library-list {
+  .pagination {
+    display: flex;
+    justify-content: center;
+    position: fixed;
+    left: var(--sidebar-width, 220px);
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    padding: 12px 0;
+    border-top: 1px solid #ebeef5;
+  }
 }
 
 /* ==========================================================================

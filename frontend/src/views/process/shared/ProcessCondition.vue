@@ -1,30 +1,8 @@
 <!--
-  ProcessCondition - 工艺条件卡（可折叠）· 协调壳
+  ProcessCondition - 工艺条件卡（可折叠）+ 3 个 Section 协调器
 
-  重构说明（2026-09-13）：
-    - 拆分为 MoldSection / MachineSection / PolymerSection 三个子组件
-    - 主组件只保留：卡片框架、折叠逻辑、折叠态 summary、校验钩子
-    - 通过 provide(ConditionKey, condition) 让子组件共享 reactive condition
-    - 子组件直接 mutate condition.xxx（无需 emit / props 双向绑定）
-
-  父组件调用方式：
-    <ProcessCondition
-      ref="pcRef"
-      :process-condition="condition"
-      mode="edit"
-      :default-expanded="true"
-    />
-    await pcRef.value?.checkFormDataValid()
-
-  ┌────────────────────────────────────────────────────────────────┐
-  │ ▼ 工艺条件                              [收起 ▲]               │  ← 展开态 header
-  │ ────────────────────────────────────────────────────────────  │
-  │  MoldSection / MachineSection / PolymerSection 三个 area      │
-  └────────────────────────────────────────────────────────────────┘
-
-  ┌────────────────────────────────────────────────────────────────┐
-  │ ▶ 工艺条件  📋 PC2025-001 [使用中]  模具:M001/射1  ...     [展开编辑 ▼] │  ← 折叠态 header
-  └────────────────────────────────────────────────────────────────┘
+  职责：卡片框架 / 折叠 / 折叠态 summary / 校验钩子
+  通过 provide(ConditionKey, condition) 让子组件共享 reactive condition
 -->
 <template>
   <el-card
@@ -32,14 +10,13 @@
     :class="{ 'is-collapsed': !expanded, 'is-readonly': isReadOnly }"
     shadow="never"
   >
-    <!-- 卡片 header：可点击切换（仅在可折叠时） -->
+    <!-- 卡片 header：可点击切换 -->
     <template #header>
       <div
         class="process-condition-card__header"
         :class="{ 'is-clickable': !isReadOnly }"
         @click="toggle"
       >
-        <!-- 左侧：折叠图标 + 标题 -->
         <div class="process-condition-card__header-left">
           <AppIcon
             :icon="expanded ? 'mdi:chevron-down' : 'mdi:chevron-right'"
@@ -48,7 +25,7 @@
           <span class="custom-form__title">工艺条件</span>
         </div>
 
-        <!-- 折叠态：显示简要信息 -->
+        <!-- 折叠态简要信息 -->
         <div v-show="!expanded" class="process-condition-card__summary">
           <span class="summary-item">
             <AppIcon icon="mdi:identifier" class="summary-item__icon" />
@@ -100,7 +77,7 @@
           </template>
         </div>
 
-        <!-- 右侧：展开/收起按钮（仅在可折叠时显示） -->
+        <!-- 右侧展开/收起按钮（仅非只读时显示） -->
         <div v-if="!isReadOnly" class="process-condition-card__header-right">
           <el-button text size="small" @click.stop="toggle">
             {{ expanded ? '收起' : '展开编辑' }}
@@ -117,16 +94,37 @@
           :model="condition"
           :rules="rules"
           class="custom-form"
-          label-width="120px"
+          label-width="100px"
         >
-          <!-- 1. 模具 -->
-          <MoldSection :disabled="isReadOnly" />
+          <el-card class="custom-form__section custom-form__section--inner" shadow="never">
+            <template #header>
+              <span class="custom-form__title">
+                <AppIcon icon="mdi:cube-outline" class="custom-form__title-icon" />
+                模具
+              </span>
+            </template>
+            <MoldSection :disabled="isReadOnly" />
+          </el-card>
 
-          <!-- 2. 注塑机 -->
-          <MachineSection :disabled="isReadOnly" />
+          <el-card class="custom-form__section custom-form__section--inner" shadow="never">
+            <template #header>
+              <span class="custom-form__title">
+                <AppIcon icon="mdi:server-outline" class="custom-form__title-icon" />
+                注塑机
+              </span>
+            </template>
+            <MachineSection :disabled="isReadOnly" />
+          </el-card>
 
-          <!-- 3. 材料 -->
-          <PolymerSection :disabled="isReadOnly" />
+          <el-card class="custom-form__section custom-form__section--inner" shadow="never">
+            <template #header>
+              <span class="custom-form__title">
+                <AppIcon icon="mdi:flask-outline" class="custom-form__title-icon" />
+                材料
+              </span>
+            </template>
+            <PolymerSection :disabled="isReadOnly" />
+          </el-card>
         </el-form>
       </div>
     </transition>
@@ -135,23 +133,10 @@
 
 <script setup lang="ts">
 /**
- * ProcessCondition - 工艺条件卡（协调壳）
+ * ProcessCondition - 工艺条件卡协调壳
  *
- * 职责：
- *   1. 创建并 provide 共享的 reactive condition
- *   2. 监听 props.processCondition 变化并同步内部 condition
- *   3. 卡片 header / 折叠 / summary 协调
- *   4. el-form 校验钩子（checkFormDataValid）
- *   5. 派生计算（用于折叠态 summary）
- *
- * 子组件（按区域拆分）：
- *   - MoldSection: 模具主选 + 基本信息 + 工艺射次 + 浇注系统（含制品/浇口循环）
- *   - MachineSection: 注塑机主选 + 基本信息 + 射台主选 + 射台信息
- *   - PolymerSection: 材料主选 + 基本信息 + 工艺参数
- *
- * 索引说明：
- *   - 后端 shot_index / injection_index 是 0 索引（0 表示第 1 射/射台）
- *   - UI 显示 1 索引（用户友好），由各子组件的字符串中间值 + watch 自动转换
+ * 职责：提供 reactive condition、协调 3 个 Section、卡片折叠/校验
+ * 父组件调用方式：await pcRef.value?.checkFormDataValid()
  */
 import { ref, reactive, watch, computed, provide } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -159,14 +144,11 @@ import type { FormInstance, FormRules } from 'element-plus'
 import MoldSection from './MoldSection.vue'
 import MachineSection from './MachineSection.vue'
 import PolymerSection from './PolymerSection.vue'
-import { useConditionDerived } from './composables/useConditionDerived'
-import { ConditionKey } from './types'
-import type { Condition } from './types'
+import { useConditionDerived } from './composables/useConditionDerived.js'
+import { ConditionKey } from './types.js'
+import type { Condition } from './types.js'
 
-// ============================================================================
 // 状态枚举映射（与后端 STATUS_CHOICES 保持一致，禁止臆造）
-// ============================================================================
-
 const STATUS_MAP: Record<string, string> = {
   active: '使用中',
   archived: '已归档',
@@ -177,10 +159,7 @@ const STATUS_TAG_TYPE: Record<string, 'success' | 'info' | 'warning'> = {
   archived: 'info',
 }
 
-// ============================================================================
 // Props
-// ============================================================================
-
 const props = withDefaults(
   defineProps<{
     processCondition: Condition
@@ -200,44 +179,23 @@ const props = withDefaults(
 
 const formRef = ref<FormInstance>()
 
-// ============================================================================
-// 折叠状态
-// ============================================================================
-
-/** 只读模式：mode='view' 或 disabled=true 时强制折叠 */
+// 只读模式：mode='view' 或 disabled=true 时强制折叠
 const isReadOnly = computed(() => props.mode === 'view' || props.disabled)
 
-/** 是否展开（受 mode / defaultExpanded 控制） */
 const expanded = ref<boolean>(
   isReadOnly.value ? false : props.defaultExpanded,
 )
 
-/** 切换展开/折叠（非只读时生效） */
 function toggle() {
   if (isReadOnly.value) return
   expanded.value = !expanded.value
 }
 
-// ============================================================================
-// 响应式状态（共享给所有 Section）
-// ============================================================================
-
+// 响应式 condition：provide 给所有 Section 使用（子组件可直接 mutate）
 const condition = reactive<Condition>(props.processCondition ?? {})
-
-/**
- * 通过 InjectionKey 提供共享的 reactive condition
- *
- * 设计动机：
- * - 子组件需要直接 mutate condition.xxx（如选择模具后写 mold_id）
- * - 用 InjectionKey 比 props/emit 更简洁：避免 prop drilling 和 emit 转发
- * - 用 InjectionKey 强类型：避免字符串 key 拼错、保证类型推断
- */
 provide(ConditionKey, condition)
 
-// ============================================================================
 // 派生计算（用于折叠态 summary）
-// ============================================================================
-
 const {
   hasMold,
   hasMachine,
@@ -245,10 +203,6 @@ const {
   shotIndexDisplay,
   injectionIndexDisplay,
 } = useConditionDerived(condition)
-
-// ============================================================================
-// 校验规则
-// ============================================================================
 
 const rules: FormRules = {
   mold_id: [{ required: true, message: '请选择模具', trigger: 'change' }],
@@ -258,19 +212,13 @@ const rules: FormRules = {
   polymer_id: [{ required: true, message: '请选择塑料', trigger: 'change' }],
 }
 
-// ============================================================================
-// 父组件钩子
-// ============================================================================
-
 defineExpose({
   /**
-   * 触发 el-form 校验。
-   * 校验通过：返回 true，父组件继续保存
-   * 校验失败：返回 false，父组件应提示用户
+   * 校验表单。返回 true 表示通过。
+   * 折叠态下强制展开，让用户看到/修改未通过校验的字段。
    */
   async checkFormDataValid(): Promise<boolean> {
     if (!formRef.value) return false
-    // 折叠态时强制展开（让用户能看到/修改不通过校验的字段）
     if (!expanded.value) {
       expanded.value = true
     }
@@ -282,22 +230,21 @@ defineExpose({
     }
     return true
   },
-  /** 切换展开/折叠（供父组件主动控制） */
+  /** 切换展开/折叠 */
   toggle,
-  /** 强制展开（供父组件主动控制） */
+  /** 强制展开（非只读时） */
   expand: () => {
     if (!isReadOnly.value) expanded.value = true
   },
-  /** 强制折叠（供父组件主动控制） */
+  /** 强制折叠 */
   collapse: () => {
     expanded.value = false
   },
+  /** 当前是否展开（父组件同步按钮状态用） */
+  isExpanded: () => expanded.value,
 })
 
-// ============================================================================
-// 监听：prop 变化时同步内部 condition
-// ============================================================================
-
+// 监听 prop 变化，同步内部 condition
 watch(
   () => props.processCondition,
   (val) => {
@@ -309,25 +256,15 @@ watch(
 
 <style lang="scss" scoped>
 /*
- * 自定义类 .process-condition-card-*：本组件特有的折叠 / 简要信息样式
- *
- * 全局 utility（不定义，本组件直接使用）：
- * - .custom-form / .custom-form__section / .custom-form__title / .custom-form__divider
+ * 本组件私有样式：折叠 / 简要信息 / 过渡动画
+ * 依赖全局 utility（不在此处定义）：
+ * - .custom-form / .custom-form__section / .custom-form__title
  *   → src/styles/utilities/custom-form.scss
- * - .subsection-block / .subsection-block--nested / --deep-nested / .subsection-block__*
+ * - .subsection-block / --nested / --deep-nested
  *   → src/styles/utilities/subsection-block.scss
- *
- * 本组件私有：
- * - .process-condition-card__*（折叠 header / summary）
- * - .summary-item*（折叠态简要信息项）
- * - .process-condition-collapse-enter/leave-*（折叠过渡）
  */
 .process-condition-card {
-  /*
-  * 重置 el-card body 默认 padding（20px 上下）
-  * - 原：el-card__body 自带 padding，导致折叠后 transition 元素高度为 0 但 padding 仍占空间，出现"留边"
-  * - 现在：padding 完全由 .process-condition-card__body 控制，折叠时可同步过渡到 0
-  */
+  // 重置 el-card body 默认 padding，让折叠过渡能同步压缩到 0
   :deep(.el-card__body) {
     padding: 0;
   }
@@ -382,25 +319,47 @@ watch(
     margin-left: auto;
   }
 
-  /*
-  * body 容器：接管原本 el-card__body 的 padding
-  * - 展开态：与 el-card 默认 20px padding 一致
-  * - 折叠态：通过 transition 同步过渡到 0（见下方 transition 规则）
-  * - max-height 控制：展开时足够大（2000px），折叠时为 0
-  */
+  // body 容器接管 el-card__body 的 padding，折叠时能过渡到 0
   &__body {
     padding: var(--el-card-padding, 20px);
     overflow: hidden;
   }
+
+  /*
+   * 内 card（模具 / 注塑机 / 材料）样式调整
+   * - 缩小 body padding 避免与外 card padding 叠加
+   * - header 加浅色背景 + 底部分隔线，与 body 区分
+   */
+  :deep(.custom-form__section--inner) {
+    margin-bottom: 16px;
+
+    .el-card__header {
+      padding: 10px 20px;
+      background-color: var(--color-bg-overlay, #f5f7fa);
+      border-bottom: 1px solid var(--color-border-extra-light);
+    }
+
+    .el-card__body {
+      padding: 16px 20px;
+    }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    // 去掉内 card 标题左边的主题色条（参考 SettingProcess.vue）
+    .custom-form__title {
+      padding-left: 0;
+      border-left: none;
+    }
+  }
 }
 
 /*
-* 折叠态简要信息项（本组件私有）
-*
-* 优化点：
-* - __value / __label / __shot 用 max-width + ellipsis，防止某一项过长挤出其他项
-* - min-width: 0 关键：flex 子项默认 min-width: auto 会阻止 ellipsis 生效
-*/
+ * 折叠态简要信息项
+ * - __value 用 max-width + ellipsis 防止某项过长挤出其他项
+ * - min-width: 0 关键：flex 子项默认 min-width: auto 会阻止 ellipsis 生效
+ */
 .summary-item {
   display: inline-flex;
   align-items: center;
@@ -411,7 +370,7 @@ watch(
   max-width: 100%;
 
   &__icon {
-    // AppIcon (Iconify Icon) 渲染为 <svg>，用 width/height 控制大小（font-size 对 svg 无效）
+    // AppIcon 渲染为 <svg>，用 width/height 控制大小（font-size 对 svg 无效）
     width: 14px;
     height: 14px;
     flex-shrink: 0;
@@ -440,15 +399,10 @@ watch(
 }
 
 /*
-* 折叠过渡动画
-* - enter: 从 maxHeight:0 + opacity:0 + padding:0 展开到实际高度 + 透明 + 20px padding
-* - leave: 反向折叠
-* - ease-in-out 缓动函数让展开/折叠看起来更顺滑
-*
-* 关键：padding-top/bottom 与 max-height 同步过渡
-* - 只过渡 max-height 会"留边"（el-card body padding 不会被压缩）
-* - 现在 3 个属性同步过渡，折叠收得干净
-*/
+ * 折叠过渡动画
+ * - 同时过渡 max-height / opacity / padding-top / padding-bottom
+ * - 只过渡 max-height 会“留边”（el-card body padding 不会被压缩）
+ */
 .process-condition-collapse-enter-active,
 .process-condition-collapse-leave-active {
   transition:

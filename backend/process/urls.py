@@ -9,10 +9,12 @@ API 路径说明（对齐 molding-expert 风格）：
 - /api/processes/parameter/<int:condition_id>/frontend/ → 工艺参数前端视图（molding-expert 风格）
 - /api/processes/parameter/batch_delete/           → 工艺参数批量删除
 - /api/processes/parameter/transplant/             → 工艺参数移植
-- /api/processes/initialization/                   → 工艺参数初始化（统一接口，落库）
-- /api/processes/initialization/infer/             → 工艺参数纯推理（不查库不落库）
+- /api/processes/initialization/from-source-condition/ → 工艺参数初始化（基于源 condition 复制）
+- /api/processes/initialization/from-masterdata/      → 工艺参数初始化（基于 masterdata ID）
+- /api/processes/initialization/infer/                → 工艺参数纯推理（不查库不落库）
 
 molding-optima 独有功能：
+- /api/processes/optimization/infer/                → 工艺优化 infer（调用链路编排）
 - /api/processes/optimization/<id>/                → 工艺优化
 - /api/processes/optimization/<id>/history/       → 工艺优化历史
 - /api/processes/expert/suggestion/                → 专家调优建议
@@ -34,7 +36,7 @@ from .views.processes import (
     ProcessParameterFrontendView,
     ProcessParameterBatchDeleteView,
     ProcessTransplantView,
-    ProcessInitializationView,
+    ProcessInitializationFromSourceConditionView,
     ProcessInitializationFromMasterdataView,
     ProcessInitializationInferView,
     ProcessOptimizationView,
@@ -42,11 +44,13 @@ from .views.processes import (
     ProcessExpertSuggestionView,
     ProcessExpertDefectTemplateView,
     ProcessExpertCreateView,
+    ProcessOptimizationInferView,
     RuleKeywordListView,
     RuleKeywordDetailView,
     RuleMethodListView,
     RuleMethodDetailView,
     RuleByDefectView,
+    DashboardStatisticsView,
 )
 from .views.rule_libraries import (
     RuleLibraryListView,
@@ -75,10 +79,10 @@ urlpatterns = [
     path("processes/parameter/transplant/", ProcessTransplantView.as_view()),
 
     # ========== 工艺参数初始化（molding-optima 独有，基于规则推理）==========
-    # /initialization/                 → Mode A：基于 condition_id（落库）
-    # /initialization/from-masterdata/ → Mode B：基于 masterdata ID（创建 Condition + 落库）
-    # /initialization/infer/           → 纯推理（不查库不落库）：前端传完整数据
-    path("processes/initialization/", ProcessInitializationView.as_view()),
+    # /initialization/from-source-condition/ → Mode C：基于源 condition 复制初始工艺（不调推理）
+    # /initialization/from-masterdata/       → Mode B：基于 masterdata ID（创建 Condition + 落库）
+    # /initialization/infer/                 → 纯推理（不查库不落库）：前端传完整数据
+    path("processes/initialization/from-source-condition/", ProcessInitializationFromSourceConditionView.as_view()),
     path("processes/initialization/from-masterdata/", ProcessInitializationFromMasterdataView.as_view()),
     path("processes/initialization/infer/", ProcessInitializationInferView.as_view()),
 
@@ -92,11 +96,17 @@ urlpatterns = [
     # ========== 工艺优化（molding-optima 独有）==========
     path("processes/optimization/<int:condition_id>/", ProcessOptimizationView.as_view()),
     path("processes/optimization/<int:condition_id>/history/", ProcessOptimizationHistoryView.as_view()),
+    # /optimization/infer/ —— infer 调用链路编排（2026-09-23 轮 5）
+    path("processes/optimization/infer/", ProcessOptimizationInferView.as_view()),
 
     # ========== 专家调优（molding-optima 独有）==========
     path("processes/expert/suggestion/", ProcessExpertSuggestionView.as_view()),
     path("processes/expert/defect-template/", ProcessExpertDefectTemplateView.as_view()),
     path("processes/expert/create/", ProcessExpertCreateView.as_view()),
+
+    # ========== 仪表板统计 ==========
+    # /statistics/dashboard/ —— 一次返回 trend + origin 聚合（供前端 ECharts 使用）
+    path("processes/statistics/dashboard/", DashboardStatisticsView.as_view()),
 
     # ========== 规则中心（v2：2026-09-14 重构，拆为规则库 + 规则方法 + 专家规则）==========
     # 规则库（Section 1 卡片视图）

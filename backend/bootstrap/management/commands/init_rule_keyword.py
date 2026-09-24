@@ -23,6 +23,12 @@ Django management command: 导入 RuleKeyword 主数据
 
 去重策略：按 keyword_name 去重保留首条（327 条入库）
 
+特殊 keyword：
+  - 导入完 JSON 后，会额外确保 DEFECTFREE（无缺陷）存在
+  - 业务场景：产品本轮试模无缺陷，但工艺仍可优化（减少周期时间、提产能、降能耗）
+  - 排序：前端按 keyword_name='DEFECTFREE' 识别后排到第一，后端不需特殊排序
+  - 命名选择：DEFECTFREE 而非 NONE（None 容易产生"无关键字"的歧义）
+
 使用方法：
   python manage.py init_rule_keyword                          # 默认 JSON
   python manage.py init_rule_keyword --json /path/to/file     # 自定义 JSON
@@ -359,6 +365,48 @@ class Command(BaseCommand):
 
             except Exception as e:
                 errors.append(f'{name}: {e}')
+
+        # 步骤 4：确保特殊 keyword DEFECTFREE（无缺陷）存在
+        # 业务场景：产品本轮试模没有明显缺陷，但工艺仍可优化
+        #   （如减少周期时间、提高产能、降低能耗等）。
+        # 字段语义：
+        #   - keyword_name='DEFECTFREE'：前哨标记，DefectFeedback 选中后隐藏 level/position
+        #   - category='defect'：保持与其他缺陷同一类，走统一的 if-then 规则路径
+        #   - parameter_kind='enum'：缺陷类不需要区分设定/实际
+        # 排序：前端按 keyword_name='DEFECTFREE' 识别后排到第一，后端不需特殊排序。
+        # 命名选择：DEFECTFREE 而非 NONE（None 容易产生"无关键字"的歧义）。
+        defect_free_name = 'DEFECTFREE'
+        defect_free_existing = RuleKeyword.objects.filter(
+            keyword_name=defect_free_name,
+            company_id=system_company.id,
+            is_deleted=False,
+        ).first()
+        if defect_free_existing:
+            self.stdout.write(f'  特殊 keyword 已存在: {defect_free_name} (id={defect_free_existing.id})')
+        elif dry_run:
+            self.stdout.write(self.style.WARNING(
+                f'  [DRY-RUN] 待新增特殊 keyword: {defect_free_name} (无缺陷)'
+            ))
+        else:
+            RuleKeyword.objects.create(
+                company_id=system_company.id,
+                keyword_name=defect_free_name,
+                keyword_alias='无缺陷',
+                category='defect',
+                parameter_kind='enum',
+                range_min=0,
+                range_max=1,
+                action_range_min=None,
+                action_range_max=None,
+                action_max_val=None,
+                fuzzy_level=3,
+                keyword_type='position',  # 缺陷类兑底用 position 占位
+                unit='',
+                description='无缺陷（产品本轮试模无缺陷，工艺仍可优化：减少周期时间、提产能、降能耗等）',
+            )
+            self.stdout.write(self.style.SUCCESS(
+                f'  新增特殊 keyword: {defect_free_name} (无缺陷)'
+            ))
 
         # 输出统计
         self.stdout.write('')

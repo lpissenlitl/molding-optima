@@ -2,7 +2,8 @@ import os
 import time
 import re
 from django.conf import settings
-from extensions.exceptions import BizException, ERROR_REQUIRED_FIELD, ERROR_ILLEGAL_ARGUMENT, ERROR_FOLDER_NAME_NOT_ALLOWED
+from extensions.exceptions import BizException, ERROR_REQUIRED_FIELD, ERROR_ILLEGAL_ARGUMENT
+from filecenter.exceptions import ERROR_FOLDER_NAME_NOT_ALLOWED
 from masterdata.models import Mold
 from utils.objects import safe_get
 

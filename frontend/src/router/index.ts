@@ -34,12 +34,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/layout/layout.vue'),
     redirect: '/dashboard',
     children: [
-      // 看板
+      // 数据总览
       {
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('@/views/dashboard/index.vue'),
-        meta: { title: '看板', icon: 'mdi:view-dashboard' },
+        meta: { title: '数据总览', icon: 'mdi:view-dashboard' },
       },
 
       // 模具管理（项目作为子菜单）
@@ -123,8 +123,14 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'optimization',
             name: 'process-optimization',
-            component: BusinessPlaceholder,
-            meta: { title: '优化记录', icon: 'mdi:lightbulb-on-outline' },
+            component: () => import('@/views/process/optimization/pages/OptimizationCreate.vue'),
+            meta: { title: '工艺优化', icon: 'mdi:lightbulb-on-outline' },
+          },
+          {
+            path: 'optimization-records',
+            name: 'process-optimization-records',
+            component: () => import('@/views/process/optimization/pages/OptimizationList.vue'),
+            meta: { title: '优化记录', icon: 'mdi:history' },
           },
           {
             path: 'rules',
@@ -137,6 +143,24 @@ const routes: RouteRecordRaw[] = [
             name: 'process-rules-detail',
             component: () => import('@/views/process/rule/pages/RuleLibraryDetail.vue'),
             meta: { title: '规则库详情', hidden: true, activeMenu: '/process/rules' },
+          },
+          {
+            path: 'rules/:libraryId(\\d+)/methods/new',
+            name: 'process-rule-method-new',
+            component: () => import('@/views/process/rule/pages/RuleMethodForm.vue'),
+            meta: { title: '新建规则方法', hidden: true, activeMenu: '/process/rules' },
+          },
+          {
+            path: 'rules/:libraryId(\\d+)/methods/:methodId(\\d+)/edit',
+            name: 'process-rule-method-edit',
+            component: () => import('@/views/process/rule/pages/RuleMethodForm.vue'),
+            meta: { title: '编辑规则方法', hidden: true, activeMenu: '/process/rules' },
+          },
+          {
+            path: 'rules/:libraryId(\\d+)/methods/:methodId(\\d+)/detail',
+            name: 'process-rule-method-detail',
+            component: () => import('@/views/process/rule/pages/RuleMethodForm.vue'),
+            meta: { title: '规则方法详情', hidden: true, activeMenu: '/process/rules' },
           },
         ],
       },

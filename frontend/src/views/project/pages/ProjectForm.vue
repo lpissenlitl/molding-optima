@@ -373,8 +373,6 @@ async function handleSubmit() {
    * - 防止 form 末尾的字段（如备注 textarea）被 fixed 操作栏遮挡
    */
   padding: 16px 16px 96px;
-  max-width: 1400px;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 

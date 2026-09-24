@@ -657,8 +657,6 @@ onMounted(async () => {
  */
 .injection-machine-form {
   padding: 16px 16px 96px;
-  max-width: 1400px;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 

@@ -13,9 +13,10 @@ from process.schemas import (
     ProcessParameterSchema,
     ProcessParameterListSchema,
     BatchDeleteProcessParameterSchema,
-    ProcessInitializationFromConditionSchema,
+    ProcessInitializationFromSourceConditionSchema,
     ProcessInitializationFromMasterdataSchema,
     ProcessInferSchema,
+    InferRequestSchema,
 )
 from process.services import (
     main_service,
@@ -24,6 +25,8 @@ from process.services import (
     optimize_service,
     rule_service,
     initialization_service,
+    statistics_service,
+    OptimizationInferService,
 )
 
 
@@ -112,37 +115,30 @@ class ProcessTransplantView(BaseView):
 
 # ==================== 工艺参数初始化（基于规则推理）====================
 
-class ProcessInitializationView(BaseView):
-    """【Mode A】工艺参数初始化接口（基于已有 condition_id）
+class ProcessInitializationFromSourceConditionView(BaseView):
+    """【Mode C】工艺参数初始化接口（基于源 condition_id 复制初始工艺，不调推理）
 
-    POST /api/processes/initialization/
+    POST /api/processes/initialization/from-source-condition/
 
-    4 步逻辑：
-      Step 1: 入口适配 —— condition_id
-      Step 2: 数据前处理 —— ORM + process_context → 4 维 dict
-      Step 3: 推理算法 —— 内部调用 infer_initial_params
-      Step 4: 输出后处理 —— 落库（创建 ProcessParameter）
+    业务场景：
+      工艺记录中已有“合格工艺”（condition + 其下的 ProcessParameter），
+      复用该工艺作为新工艺的起点。service 层会重新检索当前 masterdata
+      以保证数据不过时。
 
     请求体：
     {
-        "condition_id": 123,                                       # 必填
-        "process_context": {                                       # 可选：关联 ID + 字段覆盖
-            "gating_system_id": 3, "cavity_id": 12, "gate_id": 25, # 关联 ID（指定 1:N）
-            "injection_unit_id": 7,
-            "product_weight": 80, "gate_type": "点浇口"             # 字段覆盖
-        },
-        "process_set": {"inj_stg": 1, "hold_stg": 1, ...}          # 可选：工艺设置
+        "source_condition_id": 100,   # 必填
+        "process_set": {...}           # 可选
     }
 
-    后端行为：在已有 condition 上创建新 ProcessParameter
+    后端行为：创建新 Condition（origin_type=legacy_import）+ ProcessParameter（参数拷贝）
     """
 
     @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessInitializationFromConditionSchema))
+    @method_decorator(validate_parameters(ProcessInitializationFromSourceConditionSchema))
     def post(self, request, cleaned_data):
-        return initialization_service.infer_from_condition(
-            condition_id=cleaned_data["condition_id"],
-            process_context=cleaned_data.get("process_context"),
+        return initialization_service.infer_from_source_condition(
+            source_condition_id=cleaned_data["source_condition_id"],
             process_set=cleaned_data.get("process_set"),
         )
 
@@ -179,9 +175,9 @@ class ProcessInitializationFromMasterdataView(BaseView):
             mold_id=cleaned_data["mold_id"],
             injection_machine_id=cleaned_data["injection_machine_id"],
             polymer_id=cleaned_data["polymer_id"],
-            process_context=cleaned_data.get("process_context"),
+            shot_index=cleaned_data.get("shot_index", 0),
+            injection_index=cleaned_data.get("injection_index", 0),
             process_set=cleaned_data.get("process_set"),
-            condition_no=cleaned_data.get("condition_no"),
         )
 
 
@@ -371,6 +367,56 @@ class ProcessOptimizationHistoryView(BaseView):
         return optimize_service.get_optimization_history(condition_id)
 
 
+class ProcessOptimizationInferView(BaseView):
+    """工艺优化 infer 接口（调用链路编排）
+
+    POST /api/processes/optimization/infer/
+
+    业务语义：
+      “基于上一轮工艺与缺陷反馈，调算法生成新工艺，并同步落库”
+
+    适用场景（统一调用逻辑，仅 feedback 不同）：
+      - 场景 1（基本调参）：feedback.defect 包含 1+ 缺陷
+      - 场景 2（自动回撤）：feedback.tuning_result='ineffective'
+      - 场景 3（手动修改）：parameter 包含用户手动调整
+
+    请求体（InferRequestSchema）：
+    {
+        "condition_id": int,             # 必填
+        "parent_seq_idx": int,           # 必填（业务编号）
+        "parameter": dict | None,        # 可选，手动修改覆盖
+        "feedback": {
+            "defect": [...],             # 可选，缺陷反馈列表
+            "observations": [...],       # 可选，实测观察
+            "tuning_result": str | null, # 可选，增量反馈
+        }
+    }
+
+    响应：
+    {
+        "new_parameter": {...},          # 新工艺参数（含 parameter_id / seq_idx）
+        "suggestion": {
+            "source_type": str,
+            "recommendation_id": int,
+            "groups": [
+                {"category": str, "icon": str, "items": [...]}
+            ]
+        }
+    }
+    """
+
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(InferRequestSchema))
+    def post(self, request, cleaned_data):
+        service = OptimizationInferService()
+        return service.infer(
+            condition_id=cleaned_data["condition_id"],
+            parent_seq_idx=cleaned_data["parent_seq_idx"],
+            parameter=cleaned_data.get("parameter"),
+            feedback=cleaned_data.get("feedback"),
+        )
+
+
 
 class RuleByDefectView(BaseView):
     """根据缺陷名获取规则（query: defect_name）"""
@@ -381,3 +427,23 @@ class RuleByDefectView(BaseView):
         if not defect_name:
             return []
         return rule_service.get_rules_by_defect(defect_name)
+
+
+# ==================== 仪表板统计 ====================
+
+class DashboardStatisticsView(BaseView):
+    """仪表板统计聚合（近 30 天趋势 + 起源类型分布）
+
+    GET /api/processes/statistics/dashboard/
+
+    业务说明：
+    - 一次返回 dashboard 全部图表所需数据，避免前端 N+1 查询
+    - 多租户隔离：按当前用户 company_id 过滤
+    """
+
+    @method_decorator(require_login)
+    def get(self, request):
+        return statistics_service.get_dashboard_statistics(
+            company_id=request.user.company_id,
+            days=30,
+        )

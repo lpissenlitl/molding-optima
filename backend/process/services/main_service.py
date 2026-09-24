@@ -7,7 +7,7 @@ molding-optima 工艺基础服务
 import logging
 from datetime import datetime, date, time
 
-from django.db.models import Q
+from django.db.models import Q, Count
 
 from process.models import ProcessCondition, ProcessParameter
 from masterdata.models import Mold, GatingSystem, InjectionMoldingMachine, Polymer
@@ -388,6 +388,11 @@ def get_process_parameter_list(
         "mold", "injection_machine", "polymer"
     ).prefetch_related(
         "process_parameters"
+    ).annotate(
+        # 调机轮次数（关联的 ProcessParameter 数量）
+        # 注意：annotation 名 = 排序字段名 = 序列化字段名 = 前端字段名
+        # 不可加 _anno 等后缀，否则 parse_ordering 找不到字段
+        parameters_count=Count("process_parameters"),
     )
 
     # 单独处理日期范围：created_at 在 [start_date, end_date] 之间
@@ -417,6 +422,8 @@ def get_process_parameter_list(
         "machine_device_code": safe_get(item, "injection_machine.device_no"),
         "polymer_abbreviation": safe_get(item, "polymer.abbreviation"),
         "polymer_grade": safe_get(item, "polymer.grade"),
+        # 调机轮次数（优化记录页核心字段）
+        "parameters_count": item.parameters_count,
     } for item in pagination["items"]]
     return pagination["total_count"], results
 

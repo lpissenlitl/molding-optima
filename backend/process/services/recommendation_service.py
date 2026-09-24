@@ -229,8 +229,8 @@ class ProcessRecommendationService:
             'id': record.id,
             'defect_feedbacks': record.defect_feedbacks,
             'result': record.result,
-            'note': record.note,
-            'parameter_snapshot': record.parameter_snapshot,
+            'adjustments': record.adjustments,
+            'previous_parameter': record.previous_parameter,
             'created_at': record.created_at.isoformat() if record.created_at else None,
         }
 
@@ -277,8 +277,9 @@ class ProcessRecommendationService:
         )
 
         # 更新推荐状态
+        # is_adopted 是训练标签，不需要手动设置
+        # adopted_param 已移除（取代为 TuningRecord 同步创建 + adjustments）
         recommendation.is_adopted = True
-        recommendation.adopted_param = new_param
         recommendation.save()
 
         return new_param

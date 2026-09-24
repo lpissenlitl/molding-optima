@@ -23,7 +23,10 @@ class ProcessParameterSchema(BaseSchema):
     # --- 基本信息 ---
     param_code: Optional[str] = Field(None, description="工艺参数编号")
     param_source: Optional[str] = Field(None, description="参数来源")
-    parent_param_id: Optional[int] = Field(None, description="父参数 ID")
+    # 业务编号：前端可见，用于确定调机树中的基准节点
+    # 与 process_condition_id 联合定位父节点（反查 parent_param.id）
+    # 注意：这是业务编号（condition 内全局递增），不是数据库 ID
+    parent_seq_idx: Optional[int] = Field(None, description="父参数业务编号（seq_idx）")
     seq_idx: Optional[int] = Field(None, description="序列序号")
 
     # --- 注射参数 (6段) ---

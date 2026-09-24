@@ -552,12 +552,10 @@ async function loadDetail(id: number) {
 /*
  * mold-form 容器
  * - padding-bottom: 96px 预留底部 form-actions 空间（避免内容被遮挡）
- * - max-width: 1400px 大表单居中展示
+ * - 全宽展示（工业软件充分利用屏幕宽度）
  */
 .mold-form {
   padding: 16px 16px 96px;
-  max-width: 1400px;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 

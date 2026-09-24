@@ -20,19 +20,21 @@ class ProcessTuningService:
         defect_feedbacks: List[dict] = None,
         result: str = 'pending',
         result_detail: str = None,
-        note: str = None,
-        parameter_snapshot: dict = None,
+        previous_parameter: dict = None,
     ) -> TuningRecord:
         """
         创建调参记录
+
+        业务说明：
+        - 本方法通常由业务层调用，同步创建 TuningRecord 与 parameter
+        - previous_parameter 通常在创建时为空，由 infer/manual-adjust 后续填充
 
         Args:
             parameter: 工艺参数
             defect_feedbacks: 缺陷反馈列表
             result: 试模结果 (pending/improved/worse/unchanged/qualified/unqualified)
             result_detail: 结果详情，描述具体效果
-            note: 调参备注
-            parameter_snapshot: 参数快照
+            previous_parameter: 调整前的参数快照（OLD parameter.parameters）
 
         Returns:
             TuningRecord 实例
@@ -40,23 +42,24 @@ class ProcessTuningService:
         if defect_feedbacks is None:
             defect_feedbacks = []
 
-        if parameter_snapshot is None:
-            # 从 parameter 构建快照
-            parameter_snapshot = ProcessTuningService._build_parameter_snapshot(parameter)
-
         return TuningRecord.objects.create(
             process_parameter=parameter,
             defect_feedbacks=defect_feedbacks,
             result=result,
             result_detail=result_detail,
-            note=note,
-            parameter_snapshot=parameter_snapshot,
+            previous_parameter=previous_parameter,
         )
 
     @staticmethod
     def _build_parameter_snapshot(parameter: ProcessParameter) -> dict:
-        """从 ProcessParameter 构建快照"""
-        # 获取所有非空字段
+        """
+        从 ProcessParameter 构建快照
+
+        Deprecated：
+        - 本方法仅作为工具方法保留
+        - 创建 TuningRecord 时不再自动调用（previous_parameter 为空）
+        - infer/manual-adjust 调用时应直接从 parameter.parameters 获取快照
+        """
         snapshot = {}
         for field in parameter._meta.fields:
             field_name = field.name
@@ -85,12 +88,18 @@ class ProcessTuningService:
     def update_tuning_result(
         record: TuningRecord,
         result: str,
-        note: str = None
+        result_detail: str = None,
     ) -> TuningRecord:
-        """更新试模结果"""
+        """
+        更新试模结果
+
+        备注：
+        - 原 note 参数已移除（被 adjustments 取代）
+        - adjustments 是系统自动生成的，不允许用户手工修改
+        """
         record.result = result
-        if note:
-            record.note = note
+        if result_detail:
+            record.result_detail = result_detail
         record.save()
         return record
 
@@ -104,12 +113,13 @@ class ProcessTuningService:
 
         Args:
             record: 调参记录
-            defect_feedback: 缺陷反馈 dict
+            defect_feedback: 缺陷反馈 dict（与前端 DefectFeedbackData 对齐）
                 {
-                    "defect_type": "短射",
-                    "level": "medium",
-                    "position": "产品边缘",
-                    "image_url": "..."
+                    "keyword_id": 15,
+                    "keyword_name": "短射",
+                    "level": "high",           # 动态档位（3/5/7 档）
+                    "position": "DLWELDLINE3", # DL${defect_name}${segment}
+                    "position_3d": null
                 }
         """
         feedbacks = record.defect_feedbacks or []
@@ -154,9 +164,9 @@ class ProcessTuningService:
                 "飞边": 3
             },
             "levels": {
-                "light": 2,
+                "low": 1,
                 "medium": 2,
-                "severe": 1
+                "high": 2
             }
         }
         """
@@ -170,10 +180,11 @@ class ProcessTuningService:
 
         for record in records:
             for defect in (record.defect_feedbacks or []):
-                defect_type = defect.get('defect_type', 'unknown')
+                # 与前端 DefectFeedbackData 对齐：使用 keyword_name 而非 defect_type
+                defect_name = defect.get('keyword_name') or defect.get('defect_type', 'unknown')
                 level = defect.get('level', 'unknown')
 
-                summary['defects'][defect_type] = summary['defects'].get(defect_type, 0) + 1
+                summary['defects'][defect_name] = summary['defects'].get(defect_name, 0) + 1
                 summary['levels'][level] = summary['levels'].get(level, 0) + 1
 
         return summary

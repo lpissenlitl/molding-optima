@@ -25,8 +25,26 @@ from .initialization import (
     MoldInfoSchema,
     ProcessSetSchema,
     ProcessInferSchema,
-    ProcessInitializationFromConditionSchema,
+    ProcessInitializationFromSourceConditionSchema,
     ProcessInitializationFromMasterdataSchema,
+)
+
+# ===== 工艺优化（infer）=====
+from .optimization_infer import (
+    DefectFeedbackDataSchema,
+    CycleObservationSchema,
+    FeedbackSchema,
+    InferRequestSchema,
+    SuggestionItemSchema,
+    SuggestionGroupSchema,
+    SuggestionSchema,
+)
+
+# ===== 仪表板统计 =====
+from .statistics import (
+    DashboardTrendSchema,
+    DashboardOriginItemSchema,
+    DashboardStatisticsSchema,
 )
 
 
@@ -44,8 +62,20 @@ __all__ = [
     "MoldInfoSchema",
     "ProcessSetSchema",
     "ProcessInferSchema",
-    "ProcessInitializationFromConditionSchema",
+    "ProcessInitializationFromSourceConditionSchema",
     "ProcessInitializationFromMasterdataSchema",
+    # 工艺优化（infer）
+    "DefectFeedbackDataSchema",
+    "CycleObservationSchema",
+    "FeedbackSchema",
+    "InferRequestSchema",
+    "SuggestionItemSchema",
+    "SuggestionGroupSchema",
+    "SuggestionSchema",
+    # 仪表板统计
+    "DashboardTrendSchema",
+    "DashboardOriginItemSchema",
+    "DashboardStatisticsSchema",
 ]
 
 # 重建 ProcessConditionAndParameterSchema（其字段是 forward reference，需要在所有类加载完后解析）

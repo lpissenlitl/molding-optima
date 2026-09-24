@@ -18,8 +18,10 @@ class Recommendation(BusinessBaseModel):
     - doe: 实验设计优化
 
     设计说明：
+    - 职责单一：只记录算法推荐内容，不存储训练样本
+    - 训练样本统一归到 TuningRecord.adjustments
+    - is_adopted 是自动维护的训练标签，不需用户主动调用
     - recommendations 格式由 source_type 决定
-    - is_adopted + adopted_param 形成采纳闭环
     """
 
     process_parameter = models.ForeignKey(
@@ -69,18 +71,13 @@ class Recommendation(BusinessBaseModel):
         verbose_name="推荐方案列表",
     )
 
-    # --- 采纳状态 ---
+    # --- 采纳状态（训练标签）---
+    # 默认 True，下一轮 tuning_result = 'ineffective' 时改为 False
+    # 不需用户主动调用（不需要 adopt 接口）
     is_adopted = models.BooleanField(
-        default=False,
-        verbose_name="是否已采纳",
-    )
-
-    adopted_param = models.ForeignKey(
-        "ProcessParameter",
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name="adopted_from_recommendations",
-        verbose_name="采纳后的参数版本",
+        default=True,
+        verbose_name="是否被采纳",
+        help_text="默认 True，下一轮 ineffective 时自动改为 False（训练标签）"
     )
 
     class Meta:

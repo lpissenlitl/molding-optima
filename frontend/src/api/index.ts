@@ -104,17 +104,83 @@ export const processParameterBatchDelete = (ids: number[]) =>
 export const processTransplant = (data: { source_parameter_id: number; target_machine_spec: any }) =>
   request({ url: '/api/processes/parameter/transplant/', method: 'post', data })
 
+/**
+ * 工艺参数初始化（Mode B：基于 masterdata ID，算法生成 + 落库）
+ *
+ * 5 个必填项（在后端 schema 层面补齐）：
+ * - mold_id / polymer_id / injection_machine_id：3 个 masterdata ID
+ * - shot_index / injection_index：多射模具 / 多射台机的索引
+ *
+ * 后端响应：
+ * - condition_id / parameter_id：新创建的 Condition + ProcessParameter ID
+ * - shot_index / injection_index：实际使用的索引
+ * - matched_rules / param_source：推理元信息
+ * - process / mold_temp / hot_runner / summary：推理结果（扁平结构）
+ *
+ * 关联文档：docs/process-get-initial-frontend-integration-2026-09-23.md
+ */
+export const processInitializationFromMasterdata = (data: {
+  mold_id: number
+  polymer_id: number
+  injection_machine_id: number
+  shot_index?: number
+  injection_index?: number
+  process_set?: any
+}) =>
+  request({ url: '/api/processes/initialization/from-masterdata/', method: 'post', data })
+
 export const processOptimization = (conditionId: number) =>
   request({ url: `/api/processes/optimization/${conditionId}/`, method: 'get' })
 
 export const processOptimizationCreate = (data: { condition_id: number; target_defect?: string }) =>
   request({ url: `/api/processes/optimization/${data.condition_id || 0}/`, method: 'post', data })
 
+/**
+ * 工艺优化 infer（调机迭代核心接口）
+ *
+ * 必填项：
+ * - condition_id：工艺条件 ID（必须先调 initialization 生成）
+ * - parent_seq_idx：基准业务编号（上一轮 ProcessParameter.seq_idx）
+ *
+ * 可选项：
+ * - parameter：手动修改覆盖（结构化 dict，与 settingProcessForm 对齐）
+ * - feedback：嵌套反馈（defect / observations / tuning_result）
+ *
+ * 后端响应：
+ * - new_parameter：含 parameter_id / seq_idx（新创建的 ProcessParameter）
+ * - suggestion：算法建议（source_type / recommendation_id / groups）
+ *
+ * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
+ */
+export const processOptimizationInfer = (data: {
+  condition_id: number
+  parent_seq_idx: number
+  parameter?: any
+  feedback?: {
+    defect?: any[]
+    observations?: any[]
+    tuning_result?: 'effective' | 'ineffective' | null
+  }
+}) =>
+  request({ url: '/api/processes/optimization/infer/', method: 'post', data })
+
 export const processExpertSuggestion = (data: { condition_id: number; defect_feedback: any }) =>
   request({ url: '/api/processes/expert/suggestion/', method: 'post', data })
 
 export const processExpertDefectTemplate = () =>
   request({ url: '/api/processes/expert/defect-template/', method: 'get' })
+
+/**
+ * 仪表板统计聚合（近 30 天趋势 + 起源类型分布）
+ *
+ * 后端一次性返回 dashboard 全部图表数据，避免前端 N+1 查询：
+ * - trend：近 30 天每日新增工艺数（dates/counts）
+ * - origin_distribution：按 origin_type 分组的工艺数（饼图用）
+ *
+ * 响应：{status, msg, data: {trend: {...}, origin_distribution: [...]}}
+ */
+export const dashboardStatistics = () =>
+  request({ url: '/api/processes/statistics/dashboard/', method: 'get' })
 
 // ==================== 规则管理 ====================
 

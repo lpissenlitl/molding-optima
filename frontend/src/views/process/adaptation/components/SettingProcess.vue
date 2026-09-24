@@ -70,7 +70,7 @@
               v-model="injection.injection_time"
               v-number
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
           </el-form-item>
           <el-form-item 
@@ -82,7 +82,7 @@
               v-model="injection.delay_time"
               v-number
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
           </el-form-item>
           <el-form-item 
@@ -94,7 +94,7 @@
               v-model="injection.cooling_time"
               v-number
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
           </el-form-item>
         </el-form>
@@ -135,7 +135,7 @@
               style="width: 8rem;"
               :disabled="isSwitchModeEnabled('position')"
             >
-              <span slot="suffix">mm</span>
+              <template #suffix>mm</template>
             </el-input>
           </el-form-item>
           <el-form-item 
@@ -148,7 +148,7 @@
               style="width: 8rem;"
               :disabled="isSwitchModeEnabled('time')"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
           </el-form-item>
           <el-form-item 
@@ -161,7 +161,7 @@
               style="width: 8rem;"
               :disabled="isSwitchModeEnabled('pressure')"
             >
-              <span slot="suffix">{{ pressure_unit }}</span>
+              <template #suffix>{{ pressure_unit }}</template>
             </el-input>
           </el-form-item>
           <el-form-item 
@@ -174,7 +174,7 @@
               style="width: 8rem;"
               :disabled="isSwitchModeEnabled('velocity')"
             >
-              <span slot="suffix">{{ speed_unit }}</span>
+              <template #suffix>{{ speed_unit }}</template>
             </el-input>
           </el-form-item>
         </el-form>
@@ -431,7 +431,7 @@
               v-number
               style="width: 8rem"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
           </el-form-item>
           <el-form-item 
@@ -443,7 +443,7 @@
               v-number
               style="width: 8rem"
             >
-              <span slot="suffix">mm</span>
+              <template #suffix>mm</template>
             </el-input>
           </el-form-item>
         </el-form>

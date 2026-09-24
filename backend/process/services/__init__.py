@@ -17,9 +17,11 @@
 from .tuning_service import ProcessTuningService
 from .recommendation_service import ProcessRecommendationService
 from .initialization_service import ProcessInitializationService
+from .optimization_infer_service import OptimizationInferService
 
 __all__ = [
     "ProcessTuningService",
     "ProcessRecommendationService",
     "ProcessInitializationService",
+    "OptimizationInferService",
 ]

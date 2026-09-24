@@ -117,7 +117,7 @@
     >
       <el-form :model="keywordForm" label-width="100px">
         <el-form-item label="关键词名" required>
-          <el-input v-model="keywordForm.keyword_name" placeholder="英文标识，如 inj_pres_1" />
+          <el-input v-model="keywordForm.keyword_name" placeholder="英文大写缩写，如 IP1 / BT1" />
         </el-form-item>
         <el-form-item label="别名" required>
           <el-input v-model="keywordForm.keyword_alias" placeholder="中文名，如 一级注射压力" />

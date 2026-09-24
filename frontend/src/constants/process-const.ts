@@ -19,14 +19,14 @@ export const processConditionForm = {
   polymer_info: structuredClone(polymerInfoForm)
 }
 
-export const settingProcessForm = { 
+export const settingProcessForm = {
   injection: {
     max_stage: 6,
     stage: 1,
     table_data: [
-      { label: "压力", unit: "MPa", sections: initArray(6, null) },
-      { label: "速度", unit: "mm/s", sections: initArray(6, null) },
-      { label: "位置", unit: "mm", sections: initArray(6, null) }
+      { label: "压力", unit: "MPa", sections: initArray<number | null>(6, null) },
+      { label: "速度", unit: "mm/s", sections: initArray<number | null>(6, null) },
+      { label: "位置", unit: "mm", sections: initArray<number | null>(6, null) }
     ],
     injection_time: null,
     delay_time: null,
@@ -43,19 +43,19 @@ export const settingProcessForm = {
     max_stage: 5,
     stage: 1,
     table_data: [
-      { label: "压力", unit: "MPa", sections: initArray(5, null) },
-      { label: "速度", unit: "mm/s", sections: initArray(5, null) },
-      { label: "时间", unit: "s", sections: initArray(5, null) }
+      { label: "压力", unit: "MPa", sections: initArray<number | null>(5, null) },
+      { label: "速度", unit: "mm/s", sections: initArray<number | null>(5, null) },
+      { label: "时间", unit: "s", sections: initArray<number | null>(5, null) }
     ]
   },
   metering: {
     max_stage: 4,
     stage: 1,
     table_data: [
-      { label: "压力", unit: "MPa", sections: initArray(4, null) },
-      { label: "螺杆转速", unit: "rpm", sections: initArray(4, null) },
-      { label: "背压", unit: "MPa", sections: initArray(4, null) },
-      { label: "位置", unit: "mm", sections: initArray(4, null) }
+      { label: "压力", unit: "MPa", sections: initArray<number | null>(4, null) },
+      { label: "螺杆转速", unit: "rpm", sections: initArray<number | null>(4, null) },
+      { label: "背压", unit: "MPa", sections: initArray<number | null>(4, null) },
+      { label: "位置", unit: "mm", sections: initArray<number | null>(4, null) }
     ],
     pre_decompress_mode: 0,
     post_decompress_mode: 1,
@@ -70,7 +70,7 @@ export const settingProcessForm = {
     max_stage: 10,
     stage: 5,
     table_data: [
-      { label: "温度", unit: "℃", sections: initArray(10, null) },
+      { label: "温度", unit: "℃", sections: initArray<number | null>(10, null) },
     ],
   }
 }

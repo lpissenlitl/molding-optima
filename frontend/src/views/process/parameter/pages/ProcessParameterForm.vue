@@ -7,7 +7,7 @@
     - /process/parameter/:id/detail       详情（只读）
 
   业务说明：
-    - ProcessCondition 是"试模上下文"的通用载体（见 _shared/ProcessCondition.vue）
+    - ProcessCondition 是"试模上下文"的通用载体（见 shared/ProcessCondition.vue）
     - 本页是"工艺参数"业务视图，操作的是 Condition + Parameter 两块数据
 
   架构（2026-09-11 重构 v2）：
@@ -31,7 +31,7 @@
   样式规范：
     - 容器遵守全局表单规范（padding 16 16 96 / max-width 1400）
     - 复用全局 .form-actions / .page-header / .custom-form
-    - 本文件无任何自定义 SCSS（工艺条件卡的折叠 / 简要信息样式在 _shared/ProcessCondition.vue 内）
+    - 本文件无任何自定义 SCSS（工艺条件卡的折叠 / 简要信息样式在 shared/ProcessCondition.vue 内）
 -->
 <template>
   <div class="process-condition-form">
@@ -88,7 +88,7 @@
  *
  * 关键设计：
  * 1. 三模式（new / edit / detail）由 route 切换
- * 2. 工艺条件卡自带折叠能力（_shared/ProcessCondition 内部实现）
+ * 2. 工艺条件卡自带折叠能力（shared/ProcessCondition 内部实现）
  * 3. 工艺条件和工艺参数解耦：独立校验、独立 ref
  * 4. 提交时构造后端需要的 payload
  * 5. 详情模式：禁用底部操作条 + ProcessCondition 强制折叠
@@ -96,7 +96,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import ProcessCondition from '@/views/process/_shared/ProcessCondition.vue'
+import ProcessCondition from '@/views/process/shared/ProcessCondition.vue'
 import SettingProcess from '../components/SettingProcess.vue'
 import { injectionProcessForm, settingProcessForm } from '@/constants/process-const'
 import {
@@ -200,19 +200,20 @@ function resetForm() {
 // ============================================================================
 
 async function onSubmit() {
-  // 1. 校验条件（必填 5 项：模具/射次/机器/射台/材料）
-  //    ProcessCondition.checkFormDataValid() 内部会自动展开折叠态，让用户修改
+  // 1. 校验工艺条件（必填 5 项：模具 / 工艺射次 / 注塑机 / 射台 / 材料）
+  //    业务说明（2026-09-17 澄清）：
+  //    - 这 5 项是「工艺记录」的外键（指向模具 / 注塑机 / 材料等基础表）
+  //    - 不填则工艺记录无意义（不知道用什么模具 / 机器 / 材料打的）
+  //    - 但这 5 项指向的基础表（模具 / 注塑机 / 材料）内部的字段完整性不管
+  //      · 例如模具表里的型腔数 / 浇口类型 / 产品类别等字段，由模具模块自己负责
+  //      · 工艺录入只需要「选中」哪个模具，不用填完模具表所有字段
+  //    - ProcessCondition.checkFormDataValid() 内部会自动展开折叠态，让用户修改
   const condValid = await conditionRef.value?.checkFormDataValid()
   if (!condValid) {
     return
   }
 
-  // 2. 校验参数
-  // SettingProcess 内部如有独立校验方法可在此调用（当前 SettingProcess 未暴露校验）
-  // const paramValid = await parameterRef.value?.checkFormDataValid?.()
-  // if (!paramValid) return
-
-  // 3. 构造后端 payload
+  // 2. 构造后端 payload
   const payload = buildPayload()
 
   save_loading.value = true
@@ -297,16 +298,14 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 /*
- * 容器遵守全局表单规范（padding 16 16 96 / max-width 1400 / margin auto）
+ * 容器遵守全局表单规范（padding 16 16 96）
  * 不要自定义背景色 / display: flex / gap
  * 复用全局 .form-actions / .page-header
  *
- * 工艺条件卡的折叠 / 简要信息样式在 _shared/ProcessCondition.vue 内部
+ * 工艺条件卡的折叠 / 简要信息样式在 shared/ProcessCondition.vue 内部
  */
 .process-condition-form {
   padding: 16px 16px 96px;
-  max-width: 1400px;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 

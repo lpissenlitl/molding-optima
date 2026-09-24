@@ -145,6 +145,14 @@ export function listRuleMethods(libraryId: number, params?: {
   })
 }
 
+/** 规则方法详情 */
+export function getRuleMethod(id: number): Promise<RuleMethod> {
+  return request({
+    url: `/api/processes/rule-methods/${id}/`,
+    method: 'get',
+  })
+}
+
 /** 新建规则方法 */
 export function createRuleMethod(payload: RuleMethodCreatePayload): Promise<RuleMethod> {
   return request({
@@ -197,6 +205,18 @@ export function createExpertRule(payload: ExpertRuleCreatePayload): Promise<Expe
   return request({
     url: `/api/processes/rule-libraries/${payload.rule_library_id}/expert-rules/`,
     method: 'post',
+    data: payload,
+  })
+}
+
+/** 更新专家规则（PATCH，部分字段更新）*/
+export function updateExpertRule(
+  id: number,
+  payload: Partial<ExpertRuleCreatePayload>,
+): Promise<ExpertRule> {
+  return request({
+    url: `/api/processes/expert-rules/${id}/`,
+    method: 'patch',
     data: payload,
   })
 }

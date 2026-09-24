@@ -4,10 +4,14 @@
 职责：
     - 校验机器、模具/产品必填字段
     - 填充材料默认值
-    - 抛出明确的错误信息
+    - 抛出明确的错误信息（业务异常，非 500）
 """
 
 import logging
+
+from extensions.exceptions import BizException
+
+from process.exceptions import ERROR_PROCESS_INSUFFICIENT_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,7 @@ class DataValidator:
         'melt_density': 0.95,
     }
 
-    # 模具/产品必填字段（致命，抛异常）
+    # 模具/产品必填字段（致命，抛业务异常）
     REQUIRED_MOLD_FIELDS = [
         'product_weight',
         'gate_type',
@@ -68,7 +72,9 @@ class DataValidator:
             mold_info: 模具/产品信息 dict
 
         Raises:
-            ValueError: 模具/产品缺少必填字段时抛出
+            BizException: 模具/产品缺少必填字段时抛出（业务异常，400）
+                错误码：ERROR_PROCESS_INSUFFICIENT_FIELDS（107036）
+                message：默认消息 + 实际缺失字段列表
         """
         # 1. 校验机器字段（非致命警告）
         self._validate_machine(machine_info)
@@ -76,7 +82,7 @@ class DataValidator:
         # 2. 填充材料默认值
         self._fill_material_defaults(material_info)
 
-        # 3. 校验模具/产品必填字段（致命异常）
+        # 3. 校验模具/产品必填字段（业务异常，一次性收集所有缺失字段）
         self._validate_mold(mold_info)
 
     def _validate_machine(self, machine_info: dict) -> None:
@@ -94,14 +100,25 @@ class DataValidator:
 
     def _validate_mold(self, mold_info: dict) -> None:
         """
-        校验模具/产品必填字段
+        校验模具/产品必填字段，缺失抛 BizException（400 + 字段列表）
+
+        设计要点（2026-09-23）：
+        - 一次性收集所有缺失字段，让用户一次看全，避免循环往复
+        - 用 BizException 而非 ValueError，让中间件返回 400（友好提示）而非 500（内部错误）
+        - 错误码：ERROR_PROCESS_INSUFFICIENT_FIELDS（107036）
 
         Raises:
-            ValueError: 缺少必填字段时抛出
+            BizException: 缺少必填字段时抛出
 
         Note:
             runner_weight 允许为 0（表示热流道系统）
         """
+        missing = []
         for field in self.REQUIRED_MOLD_FIELDS:
             if not mold_info.get(field):
-                raise ValueError(f"模具/产品信息缺少必要字段: {field}")
+                missing.append(field)
+        if missing:
+            raise BizException(
+                ERROR_PROCESS_INSUFFICIENT_FIELDS,
+                f"模具/产品信息缺少字段: {', '.join(missing)}",
+            )

@@ -1,0 +1,106 @@
+/* ============================================================
+ * Custom Drawer 公共样式
+ *
+ * 包含 3 个模块：
+ *   1. drawer 头部  .el-drawer__header / .el-drawer__title / .el-drawer__close-btn
+ *   2. drawer 内容  .el-drawer__body
+ *   3. drawer 脚部  .el-drawer__footer（如需自定义 footer 用）
+ *
+ * 设计参考：与 .search-container / .form-actions 风格保持一致，
+ *          渐变背景 + 精致细节。
+ *
+ * 命名空间策略：
+ *   - 直接覆盖 el-drawer 默认类名（全局生效，所有 drawer 自动应用）
+ *   - 不需要 :deep()，因为本文件是全局 SCSS
+ *
+ * 使用方式：
+ *   任何 <el-drawer> 都自动应用，无需额外配置。
+ *   如需关闭某个特定样式，组件局部加更高优先级选择器即可。
+ * ============================================================ */
+
+
+
+/* ============================================================
+ * 1. drawer 头部
+ *
+ * 设计要点：
+ *   - 渐变背景（淡灰 → 纯白）让头部与白色内容区分
+ *   - 底部细线分隔视觉
+ *   - 标题字号 16px、加粗、深色
+ *   - padding 紧凑（上下 12px），避免 header 过高
+ * ============================================================ */
+.el-drawer__header {
+  margin-bottom: 0;         /* 覆盖默认 16px 间距，与 body padding 统一 */
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid var(--color-border-extra-light);
+}
+
+.el-drawer__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+}
+
+/*
+ * 关闭按钮
+ * - 默认灰色，hover 主题色 + 旋转 90° 动画
+ */
+.el-drawer__close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--theme-primary);
+    background-color: var(--color-primary-light-9, #ecf5ff);
+    transform: rotate(90deg);
+  }
+}
+
+
+
+/* ============================================================
+ * 2. drawer 内容
+ *
+ * 设计要点：
+ *   - 统一内边距 20px 24px
+ *   - 白色背景与 header 渐变形成层次
+ *   - 关闭 header 的 margin-bottom，避免与 body padding 重复
+ * ============================================================ */
+.el-drawer__body {
+  padding: 20px 24px;
+  background: var(--color-bg-base, #ffffff);
+  overflow-y: auto;
+}
+
+
+
+/* ============================================================
+ * 3. drawer 脚部（如需自定义 footer 用）
+ *
+ * Element Plus 的 el-drawer 默认没有 footer slot
+ * 如需添加 footer，可在组件内用：
+ *   <template #footer>
+ *     <div class="el-drawer__footer">...</div>
+ *   </template>
+ * ============================================================ */
+.el-drawer__footer {
+  padding: 16px 24px;
+  background: var(--color-bg-elevated, #fafbfc);
+  border-top: 1px solid var(--color-border-extra-light);
+  text-align: right;
+}
+
+
+

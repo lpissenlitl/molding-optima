@@ -282,6 +282,20 @@
 }
 
 /*
+ * .custom-form__title 前的 icon
+ * - 与 16px 标题字号对齐（icon 16x16，vertical-align 微调）
+ * - 主题色与左边色条呼应
+ * - margin-right 让 icon 与文字有呼吸间距
+ */
+.custom-form__title-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--el-color-primary);
+}
+
+/*
  * 分组标题（divider 类型，左对齐 + 加粗）
  * - 用于 card 内再分组（如"热流道结构"、"冷流道结构"等）
  * - 独立于 .custom-form 命名空间（divider 元素位置灵活，可能跨容器）

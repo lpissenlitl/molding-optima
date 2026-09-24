@@ -5,6 +5,7 @@ molding-optima 规则管理 service
 RuleFlowDoc（MongoDB 流程图）相关功能暂不引入。
 """
 import logging
+import re
 
 from django.db import transaction, models as db_models
 
@@ -13,6 +14,70 @@ from process.models import RuleKeyword, RuleLibrary, RuleMethod, ExpertRule
 from utils.db import paginate_queryset, parse_ordering
 
 _logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# RuleMethod 缺陷识别辅助
+# ============================================================================
+
+# 匹配规则描述中的前置条件 token
+# token 形如：kw=10 / kw>5 / kw<3 / kw>=8 / kw<=2 / kw!=0
+_PRECOND_TOKEN_RE = re.compile(
+    r'^([A-Za-z_][A-Za-z0-9_]*?)(>=|<=|>|<|=|!=)(.+)$'
+)
+
+
+def _extract_precondition_keywords(rule_description: str) -> list:
+    """从规则描述字符串中提取所有前置条件的 keyword_name
+
+    规则描述格式：
+        IF kw1 op1 v1 AND kw2 op2 v2 THEN ...
+
+    返回：['kw1', 'kw2', ...]
+    """
+    if not rule_description:
+        return []
+    m = re.search(r'\bIF\s+(.+?)\s+THEN\b', rule_description, re.IGNORECASE)
+    if not m:
+        return []
+    cond_part = m.group(1)
+    keywords = []
+    for token in cond_part.split(' AND '):
+        token = token.strip()
+        m_kw = _PRECOND_TOKEN_RE.match(token)
+        if m_kw:
+            keywords.append(m_kw.group(1))
+    return keywords
+
+
+def _auto_extract_defect(rule_description: str, company_id: int):
+    """从规则描述中自动识别缺陷关键词
+
+    业务说明：
+      defect_label / defect_code 是索引字段（用于列表查询过滤），
+      意义在于快速锁定“这条规则属于哪个缺陷”，不参与决策逻辑。
+      为避免手填错乱/与前置条件不一致，保存前自动从 preconditions 提取。
+
+    策略：
+      1. 解析 rule_description，提取所有前置条件 keyword_name
+      2. 在 RuleKeyword 表中查 category='defect' 的第一个命中
+      3. 命中：写入 alias -> defect_label, name -> defect_code
+         未命中：两个字段均为空字符串（不强约束，允许“不属于任何缺陷”的规则）
+
+    返回：(defect_label, defect_code)，都可能为空字符串
+    """
+    keywords = _extract_precondition_keywords(rule_description)
+    if not keywords:
+        return '', ''
+    kw = RuleKeyword.objects.filter(
+        company_id=company_id,
+        keyword_name__in=keywords,
+        category='defect',
+        is_deleted=False,
+    ).first()
+    if not kw:
+        return '', ''
+    return kw.keyword_alias or '', kw.keyword_name or ''
 
 
 # ==================== RuleKeyword ====================
@@ -138,6 +203,16 @@ def add_rule_method(company_id, organization_id, **params):
     params["company_id"] = company_id
     if organization_id:
         params["organization_id"] = organization_id
+
+    # 自动识别缺陷信息：覆盖前端传入的 defect_label / defect_code
+    # （前端表单不再手填这两个字段，后端始终以 rule_description 为唯一来源）
+    defect_label, defect_code = _auto_extract_defect(
+        params.get("rule_description", ""),
+        company_id,
+    )
+    params["defect_label"] = defect_label or None
+    params["defect_code"] = defect_code or None
+
     return RuleMethod.create_with_check(**params).to_dict()
 
 
@@ -149,6 +224,16 @@ def update_rule_method(rule_method_id, **params):
     ).first()
     if not rule:
         raise BizException(ERROR_DATA_NOT_FOUND, "该规则方法不存在")
+
+    # 自动识别缺陷信息：同上，保存前覆盖
+    if "rule_description" in params:
+        defect_label, defect_code = _auto_extract_defect(
+            params.get("rule_description", "") or "",
+            rule.company_id,
+        )
+        params["defect_label"] = defect_label or None
+        params["defect_code"] = defect_code or None
+
     rule.update_info(**params)
     return rule.to_dict()
 

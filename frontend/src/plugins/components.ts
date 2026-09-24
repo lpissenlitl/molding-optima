@@ -3,8 +3,12 @@
 
 import type { App } from 'vue'
 
-// Iconify 图标组件（工业领域图标）
-import { Icon } from '@iconify/vue'
+// Iconify 图标 - 离线按需注入 mdi 子集（避免 CDN 请求 + 避免全量打包）。
+// 子集文件由 scripts/extract-mdi-used-icons.js 生成。
+import { Icon, addCollection } from '@iconify/vue'
+import { mdiUsedIcons } from '@/assets/icons/mdi-used'
+
+addCollection(mdiUsedIcons as any)
 
 /**
  * 安装全局组件

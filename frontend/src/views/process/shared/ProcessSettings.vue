@@ -16,7 +16,7 @@
         >
           <el-table-column 
             label="工艺参数"
-            width="120" 
+            width="110" 
             align="left"
           >
             <template #header>
@@ -48,27 +48,27 @@
               <div>{{ col }}</div>
             </template>
             <template #default="scope">
-              <el-input 
+              <el-input
                 v-if="!readonly"
                 v-model="scope.row.sections[col_idx]"
                 v-number
                 size="small"
                 style="width: 100%;"
-                :class="{ 
+                :class="{
                   'field-changed': isFieldChanged(
                     `injection.table_data[${scope.$index}].sections[${col_idx}]`
-                  ) 
+                  )
                 }"
                 :disabled="col_idx >= injection.stage"
               >
               </el-input>
-              <span 
-                v-else 
+              <span
+                v-else
                 class="readonly-value"
-                :class="{ 
+                :class="{
                   'field-changed-text': isFieldChanged(
                     `injection.table_data[${scope.$index}].sections[${col_idx}]`
-                  ) 
+                  )
                 }"
               >
                 {{ scope.row.sections[col_idx] || '-' }}
@@ -92,7 +92,7 @@
               v-number
               :class="{ 'field-changed': isFieldChanged('injection.injection_time') }"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
             <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('injection.injection_time') }">
               {{ injection.injection_time }} <small>s</small>
@@ -106,7 +106,7 @@
               v-number
               :class="{ 'field-changed': isFieldChanged('injection.delay_time') }"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
             <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('injection.delay_time') }">
               {{ injection.delay_time }} <small>s</small>
@@ -120,7 +120,7 @@
               v-number
               :class="{ 'field-changed': isFieldChanged('injection.cooling_time') }"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
             <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('injection.cooling_time') }">
               {{ injection.cooling_time }} <small>s</small>
@@ -162,11 +162,11 @@
             <el-input
               v-if="!readonly"
               v-number
-              v-model="vp_switch.position" 
+              v-model="vp_switch.position"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('position')"
             >
-              <span slot="suffix">mm</span>
+              <template #suffix>mm</template>
             </el-input>
             <span v-else class="readonly-value-with-unit">
               {{ vp_switch.position }} <small>mm</small>
@@ -176,11 +176,11 @@
             <el-input
               v-if="!readonly"
               v-number
-              v-model="vp_switch.time" 
+              v-model="vp_switch.time"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('time')"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
             <span v-else class="readonly-value-with-unit">
               {{ vp_switch.time }} <small>s</small>
@@ -190,11 +190,11 @@
             <el-input
               v-if="!readonly"
               v-number
-              v-model="vp_switch.pressure" 
+              v-model="vp_switch.pressure"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('pressure')"
             >
-              <span slot="suffix">{{ pressure_unit }}</span>
+              <template #suffix>{{ pressure_unit }}</template>
             </el-input>
             <span v-else class="readonly-value-with-unit">
               {{ vp_switch.pressure }} <small>{{ pressure_unit }}</small>
@@ -204,11 +204,11 @@
             <el-input
               v-if="!readonly"
               v-number
-              v-model="vp_switch.velocity" 
+              v-model="vp_switch.velocity"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('velocity')"
             >
-              <span slot="suffix">{{ speed_unit }}</span>
+              <template #suffix>{{ speed_unit }}</template>
             </el-input>
             <span v-else class="readonly-value-with-unit">
               {{ vp_switch.velocity }} <small>{{ speed_unit }}</small>
@@ -228,7 +228,7 @@
         >
           <el-table-column 
             label="工艺参数"
-            width="120" 
+            width="110" 
             align="left"
           >
             <template #header>
@@ -259,10 +259,10 @@
             align="center"
           >
             <template #default="scope">
-              <el-input 
+              <el-input
                 v-if="!readonly"
                 v-number
-                v-model="scope.row.sections[col_idx]" 
+                v-model="scope.row.sections[col_idx]"
                 size="small"
                 style="width: 100%;"
                 :disabled="col_idx >= holding.stage"
@@ -288,7 +288,7 @@
         >
           <el-table-column 
             label="工艺参数"
-            width="120" 
+            width="110" 
             align="left"
           >
             <template #header>
@@ -319,9 +319,9 @@
             align="center"
           >
             <template #default="scope">
-              <el-input 
+              <el-input
                 v-if="!readonly"
-                v-model="scope.row.sections[col_idx]" 
+                v-model="scope.row.sections[col_idx]"
                 v-number
                 :disabled="col_idx >= metering.stage"
                 size="small"
@@ -343,7 +343,7 @@
           class="form-inline"
         >
           <el-form-item label="储前松退模式">
-            <el-select 
+            <el-select
               v-if="!readonly"
               v-model="metering.pre_decompress_mode"
               style="width: 8rem"
@@ -361,7 +361,7 @@
             </span>
           </el-form-item>
           <el-form-item label="储后松退模式">
-            <el-select 
+            <el-select
               v-if="!readonly"
               v-model="metering.post_decompress_mode"
               style="width: 8rem"
@@ -388,7 +388,7 @@
         >
           <el-table-column
             label=""
-            width="120"
+            width="110"
             align="center"
           >
             <template #default="scope">
@@ -494,7 +494,7 @@
               v-number
               style="width: 8rem"
             >
-              <span slot="suffix">s</span>
+              <template #suffix>s</template>
             </el-input>
             <span v-else class="readonly-value-with-unit">
               {{ metering.delay_time }} <small>s</small>
@@ -507,7 +507,7 @@
               v-number
               style="width: 8rem"
             >
-              <span slot="suffix">mm</span>
+              <template #suffix>mm</template>
             </el-input>
             <span v-else class="readonly-value-with-unit">
               {{ metering.ending_position }} <small>mm</small>
@@ -530,7 +530,7 @@
       >
         <el-table-column 
           label="工艺参数"
-          width="120" 
+          width="110" 
           align="center"
         >
           <template #header>
@@ -561,10 +561,10 @@
           align="center"
         >
           <template #default="scope">
-            <el-input 
+            <el-input
               v-if="!readonly"
               v-number
-              v-model="scope.row.sections[col_idx]" 
+              v-model="scope.row.sections[col_idx]"
               size="small"
               style="width: 100%;"
               :disabled="col_idx >= barrel_temperature.stage"
@@ -895,7 +895,7 @@ export default {
   min-height: auto;
 }
 
-.process-card >>> .el-card__header {
+.process-card :deep(.el-card__header) {
   padding: 12px 16px;
   background-color: #f5f7fa;
   border-bottom: 1px solid #e4e7ed;
@@ -906,9 +906,8 @@ export default {
   font-size: 13px;
   font-weight: 600;
   color: #303133;
-  padding: 12px 16px 8px;
+  padding: 8px 16px;
   margin: 0;
-  border-left: 3px solid #409EFF;
   background-color: #f5f7fa;
 }
 
@@ -917,13 +916,13 @@ export default {
   font-size: 12px;
 }
 
-.simple-table >>> .el-table__header th {
+.simple-table :deep(.el-table__header) th {
   padding: 8px 0;
   font-size: 12px;
   font-weight: 600;
 }
 
-.simple-table >>> .el-table__body td {
+.simple-table :deep(.el-table__body) td {
   padding: 6px 0;
   font-size: 12px;
 }
@@ -933,38 +932,56 @@ export default {
   margin-top: 8px;
 }
 
-.form-inline >>> .el-form-item {
+.form-inline :deep(.el-form-item) {
   margin-bottom: 8px;
   font-size: 12px;
 }
 
-.form-inline >>> .el-form-item__label {
+.form-inline :deep(.el-form-item__label) {
   font-size: 12px;
   padding: 0 4px 0 0;
 }
 
-.form-inline >>> .el-input__inner {
+.form-inline :deep(.el-input__inner) {
   font-size: 12px;
 }
 
-.form-inline >>> .el-select {
+.form-inline :deep(.el-select) {
   font-size: 12px;
 }
 
-/* ===== 只读值 ===== */
+/* ===== 只读值 =====
+ *
+ * span 模拟 input 视觉（柔和灰背景 + 边框），与 el-input small 高度对齐：
+ * - height: 24px = el-input small（避免切换 input <-> span 时行高跳动）
+ * - padding/border-radius 与 el-input 一致，背景略浅于 disabled input，
+ *   让"只读"不是"禁用"，而是"上下文中的灰背景框"
+ */
 .readonly-value {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 11px;
+  background-color: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
   font-size: 12px;
   color: #606266;
-  padding: 0 4px;
+  box-sizing: border-box;
 }
 
 .readonly-value-with-unit {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  height: 24px;
+  padding: 0 11px;
   gap: 2px;
+  background-color: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
   font-size: 12px;
   color: #606266;
+  box-sizing: border-box;
 }
 
 .readonly-value-with-unit small {
@@ -974,7 +991,8 @@ export default {
 }
 
 /* ===== 变更高亮 ===== */
-.field-changed >>> .el-input__inner {
+.field-changed :deep(.el-input__inner) {
+  /* margin: 0 -4px; */
   background-color: #fff7e6;
   border-color: #ffa940;
   box-shadow: 0 0 0 2px rgba(255, 169, 64, 0.2);
@@ -982,24 +1000,31 @@ export default {
   transition: all 0.3s ease;
 }
 
+/*
+ * 只读态变更高亮（覆盖 readonly-value 的部分样式）
+ * - 后定义以胜出 .readonly-value 的 background/border
+ * - 用 box-shadow inset 模拟底部高亮线（不用 ::after，避免被 cell overflow 裁剪）
+ * - 用 -1px spread 让阴影向外扩展 1px，覆盖到 border 外边缘，
+ *   下划线贯穿整个 input 宽度（包括左右 border）
+ * - 不设 padding/margin（let readonly-value 的 padding 生效，保持 layout 一致）
+ */
 .field-changed-text {
   color: #fa8c16;
   font-weight: 600;
-  position: relative;
-  padding: 2px 4px;
   background-color: #fff7e6;
-  border-radius: 2px;
+  border-color: #ffa940;
+  box-shadow: inset 0 -2px 0 -1px #ffa940;
+  /* 高亮进入动画 */
+  animation: highlight-bar 0.4s ease-out;
 }
 
-.field-changed-text::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(to right, #ffa940, #fa8c16);
-  animation: underline-expand 0.5s ease-out;
+@keyframes highlight-bar {
+  from {
+    box-shadow: inset 0 -2px 0 -1px transparent;
+  }
+  to {
+    box-shadow: inset 0 -2px 0 -1px #ffa940;
+  }
 }
 
 /* 脉冲动画 */
@@ -1009,16 +1034,6 @@ export default {
   }
   50% {
     box-shadow: 0 0 0 4px rgba(255, 169, 64, 0.2);
-  }
-}
-
-/* 下划线动画 */
-@keyframes underline-expand {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
   }
 }
 </style>
