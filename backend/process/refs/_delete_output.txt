@@ -1,4 +1,0 @@
-﻿no env specified settings loaded, use default.
-Before: RuleKeyword count = 310
-Deleted: 310
-After:  RuleKeyword count = 0
