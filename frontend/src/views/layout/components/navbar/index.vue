@@ -33,15 +33,6 @@
     </div>
 
     <div class="navbar__right">
-      <!-- 设置入口（点击弹出系统设置抽屉）-->
-      <button
-        class="navbar__action"
-        aria-label="系统设置"
-        @click="settingsOpen = true"
-      >
-        <AppIcon icon="mdi:cog-outline" />
-      </button>
-
       <!-- 用户区 -->
       <el-dropdown trigger="click">
         <span class="navbar__user" :title="userStore.display_name">
@@ -53,7 +44,11 @@
         </span>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="settingsOpen = true">
+            <el-dropdown-item @click="accountOpen = true">
+              <AppIcon icon="mdi:account-circle-outline" class="navbar__menu-icon" />
+              账户中心
+            </el-dropdown-item>
+            <el-dropdown-item divided @click="settingsOpen = true">
               <AppIcon icon="mdi:cog-outline" class="navbar__menu-icon" />
               系统设置
             </el-dropdown-item>
@@ -67,6 +62,9 @@
 
       <!-- 系统设置抽屉 -->
       <SettingsDrawer v-model="settingsOpen" />
+
+      <!-- 账户中心抽屉 -->
+      <AccountDrawer v-model="accountOpen" />
     </div>
   </div>
 </template>
@@ -77,6 +75,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import SettingsDrawer from '@/components/SettingsDrawer.vue'
+import AccountDrawer from '@/account/AccountDrawer.vue'
 
 defineProps<{
   collapsed?: boolean
@@ -92,6 +91,8 @@ const userStore = useUserStore()
 
 // 系统设置抽屉状态
 const settingsOpen = ref(false)
+// 账户中心抽屉状态
+const accountOpen = ref(false)
 
 const handleLogout = () => {
   userStore.clear()
@@ -192,28 +193,6 @@ const breadcrumbs = computed(() =>
     align-items: center;
     gap: 16px;
     flex-shrink: 0;
-  }
-
-  // 设置按钮（齿轮）
-  &__action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    color: var(--color-text-regular);
-    font-size: 20px;
-    transition: background 0.2s, color 0.2s;
-
-    &:hover {
-      background: var(--color-bg-page);
-      color: var(--theme-primary);
-    }
   }
 
   &__menu-icon {
