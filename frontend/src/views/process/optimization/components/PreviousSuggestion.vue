@@ -9,7 +9,7 @@
   设计约束：
   - 不带 title / header（由父级 round-detail-block__title 提供"上一轮调整建议"）
   - 类层级 ≤ 2：.previous-suggestion > .previous-suggestion__group / __item
-  - 浅色背景 + 左侧强调条（与 ProcessSettings 风格呼应，但不引入新 CSS 类深度）
+  - 浅色背景 + 左侧强调条（与 SettingProcess 风格呼应，但不引入新 CSS 类深度）
   - 多模态内容：按 group 分类，每组可包含任意条建议
   - 空状态：suggestion=null 或 groups 为空时显示占位文本
 -->

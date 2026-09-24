@@ -10,7 +10,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import { processParameterForm } from "@/constants/process-const"
 import { machineInfoForm } from "@/constants/machine-const"
 import SettingProcess from "./SettingProcess.vue"

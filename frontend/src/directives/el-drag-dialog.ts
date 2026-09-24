@@ -1,4 +1,10 @@
-export default { 
+// MDI inline SVG（directive 不能使用 Vue 组件，直接 inline path）
+// fullscreen (mdi-fullscreen)
+const FULLSCREEN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M5,14H7V17H10V19H5V14Z"/></svg>'
+// fullscreen-exit (mdi-fullscreen-exit, 还原按钮)
+const FULLSCREEN_EXIT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14,14H19V16H16V19H14V14M5,14H10V19H7.414L9,17.414L7,15.414L5,17.414V14M14,5V10H19V7H21V5H14M5,5V7H7V10H10V5H5Z"/></svg>'
+
+export default {
   bind(el: any, binding: any, vnode: any, oldVnode: any) {
     const resizeEvent = new CustomEvent("drag-resize",{ detail:"尺寸变化",bubbles:false })
     //初始化不最大化
@@ -31,7 +37,7 @@ export default {
     maxMin.style.right = "40px"
     maxMin.style.color = "#909399"
     maxMin.title = el.fullscreen ? "还原" : "最大化"
-    maxMin.innerHTML = "<i class=" + (el.fullscreen ? "\"el-icon-crop\"" : "\"el-icon-full-screen\"") + " onMouseOver=\"this.style.color='#409EFF'\" onMouseOut=\"this.style.color='inherit'\"></i>"
+    maxMin.innerHTML = "<i class=\"app-drag-icon\" onMouseOver=\"this.style.color='#409EFF'\" onMouseOut=\"this.style.color='inherit'\">" + (el.fullscreen ? FULLSCREEN_EXIT_SVG : FULLSCREEN_SVG) + "</i>"
     dialogHeaderEl.insertBefore(maxMin, dialogHeaderEl.childNodes[1])
     const moveDown = (e: { clientX: number; clientY: number; }) => {
       // 鼠标按下，计算当前元素距离可视区的距离
@@ -72,45 +78,39 @@ export default {
     let bodyHeight = "auto"
 
     function setMaxMin() {
+      const dialogBody = dragDom.querySelector(".el-dialog__body")
       if (el.fullscreen) {
-        const i = maxMin.querySelector(".el-icon-crop")
-        if (i !== null) {
-          i.classList.remove("el-icon-crop")
-          i.classList.add("el-icon-full-screen")
-          maxMin.innerHTML = "<i class=\"el-icon-full-screen\"></i>"
-          maxMin.title = "最大化"
-          dragDom.style.height = "auto"
-          dragDom.style.width = nowWidth + "px"
-          dragDom.style.marginTop = nowMarginTop
-          el.fullscreen = false
-          dialogHeaderEl.style.cursor = "move"
-          dialogHeaderEl.onmousedown = moveDown
-          dragDom.querySelector(".el-dialog__body").style.height = bodyHeight
-          hasSetBodyHight = false
-        }
+        // 还原：重写按钮为最大化图标
+        maxMin.innerHTML = "<i class=\"app-drag-icon\">" + FULLSCREEN_SVG + "</i>"
+        maxMin.title = "最大化"
+        dragDom.style.height = "auto"
+        dragDom.style.width = nowWidth + "px"
+        dragDom.style.marginTop = nowMarginTop
+        el.fullscreen = false
+        dialogHeaderEl.style.cursor = "move"
+        dialogHeaderEl.onmousedown = moveDown
+        if (dialogBody) dialogBody.style.height = bodyHeight
+        hasSetBodyHight = false
       } else {
-        const i = maxMin.querySelector(".el-icon-full-screen")
-        if (i !== null) {
-          i.classList.remove("el-icon-full-screen")
-          i.classList.add("el-icon-crop")
-          maxMin.title = "还原"
-          bodyHeight = dragDom.querySelector(".el-dialog__body").offsetHeight + "px"
-          nowHight = dragDom.clientHeight
-          nowWidth = dragDom.clientWidth
-          nowMarginTop = dragDom.style.marginTop
-          dragDom.style.left = 0
-          dragDom.style.top = 0
-          dragDom.style.height = "100VH"
-          dragDom.style.width = "100VW"
-          dragDom.style.marginTop = 0
-          el.fullscreen = true
-          dialogHeaderEl.style.cursor = "initial"
-          dialogHeaderEl.onmousedown = null
-          if (!hasSetBodyHight) {
-            const footerHeight = dragDom.querySelector(".el-dialog__footer") && dragDom.querySelector(".el-dialog__footer").offsetHeight
-            dragDom.querySelector(".el-dialog__body").style.height = "calc(100% - " + (dialogHeaderEl.offsetHeight + footerHeight) + "px)"
-            hasSetBodyHight = true
-          }
+        // 最大化：重写按钮为还原图标
+        maxMin.innerHTML = "<i class=\"app-drag-icon\">" + FULLSCREEN_EXIT_SVG + "</i>"
+        maxMin.title = "还原"
+        if (dialogBody) bodyHeight = dialogBody.offsetHeight + "px"
+        nowHight = dragDom.clientHeight
+        nowWidth = dragDom.clientWidth
+        nowMarginTop = dragDom.style.marginTop
+        dragDom.style.left = 0
+        dragDom.style.top = 0
+        dragDom.style.height = "100VH"
+        dragDom.style.width = "100VW"
+        dragDom.style.marginTop = 0
+        el.fullscreen = true
+        dialogHeaderEl.style.cursor = "initial"
+        dialogHeaderEl.onmousedown = null
+        if (!hasSetBodyHight) {
+          const footerHeight = dragDom.querySelector(".el-dialog__footer") && dragDom.querySelector(".el-dialog__footer").offsetHeight
+          if (dialogBody) dialogBody.style.height = "calc(100% - " + (dialogHeaderEl.offsetHeight + footerHeight) + "px)"
+          hasSetBodyHight = true
         }
       }
       el.dispatchEvent(resizeEvent)

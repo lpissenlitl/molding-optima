@@ -661,7 +661,7 @@ watch(
 <style scoped>
 /* ===== 表格 ===== */
 /*
- * 参考 ProcessSettings.vue 里的 .simple-table 样式
+ * 参考 shared/SettingProcess.vue 里的 .simple-table 样式
  * - 表格整体 12px（紧凑）
  * - 表头 8px padding + 600 字重（与其他表头一致）
  * - 表体 6px padding（让输入框紧凑）
@@ -724,8 +724,8 @@ watch(
  * ===== 区域分组标题 =====
  *
  * 用于 box-card 内部区分不同区域（注射参数 / VP切换 / 保压参数 等）
- * - 参考 ProcessSettings.vue 的 .section-header 写法
- * - 与 ProcessSettings 一致：主题色竖条 + 浅灰背景 + 600 字重
+ * - 参考 shared/SettingProcess.vue 的 .section-header 写法
+ * - 与 shared/SettingProcess 一致：主题色竖条 + 浅灰背景 + 600 字重
  *
  * 响应式：
  * - 默认桌面：padding 12px 16px 8px（上下多一点以分隔区块）

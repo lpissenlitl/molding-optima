@@ -583,7 +583,7 @@ import { settingProcessForm } from "@/constants/process-const"
 import { machineInfoForm } from "@/constants/machine-const"
 
 export default {
-  name: "ProcessSettings",
+  name: "SettingProcess",
   props: {
     // 原始数据（用于变更检测）
     originalProcess: {

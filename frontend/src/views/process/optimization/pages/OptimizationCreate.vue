@@ -53,7 +53,7 @@
                     size="small"
                   />
                 </div>
-                <ProcessSettings
+                <SettingProcess
                   :setting-process="activeRound.parameter"
                   :readonly="isProcessReadonly"
                 />
@@ -203,7 +203,7 @@ import {
   createSessionStorageKey,
 } from '@/utils/storage-session'
 import ProcessCondition from '@/views/process/shared/ProcessCondition.vue'
-import ProcessSettings from '@/views/process/shared/ProcessSettings.vue'
+import SettingProcess from '@/views/process/shared/SettingProcess.vue'
 import RoundTimeline from '../components/RoundTimeline.vue'
 import DefectFeedback from '../components/DefectFeedback.vue'
 import ProcessActualFeedback from '../components/ProcessActualFeedback.vue'
@@ -589,7 +589,7 @@ function padSteps(steps: Array<number | null | undefined> | null | undefined, ma
 function mapInferResultToParameter(result: any): typeof settingProcessForm {
   const p = result?.process ?? {}
   void result?.mold_temp
-  // hot_runner 暂不映射（前端 ProcessSettings 未提供阀口时间设置）
+  // hot_runner 暂不映射（前端 SettingProcess 未提供阀口时间设置）
   return {
     injection: {
       ...settingProcessForm.injection,
@@ -953,10 +953,10 @@ onBeforeUnmount(() => {
   }
 
   /*
-   * 嵌入态：当块内嵌 ProcessSettings 时让其外层 wrapper 透明化
+   * 嵌入态：当块内嵌 SettingProcess 时让其外层 wrapper 透明化
    * - 避免外层 border 与 wrapper 的 box-shadow/padding 叠加形成三层视觉重量
-   * - 仅影响本页面嵌入场景；ProcessSettings 默认态不变
-   * - 3 个 process-card 仍保留 border（作为 ProcessSettings 内部状态分隔）
+   * - 仅影响本页面嵌入场景；SettingProcess 默认态不变
+   * - 3 个 process-card 仍保留 border（作为 SettingProcess 内部状态分隔）
    */
   &--embedded :deep(.process-settings-wrapper) {
     background-color: transparent;

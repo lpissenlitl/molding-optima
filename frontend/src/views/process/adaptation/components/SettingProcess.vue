@@ -506,7 +506,7 @@
   </el-row>
 </template>
 
-<script>
+<script lang="ts">
 import { settingProcessForm } from "@/constants/process-const"
 import { machineInfoForm } from "@/constants/machine-const"
 

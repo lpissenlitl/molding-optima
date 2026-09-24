@@ -27,11 +27,14 @@
             v-if="showSearch && all_values.length > 6"
             v-model="search_keyword"
             placeholder="搜索..."
-            prefix-icon="el-icon-search"
             size="small"
             clearable
             class="filter-search"
-          />
+          >
+            <template #prefix>
+              <AppIcon icon="mdi:magnify" />
+            </template>
+          </el-input>
 
           <!-- 全选/反选 -->
           <div v-if="all_values.length > 2" class="filter-actions">
@@ -60,7 +63,7 @@
 
           <!-- 空状态提示（避免数据为空时中间一大块空白） -->
           <div v-if="filteredValues.length === 0" class="filter-empty">
-            <i class="el-icon-warning-outline"></i>
+            <AppIcon icon="mdi:alert-outline" />
             <span>暂无可筛选项</span>
           </div>
 
@@ -118,7 +121,9 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+
 /**
  * ColumnFilter 列筛选组件
  *
@@ -133,207 +138,176 @@
  *   - 当前 UI 只有 '' (不参与) ↔ 'in' (包含) 两态
  *   - 内部状态结构已支持三态 ('in' / 'ex' / '')，后续可加 UI 入口
  */
-export default {
-  name: "ColumnFilter",
 
-  props: {
+// props
+const props = withDefaults(
+  defineProps<{
     // 列标签
-    label: {
-      type: String,
-      required: true,
-    },
-
+    label: string
     // 自定义标题
-    title: {
-      type: String,
-      default: "",
-    },
-
+    title?: string
     // 当前包含筛选的值（向后兼容旧 props）
-    values: {
-      type: Array,
-      default: () => [],
-    },
-
+    values?: any[]
     // 排除筛选的值（向后兼容旧 props）
     // - Array: 直接作为 exclude 列表
     // - true: 配合 values，把所有 values 视为排除（向后兼容旧 exclude=true 语义）
-    exclude: {
-      type: [Array, Boolean],
-      default: false,
-    },
-
+    exclude?: any[] | boolean
     // 所有可选值
-    all_values: {
-      type: Array,
-      default: () => [],
-    },
-
+    all_values?: any[]
     // 是否显示搜索框
-    showSearch: {
-      type: Boolean,
-      default: true,
-    },
-
+    showSearch?: boolean
     // 自定义图标类名
-    iconClass: {
-      type: String,
-      default: "",
-    },
-
+    iconClass?: string
     // 自定义图标样式
-    iconStyle: {
-      type: Object,
-      default: null,
-    },
-
+    iconStyle?: Record<string, any> | null
     // 格式化标签的函数
-    formatLabel: {
-      type: Function,
-      default: null,
-    },
-  },
+    formatLabel?: ((value: any) => string) | null
+  }>(),
+  {
+    title: '',
+    values: () => [],
+    exclude: false,
+    all_values: () => [],
+    showSearch: true,
+    iconClass: '',
+    iconStyle: null,
+    formatLabel: null,
+  }
+)
 
-  data() {
-    return {
-      visible: false,
-      // 当前勾选项（与 el-checkbox-group 双向绑定，简单直观）
-      checked_values: [],
-      // 搜索关键字
-      search_keyword: "",
-    }
-  },
+const emit = defineEmits<{
+  (e: 'confirm', payload: { include: any[]; exclude: any[] }): void
+  (e: 'cancel'): void
+  (e: 'clear'): void
+}>()
 
-  computed: {
-    /**
-     * 从 props.values 提取 include 列表
-     * 兼容 exclude=true 时把所有 values 视为排除
-     */
-    includeList() {
-      if (!Array.isArray(this.values)) return []
-      if (this.exclude === true && this.values.length > 0) return []
-      return [...this.values]
-    },
+// data
+const visible = ref(false)
+const checked_values = ref<any[]>([])
+const search_keyword = ref('')
 
-    /**
-     * 从 props.exclude 提取 exclude 列表
-     * 兼容 exclude=true 时把 values 视为排除
-     */
-    excludeList() {
-      if (Array.isArray(this.exclude)) return [...this.exclude]
-      if (this.exclude === true && Array.isArray(this.values) && this.values.length > 0) {
-        return [...this.values]
-      }
-      return []
-    },
+// computed
+/**
+ * 从 props.values 提取 include 列表
+ * 兼容 exclude=true 时把所有 values 视为排除
+ */
+const includeList = computed(() => {
+  if (!Array.isArray(props.values)) return []
+  if (props.exclude === true && props.values.length > 0) return []
+  return [...props.values]
+})
 
-    /**
-     * 是否有激活的筛选条件（用于图标高亮）
-     */
-    hasActive() {
-      return this.includeList.length > 0 || this.excludeList.length > 0
-    },
+/**
+ * 从 props.exclude 提取 exclude 列表
+ */
+const excludeList = computed(() => {
+  if (Array.isArray(props.exclude)) return [...props.exclude]
+  if (props.exclude === true && Array.isArray(props.values) && props.values.length > 0) {
+    return [...props.values]
+  }
+  return []
+})
 
-    /**
-     * 搜索过滤后的值列表
-     */
-    filteredValues() {
-      if (!this.search_keyword) return this.all_values
-      const keyword = this.search_keyword.toLowerCase()
-      return this.all_values.filter(value => {
-        const displayValue = this.formatLabel
-          ? this.formatLabel(value)
-          : String(value)
-        return displayValue.toLowerCase().includes(keyword)
-      })
-    },
-  },
+/**
+ * 是否有激活的筛选条件（用于图标高亮）
+ */
+const hasActive = computed(() => {
+  return includeList.value.length > 0 || excludeList.value.length > 0
+})
 
-  watch: {
-    visible(val) {
-      if (val) {
-        // 打开弹窗时从 props 同步当前勾选状态（避免与外部脱节）
-        this.checked_values = [...this.includeList]
-      }
-    },
-    values() {
-      if (this.visible) {
-        this.checked_values = [...this.includeList]
-      }
-    },
-    exclude() {
-      if (this.visible) {
-        this.checked_values = [...this.includeList]
-      }
-    },
-  },
+/**
+ * 搜索过滤后的值列表
+ */
+const filteredValues = computed(() => {
+  if (!search_keyword.value) return props.all_values
+  const keyword = search_keyword.value.toLowerCase()
+  return props.all_values.filter(value => {
+    const displayValue = props.formatLabel
+      ? props.formatLabel(value)
+      : String(value)
+    return displayValue.toLowerCase().includes(keyword)
+  })
+})
 
-  created() {
-    // 初始化 checked_values 为当前 include
-    this.checked_values = [...this.includeList]
-  },
+// watch
+watch(visible, val => {
+  if (val) {
+    checked_values.value = [...includeList.value]
+  }
+})
 
-  methods: {
-    /**
-     * 复选框变化（仅同步内部状态，不立即 emit）
-     */
-    handleChange() {
-      // 让用户点确定才 emit，cancel 会还原
-    },
+watch(() => props.values, () => {
+  if (visible.value) {
+    checked_values.value = [...includeList.value]
+  }
+})
 
-    /**
-     * 确认筛选
-     * payload 形态：{ include: [v1, v2], exclude: [] }
-     */
-    handleConfirm() {
-      this.visible = false
-      this.$emit("confirm", {
-        include: [...this.checked_values],
-        exclude: [...this.excludeList],
-      })
-    },
+watch(() => props.exclude, () => {
+  if (visible.value) {
+    checked_values.value = [...includeList.value]
+  }
+})
 
-    /**
-     * 取消操作（还原为 props 当前值）
-     */
-    handleCancel() {
-      this.visible = false
-      this.search_keyword = ""
-      this.checked_values = [...this.includeList]
-      this.$emit("cancel")
-    },
+// 初始化 checked_values 为当前 include
+checked_values.value = [...includeList.value]
 
-    /**
-     * 清空筛选
-     */
-    handleClear() {
-      this.checked_values = []
-      this.visible = false
-      this.search_keyword = ""
-      this.$emit("clear")
-    },
+// methods
+/**
+ * 复选框变化（仅同步内部状态，不立即 emit）
+ */
+function handleChange() {
+  // 让用户点确定才 emit，cancel 会还原
+}
 
-    /**
-     * 全选（仅作用于当前可见项，避免与搜索冲突）
-     * 保留搜索之外的已选项 + 把当前可见项全部勾选
-     */
-    handleSelectAll() {
-      const visible = new Set(this.filteredValues)
-      const kept = this.checked_values.filter(v => !visible.has(v))
-      this.checked_values = [...kept, ...this.filteredValues]
-    },
+/**
+ * 确认筛选
+ * payload 形态：{ include: [v1, v2], exclude: [] }
+ */
+function handleConfirm() {
+  visible.value = false
+  emit('confirm', {
+    include: [...checked_values.value],
+    exclude: [...excludeList.value],
+  })
+}
 
-    /**
-     * 反选（仅作用于当前可见项）
-     * 保留搜索之外的已选项 + 对可见项 toggle（已选取消、未选勾选）
-     */
-    handleInvert() {
-      const visible = new Set(this.filteredValues)
-      const kept = this.checked_values.filter(v => !visible.has(v))
-      const newlyChecked = this.filteredValues.filter(v => !this.checked_values.includes(v))
-      this.checked_values = [...kept, ...newlyChecked]
-    },
-  },
+/**
+ * 取消操作（还原为 props 当前值）
+ */
+function handleCancel() {
+  visible.value = false
+  search_keyword.value = ''
+  checked_values.value = [...includeList.value]
+  emit('cancel')
+}
+
+/**
+ * 清空筛选
+ */
+function handleClear() {
+  checked_values.value = []
+  visible.value = false
+  search_keyword.value = ''
+  emit('clear')
+}
+
+/**
+ * 全选（仅作用于当前可见项，避免与搜索冲突）
+ */
+function handleSelectAll() {
+  const visible = new Set(filteredValues.value)
+  const kept = checked_values.value.filter(v => !visible.has(v))
+  checked_values.value = [...kept, ...filteredValues.value]
+}
+
+/**
+ * 反选（仅作用于当前可见项）
+ */
+function handleInvert() {
+  const visibleSet = new Set(filteredValues.value)
+  const kept = checked_values.value.filter(v => !visibleSet.has(v))
+  const newlyChecked = filteredValues.value.filter(v => !checked_values.value.includes(v))
+  checked_values.value = [...kept, ...newlyChecked]
 }
 </script>
 

@@ -131,186 +131,135 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: 'BaseSearchForm',
-  props: {
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { querySuggestions as buildQuerySuggestions } from '@/utils/form-helper'
+import type { SearchItem } from '@/types/search-item'
+
+const props = withDefaults(
+  defineProps<{
     /**
      * 查询对象（双向绑定）
      * BaseSearchForm 内部直接修改此对象（依赖 Vue 3 reactive 自动追踪）
      */
-    query: {
-      type: Object,
-      required: true
-    },
+    query: Record<string, any>
 
     /**
      * 筛选项配置数组
-     * 每项结构：
-     * {
-     *   label: string,           // 字段标签
-     *   prop: string,            // 字段名（对应 query 对象的键）
-     *   type: string,            // 类型：autocomplete/select/input/date/slot
-     *   level?: string,          // 级别：basic/advanced（可选，默认 basic）
-     *   placeholder?: string,    // 占位文本（可选，未设置时按 type 有默认值）
-     *   options?: Array,         // select 类型的选项数组
-     *   query?: Object,          // autocomplete 类型的查询配置
-     *   slot_name?: string       // slot 类型的插槽名称
-     * }
-     *
-     * 宽度规则（参考 molding-expert custom.scss 274-284）：
-     * - 默认 input/date/autocomplete = 160px，select = 120px
-     * - 如需自定义，在 el-form-item 上加 class 或 inline style 覆盖
      */
-    items: {
-      type: Array,
-      default: () => []
-    },
+    items?: SearchItem[]
 
     /**
      * 是否支持展开/收起功能
      */
-    expandable: {
-      type: Boolean,
-      default: false
-    },
+    expandable?: boolean
 
     /**
      * 尺寸（Element Plus：large / default / small）
-     * 默认 default（中等，32px），对应 Element UI 时代的 small
-     * 与 admin/user 搜索栏保持一致
      */
-    size: {
-      type: String,
-      default: 'default'
-    },
+    size?: string
 
     /**
      * 控件宽度策略
-     * - 不传（或 null）：A 紧凑型（input 160px / select 120px，节省空间）
-     * - 传数字（如 200）：B 整齐型（所有控件统一宽度，视觉对齐）
-     * - 传字符串（如 '20rem'）：自定义单位
+     * - 不传：A 紧凑型（input 160px / select 120px）
+     * - 传数字（如 200）：B 整齐型
+     * - 传字符串：自定义单位
      */
-    controlWidth: {
-      type: [Number, String],
-      default: null
-    },
+    controlWidth?: number | string | null
 
     /**
      * label 宽度
      * - 'auto'（默认）：label 宽度自适应
-     * - 传具体值（如 '6rem' / '80px'）：label 等宽 + 右对齐（推荐 B 模式启用）
+     * - 传具体值（如 '6rem' / '80px'）：label 等宽 + 右对齐
      */
-    labelWidth: {
-      type: String,
-      default: 'auto'
-    }
-  },
-
-  data() {
-    return {
-      is_expanded: false,
-      default_query: {}  // 挂载时快照初始值，重置时恢复
-    }
-  },
-
-  computed: {
-    /**
-     * form 元素的 style
-     * - B 模式：注入 --uniform-width CSS 变量供子选择器使用
-     * - A 模式：不传
-     */
-    formStyle() {
-      if (!this.controlWidth) return null
-      const w = typeof this.controlWidth === 'number' ? `${this.controlWidth}px` : this.controlWidth
-      return { '--uniform-width': w }
-    },
-
-    /**
-     * 是否有高级筛选项
-     */
-    hasAdvancedItems() {
-      if (!this.expandable) return false
-      return this.items.some(item => item.level === 'advanced')
-    },
-
-    /**
-     * 可见的筛选项（基础项 + 展开时的高级项）
-     */
-    visibleItems() {
-      if (!this.expandable) {
-        return this.items
-      }
-      return this.items.filter(item => {
-        return item.level !== 'advanced' || this.is_expanded
-      })
-    }
-  },
-
-  created() {
-    // 快照父组件传入的初始 query 值作为重置基准
-    this.default_query = JSON.parse(JSON.stringify(this.query))
-  },
-
-  methods: {
-    /**
-     * 处理清空操作
-     * Vue 3 reactive 对象可以直接赋值，响应式自动追踪
-     */
-    handleClear(prop) {
-      this.query[prop] = null
-    },
-
-    /**
-     * 切换展开/收起状态
-     */
-    toggleExpand() {
-      this.is_expanded = !this.is_expanded
-      this.$emit('expand-change', this.is_expanded)
-    },
-
-    /**
-     * 获取自动补全建议函数
-     * 支持级联筛选：配置 filter_ref 时，每次触发时从 query 动态读取关联字段的当前值
-     */
-    getSuggestions(item_query) {
-      // 无级联配置：直接复用全局方法（性能最优）
-      if (!item_query.filter_ref) {
-        return this.$querySuggestions(item_query)
-      }
-
-      // 有级联配置：每次触发时动态解析关联字段的当前值
-      return (input, cb) => {
-        const params = { ...item_query }
-        const source = this[item_query.filter_ref]
-        params.filter_columns = Object.fromEntries(
-          Object.entries(item_query.filter_columns).map(
-            ([key, ref_prop]) => [key, source[ref_prop] ?? null]
-          )
-        )
-        delete params.filter_ref
-        this.$querySuggestions(params)(input, cb)
-      }
-    },
-
-    /**
-     * 处理搜索
-     */
-    handleSearch() {
-      this.$emit('search', this.query)
-    },
-
-    /**
-     * 处理重置
-     * 恢复到初始默认值（而非全部置空），分页回到第一页
-     */
-    handleReset() {
-      Object.keys(this.query).forEach(key => {
-        this.query[key] = this.default_query[key] !== undefined ? this.default_query[key] : null
-      })
-      this.$emit('reset', this.query)
-    }
+    labelWidth?: string
+  }>(),
+  {
+    items: () => [],
+    expandable: false,
+    size: 'default',
+    controlWidth: null,
+    labelWidth: 'auto'
   }
+)
+
+const emit = defineEmits<{
+  (e: 'search', query: Record<string, any>): void
+  (e: 'reset', query: Record<string, any>): void
+  (e: 'expand-change', expanded: boolean): void
+}>()
+
+// data
+const is_expanded = ref(false)
+// setup() 在 created 之前执行，直接在顶层快照初始值即可
+const default_query = ref<Record<string, any>>(JSON.parse(JSON.stringify(props.query)))
+
+// computed
+const formStyle = computed(() => {
+  if (!props.controlWidth) return null
+  const w = typeof props.controlWidth === 'number' ? `${props.controlWidth}px` : props.controlWidth
+  return { '--uniform-width': w } as Record<string, string>
+})
+
+const hasAdvancedItems = computed(() => {
+  if (!props.expandable) return false
+  return props.items.some(item => item.level === 'advanced')
+})
+
+const visibleItems = computed(() => {
+  if (!props.expandable) return props.items
+  return props.items.filter(item => item.level !== 'advanced' || is_expanded.value)
+})
+
+// methods
+function handleClear(prop: string): void {
+  props.query[prop] = null
+}
+
+function toggleExpand(): void {
+  is_expanded.value = !is_expanded.value
+  emit('expand-change', is_expanded.value)
+}
+
+/**
+ * 获取自动补全建议函数
+ * 支持级联筛选：配置 filter_ref 时，从 query 动态读取关联字段的当前值
+ */
+function getSuggestions(item_query: SearchItem['query']) {
+  if (!item_query) return () => {}
+  if (!item_query.filter_ref) {
+    return buildQuerySuggestions(item_query)
+  }
+
+  // 有级联配置：每次触发时动态解析关联字段的当前值
+  return (input: string, cb: (suggestions: any[]) => void) => {
+    const params: Record<string, any> = { ...item_query }
+    const filter_ref = item_query.filter_ref
+    const source = filter_ref ? props.query[filter_ref] : undefined
+    if (item_query.filter_columns) {
+      params.filter_columns = Object.fromEntries(
+        Object.entries(item_query.filter_columns).map(
+          ([key, ref_prop]) => [key, source?.[ref_prop] ?? null]
+        )
+      )
+    }
+    delete params.filter_ref
+    buildQuerySuggestions(params)(input, cb)
+  }
+}
+
+function handleSearch(): void {
+  emit('search', props.query)
+}
+
+/**
+ * 重置到初始默认值（而非全部置空）
+ */
+function handleReset(): void {
+  Object.keys(props.query).forEach(key => {
+    props.query[key] = default_query.value[key] !== undefined ? default_query.value[key] : null
+  })
+  emit('reset', props.query)
 }
 </script>
 

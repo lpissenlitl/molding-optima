@@ -9,95 +9,52 @@
   />
 </template>
 
-<script>
+<script setup lang="ts">
 import BaseSearchForm from "@/components/BaseSearchForm.vue"
+import type { SearchItem } from "@/types/search-item"
 import { moldCategoryOptions, moldStructureOptions } from "@/constants/mold-const"
 
-export default {
-  name: "MoldSearchForm",
-  components: { BaseSearchForm },
-  props: {
-    queryDetail: {
-      type: Object,
-      default: () => ({
-        mold_no: null,
-        mold_name: null,
-        category: null,
-        structure: null,
-        cavity_layout: null,
-        manufacturing_method: null,
-      })
-    }
-  },
-  data() {
-    return {
-      // ✅ Data 变量使用下划线命名（与后端一致）
-      query_params: this.queryDetail,
-      search_items: [
-        // 基础项
-        { 
-          label: "模具编号", 
-          prop: "mold_no", 
-          type: "autocomplete", 
-          level: "basic",
-          query: { table: "mold", column: "mold_no" } 
-        },
-        { 
-          label: "模具名称", 
-          prop: "mold_name", 
-          type: "autocomplete", 
-          level: "basic",
-          query: { table: "mold", column: "mold_name" } 
-        },
-        { 
-          label: "模具类别", 
-          prop: "category", 
-          type: "select", 
-          level: "basic",
-          options: moldCategoryOptions 
-        },
-        { 
-          label: "模具结构", 
-          prop: "structure", 
-          type: "select", 
-          level: "basic",
-          options: moldStructureOptions 
-        },
-        { 
-          label: "模腔布局", 
-          prop: "cavity_layout", 
-          type: "autocomplete", 
-          level: "basic",
-          query: { table: "mold", column: "cavity_layout" } 
-        },
-        { 
-          label: "制作方式", 
-          prop: "manufacturing_method", 
-          type: "autocomplete", 
-          level: "basic",
-          query: { table: "project", column: "manufacturing_method" } 
-        },
-      ]
-    }
-  },
-  methods: {
-    /**
-     * 处理搜索
-     */
-    handleSearch() {
-      this.$emit("search")
-    },
-    
-    /**
-     * 处理重置
-     */
-    handleReset() {
-      this.$emit("reset")
-    }
+const props = withDefaults(
+  defineProps<{
+    queryDetail?: Record<string, any>
+  }>(),
+  {
+    queryDetail: () => ({
+      mold_no: null,
+      mold_name: null,
+      category: null,
+      structure: null,
+      cavity_layout: null,
+      manufacturing_method: null,
+    })
   }
+)
+
+const emit = defineEmits<{
+  (e: 'search'): void
+  (e: 'reset'): void
+}>()
+
+// 复用父组件传入的 query 引用（BaseSearchForm 双向修改会同步到父组件）
+const query_params = props.queryDetail
+
+const search_items: SearchItem[] = [
+  { label: "模具编号", prop: "mold_no", type: "autocomplete", level: "basic", query: { table: "mold", column: "mold_no" } },
+  { label: "模具名称", prop: "mold_name", type: "autocomplete", level: "basic", query: { table: "mold", column: "mold_name" } },
+  { label: "模具类别", prop: "category", type: "select", level: "basic", options: moldCategoryOptions },
+  { label: "模具结构", prop: "structure", type: "select", level: "basic", options: moldStructureOptions },
+  { label: "模腔布局", prop: "cavity_layout", type: "autocomplete", level: "basic", query: { table: "mold", column: "cavity_layout" } },
+  { label: "制作方式", prop: "manufacturing_method", type: "autocomplete", level: "basic", query: { table: "project", column: "manufacturing_method" } },
+]
+
+function handleSearch() {
+  emit("search")
+}
+
+function handleReset() {
+  emit("reset")
 }
 </script>
 
 <style lang="scss" scoped>
-
 </style>
