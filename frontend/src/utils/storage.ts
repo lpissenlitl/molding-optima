@@ -1,12 +1,10 @@
-import settings from "@/settings"
-
 // -- 辅助：生成带版本的 key -----------------------------------
 /**
  * 生成带软件版本号的 localStorage key
- * 例如: createStorageKey('molds') => 'app_molds_v5.0.0'
+ * 版本号由 vite.config.ts 的 __APP_VERSION__ 注入（来源：package.json）
  */
 export function createStorageKey(baseKey: string): string {
-  return `app_${baseKey}_${settings.version}`
+  return `app_${baseKey}_${__APP_VERSION__}`
 }
 
 // -- 核心：安全读写 -----------------------------------------

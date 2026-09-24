@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import pkg from './package.json'
 
 export default defineConfig({
+  // 构建时常量注入：版本号与 package.json 始终同步
+  // 代码中使用 __APP_VERSION__ 即被静态替换为字符串字面量
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [vue()],
   resolve: {
     alias: {

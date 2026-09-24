@@ -21,8 +21,8 @@ export const useAppStore = defineStore('app', {
     shortName: 'Molding Optima',
     groupName: 'MoldingX Group',
 
-    // 版本（从 package.json 同步会更佳；此处先固定）
-    version: 'v0.2.0',
+    // 版本（编译时从 package.json 注入，详情见 vite-env.d.ts）
+    version: __APP_VERSION__,
 
     // 版权
     copyrightYear: 2026,
@@ -37,7 +37,7 @@ export const useAppStore = defineStore('app', {
 
   getters: {
     /** 左侧品牌区底部署名（如：v0.2.0 · MoldingX Group）*/
-    footerBrand: (state) => `${state.version} · ${state.groupName}`,
+    footerBrand: (state) => `v${state.version} · ${state.groupName}`,
 
     /** 底部版权完整文本（如：© 2026 Molding Optima）*/
     copyrightText: (state) =>

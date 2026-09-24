@@ -1,5 +1,3 @@
-import settings from "@/settings"
-
 /**
  * sessionStorage 工具集（与 storage.ts 的 localStorage 工具成对）
  *
@@ -9,18 +7,16 @@ import settings from "@/settings"
  * - 适合「长时间操作的中途切页面不丢数据，但关闭浏览器后不需要保留」的场景
  *
  * 用法：与 localStorage 工具完全一致，仅函数名以 Session 区分
+ * 版本号由 vite.config.ts 的 __APP_VERSION__ 注入（来源：package.json）
  */
 
 // -- 辅助：生成带版本的 key -----------------------------------
 /**
  * 生成带软件版本号的 sessionStorage key
- * 例如: createSessionStorageKey('optimization-form') =>
- *       'app_optimization-form_v5.0.0'
- *
  * 版本号让软件升级时旧 key 自然失效（schema 变了也不会用错数据）
  */
 export function createSessionStorageKey(baseKey: string): string {
-  return `app_${baseKey}_${settings.version}`
+  return `app_${baseKey}_${__APP_VERSION__}`
 }
 
 // -- 核心：安全读写 -----------------------------------------
