@@ -12,13 +12,11 @@ Process 前缀已去掉（Django app 路径本身已是命名空间，Process �
 """
 
 from .tuning import TuningService
-from .recommendation import RecommendationService
 from .parameter_init import ParameterInitService
 from .optimization_infer import OptimizationInferService
 
 __all__ = [
     "TuningService",
-    "RecommendationService",
     "ParameterInitService",
     "OptimizationInferService",
 ]
