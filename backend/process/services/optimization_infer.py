@@ -22,14 +22,14 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from django.db import transaction as db_transaction
 
-from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT
+from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT, ERROR_OPERATION_FAILED, ERROR_REQUIRED_FIELD
 from process.models import (
     ProcessCondition,
     ProcessParameter,
     Recommendation,
     TuningRecord,
 )
-from process.services.recommendation_service import ProcessRecommendationService
+from process.services.recommendation import RecommendationService
 
 _logger = logging.getLogger(__name__)
 
@@ -79,6 +79,33 @@ def _direction_from_delta(before: Optional[float], after: Optional[float]) -> Op
 
 
 # ============================================================================
+# snapshot 字段排除集（用于 _snapshot_parameter）
+#
+# 背景：原实现只排除 id/时间戳/FK，会把 param_source / parameter_no / seq_idx
+#       等业务字段也纳入 snapshot。这些字段在 _create_new_parameter 里会被
+#       **parameters_dict 展开，导致与显式传入的同名 kwarg 冲突（如
+#       param_source='system_inferred'），运行时报 TypeError。
+#
+# 原则：snapshot 只包含「标量工艺字段」（inj_*/hold_*/met_*/...），业务字段
+#       （编号/来源/序号）由 Model/Service 层自行处理。
+# ============================================================================
+
+_NON_SNAPSHOT_FIELDS = frozenset({
+    # 元数据
+    "id", "created_at", "updated_at", "deleted", "deleted_at", "is_deleted",
+    # 业务字段（snapshot 外另行处理）
+    "parameter_no",       # 业务编号 → Model 层自动生成（PP-{YYYYMM}-{NNNN}）
+    "param_source",       # 参数来源 → _create_new_parameter 显式传入
+    "seq_idx",            # 序列序号 → Model.save() 自动分配
+})
+
+
+# “无缺陷” sentinel keyword 名称（与前端 constants/special-keywords.DEFECTFREE_KEYWORD_NAME 对齐）
+# 业务定义：选DEFECTFREE 时 level / position 均可不填（语义为“本次试模无缺陷”，不需描述）
+_DEFECTFREE_KEYWORD_NAME = "DEFECTFREE"
+
+
+# ============================================================================
 # infer 服务（主类）
 # ============================================================================
 
@@ -92,7 +119,7 @@ class OptimizationInferService:
 
     def __init__(self):
         # 复用现有推荐服务（已注册 FuzzyEngine / RuleMiner / LLM 等）
-        self._recommendation_service = ProcessRecommendationService()
+        self._recommendation_service = RecommendationService()
 
     # ---------- 公开入口 ----------
 
@@ -125,6 +152,11 @@ class OptimizationInferService:
             }
         """
         feedback = feedback or {}
+        # ---------- Step 0: feedback 防御性校验 ----------
+        # 原则：后端校验与前端 validateFeedback 是同一套业务约束的镜像。
+        #   - 前端负责“提示 + 阻止调用”
+        #   - 后端负责“拒收非法数据”（避免直接调用 / API 测试 / 老客户端绕过前端）
+        self._validate_feedback(feedback)
         defect_feedbacks = feedback.get("defect", []) or []
         observations = feedback.get("observations", []) or []
         tuning_result = feedback.get("tuning_result")
@@ -148,6 +180,22 @@ class OptimizationInferService:
         )
         engine_recommendations = engine_result.get("recommendations", []) or []
         engine_sources = engine_result.get("engine_sources", {}) or {}
+
+        # ---------- Step 3.5: fail-fast 守卫 ----------
+        # 算法未给出任何推荐时（引擎未注册 / 规则未命中），拒绝创建空 round。
+        # 工艺参数只由算法生成，不存在"用户手动创建"语义——
+        # 返回 200 + 空建议会让前端误以为成功，实际却跳到了无优化的下一轮。
+        # 实现细节（numpy 缺失 / 引擎注册失败）只走服务端日志，不暴露给前端用户。
+        if not engine_recommendations:
+            _logger.warning(
+                "[optimization_infer] fail-fast: 无可用推荐 "
+                "(condition_id=%s, parent_seq_idx=%s, engine_sources=%s)",
+                condition_id, parent_seq_idx, engine_sources,
+            )
+            raise BizException(
+                ERROR_OPERATION_FAILED,
+                "推荐算法暂不可用，请稍后重试或联系管理员",
+            )
 
         # ---------- Step 4: 应用推荐 → 新参数 + 建议展示 ----------
         new_parameter_dict = self._apply_recommendations_to_baseline(
@@ -210,6 +258,49 @@ class OptimizationInferService:
 
     # ---------- Step 实现 ----------
 
+    @staticmethod
+    def _validate_feedback(feedback: Dict[str, Any]) -> None:
+        """Step 0 —— 防御性校验 feedback 完整性
+
+        与前端 OptimizationCreate.vue 的 validateFeedback 是同一套业务约束的镜像：
+        - defect 至少 1 项
+        - 每项必须 keyword_id 有值
+        - 非 DEFECTFREE 项必须 level + position 有值
+
+        Raises:
+            BizException(ERROR_REQUIRED_FIELD): 字段缺失
+        """
+        defects = feedback.get("defect") or []
+        if not isinstance(defects, list) or len(defects) == 0:
+            raise BizException(
+                ERROR_REQUIRED_FIELD,
+                "请填写缺陷反馈信息",
+            )
+
+        for i, d in enumerate(defects, 1):
+            if not isinstance(d, dict):
+                raise BizException(
+                    ERROR_REQUIRED_FIELD,
+                    f"第 {i} 项缺陷格式错误：应为对象",
+                )
+            if d.get("keyword_id") is None:
+                raise BizException(
+                    ERROR_REQUIRED_FIELD,
+                    f"第 {i} 项缺陷未选择缺陷类型（keyword_id 必填）",
+                )
+            is_defect_free = d.get("keyword_name") == _DEFECTFREE_KEYWORD_NAME
+            if not is_defect_free:
+                if not d.get("level"):
+                    raise BizException(
+                        ERROR_REQUIRED_FIELD,
+                        f"第 {i} 项缺陷未选择缺陷程度",
+                    )
+                if not d.get("position"):
+                    raise BizException(
+                        ERROR_REQUIRED_FIELD,
+                        f"第 {i} 项缺陷未填写缺陷位置",
+                    )
+
     def _resolve_parent(
         self,
         condition_id: int,
@@ -266,13 +357,14 @@ class OptimizationInferService:
     def _snapshot_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
         """从 ProcessParameter 构建参数快照 dict
 
-        仅包含标量工艺字段（inj_*/hold_*/met_*/...），不包含元数据（id/created_at/...）
+        仅包含标量工艺字段（inj_*/hold_*/met_*/...），不包含元数据与业务字段
+        （见 _NON_SNAPSHOT_FIELDS）。业务字段（编号/来源/序号）由 Model/Service
+        层自行处理，避免与 _create_new_parameter 显式 kwarg 冲突。
         """
         snapshot: Dict[str, Any] = {}
         for field in parameter._meta.fields:
             name = field.name
-            # 排除元数据字段与外键
-            if name in {"id", "created_at", "updated_at", "deleted", "deleted_at", "is_deleted"}:
+            if name in _NON_SNAPSHOT_FIELDS:
                 continue
             if field.is_relation:
                 continue

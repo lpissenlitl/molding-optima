@@ -1,10 +1,10 @@
 """
-工艺参数初始化服务
+工艺参数初始化推理服务（对应文件：原 initialization_service.py）
 
 对应接口：
-- POST /api/processes/initialization/                  Mode A：基于 condition_id
-- POST /api/processes/initialization/from-masterdata/  Mode B：基于 masterdata ID
-- POST /api/processes/initialization/infer/            /infer/：纯推理，前端传完整数据
+- POST /api/processes/initialization/from-source-condition/  Mode C：基于源 condition 复制初始工艺
+- POST /api/processes/initialization/from-masterdata/       Mode B：基于 masterdata ID 推理初始工艺
+- POST /api/processes/initialization/infer/                 /infer/：纯推理，前端传完整数据
 
 4 步逻辑：入口适配 → 数据前处理 → 推理算法 → 输出后处理。
 术语：4 维上下文统一顺序 mold → machine → polymer → process_set；一律用 "mold" 不用 "product"
@@ -838,13 +838,13 @@ def _build_polymer_info_from_snapshot(
 # 快照保留完整 masterdata 上下文（便于反查/复现/历史回溯），两个 Mode 共享同一套 snapshot builders。
 # /infer/ 入口跳过这一步（前端已直接提供完整 4 维 dict）。
 
-class ProcessInitializationService:
-    """工艺参数初始化服务（4 步逻辑对应 4 个公开入口）
-
+class ParameterInitService:
+    """工艺参数初始化推理服务（4 步逻辑对应 4 个公开入口）
+    
     字段约定：
       - process_context_snapshot: 后端自动构建的不可变快照（完整 masterdata 上下文）
       - process_context:         后端自动填的"调用入参快照"（记录本次调用传了什么，便于审计）
-
+    
     入口见模块 docstring。
     """
 
@@ -1209,17 +1209,24 @@ class ProcessInitializationService:
         接收 infer_initial_params 的返回 dict（4 维输出）。
 
         原子语义：
-            本方法负责创建 ProcessParameter；ProcessCondition 由调用方负责创建。
-            两者必须在同一个 `with transaction.atomic():` 里依次创建——
-            任何一个报错都回滚，保证「工艺条件 ↔ 工艺参数」这对的不可分性。
-            详见 infer_from_masterdata / copy_to_new_masterdata 入口实现。
+            本方法负责创建 ProcessParameter + 同步创建 TuningRecord；ProcessCondition
+            由调用方负责创建。两者必须在同一个 `with transaction.atomic():` 里依次
+            创建——任何一个报错都回滚，保证「工艺条件 ↔ 工艺参数 ↔ 试模记录」
+            三元组的不可分性。详见 infer_from_masterdata / copy_to_new_masterdata
+            入口实现。
+
+        业务契约：
+            每个 ProcessParameter 同步创建 1 条 TuningRecord（result=pending），
+            保证后续 optimization/infer/ 路径的 _update_previous_tuning_record
+            能找到上一轮记录，避免「父参数缺少 TuningRecord」WARNING。
         """
         from process.models.parameter import ProcessParameter
+        from process.models.tuning_record import TuningRecord
 
         proc_dict = params_result['process']
         flat = {
             'process_condition': condition,
-            'param_source': ProcessInitializationService.PARAM_SOURCE,
+            'param_source': ParameterInitService.PARAM_SOURCE,
         }
 
         # 单值字段
@@ -1258,7 +1265,17 @@ class ProcessInitializationService:
                 field = fmt.format(i + 1)
                 flat[field] = steps[i] if i < len(steps) else None
 
-        return ProcessParameter.objects.create(**flat)
+        new_param = ProcessParameter.objects.create(**flat)
+
+        # 同步创建初始 TuningRecord（pending 状态，无缺陷反馈）
+        # 业务契约：ProcessParameter ↔ TuningRecord 1:1（见 optimization_infer._create_new_tuning_record）
+        TuningRecord.objects.create(
+            process_parameter=new_param,
+            defect_feedbacks=[],
+            result="pending",
+        )
+
+        return new_param
 
     # ProcessParameter 可拷贝的业务字段名（手工列出，避免依赖 Django ORM 不在 service 内启动）
     _COPYABLE_PARAM_FIELDS = (
@@ -1305,8 +1322,12 @@ class ProcessInitializationService:
           - parameter_no（新参数生成）
           - parent_param / seq_idx（调机树字段，新一轮调参重置）
           - param_source（标记为 template_copy）
+
+        业务契约：同步创建 1 条初始 TuningRecord（result=pending），与 _create_process_parameter 一致，
+        保证 ProcessParameter ↔ TuningRecord 1:1。
         """
         from process.models.parameter import ProcessParameter
+        from process.models.tuning_record import TuningRecord
 
         flat = {
             'process_condition': target_condition,
@@ -1317,11 +1338,20 @@ class ProcessInitializationService:
             if value is not None:
                 flat[field_name] = value
 
-        return ProcessParameter.objects.create(**flat)
+        new_param = ProcessParameter.objects.create(**flat)
+
+        # 同步创建初始 TuningRecord（pending 状态）
+        TuningRecord.objects.create(
+            process_parameter=new_param,
+            defect_feedbacks=[],
+            result="pending",
+        )
+
+        return new_param
 
 
 # 模块级公开 API（对外门面，转发到 classmethod）
-# 对外暴露模块级函数，view 层通过 initialization_service.xxx() 调用；
+# 对外暴露模块级函数，view 层通过 parameter_init.xxx() 调用；
 # 内部用 @classmethod 便于共享状态（如 _shared_rule_matcher）。
 
 def infer_initial_params(
@@ -1331,7 +1361,7 @@ def infer_initial_params(
     process_set: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """【Step 3 核心算法】纯推理入口"""
-    return ProcessInitializationService.infer_initial_params(
+    return ParameterInitService.infer_initial_params(
         mold_info=mold_info,
         machine_info=machine_info,
         polymer_info=polymer_info,
@@ -1348,7 +1378,7 @@ def infer_from_masterdata(
     process_set: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """【Mode B】基于 masterdata ID 入口（算法生成初始工艺）"""
-    return ProcessInitializationService.infer_from_masterdata(
+    return ParameterInitService.infer_from_masterdata(
         mold_id=mold_id,
         injection_machine_id=injection_machine_id,
         polymer_id=polymer_id,
@@ -1363,7 +1393,7 @@ def infer_from_source_condition(
     process_set: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """【Mode C】基于源 condition 复制初始工艺入口（不调推理）"""
-    return ProcessInitializationService.infer_from_source_condition(
+    return ParameterInitService.infer_from_source_condition(
         source_condition_id=source_condition_id,
         process_set=process_set,
     )
@@ -1376,7 +1406,7 @@ def infer_from_dict(
     process_set: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """【/infer/】纯推理入口（不查 DB、不落库）"""
-    return ProcessInitializationService.infer_from_dict(
+    return ParameterInitService.infer_from_dict(
         mold_info=mold_info,
         machine_info=machine_info,
         polymer_info=polymer_info,

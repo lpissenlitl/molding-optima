@@ -396,7 +396,7 @@ def transplant_process_parameter(
     source_injt = getattr(source_condition, "injection_unit", None) or {}
 
     # 把 ProcessParameter 拍平为 setting_process（前端嵌套格式）
-    from process.services.process_transformer import _construct_setting_process_frontend
+    from process.services.parameter_transformer import _construct_setting_process_frontend
     origin_setting = {
         "setting_process": _construct_setting_process_frontend(parameter, source_injt)
     } if False else {

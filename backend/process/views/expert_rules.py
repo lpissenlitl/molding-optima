@@ -18,7 +18,7 @@ from extensions.schemas import PaginationBaseSchema
 from extensions.views import BaseView, PaginationResponse
 from identity.decorators import require_login, require_superuser
 
-from process.services import rule_service
+from process.services import rule
 
 
 @method_decorator(require_superuser, name="dispatch")
@@ -27,7 +27,7 @@ class ExpertRuleListByLibraryView(BaseView):
 
     @method_decorator(validate_parameters(PaginationBaseSchema))
     def get(self, request, rule_library_id, cleaned_data):
-        result = rule_service.get_list_of_expert_rule(
+        result = rule.get_list_of_expert_rule(
             rule_library_id=rule_library_id,
             **cleaned_data,
         )
@@ -35,7 +35,7 @@ class ExpertRuleListByLibraryView(BaseView):
 
     @method_decorator(require_superuser)
     def post(self, request, rule_library_id):
-        return rule_service.add_expert_rule(
+        return rule.add_expert_rule(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             rule_library_id=rule_library_id,
@@ -48,17 +48,17 @@ class ExpertRuleDetailView(BaseView):
     """专家规则详情"""
 
     def get(self, request, expert_rule_id):
-        return rule_service.get_expert_rule(expert_rule_id)
+        return rule.get_expert_rule(expert_rule_id)
 
     def patch(self, request, expert_rule_id):
-        return rule_service.update_expert_rule(
+        return rule.update_expert_rule(
             expert_rule_id,
             company_id=request.user.company_id,
             **request.DATA,
         )
 
     def delete(self, request, expert_rule_id):
-        rule_service.delete_expert_rule(
+        rule.delete_expert_rule(
             expert_rule_id,
             company_id=request.user.company_id,
         )

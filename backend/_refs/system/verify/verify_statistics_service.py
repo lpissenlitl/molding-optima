@@ -16,18 +16,18 @@ import django
 django.setup()
 
 from datetime import date, timedelta
-from process.services import statistics_service
+from process.services import statistics
 from process.models import ProcessCondition
 
 
 # ===== 1. ORIGIN_LABELS 动态加载验证 =====
 print('=== ORIGIN_LABELS ===')
-print(f'Loaded {len(statistics_service.ORIGIN_LABELS)} labels from ProcessCondition.PROCESS_CONDITION_ORIGIN_CHOICES')
-for k, v in statistics_service.ORIGIN_LABELS.items():
+print(f'Loaded {len(statistics.ORIGIN_LABELS)} labels from ProcessCondition.PROCESS_CONDITION_ORIGIN_CHOICES')
+for k, v in statistics.ORIGIN_LABELS.items():
     print(f'  {k}: {v}')
-assert 'manual_creation' in statistics_service.ORIGIN_LABELS
-assert 'ai_recommendation' in statistics_service.ORIGIN_LABELS
-assert statistics_service.ORIGIN_LABELS['manual_creation'] == '手工新建'
+assert 'manual_creation' in statistics.ORIGIN_LABELS
+assert 'ai_recommendation' in statistics.ORIGIN_LABELS
+assert statistics.ORIGIN_LABELS['manual_creation'] == '手工新建'
 print('PASS')
 
 
@@ -36,12 +36,12 @@ print('\n=== trend series length ===')
 from unittest.mock import patch, MagicMock
 
 # Mock QuerySet：返回空结果
-with patch.object(statistics_service, 'ProcessCondition') as MockModel:
+with patch.object(statistics, 'ProcessCondition') as MockModel:
     mock_qs = MagicMock()
     mock_qs.filter.return_value.annotate.return_value.values.return_value.annotate.return_value.order_by.return_value = []
     MockModel.objects = mock_qs
 
-    trend = statistics_service._get_trend(company_id=1, days=30)
+    trend = statistics._get_trend(company_id=1, days=30)
     print(f'dates len: {len(trend["dates"])}')
     print(f'counts len: {len(trend["counts"])}')
     print(f'first 3 dates: {trend["dates"][:3]}')
@@ -62,7 +62,7 @@ with patch.object(statistics_service, 'ProcessCondition') as MockModel:
 
 # ===== 3. 起源分布 dict 结构 =====
 print('\n=== origin distribution structure ===')
-with patch.object(statistics_service, 'ProcessCondition') as MockModel:
+with patch.object(statistics, 'ProcessCondition') as MockModel:
     mock_qs = MagicMock()
     mock_qs.filter.return_value.values.return_value.annotate.return_value.order_by.return_value = [
         {'origin_type': 'manual_creation', 'count': 10},
@@ -71,7 +71,7 @@ with patch.object(statistics_service, 'ProcessCondition') as MockModel:
     ]
     MockModel.objects = mock_qs
 
-    items = statistics_service._get_origin_distribution(company_id=1)
+    items = statistics._get_origin_distribution(company_id=1)
     print(f'items: {items}')
     assert len(items) == 3
     assert items[0]['name'] == '手工新建'
@@ -84,13 +84,13 @@ with patch.object(statistics_service, 'ProcessCondition') as MockModel:
 
 # ===== 4. 顶层函数整合 =====
 print('\n=== get_dashboard_statistics ===')
-with patch.object(statistics_service, 'ProcessCondition') as MockModel:
+with patch.object(statistics, 'ProcessCondition') as MockModel:
     mock_qs = MagicMock()
     mock_qs.filter.return_value.annotate.return_value.values.return_value.annotate.return_value.order_by.return_value = []
     mock_qs.filter.return_value.values.return_value.annotate.return_value.order_by.return_value = []
     MockModel.objects = mock_qs
 
-    result = statistics_service.get_dashboard_statistics(company_id=1, days=30)
+    result = statistics.get_dashboard_statistics(company_id=1, days=30)
     assert 'trend' in result
     assert 'origin_distribution' in result
     assert 'dates' in result['trend']

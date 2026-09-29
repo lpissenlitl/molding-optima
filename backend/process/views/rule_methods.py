@@ -14,7 +14,7 @@ from extensions.schemas import PaginationBaseSchema
 from extensions.views import BaseView, PaginationResponse
 from identity.decorators import require_login
 
-from process.services import rule_service
+from process.services import rule
 
 
 @method_decorator(require_login, name="dispatch")
@@ -23,7 +23,7 @@ class RuleMethodListByLibraryView(BaseView):
 
     @method_decorator(validate_parameters(PaginationBaseSchema))
     def get(self, request, rule_library_id, cleaned_data):
-        result = rule_service.get_list_of_rule_method(
+        result = rule.get_list_of_rule_method(
             rule_library_id=rule_library_id,
             **cleaned_data,
         )
@@ -34,7 +34,7 @@ class RuleMethodListByLibraryView(BaseView):
         # 把 rule_library_id 注入到 params，避免前端忘记传
         params = dict(request.DATA)
         params["rule_library_id"] = rule_library_id
-        return rule_service.add_rule_method(
+        return rule.add_rule_method(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **params,
@@ -46,10 +46,10 @@ class RuleMethodDetailView(BaseView):
     """规则方法详情"""
 
     def get(self, request, rule_method_id):
-        return rule_service.get_rule_method(rule_method_id)
+        return rule.get_rule_method(rule_method_id)
 
     def patch(self, request, rule_method_id):
-        return rule_service.update_rule_method(rule_method_id, **request.DATA)
+        return rule.update_rule_method(rule_method_id, **request.DATA)
 
     def delete(self, request, rule_method_id):
-        rule_service.delete_rule_method(rule_method_id)
+        rule.delete_rule_method(rule_method_id)

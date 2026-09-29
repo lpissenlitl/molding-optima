@@ -17,6 +17,7 @@ molding-optima 独有功能：
 - /api/processes/optimization/infer/                → 工艺优化 infer（调用链路编排）
 - /api/processes/optimization/<id>/                → 工艺优化
 - /api/processes/optimization/<id>/history/       → 工艺优化历史
+- /api/processes/tuning/record/                   → 保存当前试模结果（缺陷反馈 + 效果评价）
 - /api/processes/expert/suggestion/                → 专家调优建议
 - /api/processes/expert/defect-template/           → 缺陷模板
 - /api/processes/expert/create/                    → 专家调优创建
@@ -45,6 +46,7 @@ from .views.processes import (
     ProcessExpertDefectTemplateView,
     ProcessExpertCreateView,
     ProcessOptimizationInferView,
+    ProcessTuningRecordView,
     RuleKeywordListView,
     RuleKeywordDetailView,
     RuleMethodListView,
@@ -98,6 +100,8 @@ urlpatterns = [
     path("processes/optimization/<int:condition_id>/history/", ProcessOptimizationHistoryView.as_view()),
     # /optimization/infer/ —— infer 调用链路编排（2026-09-23 轮 5）
     path("processes/optimization/infer/", ProcessOptimizationInferView.as_view()),
+    # /tuning/record/ —— 保存当前试模结果（缺陷反馈 + 效果评价）
+    path("processes/tuning/record/", ProcessTuningRecordView.as_view()),
 
     # ========== 专家调优（molding-optima 独有）==========
     path("processes/expert/suggestion/", ProcessExpertSuggestionView.as_view()),

@@ -16,7 +16,7 @@ from utils.validation import validate_pk, validate_id_list
 from utils.db import build_filters, parse_ordering, paginate_queryset
 from utils.objects import safe_get
 from utils.code_generator import generate_unique_code
-from process.services.process_transformer import _transform_frontend_to_flat, _construct_setting_process_frontend
+from process.services.parameter_transformer import _transform_frontend_to_flat, _construct_setting_process_frontend
 
 logger = logging.getLogger(__name__)
 

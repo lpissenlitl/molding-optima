@@ -1,5 +1,4 @@
-"""
-molding-optima 工艺优化 service
+"""molding-optima 工艺优化服务（对应文件：原 optimize_service.py）
 
 阶段 1：基于 DEFECT_OPTIMIZATION_HINTS 硬编码字典（兜底）
 阶段 2（已完成）：优先调用 FuzzyEngine，无规则时回退到阶段 1 字典
@@ -10,7 +9,7 @@ from typing import Optional
 
 from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND
 from process.models import ProcessCondition, ProcessParameter, RuleMethod
-from process.services.tuning_service import ProcessTuningService
+from process.services.tuning import TuningService
 
 _logger = logging.getLogger(__name__)
 
@@ -101,14 +100,14 @@ def get_fuzzy_engine():
         if engine is not None:
             return engine
     except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize_service] 从 EngineRegistry 获取 FuzzyEngine 失败: %s", e)
+        _logger.warning("[optimization_advice] 从 EngineRegistry 获取 FuzzyEngine 失败: %s", e)
 
     # 兑底：直接 import 并实例化
     try:
         from process.engines.fuzzy import FuzzyEngine
         return FuzzyEngine()
     except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize_service] FuzzyEngine 实例化失败: %s", e)
+        _logger.warning("[optimization_advice] FuzzyEngine 实例化失败: %s", e)
         return None
 
 
@@ -253,7 +252,7 @@ def _infer_via_fuzzy_engine(
       1. 从 EngineRegistry 获取 FuzzyEngine 实例
       2. 中文 defect_name → 英文（DEFECT_NAME_MAP）
       3. 提取数值型工艺参数快照（PROCESS_PARAM_FIELDS 白名单）
-      4. 分析迭代趋势（ProcessTuningService.analyze_iteration_trend）
+      4. 分析迭代趋势（TuningService.analyze_iteration_trend）
       5. 调用 FuzzyEngine.recommend(context)
       6. Recommendation → adjustments 格式转换
 
@@ -276,12 +275,12 @@ def _infer_via_fuzzy_engine(
     # 2. 提取工艺参数快照
     parameter_snapshot = _extract_process_parameters(current_params)
 
-    # 3. 趋势分析（复用 tuning_service）
+    # 3. 趋势分析（复用 tuning）
     trend_dict = {"trend": "unknown"}
     try:
         first_param = current_params[0] if current_params else None
         if first_param:
-            trend = ProcessTuningService.analyze_iteration_trend(first_param)
+            trend = TuningService.analyze_iteration_trend(first_param)
             trend_dict = {
                 "trend": trend.trend,
                 "improving_count": trend.improving,
@@ -290,7 +289,7 @@ def _infer_via_fuzzy_engine(
                 "last_result": trend.last_result,
             }
     except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize_service] iteration_trend 分析失败: %s", e)
+        _logger.warning("[optimization_advice] iteration_trend 分析失败: %s", e)
 
     # 4. 从 process_context_snapshot 读取 polymer_abbreviation / product_category
     overrides = {}
@@ -311,16 +310,16 @@ def _infer_via_fuzzy_engine(
     # 5. 调用 FuzzyEngine
     try:
         if not engine.is_available(fuzzy_context):
-            _logger.info("[optimize_service] FuzzyEngine 不可用 (defect=%s, trend=%s)",
+            _logger.info("[optimization_advice] FuzzyEngine 不可用 (defect=%s, trend=%s)",
                          defect_name_en, trend_dict.get("trend"))
             return [], "fuzzy_unavailable"
         recommendations = engine.recommend(fuzzy_context)
     except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize_service] FuzzyEngine 推理失败: %s", e, exc_info=True)
+        _logger.warning("[optimization_advice] FuzzyEngine 推理失败: %s", e, exc_info=True)
         return [], "fuzzy_error"
 
     if not recommendations:
-        _logger.info("[optimize_service] FuzzyEngine 未返回推荐 (defect=%s)", defect_name_en)
+        _logger.info("[optimization_advice] FuzzyEngine 未返回推荐 (defect=%s)", defect_name_en)
         return [], "fuzzy_unavailable"
 
     # 6. Recommendation → adjustments 格式转换
@@ -338,7 +337,7 @@ def _infer_via_fuzzy_engine(
             "source": rec.source or "fuzzy_rule",
         })
 
-    _logger.info("[optimize_service] FuzzyEngine 返回 %d 条推荐 (defect=%s)",
+    _logger.info("[optimization_advice] FuzzyEngine 返回 %d 条推荐 (defect=%s)",
                  len(adjustments), defect_name_en)
     return adjustments, "fuzzy_engine"
 

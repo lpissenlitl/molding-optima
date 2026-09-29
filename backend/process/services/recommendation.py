@@ -1,7 +1,10 @@
-"""
-推荐服务 - 对外统一入口
+"""推荐服务（对应文件：原 recommendation_service.py）
 
-整合多个 AI 引擎，提供统一的推荐接口
+- 对外统一入口：整合多个 AI 引擎，提供统一的推荐接口
+- 被 optimization_infer 调用（编排层）
+- 阶段（当前骨架）：
+  - FuzzyEngine 已在 EngineRegistry 注册并调用
+  - trend 后处理、多引擎合并策略留 TODO（设计中）
 """
 
 import logging
@@ -14,12 +17,12 @@ from process.models import (
     Recommendation,
     TuningRecord,
 )
-from process.services.tuning_service import ProcessTuningService
+from process.services.tuning import TuningService
 
 _logger = logging.getLogger(__name__)
 
 
-class ProcessRecommendationService:
+class RecommendationService:
     """
     推荐服务 - 对外统一入口
 
@@ -51,7 +54,7 @@ class ProcessRecommendationService:
             if not EngineRegistry.get_engine("fuzzy"):
                 EngineRegistry.register("fuzzy", FuzzyEngine())
         except Exception as e:  # noqa: BLE001
-            _logger.warning("[recommendation_service] FuzzyEngine 注册失败: %s", e)
+            _logger.warning("[recommendation] FuzzyEngine 注册失败: %s", e)
 
     def get_recommendations(
         self,
@@ -97,7 +100,7 @@ class ProcessRecommendationService:
         )
         if not engines:
             _logger.info(
-                "[recommendation_service] 无可用引擎: condition_id=%s", process_condition_id
+                "[recommendation] 无可用引擎: condition_id=%s", process_condition_id
             )
             return {
                 "recommendations": [],
@@ -113,7 +116,7 @@ class ProcessRecommendationService:
                 recs = engine.recommend(context) or []
             except Exception as e:  # noqa: BLE001
                 _logger.warning(
-                    "[recommendation_service] 引擎 %s 推理失败: %s",
+                    "[recommendation] 引擎 %s 推理失败: %s",
                     engine.engine_name, e,
                 )
                 recs = []
@@ -164,7 +167,7 @@ class ProcessRecommendationService:
 
         # 分析迭代趋势
         if parameter:
-            trend = ProcessTuningService.analyze_iteration_trend(parameter)
+            trend = TuningService.analyze_iteration_trend(parameter)
             trend_dict = {
                 'trend': trend.trend,
                 'improving_count': trend.improving,

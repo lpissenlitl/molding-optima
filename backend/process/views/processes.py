@@ -8,7 +8,9 @@ from identity.decorators import require_login
 from extensions.decorators import validate_parameters
 from extensions.views import BaseView, PaginationResponse
 from extensions.schemas import PaginationBaseSchema, BatchIdsSchema
+from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND, ERROR_ACCESS_DENIED
 
+from process.models import ProcessParameter
 from process.schemas import (
     ProcessParameterSchema,
     ProcessParameterListSchema,
@@ -17,16 +19,18 @@ from process.schemas import (
     ProcessInitializationFromMasterdataSchema,
     ProcessInferSchema,
     InferRequestSchema,
+    TuningRecordRequestSchema,
 )
 from process.services import (
-    main_service,
-    transplant_service,
-    expert_service,
-    optimize_service,
-    rule_service,
-    initialization_service,
-    statistics_service,
+    parameter,
+    transplant,
+    expert,
+    optimization_advice,
+    rule,
+    parameter_init,
+    statistics,
     OptimizationInferService,
+    TuningService,
 )
 
 
@@ -38,7 +42,7 @@ class ProcessParameterListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterListSchema))
     def get(self, request, cleaned_data):
-        total, results = main_service.get_process_parameter_list(
+        total, results = parameter.get_process_parameter_list(
             company_id=request.user.company_id,
             **cleaned_data,
         )
@@ -51,7 +55,7 @@ class ProcessParameterCreateView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterSchema))
     def post(self, request, cleaned_data):
-        return main_service.create_process_parameter(
+        return parameter.create_process_parameter(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **cleaned_data,
@@ -63,16 +67,16 @@ class ProcessParameterDetailView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return main_service.get_process_parameter(condition_id)
+        return parameter.get_process_parameter(condition_id)
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessParameterSchema))
     def put(self, request, condition_id, cleaned_data):
-        return main_service.update_process_parameter(condition_id, **cleaned_data)
+        return parameter.update_process_parameter(condition_id, **cleaned_data)
 
     @method_decorator(require_login)
     def delete(self, request, condition_id):
-        main_service.delete_process_parameter(condition_id)
+        parameter.delete_process_parameter(condition_id)
 
 
 class ProcessParameterFlatView(BaseView):
@@ -80,7 +84,7 @@ class ProcessParameterFlatView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return main_service.get_process_parameter_flat(condition_id)
+        return parameter.get_process_parameter_flat(condition_id)
 
 
 class ProcessParameterFrontendView(BaseView):
@@ -88,7 +92,7 @@ class ProcessParameterFrontendView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return main_service.get_process_parameter_frontend(condition_id)
+        return parameter.get_process_parameter_frontend(condition_id)
 
 
 class ProcessParameterBatchDeleteView(BaseView):
@@ -97,7 +101,7 @@ class ProcessParameterBatchDeleteView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(BatchIdsSchema))
     def post(self, request, cleaned_data):
-        return main_service.batch_delete_process_parameter(cleaned_data["ids"])
+        return parameter.batch_delete_process_parameter(cleaned_data["ids"])
 
 
 # ==================== 工艺移植 ====================
@@ -107,7 +111,7 @@ class ProcessTransplantView(BaseView):
 
     @method_decorator(require_login)
     def post(self, request):
-        return transplant_service.transplant_process_parameter(
+        return transplant.transplant_process_parameter(
             source_parameter_id=request.DATA.get("source_parameter_id"),
             target_machine_spec=request.DATA.get("target_machine_spec"),
         )
@@ -137,7 +141,7 @@ class ProcessInitializationFromSourceConditionView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessInitializationFromSourceConditionSchema))
     def post(self, request, cleaned_data):
-        return initialization_service.infer_from_source_condition(
+        return parameter_init.infer_from_source_condition(
             source_condition_id=cleaned_data["source_condition_id"],
             process_set=cleaned_data.get("process_set"),
         )
@@ -171,7 +175,7 @@ class ProcessInitializationFromMasterdataView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessInitializationFromMasterdataSchema))
     def post(self, request, cleaned_data):
-        return initialization_service.infer_from_masterdata(
+        return parameter_init.infer_from_masterdata(
             mold_id=cleaned_data["mold_id"],
             injection_machine_id=cleaned_data["injection_machine_id"],
             polymer_id=cleaned_data["polymer_id"],
@@ -203,7 +207,7 @@ class ProcessInitializationInferView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessInferSchema))
     def post(self, request, cleaned_data):
-        return initialization_service.infer_from_dict(
+        return parameter_init.infer_from_dict(
             mold_info=cleaned_data["mold_info"],
             machine_info=cleaned_data["machine_info"],
             polymer_info=cleaned_data["polymer_info"],
@@ -220,7 +224,7 @@ class RuleKeywordListView(BaseView):
     @method_decorator(validate_parameters(PaginationBaseSchema))
     def get(self, request, cleaned_data):
         # 默认按当前用户公司过滤；平台超管未接管时可看全部
-        result = rule_service.get_list_of_rule_keyword(
+        result = rule.get_list_of_rule_keyword(
             company_id=getattr(request.user, "company_id", None),
             is_superuser=getattr(request.user, "is_superuser", False),
             **cleaned_data,
@@ -229,7 +233,7 @@ class RuleKeywordListView(BaseView):
 
     @method_decorator(require_login)
     def post(self, request):
-        return rule_service.add_rule_keyword(
+        return rule.add_rule_keyword(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **request.DATA,
@@ -241,15 +245,15 @@ class RuleKeywordDetailView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, rule_keyword_id):
-        return rule_service.get_rule_keyword(rule_keyword_id)
+        return rule.get_rule_keyword(rule_keyword_id)
 
     @method_decorator(require_login)
     def put(self, request, rule_keyword_id):
-        return rule_service.update_rule_keyword(rule_keyword_id, **request.DATA)
+        return rule.update_rule_keyword(rule_keyword_id, **request.DATA)
 
     @method_decorator(require_login)
     def delete(self, request, rule_keyword_id):
-        rule_service.delete_rule_keyword(rule_keyword_id)
+        rule.delete_rule_keyword(rule_keyword_id)
 
 
 class RuleMethodListView(BaseView):
@@ -258,11 +262,11 @@ class RuleMethodListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(PaginationBaseSchema))
     def get(self, request, cleaned_data):
-        return rule_service.get_list_of_rule_method(**cleaned_data)
+        return rule.get_list_of_rule_method(**cleaned_data)
 
     @method_decorator(require_login)
     def post(self, request):
-        return rule_service.add_rule_method(
+        return rule.add_rule_method(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **request.DATA,
@@ -274,15 +278,15 @@ class RuleMethodDetailView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, rule_method_id):
-        return rule_service.get_rule_method(rule_method_id)
+        return rule.get_rule_method(rule_method_id)
 
     @method_decorator(require_login)
     def put(self, request, rule_method_id):
-        return rule_service.update_rule_method(rule_method_id, **request.DATA)
+        return rule.update_rule_method(rule_method_id, **request.DATA)
 
     @method_decorator(require_login)
     def delete(self, request, rule_method_id):
-        rule_service.delete_rule_method(rule_method_id)
+        rule.delete_rule_method(rule_method_id)
 
 
 # ==================== 专家调优 ====================
@@ -299,7 +303,7 @@ class ProcessExpertSuggestionView(BaseView):
             "defect_feedback": { "B000": "level", "B001": "position", "B002": "feedback", ... }
         }
         """
-        return expert_service.suggest_expert_adjustment(
+        return expert.suggest_expert_adjustment(
             condition_id=request.DATA.get("condition_id"),
             defect_feedback=request.DATA.get("defect_feedback"),
         )
@@ -310,7 +314,7 @@ class ProcessExpertDefectTemplateView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request):
-        return expert_service.get_defect_template()
+        return expert.get_defect_template()
 
 
 class ProcessExpertCreateView(BaseView):
@@ -318,7 +322,7 @@ class ProcessExpertCreateView(BaseView):
 
     @method_decorator(require_login)
     def post(self, request):
-        return expert_service.create_expert_optimization(
+        return expert.create_expert_optimization(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             **request.DATA,
@@ -334,7 +338,7 @@ class ProcessOptimizationView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return optimize_service.get_process_optimization(condition_id)
+        return optimization_advice.get_process_optimization(condition_id)
 
     @method_decorator(require_login)
     def post(self, request):
@@ -345,7 +349,7 @@ class ProcessOptimizationView(BaseView):
             "target_defect": "短射"  # 可选
         }
         """
-        return optimize_service.add_process_optimization(
+        return optimization_advice.add_process_optimization(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
             condition_id=request.DATA.get("condition_id"),
@@ -354,7 +358,7 @@ class ProcessOptimizationView(BaseView):
 
     @method_decorator(require_login)
     def put(self, request, condition_id):
-        return optimize_service.update_process_optimization(
+        return optimization_advice.update_process_optimization(
             condition_id, **request.DATA,
         )
 
@@ -364,7 +368,7 @@ class ProcessOptimizationHistoryView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return optimize_service.get_optimization_history(condition_id)
+        return optimization_advice.get_optimization_history(condition_id)
 
 
 class ProcessOptimizationInferView(BaseView):
@@ -417,6 +421,84 @@ class ProcessOptimizationInferView(BaseView):
         )
 
 
+class ProcessTuningRecordView(BaseView):
+    """保存当前试模结果（试模反馈 + 缺陷 + 效果评价）
+
+    POST /api/processes/tuning/record/
+
+    业务语义：
+      - 不同于 infer（创建新轮次）：这里只保存当前轮次的实测 + 缺陷反馈
+      - 不创建新 ProcessParameter，也不调算法
+      - 幂等：同一 parameter 重复提交 → 覆盖更新
+      - 业务 1:1 保证：每 parameter 至少有 1 条 TuningRecord（infer 创建或本次创建）
+
+    请求体（TuningRecordRequestSchema）：
+    {
+        "parameter_id": int,                # 必填
+        "defect_feedbacks": [...],          # 可选，缺陷反馈列表
+        "tuning_result": str | null,        # 可选，效果评价
+        "result_detail": str | null,        # 可选，结果详情
+        "observations": [...]               # 可选，实测观察（不存储）
+    }
+
+    响应：
+    {
+        "status": 0,
+        "msg": "OK",
+        "data": {
+            "tuning_record_id": int,
+            "parameter_id": int,
+            "created": bool,            # True=新建 / False=更新
+            "updated_at": datetime
+        }
+    }
+
+    错误码：
+    - 404（ERROR_DATA_NOT_FOUND）：parameter_id 不存在
+    - 403（ERROR_ACCESS_DENIED）：跨 company 访问
+    """
+
+    @method_decorator(require_login)
+    @method_decorator(validate_parameters(TuningRecordRequestSchema))
+    def post(self, request, cleaned_data):
+        # 1. 反查 parameter
+        parameter_id = cleaned_data["parameter_id"]
+        try:
+            parameter = ProcessParameter.all_objects.get(id=parameter_id)
+        except ProcessParameter.DoesNotExist:
+            raise BizException(
+                ERROR_DATA_NOT_FOUND,
+                f"工艺参数不存在: id={parameter_id}",
+            )
+
+        # 2. 越权检查（跨 company 拒绝；organization 不强制对齐）
+        user_company_id = getattr(request.user, "company_id", None)
+        if (
+            parameter.company_id is not None
+            and user_company_id is not None
+            and parameter.company_id != user_company_id
+        ):
+            raise BizException(
+                ERROR_ACCESS_DENIED,
+                f"无权访问其他公司的工艺参数: parameter_id={parameter_id}",
+            )
+
+        # 3. 业务 1:1 upsert
+        record, created = TuningService.upsert_tuning_record(
+            parameter=parameter,
+            defect_feedbacks=cleaned_data.get("defect_feedbacks"),
+            tuning_result=cleaned_data.get("tuning_result"),
+            result_detail=cleaned_data.get("result_detail"),
+        )
+
+        return {
+            "tuning_record_id": record.id,
+            "parameter_id": parameter.id,
+            "created": created,
+            "updated_at": record.updated_at,
+        }
+
+
 
 class RuleByDefectView(BaseView):
     """根据缺陷名获取规则（query: defect_name）"""
@@ -426,7 +508,7 @@ class RuleByDefectView(BaseView):
         defect_name = request.GET.get("defect_name")
         if not defect_name:
             return []
-        return rule_service.get_rules_by_defect(defect_name)
+        return rule.get_rules_by_defect(defect_name)
 
 
 # ==================== 仪表板统计 ====================
@@ -443,7 +525,7 @@ class DashboardStatisticsView(BaseView):
 
     @method_decorator(require_login)
     def get(self, request):
-        return statistics_service.get_dashboard_statistics(
+        return statistics.get_dashboard_statistics(
             company_id=request.user.company_id,
             days=30,
         )

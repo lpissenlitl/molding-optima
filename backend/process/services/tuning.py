@@ -4,15 +4,91 @@
 提供 TuningRecord 的 CRUD 操作和趋势分析
 """
 
+import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Any
 from collections import Counter
 
 from process.models import TuningRecord, ProcessParameter
 
+_logger = logging.getLogger(__name__)
 
-class ProcessTuningService:
+
+# 前端 tuning_result 枚举 → TuningRecord.result choices 映射
+# 与 optimization_infer._update_previous_tuning_record 保持一致
+_TUNING_RESULT_MAP = {
+    "effective": "improved",
+    "ineffective": "worse",
+}
+
+
+class TuningService:
     """调参记录服务"""
+
+    @staticmethod
+    def upsert_tuning_record(
+        parameter: ProcessParameter,
+        defect_feedbacks: Optional[List[Dict[str, Any]]] = None,
+        tuning_result: Optional[str] = None,
+        result_detail: Optional[str] = None,
+    ) -> Tuple[TuningRecord, bool]:
+        """
+        业务 1:1 创建或更新 parameter 关联的 TuningRecord
+
+        业务说明：
+        - 本方法供 POST /api/processes/tuning/record/ 调用
+        - 业务层保证每 parameter 至少有 1 条 TuningRecord（infer 已创建）
+        - 用户保存当前试模结果 → 覆盖更新
+        - 若 infer 链路未运行过（本参数无 TuningRecord）→ 新建一条
+
+        mapping 规则（与 optimization_infer 保持一致）：
+        - effective       → improved
+        - ineffective     → worse
+        - qualified / unqualified / pending / null → 原样存
+
+        Args:
+            parameter: 工艺参数
+            defect_feedbacks: 缺陷反馈列表（None 不更新）
+            tuning_result: 前端的 effective/ineffective/qualified/unqualified/pending
+            result_detail: 结果详情（None 不更新）
+
+        Returns:
+            (record, created) — created=True 表示新建，False 表示更新
+        """
+        # 应用 mapping
+        result_value = _TUNING_RESULT_MAP.get(tuning_result, tuning_result) if tuning_result else None
+
+        # 业务 1:1：取最新一条
+        existing = (
+            TuningRecord.objects
+            .filter(process_parameter=parameter)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if existing is not None:
+            # 只更新非 None 字段（保护业务字段不被误清）
+            if defect_feedbacks is not None:
+                existing.defect_feedbacks = defect_feedbacks
+            if result_value is not None:
+                existing.result = result_value
+            if result_detail is not None:
+                existing.result_detail = result_detail
+            existing.save()
+            return existing, False
+
+        # 新建（infer 未运行时本路径生效）
+        record = TuningRecord.objects.create(
+            process_parameter=parameter,
+            defect_feedbacks=defect_feedbacks if defect_feedbacks is not None else [],
+            result=result_value or "pending",
+            result_detail=result_detail,
+        )
+        _logger.info(
+            "[tuning/record] 新建 TuningRecord: parameter_id=%s, result=%s",
+            parameter.id, record.result,
+        )
+        return record, True
 
     @staticmethod
     def create_tuning_record(
@@ -170,7 +246,7 @@ class ProcessTuningService:
             }
         }
         """
-        records = ProcessTuningService.get_tuning_records(parameter)
+        records = TuningService.get_tuning_records(parameter)
 
         summary = {
             'total': len(records),
@@ -211,7 +287,7 @@ class ProcessTuningService:
         recommendation: str
 
     @staticmethod
-    def analyze_iteration_trend(parameter: ProcessParameter) -> 'ProcessTuningService.IterationTrend':
+    def analyze_iteration_trend(parameter: ProcessParameter) -> 'TuningService.IterationTrend':
         """
         分析迭代趋势
 
@@ -224,13 +300,13 @@ class ProcessTuningService:
         Returns:
             IterationTrend 对象
         """
-        records = ProcessTuningService.get_tuning_records(parameter)
+        records = TuningService.get_tuning_records(parameter)
 
         # 只分析已验证的记录
         validated_records = [r for r in records if r.result != 'pending']
 
         if not validated_records:
-            return ProcessTuningService.IterationTrend(
+            return TuningService.IterationTrend(
                 trend='unknown',
                 improving=0,
                 worsening=0,
@@ -269,7 +345,7 @@ class ProcessTuningService:
             trend = 'stable'
             recommendation = '趋势不明朗，建议维持当前策略观察'
 
-        return ProcessTuningService.IterationTrend(
+        return TuningService.IterationTrend(
             trend=trend,
             improving=improving,
             worsening=worsening,
