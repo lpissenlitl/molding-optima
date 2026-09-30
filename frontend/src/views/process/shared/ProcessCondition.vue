@@ -138,7 +138,7 @@
  * 职责：提供 reactive condition、协调 3 个 Section、卡片折叠/校验
  * 父组件调用方式：await pcRef.value?.checkFormDataValid()
  */
-import { ref, reactive, watch, computed, provide } from 'vue'
+import { ref, reactive, watch, computed, provide, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import MoldSection from './MoldSection.vue'
@@ -216,15 +216,31 @@ defineExpose({
   /**
    * 校验表单。返回 true 表示通过。
    * 折叠态下强制展开，让用户看到/修改未通过校验的字段。
+   * 校验失败时定位到第一个错误字段（滚动 + 聚焦），便于用户直接修改。
    */
   async checkFormDataValid(): Promise<boolean> {
     if (!formRef.value) return false
     if (!expanded.value) {
       expanded.value = true
+      // 等待展开 transition 完成 + DOM 更新，避免 scrollIntoView 滚到错位置
+      await nextTick()
+      await new Promise((r) => setTimeout(r, 200))
     }
     try {
       await formRef.value.validate()
     } catch {
+      // 等待 Element Plus 把 is-error class 同步到 DOM
+      await nextTick()
+      const errorItem = (formRef.value as any).$el?.querySelector(
+        '.el-form-item.is-error',
+      ) as HTMLElement | null
+      if (errorItem) {
+        errorItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const inputEl = errorItem.querySelector(
+          'input, textarea, .el-select__wrapper',
+        ) as HTMLElement | null
+        if (inputEl) inputEl.focus()
+      }
       ElMessage.error('工艺条件填写不完整，请检查')
       return false
     }

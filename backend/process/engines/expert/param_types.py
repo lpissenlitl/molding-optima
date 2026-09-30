@@ -14,7 +14,7 @@ ProductionParams 组合以上三类设备参数，形成完整生产工艺。
 """
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -41,11 +41,12 @@ class ProcessParams:
     inj_dly_t: float = 0.0  # 注射延迟 (s)
 
     # ========== VP切换参数 ==========
-    vps_mode: int = 0  # VP切换模式
-    vps_pos: float = 0.0  # VP切换位置 (mm)
-    vps_t: float = 0.0  # VP切换时间 (s)
-    vps_pres: float = 0.0  # VP切换压力 (MPa)
-    vps_spd: float = 0.0  # VP切换速度 (mm/s)
+    vps_mode: int = 0  # VP切换模式（mode 是枚举，默认 0=位置切换）
+    # 物理量字段：未推导的分支输出 None（语义=未使用），非 0
+    vps_pos: Optional[float] = None  # VP切换位置 (mm)
+    vps_t: Optional[float] = None  # VP切换时间 (s)
+    vps_pres: Optional[float] = None  # VP切换压力 (MPa)
+    vps_spd: Optional[float] = None  # VP切换速度 (mm/s)
 
     # ========== 保压参数 ==========
     hold_stg: int = 1  # 保压段数
@@ -78,17 +79,19 @@ class ProcessParams:
 
     # ========== 松退参数 ==========
     # 参考 process_parameter.py 的命名
-    pre_met_decomp_mode: int = 0  # 熔胶前松退模式
-    pre_met_decomp_pres: float = 0.0  # 熔胶前松退压力
-    pre_met_decomp_spd: float = 0.0  # 熔胶前松退速度
-    pre_met_decomp_t: float = 0.0  # 熔胶前松退时间
-    pre_met_decomp_dist: float = 0.0  # 熔胶前松退距离
+    pre_met_decomp_mode: int = 0  # 熔胶前松退模式（mode 是枚举，默认 0=否）
+    # 物理量字段：默认 None（语义=未推导/不使用），算法按需填充
+    pre_met_decomp_pres: Optional[float] = None  # 熔胶前松退压力
+    pre_met_decomp_spd: Optional[float] = None  # 熔胶前松退速度
+    pre_met_decomp_t: Optional[float] = None  # 熔胶前松退时间
+    pre_met_decomp_dist: Optional[float] = None  # 熔胶前松退距离
 
-    pst_met_decomp_mode: int = 0  # 熔胶后松退模式
-    pst_met_decomp_pres: float = 0.0  # 熔胶后松退压力
-    pst_met_decomp_spd: float = 0.0  # 熔胶后松退速度
-    pst_met_decomp_t: float = 0.0  # 熔胶后松退时间
-    pst_met_decomp_dist: float = 0.0  # 熔胶后松退距离
+    pst_met_decomp_mode: int = 0  # 熔胶后松退模式（mode 是枚举，默认 0=否）
+    # 物理量字段：mode=0 时不推导，保持 None
+    pst_met_decomp_pres: Optional[float] = None  # 熔胶后松退压力
+    pst_met_decomp_spd: Optional[float] = None  # 熔胶后松退速度
+    pst_met_decomp_t: Optional[float] = None  # 熔胶后松退时间
+    pst_met_decomp_dist: Optional[float] = None  # 熔胶后松退距离
 
     met_end_pos: float = 0.0  # 熔胶终止位置
 

@@ -556,12 +556,13 @@ async function loadDetail(id: number) {
         }
       }
     } else {
-      ElMessage.error(res.msg || '未读取到注塑机信息')
+      // HTTP 200 但 status !== 0：业务失败（不走 catch，由调用方自己 toast）
+      ElMessage.error(res.msg || '未读取到注塑机信息，请稍后重试')
       router.push('/equipment/injection/list')
     }
   } catch (err: any) {
     console.error('[InjectionMachineForm] loadDetail failed:', err)
-    ElMessage.error(err?.message || '加载注塑机异常')
+    // 拦截器已统一 toast，这里只返回列表
     router.push('/equipment/injection/list')
   }
 }
@@ -626,11 +627,12 @@ async function handleSave() {
       ElMessage.success(injection_machine.value.id ? '编辑成功！' : '新增成功！')
       goBack()
     } else {
-      ElMessage.error(res.msg || '保存失败')
+      // HTTP 200 但 status !== 0：业务失败（不走 catch，由调用方自己 toast）
+      ElMessage.error(res.msg || '保存失败，请稍后重试')
     }
   } catch (err: any) {
     console.error('[InjectionMachineForm] save failed:', err)
-    ElMessage.error(err?.message || '提交异常')
+    // 拦截器已统一 toast
   } finally {
     submitting.value = false
   }
@@ -662,10 +664,6 @@ onMounted(async () => {
 
 .page-header {
   margin-bottom: 16px;
-}
-
-.loading-placeholder {
-  height: 400px;
 }
 
 // 注射单元 tabs 样式（项目自定义）

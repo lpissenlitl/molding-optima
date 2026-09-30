@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, inject } from 'vue'
+import { ref, watch, inject } from 'vue'
 import { polymerList, polymerDetail } from '@/api'
 import DerivedField from './DerivedField.vue'
 import { ConditionKey } from './types.js'
@@ -186,6 +186,35 @@ const condition = inject(ConditionKey)!
 // 简称 + 牌号选择状态
 const polymerAbbreviation = ref<string>(condition.polymer_info?.abbreviation ?? '')
 const selectedGrade = ref<string>(condition.polymer_info?.grade ?? '')
+
+// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零
+// （局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）
+watch(
+  () => condition.polymer_info?.abbreviation,
+  (val) => { polymerAbbreviation.value = val ?? '' },
+)
+watch(
+  () => condition.polymer_info?.grade,
+  (val) => { selectedGrade.value = val ?? '' },
+)
+
+// 简称/牌号变空 → 自动重置材料派生信息
+// 覆盖两种清空路径:
+//   1. 点 X 按钮(@clear 触发 el-autocomplete 把 v-model 设为 '')
+//   2. 手动删空 input(@clear 不触发,只能靠 watch 兜底)
+watch(polymerAbbreviation, (val) => {
+  if (val === '') {
+    selectedGrade.value = ''
+    condition.polymer_id = null
+    condition.polymer_info = null
+  }
+})
+watch(selectedGrade, (val) => {
+  if (val === '') {
+    condition.polymer_id = null
+    condition.polymer_info = null
+  }
+})
 
 // 简称 autocomplete:输入简称关键词,按 abbreviation 模糊检索
 async function fetchAbbreviationSuggestions(queryString: string, cb: (results: any[]) => void) {
@@ -276,19 +305,16 @@ async function onGradeSelect(item: any) {
   }
 }
 
-// 简称清空:全部重置
+// 简称清空:副作用由 watch(polymerAbbreviation) 接管
+// 保留函数仅用于匹配模板的 @clear 绑定;点 X 时 el-autocomplete 已把 v-model 同步清空
 function onPolymerClear() {
-  polymerAbbreviation.value = ''
-  selectedGrade.value = ''
-  condition.polymer_id = null
-  condition.polymer_info = null
+  // no-op
 }
 
-// 牌号清空:仅清空牌号相关,保留简称
+// 牌号清空:副作用由 watch(selectedGrade) 接管
+// 保留函数仅用于匹配模板的 @clear 绑定;点 X 时 el-autocomplete 已把 v-model 同步清空
 function onGradeClear() {
-  selectedGrade.value = ''
-  condition.polymer_id = null
-  condition.polymer_info = null
+  // no-op
 }
 </script>
 

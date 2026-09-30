@@ -563,10 +563,6 @@ async function loadDetail(id: number) {
   margin-bottom: 16px;
 }
 
-.loading-placeholder {
-  height: 400px;
-}
-
 /*
  * 5 个 el-card 平铺布局
  * - display: flex + flex-direction: column：垂直堆叠

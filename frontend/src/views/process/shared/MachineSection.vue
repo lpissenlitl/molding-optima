@@ -186,6 +186,17 @@ const injectionIndexStr = ref<string>(
   condition.injection_index != null ? String(condition.injection_index + 1) : '',
 )
 
+// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零
+// （局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）
+watch(
+  () => condition.machine_info,
+  (val) => { machineQuery.value = formatMachineLabel(val) },
+)
+watch(
+  () => condition.injection_index,
+  (val) => { injectionIndexStr.value = val != null ? String(val + 1) : '' },
+)
+
 watch(injectionIndexStr, (val) => {
   const num = Number(val)
   condition.injection_index =
@@ -233,16 +244,16 @@ async function onMachineSelect(item: any) {
   } catch {
     condition.machine_info = m
   }
-  // 选择注塑机后,默认选第 1 射台(若用户尚未选过)
-  if (condition.injection_index == null) {
-    condition.injection_index = 0
-    injectionIndexStr.value = '1'
-  }
+  // 切换注塑机后,射台序号统一重置为第 1 射台(避免前一台机器的射台选择残留)
+  condition.injection_index = 0
+  injectionIndexStr.value = '1'
 }
 
 function onMachineClear() {
   condition.injection_machine_id = null
   condition.machine_info = null
+  condition.injection_index = null
+  injectionIndexStr.value = ''
 }
 </script>
 

@@ -202,6 +202,13 @@
   .el-button {
     min-width: 100px;
   }
+
+  /* 重置 Element Plus 默认 .el-button + .el-button { margin-left: 12px }，
+   * 否则会与 .form-actions 的 gap 叠加，使 gap 无法生效
+   * （例如 gap=4px 时实际间距 = 4 + 12 = 16px，与 list 类页面同理） */
+  .el-button + .el-button {
+    margin-left: 0;
+  }
 }
 
 

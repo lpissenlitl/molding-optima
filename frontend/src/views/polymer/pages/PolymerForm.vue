@@ -717,10 +717,6 @@ async function loadDetail(id: number) {
   margin-bottom: 16px;
 }
 
-.loading-placeholder {
-  height: 400px;
-}
-
 /* 仿真参数开关 card：左侧 info 区 + 右侧 switch */
 .custom-form__section--toggle {
   :deep(.el-card__body) {

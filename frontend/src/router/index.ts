@@ -6,10 +6,6 @@
 
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import ParentView from '@/views/layout/components/parentView.vue'
-import Placeholder from '@/views/placeholder/index.vue'
-
-// 业务模块占位组件（演示用，业务迁移完成后替换）
-const BusinessPlaceholder = Placeholder
 
 const routes: RouteRecordRaw[] = [
   // 登录（无 layout）

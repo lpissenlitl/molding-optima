@@ -396,8 +396,4 @@ async function handleSubmit() {
  * - 用于 card 内再分组（如"基本信息"、"客户信息"等）
  * - 已抽取到全局：src/styles/utilities/custom-form.scss（.custom-form__divider）
  */
-
-.loading-placeholder {
-  height: 400px;
-}
 </style>

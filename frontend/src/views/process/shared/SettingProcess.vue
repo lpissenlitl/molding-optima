@@ -20,11 +20,12 @@
             align="left"
           >
             <template #header>
-              <el-select 
-                v-model="injection.stage" 
+              <el-select
+                v-model="injection.stage"
                 size="small"
                 style="width: 80%;"
                 :disabled="readonly"
+                :class="{ 'field-changed': isFieldChanged('injection.stage') }"
               >
                 <el-option
                   v-for="(option, idx) in injection.max_stage"
@@ -144,6 +145,7 @@
               style="width: 8rem;"
               v-model="vp_switch.mode"
               placeholder="请选择"
+              :class="{ 'field-changed': isFieldChanged('vp_switch.mode') }"
               @change="vpSwitchModeChange"
             >
               <el-option
@@ -154,7 +156,7 @@
               >
               </el-option>
             </el-select>
-            <span v-else class="readonly-value">
+            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged('vp_switch.mode') }">
               {{ getVpSwitchModeLabel(vp_switch.mode) }}
             </span>
           </el-form-item>
@@ -165,10 +167,11 @@
               v-model="vp_switch.position"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('position')"
+              :class="{ 'field-changed': isFieldChanged('vp_switch.position') }"
             >
               <template #suffix>mm</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit">
+            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.position') }">
               {{ vp_switch.position }} <small>mm</small>
             </span>
           </el-form-item>
@@ -179,10 +182,11 @@
               v-model="vp_switch.time"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('time')"
+              :class="{ 'field-changed': isFieldChanged('vp_switch.time') }"
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit">
+            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.time') }">
               {{ vp_switch.time }} <small>s</small>
             </span>
           </el-form-item>
@@ -193,10 +197,11 @@
               v-model="vp_switch.pressure"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('pressure')"
+              :class="{ 'field-changed': isFieldChanged('vp_switch.pressure') }"
             >
               <template #suffix>{{ pressure_unit }}</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit">
+            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.pressure') }">
               {{ vp_switch.pressure }} <small>{{ pressure_unit }}</small>
             </span>
           </el-form-item>
@@ -207,10 +212,11 @@
               v-model="vp_switch.velocity"
               style="width: 8rem;"
               :disabled="isSwitchModeDisabled('velocity')"
+              :class="{ 'field-changed': isFieldChanged('vp_switch.velocity') }"
             >
               <template #suffix>{{ speed_unit }}</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit">
+            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.velocity') }">
               {{ vp_switch.velocity }} <small>{{ speed_unit }}</small>
             </span>
           </el-form-item>
@@ -232,11 +238,12 @@
             align="left"
           >
             <template #header>
-              <el-select 
-                v-model="holding.stage" 
+              <el-select
+                v-model="holding.stage"
                 size="small"
                 style="width: 80%;"
                 :disabled="readonly"
+                :class="{ 'field-changed': isFieldChanged('holding.stage') }"
               >
                 <el-option
                   v-for="(option, idx) in holding.max_stage"
@@ -266,9 +273,10 @@
                 size="small"
                 style="width: 100%;"
                 :disabled="col_idx >= holding.stage"
+                :class="{ 'field-changed': isFieldChanged(`holding.table_data[${scope.$index}].sections[${col_idx}]`) }"
               >
               </el-input>
-              <span v-else class="readonly-value">{{ scope.row.sections[col_idx] || '-' }}</span>
+              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`holding.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ scope.row.sections[col_idx] || '-' }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -292,11 +300,12 @@
             align="left"
           >
             <template #header>
-              <el-select 
-                v-model="metering.stage" 
+              <el-select
+                v-model="metering.stage"
                 size="small"
                 style="width: 80%;"
                 :disabled="readonly"
+                :class="{ 'field-changed': isFieldChanged('metering.stage') }"
               >
                 <el-option
                   v-for="(option, idx) in metering.max_stage"
@@ -326,9 +335,10 @@
                 :disabled="col_idx >= metering.stage"
                 size="small"
                 style="width: 100%;"
+                :class="{ 'field-changed': isFieldChanged(`metering.table_data[${scope.$index}].sections[${col_idx}]`) }"
               >
               </el-input>
-              <span v-else class="readonly-value">{{ scope.row.sections[col_idx] || '-' }}</span>
+              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ scope.row.sections[col_idx] || '-' }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -347,6 +357,7 @@
               v-if="!readonly"
               v-model="metering.pre_decompress_mode"
               style="width: 8rem"
+              :class="{ 'field-changed': isFieldChanged('metering.pre_decompress_mode') }"
             >
               <el-option
                 v-for="option, idx in decompressure_mode_options"
@@ -356,7 +367,7 @@
               >
               </el-option>
             </el-select>
-            <span v-else class="readonly-value">
+            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged('metering.pre_decompress_mode') }">
               {{ getDecompressModeLabel(metering.pre_decompress_mode) }}
             </span>
           </el-form-item>
@@ -365,6 +376,7 @@
               v-if="!readonly"
               v-model="metering.post_decompress_mode"
               style="width: 8rem"
+              :class="{ 'field-changed': isFieldChanged('metering.post_decompress_mode') }"
             >
               <el-option
                 v-for="option, idx in decompressure_mode_options"
@@ -374,7 +386,7 @@
               >
               </el-option>
             </el-select>
-            <span v-else class="readonly-value">
+            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged('metering.post_decompress_mode') }">
               {{ getDecompressModeLabel(metering.post_decompress_mode) }}
             </span>
           </el-form-item>
@@ -411,9 +423,10 @@
                 size="small"
                 style="width: 100%;"
                 :disabled="isDecompressDisabled(scope.$index, 'pressure')"
+                :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].pressure`) }"
               >
               </el-input>
-              <span v-else class="readonly-value">{{ scope.row.pressure || '-' }}</span>
+              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].pressure`) }">{{ scope.row.pressure || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column
@@ -432,9 +445,10 @@
                 size="small"
                 style="width: 100%;"
                 :disabled="isDecompressDisabled(scope.$index, 'velocity')"
+                :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].velocity`) }"
               >
               </el-input>
-              <span v-else class="readonly-value">{{ scope.row.velocity || '-' }}</span>
+              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].velocity`) }">{{ scope.row.velocity || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column
@@ -453,9 +467,10 @@
                 size="small"
                 style="width: 100%;"
                 :disabled="isDecompressDisabled(scope.$index, 'distance')"
+                :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].distance`) }"
               >
               </el-input>
-              <span v-else class="readonly-value">{{ scope.row.distance || '-' }}</span>
+              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].distance`) }">{{ scope.row.distance || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column
@@ -474,9 +489,10 @@
                 size="small"
                 style="width: 100%;"
                 :disabled="isDecompressDisabled(scope.$index, 'time')"
+                :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].time`) }"
               >
               </el-input>
-              <span v-else class="readonly-value">{{ scope.row.time || '-' }}</span>
+              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].time`) }">{{ scope.row.time || '-' }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -493,10 +509,11 @@
               v-model="metering.delay_time"
               v-number
               style="width: 8rem"
+              :class="{ 'field-changed': isFieldChanged('metering.delay_time') }"
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit">
+            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('metering.delay_time') }">
               {{ metering.delay_time }} <small>s</small>
             </span>
           </el-form-item>
@@ -506,10 +523,11 @@
               v-model="metering.ending_position"
               v-number
               style="width: 8rem"
+              :class="{ 'field-changed': isFieldChanged('metering.ending_position') }"
             >
               <template #suffix>mm</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit">
+            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('metering.ending_position') }">
               {{ metering.ending_position }} <small>mm</small>
             </span>
           </el-form-item>
@@ -534,11 +552,12 @@
           align="center"
         >
           <template #header>
-            <el-select 
-              v-model="barrel_temperature.stage" 
+            <el-select
+              v-model="barrel_temperature.stage"
               size="small"
               style="width: 80%;"
               :disabled="readonly"
+              :class="{ 'field-changed': isFieldChanged('barrel_temperature.stage') }"
             >
               <el-option
                 v-for="(option, idx) in barrel_temperature.max_stage"
@@ -568,9 +587,10 @@
               size="small"
               style="width: 100%;"
               :disabled="col_idx >= barrel_temperature.stage"
+              :class="{ 'field-changed': isFieldChanged(`barrel_temperature.table_data[${scope.$index}].sections[${col_idx}]`) }"
             >
             </el-input>
-            <span v-else class="readonly-value">{{ scope.row.sections[col_idx] || '-' }}</span>
+            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`barrel_temperature.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ scope.row.sections[col_idx] || '-' }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -950,13 +970,8 @@ export default {
   font-size: 12px;
 }
 
-/* ===== 只读值 =====
- *
- * span 模拟 input 视觉（柔和灰背景 + 边框），与 el-input small 高度对齐：
- * - height: 24px = el-input small（避免切换 input <-> span 时行高跳动）
- * - padding/border-radius 与 el-input 一致，背景略浅于 disabled input，
- *   让"只读"不是"禁用"，而是"上下文中的灰背景框"
- */
+/* ===== 只读值 ===== */
+/* span 模拟 input 视觉；height: 24px = el-input small，切换 input<->span 时行高不变 */
 .readonly-value {
   display: inline-flex;
   align-items: center;
@@ -991,49 +1006,23 @@ export default {
 }
 
 /* ===== 变更高亮 ===== */
-.field-changed :deep(.el-input__inner) {
-  /* margin: 0 -4px; */
-  background-color: #fff7e6;
-  border-color: #ffa940;
-  box-shadow: 0 0 0 2px rgba(255, 169, 64, 0.2);
-  animation: highlight-pulse 2s ease-in-out;
-  transition: all 0.3s ease;
+/* 浅橙背景 + 橙字加粗，编辑态（wrapper 穿透）与只读态统一 */
+.field-changed :deep(.el-input__wrapper),
+.field-changed :deep(.el-select__wrapper) {
+  background-color: #fff7e6 !important;
+  transition: background-color 0.3s ease;
+}
+.field-changed :deep(.el-input__inner),
+.field-changed :deep(.el-select__placeholder),
+.field-changed :deep(.el-select__selected-item) {
+  color: #fa8c16;
+  font-weight: 600;
 }
 
-/*
- * 只读态变更高亮（覆盖 readonly-value 的部分样式）
- * - 后定义以胜出 .readonly-value 的 background/border
- * - 用 box-shadow inset 模拟底部高亮线（不用 ::after，避免被 cell overflow 裁剪）
- * - 用 -1px spread 让阴影向外扩展 1px，覆盖到 border 外边缘，
- *   下划线贯穿整个 input 宽度（包括左右 border）
- * - 不设 padding/margin（let readonly-value 的 padding 生效，保持 layout 一致）
- */
+/* 只读态（覆盖 readonly-value 的背景/文字色） */
 .field-changed-text {
   color: #fa8c16;
   font-weight: 600;
   background-color: #fff7e6;
-  border-color: #ffa940;
-  box-shadow: inset 0 -2px 0 -1px #ffa940;
-  /* 高亮进入动画 */
-  animation: highlight-bar 0.4s ease-out;
-}
-
-@keyframes highlight-bar {
-  from {
-    box-shadow: inset 0 -2px 0 -1px transparent;
-  }
-  to {
-    box-shadow: inset 0 -2px 0 -1px #ffa940;
-  }
-}
-
-/* 脉冲动画 */
-@keyframes highlight-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 169, 64, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(255, 169, 64, 0.2);
-  }
 }
 </style>

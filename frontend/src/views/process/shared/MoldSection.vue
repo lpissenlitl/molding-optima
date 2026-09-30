@@ -307,6 +307,17 @@ const shotIndexStr = ref<string>(
   condition.shot_index != null ? String(condition.shot_index + 1) : '',
 )
 
+// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零
+// （局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）
+watch(
+  () => condition.mold_info?.mold_no,
+  (val) => { moldQuery.value = val ?? '' },
+)
+watch(
+  () => condition.shot_index,
+  (val) => { shotIndexStr.value = val != null ? String(val + 1) : '' },
+)
+
 watch(shotIndexStr, (val) => {
   const num = Number(val)
   condition.shot_index =
@@ -339,11 +350,9 @@ async function onMoldSelect(item: any) {
   const mold = item?.item ?? null
   if (!mold) return
   condition.mold_id = mold.id
-  // 选择模具后,默认选第 1 射(若用户尚未选过)
-  if (condition.shot_index == null) {
-    condition.shot_index = 0
-    shotIndexStr.value = '1'
-  }
+  // 切换模具后,射次统一重置为第 1 射(避免前一个模具的射次选择残留)
+  condition.shot_index = 0
+  shotIndexStr.value = '1'
   // 列表 API(to_dict() 不带 include_rvs=True)不返回反向关联
   // 必须调详情 API 获取完整的 gating_systems / cavities / gates
   try {
@@ -362,6 +371,8 @@ async function onMoldSelect(item: any) {
 function onMoldClear() {
   condition.mold_id = null
   condition.mold_info = null
+  condition.shot_index = null
+  shotIndexStr.value = ''
 }
 </script>
 

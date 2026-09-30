@@ -33,6 +33,29 @@ from .param_types import ProcessParams, MoldTempParams, HotRunnerParams, Product
 logger = logging.getLogger('engines.expert.initializer')
 
 
+def _fmt_num(v, decimals: int = 2) -> str:
+    """
+    None-safe 数字格式化（用于 logger.debug 拼接）
+
+    背景：ProcessParams 物理量字段未推导时为 None（语义=未使用），直接 f"{v:.2f}" 会 TypeError。
+    """
+    if v is None:
+        return "N/A"
+    return f"{v:.{decimals}f}"
+
+
+def _round_or_none(v, decimals: int = 2):
+    """
+    None-safe round（用于格式化输出）
+
+    背景：ProcessParams 物理量字段未推导时为 None，直接 round(None, 2) 会 TypeError。
+    返回 None 让前端按"未设置"语义显示 "-"。
+    """
+    if v is None:
+        return None
+    return round(v, decimals)
+
+
 # ========== 多级参数系数映射表 ==========
 # 这些"段间比例"暂不在 JSON 规则覆盖范围内，
 # 保留为模块常量；下一轮迭代可迁入 DEFAULT 规则。
@@ -2140,12 +2163,7 @@ class AlgorithmEngine:
             proc.vps_mode = 0   # 默认位置切换
             vps_mode_source = 'default'
 
-        # 按 mode 填充推荐值（行业标准推导公式）
-        proc.vps_pos = 0
-        proc.vps_t = 0
-        proc.vps_pres = 0
-        proc.vps_spd = 0
-
+        # 按 mode 填充推荐值（未使用的分支保持 None，语义=未推导）
         # 获取 inj_pres（用于 mode=2 的推荐值）
         inj_pres_1st_for_vps = proc.inj_pres_steps[0] if proc.inj_pres_steps else 0.0
 
@@ -2165,9 +2183,9 @@ class AlgorithmEngine:
 
         logger.debug(
             f"VP 切换参数: mode={proc.vps_mode} (source={vps_mode_source}) "
-            f"vps_pos={proc.vps_pos:.2f}mm vps_t={proc.vps_t:.3f}s "
-            f"vps_pres={proc.vps_pres:.2f}MPa (inj_pos={inj_pos:.2f}mm, "
-            f"inj_time={inj_time:.3f}s, inj_pres={inj_pres_1st_for_vps:.2f}MPa)"
+            f"vps_pos={_fmt_num(proc.vps_pos)}mm vps_t={_fmt_num(proc.vps_t)}s "
+            f"vps_pres={_fmt_num(proc.vps_pres)}MPa (inj_pos={_fmt_num(inj_pos)}mm, "
+            f"inj_time={_fmt_num(inj_time)}s, inj_pres={_fmt_num(inj_pres_1st_for_vps)}MPa)"
         )
 
         # ========== 保压参数 ==========
@@ -2420,16 +2438,15 @@ class AlgorithmEngine:
         pst_time, time_info = self._compute_suckback_time(pst_dist, pst_velo, c_suck)
 
         proc.pre_met_decomp_mode = pre_mode
-        proc.pre_met_decomp_pres = 0.0      # 前松退默认关，不推导压力
-        proc.pre_met_decomp_spd = 0.0
-        proc.pre_met_decomp_t = 0.0
-        proc.pre_met_decomp_dist = 0.0
+        # 前松退默认关：4 个物理量不推导，保持 None（语义=未设置）
 
         proc.pst_met_decomp_mode = pst_mode
-        proc.pst_met_decomp_pres = round(pst_pres, 2)
-        proc.pst_met_decomp_spd = round(pst_velo, 2)
-        proc.pst_met_decomp_t = round(pst_time, 2)
-        proc.pst_met_decomp_dist = round(pst_dist, 2)
+        # mode=0 表示"否"，4 个物理量不推导，保持 None（语义=未设置）
+        if pst_mode != 0:
+            proc.pst_met_decomp_pres = round(pst_pres, 2)
+            proc.pst_met_decomp_spd = round(pst_velo, 2)
+            proc.pst_met_decomp_t = round(pst_time, 2)
+            proc.pst_met_decomp_dist = round(pst_dist, 2)
 
         # ========== #18：计量终止位置 ==========
         # met_end_pos = meter_posi + pst_dist（公式透明，与 #14 同类）
@@ -2770,23 +2787,30 @@ class AlgorithmEngine:
         """格式化输出"""
         proc = params.process
 
-        proc.inj_pres_steps = [round(v, 0) for v in proc.inj_pres_steps]
-        proc.inj_spd_steps = [round(v, 0) for v in proc.inj_spd_steps]
-        proc.inj_pos_steps = [round(v, 2) for v in proc.inj_pos_steps]
-        proc.inj_t = round(proc.inj_t, 2)
-        proc.inj_dly_t = round(proc.inj_dly_t, 2)
+        # list 元素也可能是 None（设备不支持某段时该位置留空），全部走 None-safe
+        proc.inj_pres_steps = [_round_or_none(v, 0) for v in proc.inj_pres_steps]
+        proc.inj_spd_steps = [_round_or_none(v, 0) for v in proc.inj_spd_steps]
+        proc.inj_pos_steps = [_round_or_none(v, 2) for v in proc.inj_pos_steps]
+        proc.inj_t = _round_or_none(proc.inj_t, 2)
+        proc.inj_dly_t = _round_or_none(proc.inj_dly_t, 2)
 
-        proc.vps_pos = round(proc.vps_pos, 2)
-        proc.vps_t = round(proc.vps_t, 2)
+        proc.vps_pos = _round_or_none(proc.vps_pos, 2)
+        proc.vps_t = _round_or_none(proc.vps_t, 2)
 
-        proc.hold_pres_steps = [round(v, 0) for v in proc.hold_pres_steps]
-        proc.hold_spd_steps = [round(v, 0) for v in proc.hold_spd_steps]
-        proc.hold_time_steps = [round(v, 2) for v in proc.hold_time_steps]
+        proc.hold_pres_steps = [_round_or_none(v, 0) for v in proc.hold_pres_steps]
+        proc.hold_spd_steps = [_round_or_none(v, 0) for v in proc.hold_spd_steps]
+        proc.hold_time_steps = [_round_or_none(v, 2) for v in proc.hold_time_steps]
 
-        proc.cool_t = round(proc.cool_t, 2)
+        # ========== 计量参数（与注射/保压保持一致：压力·转速 0 位，位置 2 位）==========
+        proc.met_pres_steps = [_round_or_none(v, 0) for v in proc.met_pres_steps]
+        proc.met_rot_spd_steps = [_round_or_none(v, 0) for v in proc.met_rot_spd_steps]
+        proc.met_back_pres_steps = [_round_or_none(v, 0) for v in proc.met_back_pres_steps]
+        proc.met_pos_steps = [_round_or_none(v, 2) for v in proc.met_pos_steps]
 
-        proc.pst_met_decomp_dist = round(proc.pst_met_decomp_dist, 2)
-        proc.met_end_pos = round(proc.met_end_pos, 2)
+        proc.cool_t = _round_or_none(proc.cool_t, 2)
 
-        proc.noz_temp = round(proc.noz_temp, 0)
-        proc.brl_temp_steps = [round(t, 0) for t in proc.brl_temp_steps]
+        proc.pst_met_decomp_dist = _round_or_none(proc.pst_met_decomp_dist, 2)
+        proc.met_end_pos = _round_or_none(proc.met_end_pos, 2)
+
+        proc.noz_temp = _round_or_none(proc.noz_temp, 0)
+        proc.brl_temp_steps = [_round_or_none(t, 0) for t in proc.brl_temp_steps]

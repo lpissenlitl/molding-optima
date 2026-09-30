@@ -51,7 +51,12 @@ molding-optima/
 cd backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+
+# 使用 pip-tools 双文件依赖管理：
+#   requirements.in  = 顶层依赖（手工维护）
+#   requirements.txt = lock file（pip-compile 生成）
+pip install pip-tools
+pip-sync requirements.txt   # 同步 venv 到 lock 文件一致
 
 # 数据库迁移
 python manage.py migrate
@@ -62,6 +67,16 @@ python manage.py createsuperuser
 # 启动开发服务器（默认端口 8200）
 python manage.py runserver 0.0.0.0:8200
 ```
+
+> **依赖管理**（pip-tools）：
+> - 加新包：编辑 `requirements.in` → `pip-compile requirements.in` → `pip-sync`
+> - 升级包：`pip-compile --upgrade-package <name>` in requirements.in` → `pip-sync`
+> - 生产部署（Linux）：`pip install -r requirements.txt` + `pip install 'uwsgi>=2.0.21'`（uwsgi 不进 lock file，部署层单独处理）
+>
+> **镜像源配置**（如需国内镜像加速）：
+> - pip 全局配置位置：`C:\Users\<user>\pip\pip.ini`（Windows）或 `~/.config/pip/pip.conf`（Linux）
+> - 配置示例：`global.index-url = https://mirrors.aliyun.com/pypi/simple/`
+> - pip-compile 默认会把 `index-url` 写入生成的 lock file。加 `--no-emit-index-url` 开关让 `requirements.txt` 保持纯依赖列表（推荐）。
 
 ### 前端
 

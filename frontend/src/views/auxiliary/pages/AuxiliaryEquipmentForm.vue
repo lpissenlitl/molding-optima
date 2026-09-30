@@ -272,8 +272,4 @@ onMounted(async () => {
 .page-header {
   margin-bottom: 16px;
 }
-
-.loading-placeholder {
-  height: 400px;
-}
 </style>

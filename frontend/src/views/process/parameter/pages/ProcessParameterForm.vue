@@ -1,37 +1,8 @@
 <!--
   ProcessParameterForm - 工艺参数表单（new / edit / detail 三模式共用）
 
-  路由：
-    - /process/parameter/new              新建
-    - /process/parameter/:id/edit         编辑
-    - /process/parameter/:id/detail       详情（只读）
-
-  业务说明：
-    - ProcessCondition 是"试模上下文"的通用载体（见 shared/ProcessCondition.vue）
-    - 本页是"工艺参数"业务视图，操作的是 Condition + Parameter 两块数据
-
-  架构（2026-09-11 重构 v2）：
-    - 顶部 page-header（返回列表）
-    - ProcessCondition（可折叠卡）：默认展开（new/edit）或强制折叠（detail）
-      - 展开：显示完整条件表单
-      - 折叠：显示简要信息（条件号 + 状态 + 模具/机器/材料）
-    - SettingProcess（始终展开）：工艺参数主体
-    - 底部 form-actions：取消 / 保存（new）/ 撤销修改（edit）/ 更新
-
-  模式行为：
-    - new    → ProcessCondition 默认展开（用户填条件）
-    - edit   → ProcessCondition 默认展开（用户可能改条件）
-    - detail → ProcessCondition 强制折叠（只读）
-
-  数据流：
-    - 加载：根据 mode 调用 getProcessParameterFrontend(id) 或 初始化空 form
-    - 提交（new）：saveProcessParameterFrontend → 成功后保存返回的 id → 切到 edit
-    - 提交（edit）：updateProcessParameterFrontend(id, payload) → 提示成功
-
-  样式规范：
-    - 容器遵守全局表单规范（padding 16 16 96 / max-width 1400）
-    - 复用全局 .form-actions / .page-header / .custom-form
-    - 本文件无任何自定义 SCSS（工艺条件卡的折叠 / 简要信息样式在 shared/ProcessCondition.vue 内）
+  数据模型：操作 Condition（试模上下文）+ Parameter（工艺参数）两块数据
+  样式约束：本文件无任何自定义 SCSS（条件卡折叠样式在 shared/ProcessCondition.vue）
 -->
 <template>
   <div class="process-condition-form">
@@ -83,16 +54,7 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 工艺参数表单（Vue 3 Composition API 版）
- *
- * 关键设计：
- * 1. 三模式（new / edit / detail）由 route 切换
- * 2. 工艺条件卡自带折叠能力（shared/ProcessCondition 内部实现）
- * 3. 工艺条件和工艺参数解耦：独立校验、独立 ref
- * 4. 提交时构造后端需要的 payload
- * 5. 详情模式：禁用底部操作条 + ProcessCondition 强制折叠
- */
+// 工艺条件和工艺参数解耦：独立校验、独立 ref
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -134,7 +96,6 @@ const save_loading = ref(false)
 const conditionRef = ref<InstanceType<typeof ProcessCondition> | null>(null)
 const parameterRef = ref<InstanceType<typeof SettingProcess> | null>(null)
 
-/** 用于"撤销修改"——保存编辑前的快照 */
 let formSnapshot: any = null
 
 // ============================================================================
@@ -145,11 +106,9 @@ async function loadForm() {
   loaded.value = false
   try {
     if (mode.value === 'new') {
-      // 新建：重置为空表单
       Object.assign(form, structuredClone(injectionProcessForm))
       formSnapshot = null
     } else {
-      // 编辑 / 详情：拉取后端数据
       const id = Number(route.params.id)
       if (!id) {
         ElMessage.error('无效的工艺 ID')
@@ -166,7 +125,6 @@ async function loadForm() {
           ...(parameter ?? {}),
           setting_process: parameter?.setting_process ?? structuredClone(settingProcessForm),
         }
-        // 编辑模式快照用于"撤销修改"
         if (mode.value === 'edit') {
           formSnapshot = JSON.parse(JSON.stringify(form))
         }
@@ -190,7 +148,6 @@ function resetForm() {
   if (mode.value === 'new') {
     Object.assign(form, structuredClone(injectionProcessForm))
   } else if (mode.value === 'edit' && formSnapshot) {
-    // 撤销到原始快照
     Object.assign(form, JSON.parse(JSON.stringify(formSnapshot)))
   }
 }
@@ -200,14 +157,8 @@ function resetForm() {
 // ============================================================================
 
 async function onSubmit() {
-  // 1. 校验工艺条件（必填 5 项：模具 / 工艺射次 / 注塑机 / 射台 / 材料）
-  //    业务说明（2026-09-17 澄清）：
-  //    - 这 5 项是「工艺记录」的外键（指向模具 / 注塑机 / 材料等基础表）
-  //    - 不填则工艺记录无意义（不知道用什么模具 / 机器 / 材料打的）
-  //    - 但这 5 项指向的基础表（模具 / 注塑机 / 材料）内部的字段完整性不管
-  //      · 例如模具表里的型腔数 / 浇口类型 / 产品类别等字段，由模具模块自己负责
-  //      · 工艺录入只需要「选中」哪个模具，不用填完模具表所有字段
-  //    - ProcessCondition.checkFormDataValid() 内部会自动展开折叠态，让用户修改
+  // 校验工艺条件 5 项必填外键：模具 / 工艺射次 / 注塑机 / 射台 / 材料
+  // 这 5 项选中即可，不用填完各基础表的所有字段——各基础表的字段由基础模块自己负责
   const condValid = await conditionRef.value?.checkFormDataValid()
   if (!condValid) {
     return
@@ -250,17 +201,7 @@ async function onSubmit() {
   }
 }
 
-/**
- * 构造后端需要的 payload
- *
- * 后端 (main_service.create_process_parameter_frontend / update_process_parameter_frontend)：
- *   condition_kwargs = kwargs.get("condition")
- *   setting_process = kwargs.get("parameter", {}).get("setting_process")
- *
- * 注：condition 只需要后端可识别的字段（id、mold_id、shot_index、
- *     injection_machine_id、injection_index、polymer_id、process_context），
- *     *_info 是给前端用的缓存，不需要回传。
- */
+// 仅回传后端可识别的字段；condition.*_info 是前端缓存，不需要回传
 function buildPayload() {
   return {
     condition: {
@@ -297,19 +238,10 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-/*
- * 容器遵守全局表单规范（padding 16 16 96）
- * 不要自定义背景色 / display: flex / gap
- * 复用全局 .form-actions / .page-header
- *
- * 工艺条件卡的折叠 / 简要信息样式在 shared/ProcessCondition.vue 内部
- */
+// 容器遵守全局表单规范（padding 由 .process-condition-form 决定）
+// 不要在本文件加 display: flex / gap / 自定义背景色
 .process-condition-form {
   padding: 16px 16px 96px;
   box-sizing: border-box;
-}
-
-.loading-placeholder {
-  height: 400px;
 }
 </style>

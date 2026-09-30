@@ -83,7 +83,10 @@
             请先选择缺陷类型
           </span>
           <template v-else>
-            <el-radio-group v-model="defect.level">
+            <el-radio-group
+              v-model="defect.level"
+              @change="syncToParent"
+            >
               <el-radio-button
                 v-for="opt in getLevelOptions(defect)"
                 :key="opt.value"
@@ -113,6 +116,7 @@
             clearable
             placeholder="选择预设位置或输入自定义位置"
             style="width: 100%;"
+            @change="syncToParent"
           >
             <el-option
               v-for="opt in getPositionOptions(defect)"

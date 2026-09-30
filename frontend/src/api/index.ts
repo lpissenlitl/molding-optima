@@ -164,6 +164,40 @@ export const processOptimizationInfer = (data: {
 }) =>
   request({ url: '/api/processes/optimization/infer/', method: 'post', data })
 
+/**
+ * 提交当前轮次试模结果（TuningRecord 幂等落库）
+ *
+ * 业务语义：
+ * - 不同于 infer（创建新轮次）：这里只保存当前轮次的实测 + 缺陷反馈
+ * - 不创建新 ProcessParameter，也不污染 source_type
+ * - 幂等键：parameter_id；同一 parameter 重复提交 → 覆盖更新
+ *
+ * 必填：parameter_id
+ * 可选：defect_feedbacks / observations / tuning_result / result_detail
+ *
+ * 后端响应：{ status, msg, data: { tuning_record_id, parameter_id, created, updated_at } }
+ *
+ * 关联文档：_refs/module/process/process-get-initial-frontend-integration-2026-09-23.md
+ *
+ * 前端兜底（已实现）：
+ * - onSubmit 检查 activeRound.value.parameter_id == null → warning + return
+ * - 保存按钮 :disabled="!hasActiveParameter"（未调过 infer 时点不动）
+ *
+ * TODO 后端：补 POST /api/processes/tuning/record/ 接口
+ *   - service 层按 parameter_id 做 update_or_create（业务 1:1 保证）
+ *   - 若 parameter 已被新版本取代（status=archived），返回 409 拒绝
+ *   - 参数不存在返回 404（防御性检查）
+ *   - 跨 company_id / organization_id 越权返回 403
+ */
+export const processTuningRecord = (data: {
+  parameter_id: number
+  defect_feedbacks?: any[]
+  observations?: any[]
+  tuning_result?: 'effective' | 'ineffective' | 'qualified' | 'unqualified' | 'pending' | null
+  result_detail?: string
+}) =>
+  request({ url: '/api/processes/tuning/record/', method: 'post', data })
+
 export const processExpertSuggestion = (data: { condition_id: number; defect_feedback: any }) =>
   request({ url: '/api/processes/expert/suggestion/', method: 'post', data })
 

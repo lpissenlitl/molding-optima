@@ -63,24 +63,15 @@ class AIEngineBase(ABC):
         根据上下文返回推荐结果
 
         Args:
-            context: 推理上下文
+            context: 推理上下文（5 字段 schema，详见 optimization_infer.EngineContext）
                 {
-                    'process_condition': {...},
-                    'process_parameter': {...},
-                    'defect_feedbacks': [...],
-                    'tuning_history': [...],
-                    'iteration_trend': {           # 迭代趋势分析
-                        'trend': 'improving/worsening/stable/final',
-                        'improving_count': 0,
-                        'worsening_count': 0,
-                        'last_result': 'pending',
-                        'recommendation': '...',
-                    },
-                    'machine': {...},
-                    'mold': {...},
-                    'polymer': {...},
-                    'product': {...},
+                    'machine': {...},                  # 设备信息（InjectionUnit HMI 范围）
+                    'polymer_abbreviation': str | None,# 材料简称（RuleQueryService L1/L2 匹配）
+                    'product_category': str | None,    # 产品类别（RuleQueryService L1/L3 匹配）
+                    'process_parameter': {...},        # 工艺参数（已翻译为算法侧命名，如 IL1/NT/CT）
+                    'feedback': {...},                 # 反馈信息（整体透传）
                 }
+                注：算法侧不验证 schema 完整性，由调用方（_call_engines）入口校验。
 
         Returns:
             推荐结果列表

@@ -239,10 +239,6 @@ async function loadDetail(id: number) {
   margin-bottom: 16px;
 }
 
-.loading-placeholder {
-  height: 400px;
-}
-
 /* card 标题 */
 .custom-form__title {
   font-size: 15px;

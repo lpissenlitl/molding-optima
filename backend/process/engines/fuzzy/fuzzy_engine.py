@@ -39,6 +39,58 @@ class FuzzyEngine(AIEngineBase):
     engine_type = "optimization"
     engine_subtype = "fuzzy"
 
+    # ============================================================
+    # 字段命名约束声明（Port-Adapter 模式的“端口”部分）
+    #
+    # 设计（见 algorithm-context-design.md §6.10）：
+    # - fuzzy rule 用的字段名（来自 RuleKeyword.keyword_name）是稳定的“业务专家约定”
+    # - 本声明让算法侧声明“我需要什么字段名”这种接口契约
+    # - 上层（数据准备层 _normalize_field_name_by_spec）按此映射翻译业务命名
+    # - 算法内部不需要懂业务命名（保持纯函数）
+    #
+    # 约定：每个 key 是业务 prefix 或完整字段名，value 是算法侧使用的字段名。
+    # - 前缀映射：value 是算法 prefix，拼上原序号（如 IL1、BT3）
+    # - 完整字段名映射：value 是算法完整名（如 NT、CT、MEL、DDBM）
+    #
+    # 设计原则（2026-09-30 确认）：
+    # - 以算法侧 RuleKeyword 为准则：表中每个 mapping 都对应实际存在的算法 keyword
+    # - 理论上 ProcessParameter 中每个工艺字段都能在此找到映射（70/71 已覆盖）
+    # - 未映射场景只发生在业务控制字段（如 _stg / _mode）或算法未启用的边界 case（如 met_lim_t）
+    # ============================================================
+    FIELD_NAME_ALIAS: Dict[str, str] = {
+        # ---- 注射阶段（inj_*_N → IL/IV/IP_N，前缀映射）----
+        "inj_pos":  "IL",   # 注射位置 1-6 → IL1-IL6
+        "inj_spd":  "IV",   # 注射速度 1-6 → IV1-IV6
+        "inj_pres": "IP",   # 注射压力 1-6 → IP1-IP6
+        # ---- 保压阶段（hold_*_N → PP/PV/PT_N，前缀映射）----
+        # 注意：保压只有压力/速度/时间三组（无位置字段：算法 ML 实际是熔胶位置）
+        "hold_pres": "PP",   # 保压压力 1-5 → PP1-PP5
+        "hold_spd":  "PV",   # 保压速度 1-5 → PV1-PV5
+        "hold_t":    "PT",   # 保压时间 1-5 → PT1-PT5
+        # ---- 熔胶阶段（met_*_N → ML/MP/MBP/MSR_N，前缀映射）----
+        "met_pos":      "ML",   # 熔胶位置 1-4 → ML1-ML4（算法侧 ML 实际是熔胶位置）
+        "met_pres":     "MP",   # 熔胶压力 1-4 → MP1-MP4
+        "met_back_pres":"MBP",  # 背压 1-4 → MBP1-MBP4
+        "met_rot_spd":  "MSR",  # 螺杆转速 1-4 → MSR1-MSR4
+        # ---- 温度（完整字段名映射 或 前缀映射）----
+        "noz_temp":  "NT",   # 喷嘴温度 → NT
+        "cool_t":    "CT",   # 冷却时间 → CT
+        "brl_temp":  "BT",   # 料筒温度 1-9 → BT1-BT9
+        # ---- 熔胶动作（完整字段名映射）----
+        "pre_met_decomp_dist":    "DDBM", # 熔胶前松退距离 → DDBM
+        "pst_met_decomp_dist":    "DDAM", # 熔胶后松退距离 → DDAM
+        "met_end_pos":            "MEL",  # 计量终点位置 → MEL
+        # ---- 注射耗时（完整字段名映射）----
+        "inj_t":     "IT",       # 注射时间 → IT
+        "inj_dly_t": "ID",       # 注射延迟 → ID
+        # ---- VP 切换（完整字段名映射）----
+        "vps_mode": "VPTM",      # VP 切换模式 → VPTM
+        "vps_pos":  "VPTL",      # VP 切换位置 → VPTL
+        "vps_pres": "VPTP",      # VP 切换压力 → VPTP
+        "vps_spd":  "VPTV",      # VP 切换速度 → VPTV
+        "vps_t":    "VPTT",      # VP 切换时间 → VPTT
+    }
+
     # 工厂级网络和兜底层网络（每次 recommend 时构造；可考虑缓存）
     def __init__(self):
         self._rule_net = None  # 兼容旧接口，不使用
@@ -55,21 +107,24 @@ class FuzzyEngine(AIEngineBase):
 
         Args:
             context: {
-                'defect_feedbacks': [...],
-                'process_parameter': {...},   # 当前参数
-                'iteration_trend': {...},     # 迭代趋势
+                'feedback': {                        # 反馈 dict（含 defect / observations / tuning_result）
+                    'defect': [...],
+                    'observations': [...],
+                    'tuning_result': str | None,
+                },
+                'process_parameter': {...},          # 当前参数
+                'iteration_trend': {...},            # 迭代趋势
                 'machine': {...},
                 # --- FuzzyEngine 扩展上下文 ---
-                'defect_name': 'SHORTSHOT',    # 当前缺陷名（必填）
                 'polymer_abbreviation': 'PE',
                 'product_category': '酒瓶',
-                'rule_library_code': 'packaging',  # 可选
+                'rule_library_code': 'packaging',    # 可选
             }
 
         Returns:
             List[Recommendation]
         """
-        defects = context.get('defect_feedbacks', [])
+        defects = (context.get('feedback') or {}).get('defect', []) or []
         if not defects:
             return []
 
@@ -120,7 +175,7 @@ class FuzzyEngine(AIEngineBase):
 
     def is_available(self, context: dict) -> bool:
         """判断是否可用。"""
-        if not context.get('defect_feedbacks'):
+        if not (context.get('feedback') or {}).get('defect'):
             return False
 
         trend = context.get('iteration_trend', {})

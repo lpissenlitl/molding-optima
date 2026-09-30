@@ -1,0 +1,11 @@
+/*
+ * Loading Placeholder - 加载占位高度（全局 utility）
+ *
+ * 用途：表格 / 表单加载等待时的占位高度，避免布局抖动
+ * 用法：<div v-if="!loaded" v-loading="true" class="loading-placeholder" />
+ * 引入位置：src/main.ts（全局）
+ */
+
+.loading-placeholder {
+  height: 400px;
+}

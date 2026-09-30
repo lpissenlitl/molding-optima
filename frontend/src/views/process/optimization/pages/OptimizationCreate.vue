@@ -21,10 +21,12 @@
       <!-- 工艺优化工作台 -->
       <el-card class="box-card optimization-card" style="margin-top: 16px">
         <template #header>
-          <span class="custom-form__title">
-            <AppIcon icon="mdi:tune-vertical" class="custom-form__title-icon" />
-            工艺优化
-          </span>
+          <div class="optimization-card__header">
+            <div class="optimization-card__header-left">
+              <AppIcon icon="mdi:tune-vertical" class="optimization-card__header-icon" />
+              <span class="custom-form__title">工艺优化</span>
+            </div>
+          </div>
         </template>
 
         <div class="optimization-workspace">
@@ -55,15 +57,12 @@
                 </div>
                 <SettingProcess
                   :setting-process="activeRound.parameter"
+                  :original-process="originalParameter"
                   :readonly="isProcessReadonly"
                 />
               </div>
 
-              <!--
-                详情区顺序：工艺参数 → 上一轮建议 → 工艺实测 → 缺陷反馈
-                - 参数（事实）/ 上一轮建议（回顾）/ 工艺实测（验证）/ 缺陷反馈（结果）
-                - 缺陷反馈永远在最后；中间可插入模温机 / 热流道等反馈类
-              -->
+              <!-- 详情区顺序：参数 → 上一轮建议 → 工艺实测 → 缺陷反馈；缺陷永远在最后 -->
               <div class="round-detail-block">
                 <div class="round-detail-block__title">
                   <AppIcon icon="mdi:lightbulb-on-outline" />
@@ -72,11 +71,7 @@
                 <PreviousSuggestion :suggestion="previousSuggestion" />
               </div>
 
-              <!--
-                工艺实测：默认折叠（理论上大部分场景用不上，避免误导必填）
-                - 展开后 chevron 旋转 + body 高度过渡
-                - 折叠状态跨轮次粘性保留
-              -->
+              <!-- 工艺实测：默认折叠（避免误导必填）+ 粘性状态（跨轮次保留） -->
               <div
                 class="round-detail-block round-detail-block--collapsible"
                 :class="{ 'is-collapsed': !observationExpanded }"
@@ -117,7 +112,7 @@
                 </Transition>
               </div>
 
-              <!-- 缺陷反馈（永远位于最下方，作为本轮试模的最终结果） -->
+              <!-- 缺陷反馈：作为本轮试模的最终结果 -->
               <div class="round-detail-block">
                 <div class="round-detail-block__title">
                   <AppIcon icon="mdi:alert-circle-outline" />
@@ -131,7 +126,6 @@
                 />
               </div>
             </template>
-            <!-- 默认轮次不需 empty，但若 activeRound 缺失则兜底 -->
             <el-empty
               v-else
               description="点击 [获取初始工艺] 开始调机"
@@ -142,18 +136,10 @@
       </el-card>
     </template>
 
-    <!-- 底部操作 -->
     <div v-if="loaded" class="form-actions">
       <!--
-        配色原则（2026-09-23）：
-        - 获取初始工艺：success 绿 — 创建成功（开新工艺）
-        - 获取优化工艺：warning 黄 — 迭代优化（每次都是新决策）
-        - 重置 / 折叠：plain — 中性辅助操作
-        - 保存：primary 蓝 — 主操作（提交唯一入口）
-
-        状态联动（业务流互斥）：
-        - 获取初始工艺：有初始工艺后需重置才能重调
-        - 获取优化工艺：必须先有工艺（任意轮次 parameter_id 存在）
+        配色：success=开新工艺, warning=迭代优化, plain=辅助, primary=主操作
+        状态联动由 :disabled 表达式保证（hasInitialProcess / hasAnyProcess）
       -->
       <el-button
         type="success"
@@ -178,11 +164,20 @@
           :icon="conditionExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down'"
           style="margin-right: 4px;"
         />
-        {{ conditionExpanded ? '折叠条件' : '展开条件' }}
+        {{ conditionExpanded ? '折叠工艺条件' : '展开工艺条件' }}
       </el-button>
-      <el-button @click="resetForm">重置</el-button>
-      <el-button type="primary" :loading="save_loading" @click="onSubmit">
-        保存
+      <el-button @click="resetForm">
+        <el-icon style="margin-right: 4px"><RefreshLeft /></el-icon>
+        重置优化页面
+      </el-button>
+      <el-button
+        type="primary"
+        :loading="save_loading"
+        :disabled="!hasActiveParameter"
+        @click="onSubmit"
+      >
+        <el-icon style="margin-right: 4px"><Check /></el-icon>
+        保存当前工艺
       </el-button>
     </div>
   </div>
@@ -191,9 +186,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { RefreshLeft, Check } from '@element-plus/icons-vue'
 import { settingProcessForm } from '@/constants/process-const'
+import { DEFECTFREE_KEYWORD_NAME } from '@/constants/special-keywords'
 import { listRuleKeywords } from '@/api/rule'
-import { processInitializationFromMasterdata, processOptimizationInfer } from '@/api/index'
+import { processInitializationFromMasterdata, processOptimizationInfer, processTuningRecord } from '@/api/index'
 import type { RuleKeyword } from '@/types/rule'
 import type { Suggestion } from '@/types/optimization'
 import {
@@ -209,9 +206,7 @@ import DefectFeedback from '../components/DefectFeedback.vue'
 import ProcessActualFeedback from '../components/ProcessActualFeedback.vue'
 import PreviousSuggestion from '../components/PreviousSuggestion.vue'
 
-// ============================================================================
 // sessionStorage 持久化（避免切页面后丢失未提交的工艺数据）
-// ============================================================================
 
 /**
  * sessionStorage key（带软件版本号）
@@ -292,9 +287,7 @@ function restoreDraft(): boolean {
   return true
 }
 
-// ============================================================================
 // 状态
-// ============================================================================
 
 /**
  * 创建一个调机轮次
@@ -330,12 +323,28 @@ const form = reactive({
   active_round_id: null as number | null,
 })
 
-/** 页面初始化后默认选中首个轮次 */
-form.active_round_id = form.rounds[0]?.id ?? null
-
 const activeRound = computed(() =>
   form.rounds.find((r) => r.id === form.active_round_id) ?? null,
 )
+
+/**
+ * 当前活动轮次的参数快照（用于 SettingProcess 的变更高亮对比）
+ * - 切到哪个 round 就 snapshot 哪个 round.parameter
+ * - resetForm 时随 activeRound 切换自动重置
+ * - 用户手动修改 activeRound.parameter 后该快照保持不变，与原值对比触发高亮
+ */
+const originalParameter = ref<typeof settingProcessForm | null>(null)
+
+watch(activeRound, (newRound) => {
+  if (newRound?.parameter) {
+    // JSON 深拷贝：structuredClone 对 Vue 3 reactive Proxy 可能抛 DataCloneError；
+    // settingProcessForm 全是简单数值/数组/对象，JSON 拷贝足够
+    // （与 SettingProcess.saveOriginalSnapshot 保持一致）
+    originalParameter.value = JSON.parse(JSON.stringify(newRound.parameter))
+  } else {
+    originalParameter.value = null
+  }
+}, { immediate: true })
 
 /** 工艺条件是否已有数据：有数据默认折叠（用户重心已上优化），无数据默认展开（需填条件） */
 const hasConditionData = computed(() => {
@@ -354,6 +363,15 @@ const hasConditionData = computed(() => {
 const hasInitialProcess = computed(() => Boolean(form.condition?.id))
 const hasAnyProcess = computed(() =>
   form.rounds.some((r) => r.parameter_id != null),
+)
+
+/**
+ * 当前 active round 是否已绑定后端 ProcessParameter
+ * - 控制【保存】按钮 disabled：未调过 infer / 被重置的 round 不能提交
+ * - onSubmit 函数体内另有 warning toast 兜底（万一被通过其它路径触发）
+ */
+const hasActiveParameter = computed(() =>
+  activeRound.value?.parameter_id != null,
 )
 
 /** 机器单位映射（供 ProcessActualFeedback 使用）；重量无机器信息，默认 g */
@@ -383,9 +401,7 @@ const initial_loading = ref(false)
 const optimize_loading = ref(false)
 const conditionRef = ref<InstanceType<typeof ProcessCondition> | null>(null)
 
-// ============================================================================
 // 缺陷 keyword 列表（DefectFeedback 需要）
-// ============================================================================
 
 /**
  * 缺陷类 keyword 列表
@@ -405,7 +421,8 @@ async function loadDefectKeywords() {
     defectKeywords.value = items.filter(k => k.category === 'defect')
     positionKeywords.value = items.filter(k => k.category === 'defect_position')
   } catch (err: any) {
-    ElMessage.error(err?.message || '缺陷 keyword 加载失败')
+    console.error('[loadDefectKeywords] 调用失败:', err)
+    // 拦截器已统一 toast，这里只恢复兜底状态
     defectKeywords.value = []
     positionKeywords.value = []
   } finally {
@@ -413,51 +430,12 @@ async function loadDefectKeywords() {
   }
 }
 
-// ============================================================================
-// 上一轮调整建议（开发阶段 mock，后续接入算法响应）
-// ============================================================================
-
-/** 上一轮算法 / 工艺员调整建议；生产环境来源：上一轮 infer 接口的 suggestion 字段 */
-const previousSuggestion = ref<Suggestion | null>({
-  source_round_id: 0,
-  adopted: null,  // 未确认
-  groups: [
-    {
-      category: '工艺调整',
-      icon: 'mdi:tune-variant',
-      items: [
-        {
-          description: '降低注射一段压力 5 MPa',
-          direction: 'decrease',
-          rule_refs: ['M001', 'M005'],
-        },
-        {
-          description: '延长保压时间 0.5 s',
-          direction: 'increase',
-          rule_refs: ['M003'],
-        },
-        {
-          description: '检查产品壁厚均匀性',
-          direction: 'check',
-        },
-      ],
-    },
-    {
-      category: '模温调整',
-      icon: 'mdi:thermometer',
-      items: [
-        {
-          description: '提高动模温度 10 ℃',
-          direction: 'increase',
-        },
-        {
-          description: '定模温度保持不变',
-          direction: 'hold',
-        },
-      ],
-    },
-  ],
-})
+/**
+ * 上一轮算法 / 工艺员调整建议；来源：上一轮 infer 接口的 suggestion.groups
+ * - 初值为 null：调过 getOptimizedProcess 后由 infer 响应填充
+ * - PreviousSuggestion 组件在 null 时显示「暂无调整建议」占位
+ */
+const previousSuggestion = ref<Suggestion | null>(null)
 
 function toggleCondition() {
   conditionRef.value?.toggle()
@@ -472,9 +450,7 @@ function syncConditionExpanded() {
   }
 }
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 
 /**
  * 加载表单：优先从 sessionStorage 恢复草稿，失败走默认初始化
@@ -499,14 +475,13 @@ async function loadForm() {
     }
     loaded.value = true
   } catch (err: any) {
-    ElMessage.error(err?.message || '加载失败')
+    console.error('[loadProcessForm] 调用失败:', err)
+    // 拦截器已统一 toast，这里只置 loaded 避免死锁
     loaded.value = true
   }
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 /**
  * 重置表单（用户主动清空数据）
@@ -521,7 +496,7 @@ async function loadForm() {
 async function resetForm() {
   try {
     await ElMessageBox.confirm(
-      '确定要重置当前页面吗？所有未保存的工艺数据、轮次、缺陷反馈将被清除。',
+      '确定要重置当前优化页面吗？所有未保存的工艺数据、轮次、缺陷反馈将被清除。',
       '重置确认',
       {
         type: 'warning',
@@ -550,15 +525,16 @@ async function resetForm() {
   form.rounds.splice(0, form.rounds.length, makeRound('initial'))
   form.active_round_id = form.rounds[0]?.id ?? null
 
+  // activeRound watch 会自动 snapshot 新 round.parameter 到 originalParameter，
+  // 实现 SettingProcess 变更高亮同步重置（无需穿透调组件方法）
+
   conditionExpanded.value = true
   observationExpanded.value = false
 
-  ElMessage.success('页面已重置')
+  ElMessage.success('优化页面已重置')
 }
 
-// ============================================================================
 // 后端推理响应 → 前端表单（原子应用）
-// ============================================================================
 // 背景：
 //   后端 /initialization/from-masterdata/ 返回扁平工艺字段（inj_pres_steps 等），
 //   前端 settingProcessForm 是嵌套结构（injection / holding / metering / ...）。
@@ -574,7 +550,7 @@ async function resetForm() {
 /** 把后端 steps 数组补齐到 max 长度，缺的填 null（前端 UI 需要固定长度） */
 function padSteps(steps: Array<number | null | undefined> | null | undefined, max: number): Array<number | null> {
   if (!Array.isArray(steps)) return new Array(max).fill(null)
-  // 后端 steps 元素本身不会传 undefined，过滤保持类型严谨
+  // 后端步骤元素不会传 undefined，类型 cast 后 slice 即可
   const padded: Array<number | null> = (steps as Array<number | null>).slice()
   while (padded.length < max) padded.push(null)
   return padded.slice(0, max)
@@ -629,6 +605,24 @@ function mapInferResultToParameter(result: any): typeof settingProcessForm {
         { label: '背压', unit: 'MPa', sections: padSteps(p.met_back_pres_steps, 4) },
         { label: '位置', unit: 'mm', sections: padSteps(p.met_pos_steps, 4) },
       ],
+      pre_decompress_mode: p.pre_met_decomp_mode ?? 0,
+      post_decompress_mode: p.pst_met_decomp_mode ?? 0,
+      decompress_table_data: [
+        {
+          label: '储前',
+          pressure: p.pre_met_decomp_pres ?? null,
+          velocity: p.pre_met_decomp_spd ?? null,
+          time: p.pre_met_decomp_t ?? null,
+          distance: p.pre_met_decomp_dist ?? null,
+        },
+        {
+          label: '储后',
+          pressure: p.pst_met_decomp_pres ?? null,
+          velocity: p.pst_met_decomp_spd ?? null,
+          time: p.pst_met_decomp_t ?? null,
+          distance: p.pst_met_decomp_dist ?? null,
+        },
+      ],
       delay_time: p.met_lim_t ?? null,
       ending_position: p.met_end_pos ?? null,
     },
@@ -658,11 +652,9 @@ function applyInferResultToForm(result: any) {
   const data = result?.data
   if (!data) return
 
-  // 1) 工艺条件（ProcessCondition）
   if (data.condition_id) form.condition.id = data.condition_id
   if (data.condition_no) form.condition.condition_no = data.condition_no
 
-  // 2) 当前轮次工艺参数（ProcessParameter）
   if (!activeRound.value) return
 
   if (data.parameter_id != null) {
@@ -690,13 +682,11 @@ function applyInferResultToForm(result: any) {
  * docs/process-frontend-param-mapping-atomic-2026-09-23.md
  */
 async function getInitialProcess() {
-  // Step 1: 5 项必填校验（ProcessCondition 组件复用校验逻辑）
   const isValid = await conditionRef.value?.checkFormDataValid()
   if (!isValid) return
 
   initial_loading.value = true
   try {
-    // Step 2: 调用后端
     const result: any = await processInitializationFromMasterdata({
       mold_id: form.condition.mold_id,
       polymer_id: form.condition.polymer_id,
@@ -705,10 +695,9 @@ async function getInitialProcess() {
       injection_index: form.condition.injection_index ?? 0,
     })
 
-    // Step 3: 响应处理（集中到 applyInferResultToForm，保证原子性）
+    // 集中应用响应，保证原子性
     applyInferResultToForm(result)
 
-    // Step 4: 成功提示（toast 摘要）
     const ruleHint = Array.isArray(result?.data?.matched_rules) && result.data.matched_rules.length > 0
       ? `（命中 ${result.data.matched_rules.length} 条规则）`
       : ''
@@ -718,13 +707,48 @@ async function getInitialProcess() {
       + `seq_idx=${result?.data?.seq_idx ?? '-'}${ruleHint}`,
     )
   } catch (err: any) {
-    // request.ts 拦截器已 ElMessage.warning 显示了后端响应 data.msg
-    // （含 BizException 详情，如 "工艺参数输入字段不足 - 缺少字段: gate_type, ..."）
-    // 这里仅保留袌底，不重复 toast（避免双重提示）
     console.error('[getInitialProcess] 调用后端失败:', err)
+    // 拦截器已统一 toast
   } finally {
     initial_loading.value = false
   }
+}
+
+/**
+ * 校验本轮缺陷反馈完整性（infer 前置校验）
+ *
+ * 业务约束：
+ * - 缺陷数组至少 1 项（空数组 / 缺失都视为“未反馈”）
+ * - 每项必须 keyword_id 有值（选了缺陷类型）
+ * - 非 DEFECTFREE 项必须 level + position 有值（“无缺陷”不需要程度和位置）
+ *
+ * 返回 { ok, error? }；pure 函数无副作用，便于测试。
+ */
+interface FeedbackValidation {
+  ok: boolean
+  error?: string
+}
+function validateFeedback(feedback: any): FeedbackValidation {
+  const defects = feedback?.defect
+  if (!Array.isArray(defects) || defects.length === 0) {
+    return { ok: false, error: '请填写缺陷反馈信息' }
+  }
+  for (let i = 0; i < defects.length; i++) {
+    const d = defects[i]
+    if (d?.keyword_name == null) {
+      return { ok: false, error: `第 ${i + 1} 项缺陷未选择缺陷类型` }
+    }
+    const isDefectFree = d?.keyword_name === DEFECTFREE_KEYWORD_NAME
+    if (!isDefectFree) {
+      if (d?.level == null || d?.level === '') {
+        return { ok: false, error: `第 ${i + 1} 项缺陷未选择缺陷程度` }
+      }
+      if (!d?.position || d.position === '') {
+        return { ok: false, error: `第 ${i + 1} 项缺陷未填写缺陷位置` }
+      }
+    }
+  }
+  return { ok: true }
 }
 
 /**
@@ -732,18 +756,18 @@ async function getInitialProcess() {
  *
  * 业务约束：
  * - 必须先调 getInitialProcess（前置依赖：form.condition.id + activeRound.seq_idx）
+ * - 必须填写缺陷反馈（validateFeedback 校验完整性）
  * - infer 后创建新轮次（不替换当前轮次），保持调机树语义
- * - previousSuggestion 由 infer 响应的 suggestion 字段填充
- *   （替换原 mock 数据，这是 docs 原则 6 / 8 的实现）
+ * - previousSuggestion 由 infer 响应的 suggestion.groups 填充
  *
  * 响应处理：
  * - new_parameter.parameter_id / seq_idx → 新轮次
- * - suggestion.groups → previousSuggestion.groups（供 UI 展示"上一轮调整建议"）
+ * - suggestion.groups → previousSuggestion.groups（供 UI 展示“上一轮调整建议”）
  *
  * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
  */
 async function getOptimizedProcess() {
-  // Step 1: 前置校验
+  // 前置校验：必须先调过 getInitialProcess（依赖 condition.id + activeRound.seq_idx）
   if (!form.condition?.id) {
     ElMessage.warning('请先点击【获取初始工艺】生成工艺条件')
     return
@@ -752,20 +776,40 @@ async function getOptimizedProcess() {
     ElMessage.warning('当前轮次缺少 seq_idx，请重置后重试')
     return
   }
+  // 缺陷反馈完整性校验（避免后端静默接收空 feedback 导致不报期望）
+  const validation = validateFeedback(activeRound.value?.feedback)
+  if (!validation.ok) {
+    ElMessage.warning(validation.error!)
+    return
+  }
 
   optimize_loading.value = true
   try {
-    // Step 2: 调用后端
     const result: any = await processOptimizationInfer({
       condition_id: form.condition.id,
       parent_seq_idx: activeRound.value.seq_idx,
       feedback: activeRound.value.feedback,
     })
 
-    // Step 3: 创建新轮次（optimized）+ 切换 active
-    const newRound = makeRound('optimized')
-    // 后端响应包装：{status, msg, timestamp, data: {...}}；业务数据在 .data 下
     const inferData = result?.data ?? result ?? {}
+
+    // 响应有效性校验：new_parameter / suggestion.groups 缺失时不跳转下一轮
+    // （后端算法不可用等场景，排查走服务端日志）
+    const hasNewParameter = !!(
+      inferData.new_parameter && inferData.new_parameter.parameter_id != null
+    )
+    const hasSuggestion = Array.isArray(inferData.suggestion?.groups)
+      && inferData.suggestion.groups.length > 0
+
+    if (!hasNewParameter || !hasSuggestion) {
+      ElMessage.error('推荐算法暂不可用，请稍后重试或联系管理员')
+      return
+    }
+
+    // 在切换 active 之前保存上一轮 round.id（source_round_id 语义）
+    const previousRoundId = activeRound.value?.id ?? null
+
+    const newRound = makeRound('optimized')
     if (inferData.new_parameter) {
       newRound.parameter_id = inferData.new_parameter.parameter_id ?? null
       newRound.seq_idx = inferData.new_parameter.seq_idx ?? null
@@ -773,42 +817,69 @@ async function getOptimizedProcess() {
     form.rounds.push(newRound)
     form.active_round_id = newRound.id
 
-    // Step 4: 更新 previousSuggestion（上一轮调整建议）
+    // 上一轮调整建议：infer 响应的 suggestion.groups
     if (inferData.suggestion && Array.isArray(inferData.suggestion.groups)) {
       previousSuggestion.value = {
-        source_round_id: activeRound.value.id,  // 上一轮 round.id
+        source_round_id: previousRoundId,
         adopted: null,  // 未确认（待本轮填 effective/ineffective 后自动变更）
         groups: inferData.suggestion.groups,
       }
     }
 
-    // Step 5: 成功提示（toast 摘要）
-    const groupCount = Array.isArray(inferData.suggestion?.groups)
-      ? inferData.suggestion.groups.length
-      : 0
+    const groupCount = inferData.suggestion.groups.length
+    const seqIdx = inferData.new_parameter?.seq_idx ?? '-'
+    const paramId = inferData.new_parameter?.parameter_id ?? '-'
     ElMessage.success(
-      `优化工艺已生成 seq_idx=${inferData.new_parameter?.seq_idx ?? '-'}, `
-      + `parameter_id=${inferData.new_parameter?.parameter_id ?? '-'}, `
-      + `建议 ${groupCount} 类`,
+      `优化工艺已生成 seq_idx=${seqIdx}, parameter_id=${paramId}，建议 ${groupCount} 类`,
     )
   } catch (err: any) {
-    // request.ts 拦截器已 ElMessage.warning 显示了后端响应 data.msg
-    // （含 BizException 详情，含 infer 错误或字段缺失提示）
-    // 这里仅保留袌底，不重复 toast（避免双重提示）
     console.error('[getOptimizedProcess] 调用后端失败:', err)
+    // 拦截器已统一 toast（已在 getOptimizedProcess 顶部校验响应有效性）
   } finally {
     optimize_loading.value = false
   }
 }
 
-/** 提交保存。TODO：调保存接口 */
+/**
+ * 提交当前轮次试模结果（TuningRecord 落库）
+ *
+ * 业务语义（区别于 getOptimizedProcess 的 infer 路径）：
+ * - 用户在当前轮次填了实测 + 缺陷反馈，希望立即落库
+ * - 不创建新 ProcessParameter / 不调算法 / 不污染 source_type
+ * - 幂等：同一 parameter 重复提交 → 覆盖更新
+ *
+ * 关联：api/index.ts → processTuningRecord
+ * 后端接口：POST /api/processes/tuning/record/（待后端补）
+ */
 async function onSubmit() {
+  if (!activeRound.value) {
+    ElMessage.warning('请先选择调机轮次')
+    return
+  }
+  if (activeRound.value.parameter_id == null) {
+    ElMessage.warning('当前轮次未绑定工艺参数，请先调【获取初始工艺】或【获取优化工艺】')
+    return
+  }
+
   save_loading.value = true
   try {
-    // TODO: 提交保存
-    ElMessage.success('保存成功')
+    const feedback = activeRound.value.feedback || {}
+    const res: any = await processTuningRecord({
+      parameter_id: activeRound.value.parameter_id,
+      defect_feedbacks: feedback.defect ?? [],
+      observations: feedback.observations ?? [],
+      tuning_result: feedback.tuning_result ?? null,
+    })
+    if (res?.status === 0) {
+      const created = res.data?.created
+      ElMessage.success(created ? '已保存当前试模结果' : '已更新当前试模结果')
+    } else {
+      // HTTP 200 但 status !== 0：业务失败（不走 catch，由调用方自己 toast）
+      ElMessage.error(res?.msg || '保存失败，请稍后重试')
+    }
   } catch (err: any) {
-    ElMessage.error(err?.message || '保存失败')
+    console.error('[OptimizationCreate] onSubmit 调用后端失败:', err)
+    // 拦截器已统一 toast
   } finally {
     save_loading.value = false
   }
@@ -854,8 +925,33 @@ onBeforeUnmount(() => {
   padding: 16px 16px 96px;
 }
 
-.loading-placeholder {
-  height: 400px;
+/*
+ * 顶部 header：与 ProcessCondition.vue 视觉对齐
+ * - 左侧 18x18 灰色 icon + 主题色条 + 标题（三段式）
+ * - 与工艺条件的 chevron 占同一视觉锚点位置，避免“最左元素不一致”的视觉跳跃
+ * - icon 是装饰性（无点击行为），颜色调灰（#606266）不喧宾夺主
+ */
+.optimization-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 0;
+
+  &-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  &-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #606266;
+    vertical-align: middle;
+  }
 }
 
 /*

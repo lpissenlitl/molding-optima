@@ -148,6 +148,15 @@ def _assert_eq(actual, expected, label):
         )
 
 
+def _assert_is_none(actual, label):
+    if actual is None:
+        _passes.append(f"  {PASS}[PASS]{NC} {label}: {actual} is None")
+    else:
+        _failures.append(
+            f"  {FAIL}[FAIL]{NC} {label}: expected=None, actual={actual}"
+        )
+
+
 def _assert_close(actual, expected, label, eps=0.5):
     if abs(actual - expected) <= eps:
         _passes.append(f"  {PASS}[PASS]{NC} {label}: {actual:.3f} ≈ {expected}")
@@ -178,8 +187,8 @@ def test_scenario_a_default_position():
 
     _assert_eq(mode, 0, "A1 默认 mode=0（位置切换）")
     _assert_close(pos, 10.88, "A2 vps_pos ≈ 10.88（来自 inj_pos=cushion+replenish）", eps=0.5)
-    _assert_eq(t, 0, "A3 vps_t=0（位置模式不填时间）")
-    _assert_eq(pres, 0, "A4 vps_pres=0（位置模式不填压力）")
+    _assert_is_none(t, "A3 vps_t=None（位置模式不使用）")
+    _assert_is_none(pres, "A4 vps_pres=None（位置模式不使用）")
     _assert_in(log, "VP 切换参数", "A5 日志输出 VP 切换参数")
 
 
@@ -193,16 +202,16 @@ def test_scenario_b_user_int():
     # B1: 时间切换 mode=1
     mode, pos, t, pres, log = _run_and_capture_log(mold, material, process_set={'vps_mode': 1})
     _assert_eq(mode, 1, "B1.1 mode=1（时间切换）")
-    _assert_eq(pos, 0, "B1.2 vps_pos=0（时间模式不填位置）")
+    _assert_is_none(pos, "B1.2 vps_pos=None（时间模式不使用）")
     _assert_close(t, 0.5985, "B1.3 vps_t ≈ 0.5985s（inj_time × 0.95 ≈ 0.63 × 0.95，#5 重构 v2 后）", eps=0.05)
-    _assert_eq(pres, 0, "B1.4 vps_pres=0（时间模式不填压力）")
+    _assert_is_none(pres, "B1.4 vps_pres=None（时间模式不使用）")
     _assert_in(log, "source=explicit", "B1.5 日志 source=explicit")
 
     # B2: 压力切换 mode=2
     mode, pos, t, pres, log = _run_and_capture_log(mold, material, process_set={'vps_mode': 2})
     _assert_eq(mode, 2, "B2.1 mode=2（压力切换）")
-    _assert_eq(pos, 0, "B2.2 vps_pos=0（压力模式不填位置）")
-    _assert_eq(t, 0, "B2.3 vps_t=0（压力模式不填时间）")
+    _assert_is_none(pos, "B2.2 vps_pos=None（压力模式不使用）")
+    _assert_is_none(t, "B2.3 vps_t=None（压力模式不使用）")
     _assert_close(pres, 59.6, "B2.4 vps_pres ≈ 59.6MPa（inj_pres × 0.85）", eps=1.0)
     _assert_in(log, "source=explicit", "B2.5 日志 source=explicit")
 
@@ -211,7 +220,7 @@ def test_scenario_b_user_int():
     _assert_eq(mode, 3, "B3.1 mode=3（位置&时间）")
     _assert_close(pos, 10.88, "B3.2 vps_pos ≈ 10.88mm（inj_pos 推导）", eps=0.5)
     _assert_close(t, 0.5985, "B3.3 vps_t ≈ 0.5985s（inj_time × 0.95）", eps=0.05)
-    _assert_eq(pres, 0, "B3.4 vps_pres=0（位置&时间模式不填压力）")
+    _assert_is_none(pres, "B3.4 vps_pres=None（位置&时间模式不使用）")
 
 
 # ========== 场景 C：字符串兼容 ==========

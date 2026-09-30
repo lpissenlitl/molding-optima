@@ -11,7 +11,7 @@
 - is_adopted 自动维护：下一轮 ineffective 时改 False
 """
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, TypedDict
 
 from django.db import transaction as db_transaction
 
@@ -23,17 +23,13 @@ from process.models import (
     TuningRecord,
 )
 from process.engines.base_engine import EngineRegistry, Recommendation as EngineRecommendation
-from process.services.tuning import TuningService
+from process.engines.fuzzy import FuzzyEngine  # 用于字段命名约束（FIELD_NAME_ALIAS）
 
 _logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# 模块级 lazy 引擎注册
-#
-# 设计原因：
-# - 不再走中间层（RecommendationService），编排层直接问 EngineRegistry
-# - lazy + 幂等：避免重复注册 + 避免循环依赖（模块被 services.__init__ 预加载）
+# 模块级 lazy 引擎注册（避免重复注册 + 避免循环依赖）
 # ============================================================================
 _engines_registered = False
 
@@ -50,6 +46,40 @@ def _ensure_engines_registered() -> None:
     except Exception as e:  # noqa: BLE001
         _logger.warning("[optimization_infer] FuzzyEngine 注册失败: %s", e)
     _engines_registered = True
+
+
+# ============================================================================
+# 算法接口契约（EngineContext schema）
+#
+# 设计（2026-09-30 确认）：
+# - 虽然算法侧 AIEngineBase.recommend 接受 Dict[str, Any]（不限严格 schema），
+#   但 Step 2 → Step 3 之间应有明确的契约文档，否则字段缺失只能运行时发现。
+# - 使用 TypedDict：保留 Dict 调用风格 + 提供类型提示 + 0 运行成本。
+# - _REQUIRED_CONTEXT_KEYS 是运行期 fail-fast 验证集合。
+# ============================================================================
+class EngineContext(TypedDict):
+    """算法引擎输入 context 的标准格式
+
+    由 Step 2 _build_engine_context 构造，Step 3 _call_engines 使用。
+
+    字段语义：
+    - machine: 设备信息（按 injection_index 选中的 InjectionUnit，含 HMI 范围字段）
+    - polymer_abbreviation: 材料简称（RuleQueryService L1/L2 特异性匹配）
+    - product_category: 产品类别（RuleQueryService L1/L3 特异性匹配）
+    - process_parameter: 工艺参数（已翻译为算法侧命名，如 IL1/NT/CT）
+    - feedback: 反馈信息（整体透传，不拆分）
+
+    字段全部必填，但 polymer_abbreviation / product_category 允许 None（算法可走 L4 通用规则）。
+    """
+    machine: Dict[str, Any]
+    polymer_abbreviation: Optional[str]
+    product_category: Optional[str]
+    process_parameter: Dict[str, Any]
+    feedback: Dict[str, Any]
+
+
+# 必需 key 集合（用于 _call_engines 入口验证；None 值也算“存在”）
+_REQUIRED_CONTEXT_KEYS = frozenset(EngineContext.__annotations__.keys())
 
 
 # ============================================================================
@@ -145,6 +175,73 @@ _DEFECTFREE_KEYWORD_NAME = "DEFECTFREE"
 
 
 # ============================================================================
+# Step 1 数据准备层 helper
+#
+# _to_full_dict(instance) ：ORM → 完整 dict（仅排除 ORM 关系字段）
+#
+# 设计边界：
+# - Step 1 不做字段选择 / 重命名 / 裁剪，只做 ORM → dict 的转换。
+# - 字段选择是 Step 2 (_build_engine_context) 的职责。
+# - 仅排除 ORM 关系字段（ForeignKey / OneToOne 等），避免 ORM 对象嵌套到 dict。
+# - ORM 元数据（id / created_at / updated_at / is_deleted / deleted_at）和业务字段
+#   （parameter_no / param_source / seq_idx）保留在 dict 中，后续由 Step 2 决定是否裁剪。
+# ============================================================================
+def _to_full_dict(instance: Any) -> Dict[str, Any]:
+    """ORM → 完整 dict（仅排除 ORM 关系字段，避免对象嵌套）。"""
+    if instance is None:
+        return {}
+    return {
+        f.name: getattr(instance, f.name)
+        for f in instance._meta.fields
+        if not f.is_relation
+    }
+
+
+def _normalize_field_name_by_spec(
+    params: Dict[str, Any],
+    field_spec: Dict[str, str],
+) -> Dict[str, Any]:
+    """按算法侧声明的字段命名约束（FIELD_NAME_ALIAS）做字段名翻译（业务 → 算法）
+
+    Port-Adapter 模式：
+    - 算法侧声明字段命名约定（FIELD_NAME_ALIAS，每个引擎各自声明）
+    - 数据准备层按约束翻译（不感知业务语义）
+    - 业务编排层只懂业务 dict
+
+    翻译规则示例：
+        'inj_pos_1' + spec={'inj_pos': 'IL'}       → 'IL1'         （前缀 + 数字后缀映射）
+        'noz_temp'  + spec={'noz_temp': 'NT'}      → 'NT'          （完整字段名映射）
+        'cool_t'    + spec={'cool_t': 'CT'}        → 'CT'          （完整字段名映射，注意 cool_t 不是“原样保留”）
+        'met_lim_t' + spec={...完整业务映射...}    → 'met_lim_t'   （边界 case：算法侧未启用嫧胶延时）
+
+    Args:
+        params: 业务命名 dict
+        field_spec: 算法侧声明的 prefix/完整字段名 → 算法 prefix/完整名映射
+
+    Returns:
+        翻译后的算法命名 dict（新 dict，不修改原对象）
+    """
+    if not field_spec:
+        return dict(params)  # 无映射时快路径
+
+    normalized: Dict[str, Any] = {}
+    for key, value in params.items():
+        # 优先 1：完整字段名映射（如 noz_temp → NT、vps_pos → VPTL）
+        if key in field_spec:
+            normalized[field_spec[key]] = value
+            continue
+        # 优先 2：前缀 + 数字后缀映射（如 inj_pos_1 → IL1、brl_temp_3 → BT3）
+        # 注意：必须保证后缀是纯数字，避免 noz_temp 被拆成 noz + temp
+        prefix, sep, suffix = key.rpartition('_')
+        if sep and suffix.isdigit() and prefix in field_spec:
+            new_key = f"{field_spec[prefix]}{suffix}"  # 直接拼接算法 prefix + 序号
+        else:
+            new_key = key  # 无映射或拆错位置，原样保留
+        normalized[new_key] = value
+    return normalized
+
+
+# ============================================================================
 # infer 服务（主类）
 # ============================================================================
 
@@ -191,37 +288,33 @@ class OptimizationInferService:
             }
         """
         feedback = feedback or {}
-        # Step 0: feedback 防御性校验（与前端 validateFeedback 是同一套约束镜像）
+        # Step 0: feedback 防御性校验
         self._validate_feedback(feedback)
-        defect_feedbacks = feedback.get("defect", []) or []
-        observations = feedback.get("observations", []) or []
-        tuning_result = feedback.get("tuning_result")
 
-        # ---------- Step 1: 反查 parent_param ----------
-        condition, parent_param = self._resolve_parent(
+        # ---------- Step 1: 构建基准参数（反查 + ORM→dict 标准化 + baseline 构建）----------
+        condition_orm, parent_param_orm = self._resolve_parent(
             condition_id=condition_id,
             parent_seq_idx=parent_seq_idx,
         )
-
-        # ---------- Step 2: 构建基线参数 ----------
+        parameter_data = _to_full_dict(parent_param_orm)
         baseline = self._build_baseline(
-            parent_param=parent_param,
+            parameter_data=parameter_data,
             user_override=parameter,
         )
 
-        # ---------- Step 3: 直接调用算法引擎（无中间层） ----------
-        # Step 3a: 构造算法 context（不上 DB，所需数据已在 Step 1 拿齐）
+        # ---------- Step 2: 构造算法 context（build condition 在内部） ----------
         engine_context = self._build_engine_context(
-            condition=condition,
-            parent_param=parent_param,
-            defect_feedbacks=defect_feedbacks,
+            condition=condition_orm,
+            parameter=baseline,
+            feedback=feedback,
         )
-        # Step 3b: 调用已注册引擎（纯调用，不查 DB）
+        
+        # ---------- Step 3: 调用已注册算法引擎（纯调用，不查 DB） ----------
         engine_result = self._call_engines(engine_context)
         engine_recommendations = engine_result.get("recommendations", []) or []
         engine_sources = engine_result.get("engine_sources", {}) or {}
 
-        # Step 3.5: fail-fast 守卫 —— 算法未给出推荐时拒绝创建空 round
+        # fail-fast 守卫：算法未给出推荐时拒绝创建空 round
         # （工艺参数只由算法生成，无推荐 = 无效 round；避免前端误以为成功）
         if not engine_recommendations:
             _logger.warning(
@@ -245,31 +338,34 @@ class OptimizationInferService:
         )
 
         # ---------- Step 5: 原子事务落库 ----------
+        # Step 5 入口一次性从 feedback 提取（贴近使用方，不跨步共享）
+        defect_feedbacks = feedback.get("defect", []) or []
+        tuning_result = feedback.get("tuning_result")
         with db_transaction.atomic():
             # 5.1 更新上一轮 TuningRecord（缺陷反馈 + 试模结果）
             self._update_previous_tuning_record(
-                parent_param=parent_param,
+                parent_param=parent_param_orm,
                 defect_feedbacks=defect_feedbacks,
                 tuning_result=tuning_result,
             )
 
             # 5.2 更新上一轮 Recommendation.is_adopted（训练标签）
             self._update_previous_recommendation_is_adopted(
-                parent_param=parent_param,
+                parent_param=parent_param_orm,
                 tuning_result=tuning_result,
             )
 
             # 5.3 创建新 ProcessParameter
             new_param = self._create_new_parameter(
-                condition=condition,
-                parent_param=parent_param,
+                condition=condition_orm,
+                parent_param=parent_param_orm,
                 parameters_dict=new_parameter_dict,
             )
 
             # 5.4 创建新 TuningRecord（pending 状态，等待下次反馈）
             self._create_new_tuning_record(
                 new_param=new_param,
-                parent_param=parent_param,
+                parent_param=parent_param_orm,
                 defect_feedbacks=defect_feedbacks,
             )
 
@@ -315,10 +411,10 @@ class OptimizationInferService:
                     ERROR_REQUIRED_FIELD,
                     f"第 {i} 项缺陷格式错误：应为对象",
                 )
-            if d.get("keyword_id") is None:
+            if d.get("keyword_name") is None:
                 raise BizException(
                     ERROR_REQUIRED_FIELD,
-                    f"第 {i} 项缺陷未选择缺陷类型（keyword_id 必填）",
+                    f"第 {i} 项缺陷未选择缺陷类型（keyword_name 必填）",
                 )
             is_defect_free = d.get("keyword_name") == _DEFECTFREE_KEYWORD_NAME
             if not is_defect_free:
@@ -338,9 +434,20 @@ class OptimizationInferService:
         condition_id: int,
         parent_seq_idx: int,
     ) -> Tuple[ProcessCondition, ProcessParameter]:
-        """Step 1 —— 反查 condition + parent_param（两者必须同时存在）"""
+        """Step 1 —— 反查 condition + parent_param（两者必须同时存在）
+
+        使用 select_related + prefetch_related 预加载：
+        - injection_machine / polymer / mold（FK 一级，select_related）
+        - injection_machine__injection_units（FK 二级，prefetch_related）
+          → _build_engine_context 按 injection_index 选 InjectionUnit 时避免 N+1
+        """
         try:
-            condition = ProcessCondition.objects.get(id=condition_id)
+            condition = (
+                ProcessCondition.objects
+                .select_related('injection_machine', 'polymer', 'mold')
+                .prefetch_related('injection_machine__injection_units')
+                .get(id=condition_id)
+            )
         except ProcessCondition.DoesNotExist as exc:
             raise BizException(
                 ERROR_DATA_NOT_FOUND,
@@ -362,14 +469,22 @@ class OptimizationInferService:
 
     def _build_baseline(
         self,
-        parent_param: ProcessParameter,
+        parameter_data: Dict[str, Any],
         user_override: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Step 2 —— 构建算法输入基线（user_override > parent_param）"""
-        baseline = self._snapshot_parameter(parent_param)
+        """Step 1 —— 构建 baseline（编排方法：纯 dict 操作）
+
+        接收 dict 输入，支持多种来源：
+        - ORM 序列化后的 parameter_data（来自 _to_full_dict）
+        - 前端直接传入的 parameter_data（纯参数）
+        - 其他业务场景传入的 dict
+
+        不查 DB——数据访问由 infer() 完成。
+        """
+        baseline = dict(parameter_data)
 
         if user_override:
-            # 用户手动修改覆盖基线（仅覆盖显式提供的字段）
+            # 用户手动修改覆盖 baseline（仅覆盖显式提供的字段）
             for key, value in user_override.items():
                 if value is not None:
                     baseline[key] = value
@@ -391,15 +506,14 @@ class OptimizationInferService:
                 snapshot[name] = value
         return snapshot
 
-    # ---------- Step 3 实现：直接调用算法引擎（原本是 RecommendationService 的职责） ----------
+    # ---------- Step 3 实现：调用已注册算法引擎 ----------
 
-    def _call_engines(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Step 3b —— 纯调用已注册引擎，不查 DB
+    def _call_engines(self, context: EngineContext) -> Dict[str, Any]:
+        """Step 3 —— 纯调用已注册引擎，不查 DB
 
-        设计：调用方负责构造 context，本方法只负责『调引擎 + 汇总输出』。
-        好处：
-        - 单元测试可直接传 mock context，无需 setup DB
-        - context 字段名是隐式契约，但好处是调用方完全控制上下文内容
+        Args:
+            context: 算法入参（5 字段 schema，见 EngineContext）
+                字段齐全性在本函数入口校验，避免转发到引擎后才报错。
 
         Returns:
             {
@@ -407,13 +521,22 @@ class OptimizationInferService:
                 'engine_sources': {name: [...]},  # 各引擎输出（用于 source_type 决策）
                 'best_recommendation': {...} | None,
             }
+
+        TODO（后续迭代）：
+        - trend 后处理（worsening *0.5 / improving *1.2 / stable 1.0）
+        - 多引擎同参数合并（按 confidence 取最高）
         """
+        # ---- 入口验证：5 字段 schema 完整性 ----
+        # 不齐全直接返回空（让调用方 fail-fast 在 278-285 报 BizException）
         if not context:
-            return {
-                "recommendations": [],
-                "engine_sources": {},
-                "best_recommendation": None,
-            }
+            _logger.warning("[optimization_infer] _call_engines context 为空")
+            return self._empty_engine_result()
+        missing = _REQUIRED_CONTEXT_KEYS - set(context.keys())
+        if missing:
+            _logger.warning(
+                "[optimization_infer] _call_engines context 缺字段: %s", missing,
+            )
+            return self._empty_engine_result()
 
         engines = EngineRegistry.get_engines_by_priority(
             context=context,
@@ -421,11 +544,7 @@ class OptimizationInferService:
         )
         if not engines:
             _logger.info("[optimization_infer] 无可用引擎")
-            return {
-                "recommendations": [],
-                "engine_sources": {},
-                "best_recommendation": None,
-            }
+            return self._empty_engine_result()
 
         all_recommendations: List[EngineRecommendation] = []
         engine_sources: Dict[str, List[Dict[str, Any]]] = {}
@@ -451,96 +570,82 @@ class OptimizationInferService:
             "best_recommendation": merged[0] if merged else None,
         }
 
+    @staticmethod
+    def _empty_engine_result() -> Dict[str, Any]:
+        """统一空返回结构（避免在 _call_engines 里重复字面量）"""
+        return {
+            "recommendations": [],
+            "engine_sources": {},
+            "best_recommendation": None,
+        }
+
     def _build_engine_context(
         self,
         condition: ProcessCondition,
-        parent_param: ProcessParameter,
-        defect_feedbacks: List[Dict[str, Any]],
+        parameter: Dict[str, Any],
+        feedback: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Step 3a —— 构造算法引擎输入 context
+        """Step 2 —— 构造算法引擎输入 context（业务 → 算法 翻译边界）
 
-        不查 DB—— condition / parent_param 由调用方传入。
+        边界职责（Port-Adapter 模式）：
+        - 字段选择（业务多 → 算法少）
+        - 字段名翻译（业务命名 → 算法命名，按 FuzzyEngine.FIELD_NAME_ALIAS）
+        - 上下文组装（machine / process_parameter / feedback / 规则查询参数）
 
-        iteration_trend 含义：
-        - improving: 持续改善，继续当前方向
-        - worsening: 持续恶化，需回退或换策略
-        - stable: 改善/恶化交替，陷入僵局
-        - final: 已达终态
+        业务编排层（Step 1）只懂业务；数据准备层（Step 2）是唯一翻译边界；
+        算法层（Step 3）是纯函数，不该懂业务命名。
+
+        与 parameter_init 的关键差异：
+        - parameter_init: mold_info + polymer_info + machine_info 完整提取 → 初始工艺推理
+        - optimization_infer: machine（InjectionUnit HMI 范围）+ baseline + defect → 缺陷修正推理
         """
-        tuning_history = (
-            TuningRecord.objects.filter(process_parameter=parent_param)
-            .order_by('-created_at')[:50]
+        machine = self._extract_machine_unit(condition)
+        polymer_abbreviation = (
+            condition.polymer.abbreviation
+            if condition.polymer else None
+        )
+        product_category = (
+            condition.mold.product_category
+            if condition.mold else None
         )
 
-        # 分析迭代趋势（仅取 parent_param 的调参记录）
-        trend = TuningService.analyze_iteration_trend(parent_param)
-        trend_dict = {
-            'trend': trend.trend,
-            'improving_count': trend.improving,
-            'worsening_count': trend.worsening,
-            'unchanged_count': trend.unchanged,
-            'last_result': trend.last_result,
-            'recommendation': trend.recommendation,
-        }
+        # 数据准备层职责：业务命名 → 算法命名（按算法约束翻译）
+        # 当前 FuzzyEngine.FIELD_NAME_ALIAS 为空 dict，业务命名 == 算法命名 → no-op
+        algorithm_params = _normalize_field_name_by_spec(
+            parameter, FuzzyEngine.FIELD_NAME_ALIAS,
+        )
 
         context: Dict[str, Any] = {
-            'process_condition': self._serialize_condition(condition),
-            # current_parameters 是算法关键输入：体现当前参数的高低水平，
-            # 算法需以此为起点计算调整量
-            'current_parameters': self._serialize_parameter(parent_param),
-            'defect_feedbacks': defect_feedbacks,
-            'tuning_history': [self._serialize_record(r) for r in tuning_history],
-            'iteration_trend': trend_dict,
+            'machine': machine,
+            'polymer_abbreviation': polymer_abbreviation,
+            'product_category': product_category,
+            'process_parameter': algorithm_params,
+            'feedback': feedback,
         }
-
-        if condition.injection_machine:
-            context['machine'] = self._get_machine_capabilities(condition.injection_machine)
 
         return context
 
     @staticmethod
-    def _serialize_condition(condition: ProcessCondition) -> Dict[str, Any]:
-        return {
-            'id': condition.id,
-            'condition_no': condition.condition_no,
-            'status': condition.status,
-            'origin_type': condition.origin_type,
-            'mold_id': condition.mold_id,
-            'injection_machine_id': condition.injection_machine_id,
-            'polymer_id': condition.polymer_id,
-            'shot_index': condition.shot_index,
-            'injection_index': condition.injection_index,
-        }
+    def _extract_machine_unit(condition: ProcessCondition) -> Dict[str, Any]:
+        """按 condition.injection_index 从 InjectionMoldingMachine.injection_units 选一台
 
-    @staticmethod
-    def _serialize_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
-        data: Dict[str, Any] = {}
-        for field in parameter._meta.fields:
-            if field.name.startswith('_') or field.name in ('id', 'created_at', 'updated_at'):
-                continue
-            value = getattr(parameter, field.name, None)
-            if value is not None:
-                data[field.name] = value
-        return data
+        返回该 InjectionUnit 的完整字段 dict（不含 FK），供算法自挑 HMI 范围字段。
+        未找到则返回 {}（不抛错，由下游 fail-fast 守卫阻断）。
+        """
+        machine = condition.injection_machine
+        if machine is None:
+            return {}
 
-    @staticmethod
-    def _serialize_record(record: TuningRecord) -> Dict[str, Any]:
-        return {
-            'id': record.id,
-            'defect_feedbacks': record.defect_feedbacks,
-            'result': record.result,
-            'adjustments': record.adjustments,
-            'previous_parameter': record.previous_parameter,
-            'created_at': record.created_at.isoformat() if record.created_at else None,
-        }
+        injection_index = condition.injection_index or 0
+        injection_units = list(machine.injection_units.all())
+        if injection_index < len(injection_units):
+            return _to_full_dict(injection_units[injection_index])
 
-    @staticmethod
-    def _get_machine_capabilities(machine) -> Dict[str, Any]:
-        return {
-            'id': machine.id,
-            'name': getattr(machine, 'name', str(machine)),
-            'capabilities': {},  # TODO: 后续根据实际设备模型完善
-        }
+        _logger.warning(
+            "[optimization_infer] injection_index=%s 超出 machine(id=%s) 的 injection_units（共 %s 个）",
+            injection_index, machine.id, len(injection_units),
+        )
+        return {}
 
     @staticmethod
     def _apply_recommendations_to_baseline(

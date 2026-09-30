@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 
 from process.engines.base_engine import AIEngineBase, Recommendation, EngineRegistry
 from process.engines.expert.initializer import ProcessInitializer
-from process.engines.expert.param_types import ProcessParams
+from process.engines.expert.param_types import ProductionParams
 
 
 class ExpertEngine(AIEngineBase):
@@ -69,47 +69,53 @@ class ExpertEngine(AIEngineBase):
         """
         判断是否可用
 
-        需要机器、材料、产品信息完整
+        与 infer_initial_params 一致：需要机器、材料、模具信息完整。
+        product 字段虽是 expert engine 可选的辅助信息，但 infer_initial_params
+        必填 mold。
         """
         return all([
             context.get('machine'),
             context.get('polymer'),
-            context.get('product'),
+            context.get('mold'),
         ])
 
-    def infer_initial_params(self, context: dict) -> ProcessParams:
+    def infer_initial_params(self, context: dict) -> ProductionParams:
         """
         推理初始工艺参数
 
-        使用专家规则基于机器/材料/产品信息推导初始工艺参数
+        使用专家规则基于机器/材料/模具信息推导初始工艺参数
 
         Args:
             context: 推理上下文
                 {
                     'machine': {...},      # 机器信息
                     'polymer': {...},      # 材料信息
-                    'product': {...},      # 产品信息
+                    'mold': {...},         # 模具信息（ProcessInitializer 必填）
                 }
 
         Returns:
-            ProcessParams: 工艺参数
+            ProductionParams: 完整生产工艺参数（注入机 + 模温机 + 热流道）
 
         Raises:
             ValueError: 必要信息不完整时
         """
         machine = context.get('machine', {})
         polymer = context.get('polymer', {})
-        product = context.get('product', {})
+        mold = context.get('mold', {})
 
         if not machine:
             raise ValueError("缺少机器信息")
         if not polymer:
             raise ValueError("缺少材料信息")
-        if not product:
-            raise ValueError("缺少产品信息")
+        if not mold:
+            raise ValueError("缺少模具信息")
 
-        initializer = ProcessInitializer(machine, polymer)
-        return initializer.derive(product)
+        initializer = ProcessInitializer(
+            mold_info=mold,
+            machine_info=machine,
+            polymer_info=polymer,
+        )
+        return initializer.derive()
 
 
 # 注册引擎

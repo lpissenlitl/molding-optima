@@ -66,18 +66,25 @@
  *
  * 注意：此组件只负责展示，不修改父级数据
  */
+import { computed } from 'vue'
 import type { Suggestion, SuggestionDirection } from '@/types/optimization'
 
-defineProps<{
+const props = defineProps<{
   suggestion?: Suggestion | null
 }>()
 
-/** 是否展示内容（不是空对象） */
-function hasContent(sug: Suggestion | null | undefined): boolean {
+/**
+ * 是否展示内容（有 groups 且至少一个 group 有 items）
+ * - 用 computed 而非 function：Vue 模板不会自动为函数名加 ()，
+ *   若写成函数 + v-if="!hasContent"，Vue 会把函数引用取反为 false，
+ *   导致永远走 v-else 分支，跳过空状态检查
+ * - computed 会响应 props.suggestion 变化，模板中自动解包 .value
+ */
+const hasContent = computed(() => {
+  const sug = props.suggestion
   if (!sug || !sug.groups || sug.groups.length === 0) return false
-  // 至少有一个 group 至少有一个 item
   return sug.groups.some(g => g.items && g.items.length > 0)
-}
+})
 
 /** 调整方向 → iconify 图标 */
 function directionIcon(dir: SuggestionDirection): string {

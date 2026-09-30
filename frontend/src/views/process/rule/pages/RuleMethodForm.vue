@@ -981,10 +981,6 @@ onMounted(() => {
   color: #303133;
 }
 
-.loading-placeholder {
-  height: 400px;
-}
-
 /* ============ 左编辑区 + 右流程图 ============ */
 .form-body {
   display: flex;

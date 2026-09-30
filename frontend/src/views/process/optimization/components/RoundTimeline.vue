@@ -31,7 +31,7 @@
         <div class="round-item__dot" :class="`round-item__dot--${round.type}`" />
         <div class="round-item__content">
           <div class="round-item__title">
-            第 {{ rounds.length - idx }} 轮
+            第 {{ round.seq_idx ?? idx + 1 }} 轮
             <el-tag size="small" :type="TYPE_TAG[round.type]">{{ TYPE_LABEL[round.type] }}</el-tag>
           </div>
           <div class="round-item__time">{{ round.created_at }}</div>
@@ -55,6 +55,8 @@ defineProps<{
     type: 'initial' | 'optimized' | 'manual'
     created_at: string
     summary?: string
+    /** 业务轮次号（后端 ProcessParameter.seq_idx）；未调过后端接口时为 null */
+    seq_idx?: number | null
   }>
   activeId?: number | string | null
 }>()

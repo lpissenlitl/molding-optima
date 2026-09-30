@@ -40,6 +40,11 @@ from .optimization_infer import (
     SuggestionSchema,
 )
 
+# ===== 调参记录 =====
+from .tuning import (
+    TuningRecordRequestSchema,
+)
+
 # ===== 仪表板统计 =====
 from .statistics import (
     DashboardTrendSchema,
@@ -72,6 +77,8 @@ __all__ = [
     "SuggestionItemSchema",
     "SuggestionGroupSchema",
     "SuggestionSchema",
+    # 调参记录
+    "TuningRecordRequestSchema",
     # 仪表板统计
     "DashboardTrendSchema",
     "DashboardOriginItemSchema",
