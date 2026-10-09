@@ -198,12 +198,6 @@ export const processTuningRecord = (data: {
 }) =>
   request({ url: '/api/processes/tuning/record/', method: 'post', data })
 
-export const processExpertSuggestion = (data: { condition_id: number; defect_feedback: any }) =>
-  request({ url: '/api/processes/expert/suggestion/', method: 'post', data })
-
-export const processExpertDefectTemplate = () =>
-  request({ url: '/api/processes/expert/defect-template/', method: 'get' })
-
 /**
  * 仪表板统计聚合（近 30 天趋势 + 起源类型分布）
  *
@@ -212,9 +206,14 @@ export const processExpertDefectTemplate = () =>
  * - origin_distribution：按 origin_type 分组的工艺数（饼图用）
  *
  * 响应：{status, msg, data: {trend: {...}, origin_distribution: [...]}}
+ *
+ * 迁移记录：
+ *   2026-10-08 v1 从 /api/processes/statistics/dashboard/ 迁出至 dashboard app
+ *   2026-10-08 v2 dashboard → analytic（无 -s 后缀，与 reporting 互补）
+ *   现 URL：/api/analytic/process-statistics/
  */
 export const dashboardStatistics = () =>
-  request({ url: '/api/processes/statistics/dashboard/', method: 'get' })
+  request({ url: '/api/analytic/process-statistics/', method: 'get' })
 
 // ==================== 规则管理 ====================
 

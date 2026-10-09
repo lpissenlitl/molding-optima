@@ -560,9 +560,8 @@ async function loadDetail(id: number) {
       ElMessage.error(res.msg || '未读取到注塑机信息，请稍后重试')
       router.push('/equipment/injection/list')
     }
-  } catch (err: any) {
-    console.error('[InjectionMachineForm] loadDetail failed:', err)
-    // 拦截器已统一 toast，这里只返回列表
+  } catch {
+    // 拦截器已统一 toast
     router.push('/equipment/injection/list')
   }
 }
@@ -630,8 +629,7 @@ async function handleSave() {
       // HTTP 200 但 status !== 0：业务失败（不走 catch，由调用方自己 toast）
       ElMessage.error(res.msg || '保存失败，请稍后重试')
     }
-  } catch (err: any) {
-    console.error('[InjectionMachineForm] save failed:', err)
+  } catch {
     // 拦截器已统一 toast
   } finally {
     submitting.value = false

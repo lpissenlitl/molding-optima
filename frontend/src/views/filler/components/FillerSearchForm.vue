@@ -13,6 +13,7 @@
     :items="search_items"
     :expandable="false"
     :control-width="200"
+    :label-width="'50px'"
     @search="handleSearch"
     @reset="handleReset"
   />
@@ -21,6 +22,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import BaseSearchForm from '@/components/BaseSearchForm.vue'
+import type { SearchItem } from '@/types/search-item'
 
 const props = defineProps({
   queryDetail: {
@@ -41,7 +43,7 @@ const emit = defineEmits<{
 
 const query_params = ref<any>({ ...props.queryDetail })
 
-const search_items = [
+const search_items: SearchItem[] = [
   { label: '名称', prop: 'name', type: 'autocomplete', level: 'basic', query: { table: 'filler', column: 'name' } },
   { label: '缩写', prop: 'abbreviation', type: 'autocomplete', level: 'basic', query: { table: 'filler', column: 'abbreviation' } },
   { label: '类别', prop: 'category', type: 'autocomplete', level: 'basic', query: { table: 'filler', column: 'category' } },

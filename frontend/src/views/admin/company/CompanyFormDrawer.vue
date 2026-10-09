@@ -299,8 +299,8 @@ async function loadCompanyInfo(companyId: number) {
     } else {
       ElMessage.error(res.msg || '加载公司详情失败')
     }
-  } catch (err) {
-    console.error('[CompanyFormDrawer] loadCompanyInfo failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     loading.value = false
   }
@@ -395,8 +395,8 @@ async function submit() {
     } else {
       ElMessage.error(res.msg || (isCreate.value ? '创建失败' : '更新失败'))
     }
-  } catch (err) {
-    console.error('[CompanyFormDrawer] submit failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     submitting.value = false
   }

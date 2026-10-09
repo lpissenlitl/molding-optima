@@ -213,8 +213,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[PolymerList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -281,8 +281,8 @@ async function deletePolymer(row: any) {
     } else {
       ElMessage.error(res.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[PolymerList] deletePolymer failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -307,8 +307,8 @@ async function batchDelete() {
     } else {
       ElMessage.error(res.msg || '批量删除失败')
     }
-  } catch (err) {
-    console.error('[PolymerList] batchDelete failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -326,8 +326,8 @@ async function exportListToExcel() {
     } else {
       ElMessage.error(res.msg || '导出失败')
     }
-  } catch (err) {
-    console.error('[PolymerList] exportListToExcel failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 

@@ -233,8 +233,8 @@ async function loadPermissionTree() {
     } else {
       ElMessage.error(res.msg || '权限树加载失败')
     }
-  } catch (err) {
-    console.error('[RoleFormDrawer] loadPermissionTree failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     tree_loading.value = false
   }
@@ -306,8 +306,8 @@ async function loadRoleDetail(roleId: number) {
     } else {
       ElMessage.error(res.msg || '加载角色详情失败')
     }
-  } catch (err) {
-    console.error('[RoleFormDrawer] loadRoleDetail failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     loading.value = false
   }
@@ -378,8 +378,8 @@ async function submit() {
     } else {
       ElMessage.error(res.msg || (isCreate.value ? '创建失败' : '更新失败'))
     }
-  } catch (err) {
-    console.error('[RoleFormDrawer] submit failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     submitting.value = false
   }

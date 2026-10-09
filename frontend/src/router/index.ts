@@ -1,29 +1,26 @@
-﻿// molding-optima 路由（Vue Router 4）
+﻿// 路由（Vue Router 4）
 // 设计原则：
 // - 路由是菜单的唯一真理之源（sidebar 自动从 router 生成）
 // - 默认 2 级菜单（视觉简洁），alwaysShow=true 可强制显示父级
 // - 中间层路由用 ParentView 占位（无真实页面）
-
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import ParentView from '@/views/layout/components/parentView.vue'
 
 const routes: RouteRecordRaw[] = [
-  // 登录（无 layout）
+  // 登录
   {
     path: '/login',
     name: 'login',
     component: () => import('@/views/login/index.vue'),
     meta: { hidden: true, title: '登录' },
   },
-
-  // 404（无 layout）
+  // 404
   {
     path: '/404',
     name: 'not-found',
     component: () => import('@/views/404.vue'),
     meta: { hidden: true, title: '404' },
   },
-
   // layout 容器
   {
     path: '/',
@@ -37,7 +34,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/index.vue'),
         meta: { title: '数据总览', icon: 'mdi:view-dashboard' },
       },
-
       // 模具管理（项目作为子菜单）
       {
         path: 'mold',
@@ -83,7 +79,6 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },
-
       // 工艺管理
       {
         path: 'process',
@@ -91,7 +86,6 @@ const routes: RouteRecordRaw[] = [
         redirect: '/process/parameter',
         meta: { title: '工艺管理', icon: 'mdi:chart-line' },
         children: [
-          // 工艺参数视图（基于 ProcessCondition 载体）
           {
             path: 'parameter',
             name: 'process-parameter',
@@ -160,8 +154,7 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },
-
-      // 设备管理（2026-09-09 重构：物理目录拆为 injection/auxiliary，路由统一前缀）
+      // 设备管理（injection/auxiliary 物理目录独立，路由统一前缀）
       {
         path: 'equipment',
         component: ParentView,
@@ -220,8 +213,7 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },
-
-      // 材料管理（2026-09-08 重构：物理目录独立，路由统一前缀）
+      // 材料管理（polymer/filler 物理目录独立，路由统一前缀）
       {
         path: 'material',
         component: ParentView,
@@ -278,7 +270,6 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },
-
       // 权限管理
       {
         path: 'admin',
@@ -340,8 +331,7 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-
-  // 兜底路由
+  // 兜底
   {
     path: '/:pathMatch(.*)*',
     redirect: '/404',

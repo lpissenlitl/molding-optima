@@ -310,9 +310,8 @@ async function loadDetail() {
       ElMessage.error(res.msg || '加载项目详情失败')
       router.push('/mold/project/list')
     }
-  } catch (err: any) {
-    console.error('[ProjectForm] loadDetail failed:', err)
-    ElMessage.error(err?.message || '加载项目详情异常')
+  } catch {
+    // 拦截器已统一 toast + console
     router.push('/mold/project/list')
   } finally {
     loading.value = false
@@ -355,9 +354,8 @@ async function handleSubmit() {
     } else {
       ElMessage.error(res.msg || (is_edit.value ? '保存失败' : '创建失败'))
     }
-  } catch (err: any) {
-    console.error('[ProjectForm] submit failed:', err)
-    ElMessage.error(err?.message || '提交异常')
+  } catch {
+    // 拦截器已统一 toast + console
   } finally {
     submitting.value = false
   }

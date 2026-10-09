@@ -240,8 +240,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res?.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[ProcessParameterList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -287,8 +287,8 @@ async function deleteOne(row: any) {
     } else {
       ElMessage.error(res?.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[ProcessParameterList] deleteOne failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -314,8 +314,8 @@ async function batchDelete() {
     } else {
       ElMessage.error(res?.msg || '批量删除失败')
     }
-  } catch (err) {
-    console.error('[ProcessParameterList] batchDelete failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 

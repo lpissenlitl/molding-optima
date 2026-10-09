@@ -383,8 +383,8 @@ async function transplantOriginalProcess() {
     } else {
       ElMessage({ message: (res as any).message || "工艺参数转换失败", type: "error" })
     }
-  } catch (error) {
-    console.error("工艺移植失败:", error)
+  } catch {
+    // 拦截器已统一 toast
     ElMessage({ message: "工艺参数转换失败，请重试", type: "error" })
   }
 }

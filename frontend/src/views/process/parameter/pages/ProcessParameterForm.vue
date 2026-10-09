@@ -134,9 +134,8 @@ async function loadForm() {
         return
       }
     }
-  } catch (err) {
-    console.error('[ProcessParameterForm] loadForm failed:', err)
-    ElMessage.error('加载失败')
+  } catch {
+    // 拦截器已统一 toast + console
     goBack()
     return
   } finally {
@@ -193,9 +192,8 @@ async function onSubmit() {
         ElMessage.error(res?.msg || '更新失败')
       }
     }
-  } catch (err) {
-    console.error('[ProcessParameterForm] onSubmit failed:', err)
-    ElMessage.error('保存失败')
+  } catch {
+    // 拦截器已统一 toast + console
   } finally {
     save_loading.value = false
   }

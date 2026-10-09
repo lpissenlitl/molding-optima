@@ -215,8 +215,8 @@ async function loadUsers() {
     if (res.status === 0) {
       user_options.value = res.data?.items || []
     }
-  } catch (err) {
-    console.error('[OrganizationFormDrawer] loadUsers failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -242,8 +242,8 @@ async function loadOrgInfo(orgId: number) {
     } else {
       ElMessage.error(res.msg || '加载组织详情失败')
     }
-  } catch (err) {
-    console.error('[OrganizationFormDrawer] loadOrgInfo failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     loading.value = false
   }
@@ -322,8 +322,8 @@ async function submit() {
     } else {
       ElMessage.error(res.msg || (isCreate.value ? '创建失败' : '更新失败'))
     }
-  } catch (err) {
-    console.error('[OrganizationFormDrawer] submit failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     submitting.value = false
   }

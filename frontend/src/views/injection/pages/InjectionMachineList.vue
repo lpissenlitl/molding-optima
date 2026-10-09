@@ -189,8 +189,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[InjectionMachineList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -236,8 +236,8 @@ async function exportListToExcel() {
     if (res.status === 0 && res.data?.url) {
       window.location.href = getReportDownloadUrl(res.data.url)
     }
-  } catch (err) {
-    console.error('[InjectionMachineList] exportListToExcel failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -260,8 +260,8 @@ async function deleteMachine(row: any) {
       ElMessage.success('删除成功!')
       fetchList()
     }
-  } catch (err) {
-    console.error('[InjectionMachineList] deleteMachine failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 

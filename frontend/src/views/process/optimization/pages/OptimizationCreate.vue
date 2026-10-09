@@ -339,7 +339,7 @@ watch(activeRound, (newRound) => {
   if (newRound?.parameter) {
     // JSON 深拷贝：structuredClone 对 Vue 3 reactive Proxy 可能抛 DataCloneError；
     // settingProcessForm 全是简单数值/数组/对象，JSON 拷贝足够
-    // （与 SettingProcess.saveOriginalSnapshot 保持一致）
+    // （SettingProcess 原 saveOriginalSnapshot() 在 2026-10-08 删除，本组件承担唯一的快照职责）
     originalParameter.value = JSON.parse(JSON.stringify(newRound.parameter))
   } else {
     originalParameter.value = null
@@ -420,8 +420,7 @@ async function loadDefectKeywords() {
     const items: RuleKeyword[] = res?.data?.items ?? res?.items ?? []
     defectKeywords.value = items.filter(k => k.category === 'defect')
     positionKeywords.value = items.filter(k => k.category === 'defect_position')
-  } catch (err: any) {
-    console.error('[loadDefectKeywords] 调用失败:', err)
+  } catch {
     // 拦截器已统一 toast，这里只恢复兜底状态
     defectKeywords.value = []
     positionKeywords.value = []
@@ -474,8 +473,7 @@ async function loadForm() {
       observationExpanded.value = false
     }
     loaded.value = true
-  } catch (err: any) {
-    console.error('[loadProcessForm] 调用失败:', err)
+  } catch {
     // 拦截器已统一 toast，这里只置 loaded 避免死锁
     loaded.value = true
   }
@@ -706,8 +704,7 @@ async function getInitialProcess() {
       + `parameter_id=${result?.data?.parameter_id ?? '-'}, `
       + `seq_idx=${result?.data?.seq_idx ?? '-'}${ruleHint}`,
     )
-  } catch (err: any) {
-    console.error('[getInitialProcess] 调用后端失败:', err)
+  } catch {
     // 拦截器已统一 toast
   } finally {
     initial_loading.value = false
@@ -832,8 +829,7 @@ async function getOptimizedProcess() {
     ElMessage.success(
       `优化工艺已生成 seq_idx=${seqIdx}, parameter_id=${paramId}，建议 ${groupCount} 类`,
     )
-  } catch (err: any) {
-    console.error('[getOptimizedProcess] 调用后端失败:', err)
+  } catch {
     // 拦截器已统一 toast（已在 getOptimizedProcess 顶部校验响应有效性）
   } finally {
     optimize_loading.value = false
@@ -877,8 +873,7 @@ async function onSubmit() {
       // HTTP 200 但 status !== 0：业务失败（不走 catch，由调用方自己 toast）
       ElMessage.error(res?.msg || '保存失败，请稍后重试')
     }
-  } catch (err: any) {
-    console.error('[OptimizationCreate] onSubmit 调用后端失败:', err)
+  } catch {
     // 拦截器已统一 toast
   } finally {
     save_loading.value = false
@@ -889,7 +884,16 @@ onMounted(() => {
   loadForm()
   loadDefectKeywords()
   syncConditionExpanded()
-  conditionSyncTimer = setInterval(syncConditionExpanded, 250)
+  /*
+   * 工艺条件折叠态同步定时器（2026-10-08：250ms → 1000ms）
+   * - 250ms 是历史默认值，但工艺条件塌缩/展开是低频操作（用户手工点击 header 触发），
+   *   不需要 4Hz 同步频率
+   * - 1000ms 仍保证按钮标签最多 1s 内跟上，UX 可接受
+   * - 每秒 4 次 → 每秒 1 次，CPU 占用降低 ~75%
+   * - 注意：1000ms 是 dev-only 优化（这轮 setInterval 是开发期体验问题）；
+   *     若用户对同步延迟敏感，可改用 ProcessCondition watchExpanded 事件回调（消除轮询）
+   */
+  conditionSyncTimer = setInterval(syncConditionExpanded, 1000)
 
   /*
    * 持久化 watch —— 挂载后才挂（不 immediate）

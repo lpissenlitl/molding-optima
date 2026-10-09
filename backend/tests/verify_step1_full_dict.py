@@ -19,8 +19,8 @@ import django
 django.setup()
 
 from process.models import ProcessParameter, ProcessCondition
-from process.services.optimization_infer import (
-    OptimizationInferService,
+from process.services.parameter_optimize import (
+    ParameterOptimizeService,
     _to_full_dict,
 )
 
@@ -76,28 +76,28 @@ print(f"[3] ORM 元数据 / 业务字段 / 工艺字段都保留: OK ({len(expec
 
 
 # ---------- _serialize_parameter 已删除（Step 1 直接用 _to_full_dict）----------
-from process.services import optimization_infer as service_module
+from process.services import parameter_optimize as service_module
 
-assert not hasattr(service_module.OptimizationInferService, "_serialize_parameter"), (
+assert not hasattr(service_module.ParameterOptimizeService, "_serialize_parameter"), (
     "_serialize_parameter 应已删除（Step 1 直接用 _to_full_dict）"
 )
 print(f"[4] _serialize_parameter 已删除（Step 1 直接用 _to_full_dict）: OK")
 
 
 # ---------- _build_condition_data 已删除（build condition 职责移到 Step 2）----------
-assert not hasattr(service_module.OptimizationInferService, "_build_condition_data"), (
+assert not hasattr(service_module.ParameterOptimizeService, "_build_condition_data"), (
     "_build_condition_data 应已删除（build condition 移到 Step 2 _build_engine_context）"
 )
-assert not hasattr(service_module.OptimizationInferService, "_serialize_condition"), (
+assert not hasattr(service_module.ParameterOptimizeService, "_serialize_condition"), (
     "_serialize_condition 应已删除"
 )
-assert not hasattr(service_module.OptimizationInferService, "_serialize_machine"), (
+assert not hasattr(service_module.ParameterOptimizeService, "_serialize_machine"), (
     "_serialize_machine 应已删除"
 )
-assert not hasattr(service_module.OptimizationInferService, "_serialize_polymer"), (
+assert not hasattr(service_module.ParameterOptimizeService, "_serialize_polymer"), (
     "_serialize_polymer 应已删除"
 )
-assert not hasattr(service_module.OptimizationInferService, "_serialize_mold"), (
+assert not hasattr(service_module.ParameterOptimizeService, "_serialize_mold"), (
     "_serialize_mold 应已删除"
 )
 print(f"\n[5] _build_condition_data + 4 个 _serialize_* 已删除: OK")

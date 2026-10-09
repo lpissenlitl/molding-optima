@@ -18,8 +18,8 @@ import django
 django.setup()
 
 from extensions.exceptions import BizException, ERROR_REQUIRED_FIELD
-from process.services.optimization_infer import (
-    OptimizationInferService,
+from process.services.parameter_optimize import (
+    ParameterOptimizeService,
     _DEFECTFREE_KEYWORD_NAME,
 )
 
@@ -31,7 +31,7 @@ print("=" * 70)
 
 def expect_fail(feedback: dict, expected_substr: str, case_name: str):
     try:
-        OptimizationInferService._validate_feedback(feedback)
+        ParameterOptimizeService._validate_feedback(feedback)
     except BizException as e:
         assert e.error_code == ERROR_REQUIRED_FIELD, (
             f"[{case_name}] expected ERROR_REQUIRED_FIELD, got {e.error_code}"
@@ -47,7 +47,7 @@ def expect_fail(feedback: dict, expected_substr: str, case_name: str):
 
 def expect_ok(feedback: dict, case_name: str):
     try:
-        OptimizationInferService._validate_feedback(feedback)
+        ParameterOptimizeService._validate_feedback(feedback)
         print(f"[PASS] {case_name}: 合法")
     except Exception as e:
         print(f"[FAIL] {case_name}: 不应抛错但抛了: {e}")

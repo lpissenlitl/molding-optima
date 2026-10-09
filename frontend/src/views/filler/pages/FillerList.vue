@@ -163,8 +163,8 @@ async function getListData() {
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[FillerList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -210,8 +210,8 @@ async function deleteFiller(row: any) {
     } else {
       ElMessage.error(res.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[FillerList] deleteFiller failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -229,8 +229,8 @@ async function exportListToExcel() {
     } else {
       ElMessage.error(res.msg || '导出失败')
     }
-  } catch (err) {
-    console.error('[FillerList] exportListToExcel failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 </script>

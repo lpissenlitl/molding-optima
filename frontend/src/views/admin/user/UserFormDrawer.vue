@@ -205,8 +205,8 @@ async function loadOrganizations() {
       // 树形结构：根节点是公司根组织，包含 children
       organizations.value = res.data ? [res.data] : []
     }
-  } catch (err) {
-    console.error('[UserFormDrawer] loadOrganizations failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -217,8 +217,8 @@ async function loadRoles() {
     if (res.status === 0) {
       roles.value = res.data.items || []
     }
-  } catch (err) {
-    console.error('[UserFormDrawer] loadRoles failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -242,8 +242,8 @@ async function loadUserDetail(userId: number) {
     } else {
       ElMessage.error(res.msg || '加载用户详情失败')
     }
-  } catch (err) {
-    console.error('[UserFormDrawer] loadUserDetail failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     loading.value = false
   }
@@ -322,8 +322,8 @@ async function submit() {
     } else {
       ElMessage.error(res.msg || (isCreate.value ? '创建失败' : '更新失败'))
     }
-  } catch (err) {
-    console.error('[UserFormDrawer] submit failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     submitting.value = false
   }

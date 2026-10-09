@@ -273,8 +273,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[CompanyList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -374,8 +374,8 @@ async function deleteCompany(row: any) {
     } else {
       ElMessage.error(res.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[CompanyList] deleteCompany failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -402,8 +402,8 @@ async function batchDelete() {
     } else {
       ElMessage.error(res.msg || '批量删除失败')
     }
-  } catch (err) {
-    console.error('[CompanyList] batchDelete failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -433,8 +433,8 @@ async function toggleAssume(row: any, enable: boolean) {
       // 从后端重新拉完整用户信息（同步 organization_id / permissions 等字段）
       try {
         await userStore.fetchInfo()
-      } catch (err) {
-        console.error('[CompanyList] fetchInfo after assume failed:', err)
+      } catch {
+        // 拦截器已统一 toast
       }
 
       ElMessage.success(
@@ -447,9 +447,8 @@ async function toggleAssume(row: any, enable: boolean) {
     } else {
       ElMessage.error(res.msg || '操作失败')
     }
-  } catch (err) {
-    console.error('[CompanyList] toggleAssume failed:', err)
-    ElMessage.error('操作失败')
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     row._assume_loading = false
   }

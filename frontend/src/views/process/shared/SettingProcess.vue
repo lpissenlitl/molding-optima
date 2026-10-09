@@ -146,7 +146,6 @@
               v-model="vp_switch.mode"
               placeholder="请选择"
               :class="{ 'field-changed': isFieldChanged('vp_switch.mode') }"
-              @change="vpSwitchModeChange"
             >
               <el-option
                 v-for="option in vp_switch_mode_options"
@@ -709,9 +708,15 @@ export default {
     }
   },
   mounted() {
-    this.$nextTick(() => {
-      this.saveOriginalSnapshot()
-    })
+    /*
+     * 2026-10-08 清理：不再调 saveOriginalSnapshot()
+     * - 原因：与父级 OptimizationCreate 的 originalParameter watch 重复
+     *   （父级 watch(activeRound) 已经 JSON deep clone 了当前 round.parameter，
+     *    并通过 :original-process="originalParameter" 传到本组件）
+     * - SettingProcess 自身的 originalProcess watch（immediate: true）会把 prop
+     *   同步到 this.original_process，所以 mounted 里再 clone 一遍是浪费
+     * - 卸载 saveOriginalSnapshot() / resetSnapshot() 方法（dead code，从未被外部调用）
+     */
   },
   methods: {
     /**
@@ -766,23 +771,14 @@ export default {
       
       return current_value !== original_value
     },
-    
-    /**
-     * 保存原始数据快照
+
+    /*
+     * 2026-10-08：删除 saveOriginalSnapshot() / resetSnapshot() 方法
+     * - 这两个方法在 2026-10-08 之前由 mounted() 调用，但调用已被移除（避免与父级 originalParameter watch 重复深克隆）
+     * - 全文搜索确认无外部调用方（仅 SettingProcess 内部使用）
+     * - original_process 现在完全由 originalProcess prop watch (immediate: true) 同步
      */
-    saveOriginalSnapshot() {
-      if (this.setting_process) {
-        this.original_process = JSON.parse(JSON.stringify(this.setting_process))
-      }
-    },
-    
-    /**
-     * 重置快照（保存成功后调用）
-     */
-    resetSnapshot() {
-      this.saveOriginalSnapshot()
-    },
-    
+
     stageHeader(type = "injection", max_stage = 6) {
       const label_arr = []
       if (type === "barrel_temperature") {
@@ -841,10 +837,6 @@ export default {
       }
     },
 
-    vpSwitchModeChange(mode) {
-      console.log(mode)
-    },
-    
     getVpSwitchModeLabel(mode) {
       const mode_map = new Map(this.vp_switch_mode_options.map(item => [item.value, item.label]))
       return mode_map.get(mode) || "-"

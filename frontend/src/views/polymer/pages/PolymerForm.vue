@@ -416,9 +416,8 @@ async function loadAvailableFillers() {
     } else {
       ElMessage.warning(res.msg || '加载填充物库失败')
     }
-  } catch (err: any) {
-    console.error('[PolymerForm] loadAvailableFillers failed:', err)
-    ElMessage.error(err?.message || '加载填充物库异常')
+  } catch {
+    // 拦截器已统一 toast + console
   }
 }
 
@@ -662,9 +661,8 @@ async function handleSave() {
     } else {
       ElMessage.error(res.msg || '保存失败')
     }
-  } catch (err: any) {
-    console.error('[PolymerForm] save failed:', err)
-    ElMessage.error(err?.message || '提交异常')
+  } catch {
+    // 拦截器已统一 toast + console
   } finally {
     submitting.value = false
   }
@@ -697,9 +695,8 @@ async function loadDetail(id: number) {
       ElMessage.error(res.msg || '未读取到相关材料信息')
       router.push('/material/polymer/list')
     }
-  } catch (err: any) {
-    console.error('[PolymerForm] loadDetail failed:', err)
-    ElMessage.error(err?.message || '加载材料详情异常')
+  } catch {
+    // 拦截器已统一 toast + console
     router.push('/material/polymer/list')
   } finally {
     loading.value = false

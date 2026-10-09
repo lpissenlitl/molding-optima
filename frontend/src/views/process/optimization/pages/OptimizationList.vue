@@ -315,8 +315,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res?.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[OptimizationList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -362,8 +362,8 @@ async function openHistory(row: any) {
     } else {
       ElMessage.error(res?.msg || '加载调机历史失败')
     }
-  } catch (err) {
-    console.error('[OptimizationList] openHistory failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     history_loading.value = false
   }
@@ -409,8 +409,8 @@ async function deleteOne(row: any) {
     } else {
       ElMessage.error(res?.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[OptimizationList] deleteOne failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -435,8 +435,8 @@ async function batchDelete() {
     } else {
       ElMessage.error(res?.msg || '批量删除失败')
     }
-  } catch (err) {
-    console.error('[OptimizationList] batchDelete failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -449,9 +449,11 @@ onMounted(() => {
 })
 </script>
 
-<style lang="scss" scoped>
+<style scoped lang="scss">
 .optimization-list {
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .history-item {
@@ -468,13 +470,18 @@ onMounted(() => {
   }
 }
 
-:deep(.row-action-buttons) {
+.row-action-buttons {
   display: inline-flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
+  justify-content: center;
+
+  .el-button + .el-button {
+    margin-left: 0;
+  }
 }
 
 .text-danger {
-  color: var(--el-color-danger);
+  color: #f56c6c;
 }
 </style>

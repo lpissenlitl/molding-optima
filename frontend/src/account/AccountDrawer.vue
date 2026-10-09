@@ -406,9 +406,8 @@ async function loadProfile() {
     profileForm.engineer_name = userStore.engineer_name || ''
     profileForm.email = userStore.email || ''
     profileForm.phone = userStore.phone || ''
-  } catch (err) {
-    // 拦截器已提示
-    console.error('[AccountDrawer] loadProfile failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     loading.value = false
   }
@@ -440,9 +439,8 @@ async function saveProfile() {
     // 刷新 store 拿到最新值
     await userStore.fetchInfo()
     ElMessage.success('个人信息已更新')
-  } catch (err) {
-    // 拦截器已提示
-    console.error('[AccountDrawer] saveProfile failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     profileSaving.value = false
   }
@@ -471,8 +469,8 @@ async function savePassword() {
     userStore.clear()
     visible.value = false
     router.push('/login')
-  } catch (err) {
-    console.error('[AccountDrawer] savePassword failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     passwordSaving.value = false
   }

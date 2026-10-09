@@ -395,7 +395,7 @@ async function safeCall<T>(fn: () => Promise<any>, fallback: T): Promise<T> {
     }
     return fallback
   } catch (err) {
-    console.error('[Dashboard] API 调用失败:', err)
+    if (import.meta.env.DEV) console.error('[Dashboard] API 调用失败:', err)
     return fallback
   }
 }

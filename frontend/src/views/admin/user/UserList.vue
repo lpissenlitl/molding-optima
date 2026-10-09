@@ -263,9 +263,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
-  } catch (err) {
-    // request 拦截器已统一处理错误
-    console.error('[UserList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -375,8 +374,8 @@ async function deleteUser(row: any) {
     } else {
       ElMessage.error(res.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[UserList] deleteUser failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -404,8 +403,8 @@ async function batchDelete() {
     } else {
       ElMessage.error(res.msg || '批量删除失败')
     }
-  } catch (err) {
-    console.error('[UserList] batchDelete failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -445,8 +444,8 @@ async function confirmResetPwd() {
     } else {
       ElMessage.error(res.msg || '重置失败')
     }
-  } catch (err) {
-    console.error('[UserList] resetPwd failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     reset_pwd_loading.value = false
   }

@@ -25,5 +25,6 @@ urlpatterns = [
         path('', include('filecenter.urls')),
         path('', include('reporting.urls')),
         path('', include('process.urls')),
+        path('', include('analytic.urls')),
     ])),
 ]

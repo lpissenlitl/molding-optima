@@ -240,8 +240,8 @@ async function fetchList() {
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
-  } catch (err) {
-    console.error('[OrgList] fetchList failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   } finally {
     list_loading.value = false
   }
@@ -330,8 +330,8 @@ async function onNodeDelete(node: any, data: any) {
     } else {
       ElMessage.error(res.msg || '删除失败')
     }
-  } catch (err) {
-    console.error('[OrgList] onNodeDelete failed:', err)
+  } catch {
+    // 拦截器已统一 toast
   }
 }
 
@@ -421,8 +421,8 @@ async function handleDragEnd(
       ElMessage.error(res.msg || '调整失败')
       await fetchList() // 回滚本地状态
     }
-  } catch (err) {
-    console.error('[OrgList] handleDragEnd failed:', err)
+  } catch {
+    // 拦截器已统一 toast
     await fetchList()
   }
 }

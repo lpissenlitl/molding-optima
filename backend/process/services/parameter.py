@@ -1,438 +1,240 @@
 """
-molding-optima 工艺基础服务
+工艺参数服务（parameter service）
 
-从 molding-expert 同步对齐，去除陈旧的 injection_unit_id 字段，
-改用 injection_machine + injection_index 业务规则推导。
+业务核心实体：ProcessParameter（工艺参数 / 调机轮次）
+依附实体：ProcessCondition（工艺条件）
+
+业务模型：
+- parameter 是 condition 的子资源，必须依附 condition（ForeignKey）
+- parameter 之间通过 parent_param 自关联，构成版本树
+- seq_idx 在同一父节点下递增（全局自增也保留语义：condition 内创建顺序）
+
+应用场景：
+- 单条 parameter CRUD（按 parameter_id）—— 与 condition.py 的"按 condition_id 操作"区分
+- 版本树查询（按 condition_id / parameter_id）
+- 手动版本管理（用户不走算法，纯手动微调字段创建新版本）
+
+设计原则：
+- 本服务专注于"按 parameter_id 操作"具体的某一条 parameter
+- 关系字段（process_condition / parent_param / seq_idx）不允许通过本服务修改
+- 版本树查询不影响数据（只读）
+- 手动版本管理走事务，保证 seq_idx + parent_param 一致性
+
+合并历史：
+- 2026-10-09：独立出来。原 parameter.py 的所有函数都按 condition_id 操作（命名误导），
+  已合并入 condition.py。本文件专门处理"按 parameter_id 操作"和版本树管理。
 """
 import logging
-from datetime import datetime, date, time
+from datetime import datetime
+from typing import Dict, Any, List
 
-from django.db.models import Q, Count
+from django.db import transaction
+from django.db.models import Max
 
-from process.models import ProcessCondition, ProcessParameter
-from masterdata.models import Mold, GatingSystem, InjectionMoldingMachine, Polymer
-from extensions.exceptions import ERROR_ILLEGAL_ARGUMENT, BizException, ERROR_DATA_NOT_FOUND, ERROR_REQUIRED_FIELD
-from utils.validation import validate_pk, validate_id_list
-from utils.db import build_filters, parse_ordering, paginate_queryset
-from utils.objects import safe_get
-from utils.code_generator import generate_unique_code
-from process.services.parameter_transformer import _transform_frontend_to_flat, _construct_setting_process_frontend
+from extensions.exceptions import (
+    BizException, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT,
+)
+from process.models import ProcessParameter, ProcessCondition
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
-# ============================================================
-# 辅助函数
-# ============================================================
+# ============================================================================
+# 私有工具函数
+# ============================================================================
 
-def _create_process_condition(company_id: int, organization_id: int, **kwargs):
+def _get_parameter_by_id(parameter_id: int) -> ProcessParameter:
+    """获取工艺参数对象（带 condition + parent 预加载）
+
+    Raises:
+        BizException: 工艺参数不存在
     """
-    创建工艺条件
+    try:
+        return ProcessParameter.all_objects.select_related(
+            "process_condition",
+            "parent_param",
+        ).get(id=parameter_id, is_deleted=False)
+    except ProcessParameter.DoesNotExist:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"工艺参数不存在: id={parameter_id}")
 
-    与 molding-expert 差异：
-      - 不再保存 injection_unit_id 字段（molding-optima 模型中无此字段）
-      - 注射单元通过 injection_machine + injection_index 业务规则推导
+
+def _serializable_parameter_dict(parameter: ProcessParameter) -> dict:
+    """构造返回的 parameter 字典
+
+    注：to_dict() 已处理主字段；这里补上 parent_param_id（FK 转 _id）。
     """
-    mold_id = kwargs.get("mold_id")
-    injection_machine_id = kwargs.get("injection_machine_id")
-    polymer_id = kwargs.get("polymer_id")
+    data = parameter.to_dict()
+    # to_dict() 已经把 process_condition_id 暴露为 process_condition_id
+    # 但 parent_param 可能被 to_dict() 排除（反向关系）；手动补
+    if "parent_param_id" not in data:
+        data["parent_param_id"] = parameter.parent_param_id
+    return data
 
-    if not mold_id:
-        raise BizException(ERROR_REQUIRED_FIELD, "模具信息必须存在，且不能为空")
-    if not injection_machine_id:
-        raise BizException(ERROR_REQUIRED_FIELD, "注塑机信息必须存在，且不能为空")
-    if not polymer_id:
-        raise BizException(ERROR_REQUIRED_FIELD, "材料信息必须存在，且不能为空")
 
-    mold = Mold.objects.prefetch_related("gating_systems").get(id=mold_id)
-    gating_systems = mold.gating_systems.all()
-    machine = InjectionMoldingMachine.objects.prefetch_related("injection_units").get(id=injection_machine_id)
-    injection_units = machine.injection_units.all()
-    polymer = Polymer.objects.get(id=polymer_id)
+# ============================================================================
+# 单条 CRUD（按 parameter_id）
+# ============================================================================
 
-    # 获取浇注系统信息
-    shot_index = kwargs.get("shot_index", 0)
-    if gating_systems.count() == 1:
-        gating_system = gating_systems.first()
-    elif gating_systems.count() > 1 and shot_index < gating_systems.count():
-        gating_system = gating_systems[shot_index]
-    else:
-        raise BizException(ERROR_DATA_NOT_FOUND, "无效注射次序索引")
+def get_parameter(parameter_id: int) -> dict:
+    """获取工艺参数详情（按 parameter_id）
 
-    # 获取注射单元信息（业务规则：injection_machine + injection_index → InjectionUnit）
-    injection_index = kwargs.get("injection_index", 0)
-    if injection_units.count() == 1:
-        injection_unit = machine.injection_units.first()
-    elif injection_units.count() > 1 and injection_index < injection_units.count():
-        injection_unit = injection_units[injection_index]
-    else:
-        raise BizException(ERROR_DATA_NOT_FOUND, "无效注射单元索引")
+    区别于 condition.get_condition(condition_id)：
+    - condition.get_condition 返回 condition + 最新 parameter
+    - 本函数返回**具体某一条** parameter（任意版本）
 
-    # === 后端自动生成的不可变快照（创建时锁定）===
-    process_context_snapshot = {
-        "version": "1.0",
-        "captured_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "mold": {
-            "mold_no": mold.mold_no,
-            "mold_name": mold.mold_name,
-            "mold_type": mold.mold_type,
-            "cavity_layout": mold.cavity_layout,
-            "shot_index": shot_index,
-            "gating_system": {
-                "runner_type": gating_system.runner_type,
-            }
-        },
-        "machine": {
-            "brand": machine.brand,
-            "model": machine.model,
-            "device_no": machine.device_no,
-            "machine_type": machine.machine_type,
-            "drive_system": machine.drive_system,
-            "unit_count": machine.unit_count,
-            "injection_index": injection_index,
-            "injection_unit": {
-                "screw_diameter": injection_unit.screw_diameter,
-            },
-        },
-        "polymer": {
-            "abbreviation": polymer.abbreviation,
-            "grade": polymer.grade,
-            "manufacturer": polymer.manufacturer,
-        },
-        "hmi_to_std_mapping": {
-            "IP": {
-                "HMI_unit": injection_unit.pressure_unit,
-                "HMI_max": injection_unit.max_set_injection_pressure,
-                "std_unit": "MPa",
-                "std_max": injection_unit.max_injection_pressure,
-            },
-            "IV": {
-                "HMI_unit": injection_unit.speed_unit,
-                "HMI_max": injection_unit.max_set_injection_speed,
-                "std_unit": "mm/s",
-                "std_max": injection_unit.max_injection_speed,
-            },
-            "PP": {
-                "HMI_unit": injection_unit.pressure_unit,
-                "HMI_max": injection_unit.max_set_holding_pressure,
-                "std_unit": "MPa",
-                "std_max": injection_unit.max_holding_pressure,
-            },
-            "PV": {
-                "HMI_unit": injection_unit.speed_unit,
-                "HMI_max": injection_unit.max_set_holding_speed,
-                "std_unit": "MPa",
-                "std_max": injection_unit.max_holding_speed,
-            },
-            "MP": {
-                "HMI_unit": injection_unit.pressure_unit,
-                "HMI_max": injection_unit.max_set_metering_back_pressure,
-                "std_unit": "MPa",
-                "std_max": injection_unit.max_metering_back_pressure,
-            },
-            "MSR": {
-                "HMI_unit": injection_unit.screw_rotation_unit,
-                "HMI_max": injection_unit.max_set_screw_rotation_speed,
-                "std_unit": "rpm",
-                "std_max": injection_unit.max_screw_rotation_speed,
-            },
-            "MBP": {
-                "HMI_unit": injection_unit.back_pressure_unit,
-                "HMI_max": injection_unit.max_set_metering_back_pressure,
-                "std_unit": "MPa",
-                "std_max": injection_unit.max_metering_back_pressure,
-            },
-            "DP": {
-                "HMI_unit": injection_unit.pressure_unit,
-                "HMI_max": injection_unit.max_set_decompression_pressure,
-                "std_unit": "MPa",
-                "std_max": injection_unit.max_decompression_pressure,
-            },
-            "DV": {
-                "HMI_unit": injection_unit.speed_unit,
-                "HMI_max": injection_unit.max_set_decompression_speed,
-                "std_unit": "mm/s",
-                "std_max": injection_unit.max_decompression_speed,
-            },
-        }
+    Args:
+        parameter_id: 工艺参数 ID
+
+    Returns:
+        dict: 工艺参数详情（含 process_condition_id, parent_param_id, seq_idx 等）
+    """
+    parameter = _get_parameter_by_id(parameter_id)
+    return _serializable_parameter_dict(parameter)
+
+
+@transaction.atomic
+def update_parameter(parameter_id: int, **kwargs) -> dict:
+    """更新工艺参数字段（不影响 condition 和其他 parameter）
+
+    区别于 condition.update_condition(condition_id, ...):
+    - condition.update_condition 修改 condition 字段 + 最新一条 parameter
+    - 本函数修改**任意指定** parameter（不影响 condition 字段）
+
+    禁止通过本接口修改关系字段（id / process_condition / parent_param / seq_idx），
+    防止破坏版本树结构。
+
+    Args:
+        parameter_id: 工艺参数 ID
+        **kwargs: 待更新的字段（白名单自动过滤非法字段）
+
+    Returns:
+        dict: 更新后的工艺参数
+    """
+    parameter = _get_parameter_by_id(parameter_id)
+
+    # 过滤禁止字段（防止破坏关系 / 时间戳 / 主键）
+    forbidden_fields = {
+        "id", "process_condition", "process_condition_id",
+        "parent_param", "parent_param_id", "seq_idx",
+        "created_at", "updated_at", "is_deleted", "deleted_at",
+        "parameter_no",
     }
+    clean_kwargs = {k: v for k, v in kwargs.items() if k not in forbidden_fields}
 
-    # === 前端传入的上下文覆盖值（业务可调）===
-    # 优先使用调用方传入的 process_context（前端可控）
-    # 未传则为空 dict，后续算法层可从 snapshot 提取默认值
-    process_context = kwargs.pop("process_context", None) or {}
+    if not clean_kwargs:
+        raise BizException(
+            ERROR_ILLEGAL_ARGUMENT,
+            "update_parameter: 至少需要一个可更新字段",
+        )
 
-    # molding-optima 适配：
-    # - 删除 injection_unit_id 字段（模型中无此字段）
-    # - 多租户用 company_id / organization_id（BusinessBaseModel FK 的 _id 后缀）
-    kwargs.update({
-        "company_id": company_id,
-        "organization_id": organization_id,
-        "status": "draft",
-        "condition_no": generate_unique_code("PCOND"),
-        "origin_type": "manual_creation",
-        "process_context": process_context,
-        "process_context_snapshot": process_context_snapshot,
-    })
-    return ProcessCondition.create_with_check(**kwargs)
+    parameter.update_info(**clean_kwargs)
+    _logger.info(
+        "[parameter] update_parameter: id=%s, fields=%s",
+        parameter_id, sorted(clean_kwargs.keys()),
+    )
+    return _serializable_parameter_dict(parameter)
 
 
-# ============================================================
-# 创建 / 查询 / 更新 / 删除
-# ============================================================
+@transaction.atomic
+def delete_parameter(parameter_id: int) -> None:
+    """删除单条工艺参数（不影响 condition 和其他 parameter）
 
-def create_process_parameter(company_id: int, organization_id: int, **kwargs):
-    """创建工艺参数"""
-    condition_kwargs = kwargs.get("condition")
-    parameter_kwargs = kwargs.get("parameter")
+    业务场景：删除某个无效的调整版本（保留历史链中的其他版本）。
 
-    if not condition_kwargs:
-        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺条件信息存在")
-    if not parameter_kwargs:
-        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺参数信息存在")
+    Args:
+        parameter_id: 工艺参数 ID
 
-    condition = _create_process_condition(company_id, organization_id, **condition_kwargs)
-    parameter_kwargs.update({
-        "company_id": company_id,
-        "organization_id": organization_id,
-        "process_condition_id": condition.id,
-        "param_code": generate_unique_code("PPARA"),
-        "param_source": "unknown",
-    })
-    parameter = ProcessParameter.create_with_check(**parameter_kwargs)
-    return parameter.to_dict()
-
-
-def create_process_parameter_frontend(company_id: int, organization_id: int, **kwargs):
+    注：若该 parameter 有后代（children），删除后后代的 parent_param_id 仍指向
+        已删除的 record。这会造成"孤儿后代"。调用前请确认无 children 或预期承担。
     """
-    创建工艺参数 (前端嵌套结构格式)
+    parameter = _get_parameter_by_id(parameter_id)
+
+    # 防御——有 children 时不允许直接删除（避免孤儿）
+    has_children = ProcessParameter.objects.filter(
+        parent_param_id=parameter_id,
+        is_deleted=False,
+    ).exists()
+    if has_children:
+        raise BizException(
+            ERROR_ILLEGAL_ARGUMENT,
+            f"工艺参数 id={parameter_id} 有未删除的后代版本，不允许直接删除。"
+            f"请先处理后代或使用软删除标记。",
+        )
+
+    parameter.soft_delete()
+    _logger.info("[parameter] delete_parameter: id=%s", parameter_id)
+
+
+# ============================================================================
+# 版本树查询（只读）
+# ============================================================================
+
+def get_parameter_tree(condition_id: int) -> List[dict]:
+    """获取工艺条件下的版本树（树形结构）
+
+    业务：工艺优化页 / 工艺详情页展示调机历史树。
+
+    Args:
+        condition_id: 工艺条件 ID
+
+    Returns:
+        list: 根节点列表（每个节点含 children 字段递归子树）
+            [
+                {
+                    "id": 1,
+                    "seq_idx": 1,
+                    "parent_param_id": None,
+                    "param_source": "algorithm_init",
+                    "created_at": "2026-10-09 ...",
+                    "updated_at": "2026-10-09 ...",
+                    "children": [
+                        {
+                            "id": 2,
+                            "seq_idx": 2,
+                            "parent_param_id": 1,
+                            "param_source": "ai_recommended",
+                            "created_at": "...",
+                            "children": [...]
+                        }
+                    ]
+                }
+            ]
     """
-    condition_kwargs = kwargs.get("condition")
-    parameter_nested = kwargs.get("parameter", {})
-    setting_process = parameter_nested.get("setting_process")
+    if not ProcessCondition.objects.filter(id=condition_id, is_deleted=False).exists():
+        raise BizException(ERROR_DATA_NOT_FOUND, f"工艺条件不存在: id={condition_id}")
 
-    if not condition_kwargs:
-        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺条件信息存在")
-    if not setting_process:
-        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺参数信息存在")
-
-    # 转换前端嵌套结构为扁平格式
-    parameter_kwargs = _transform_frontend_to_flat(setting_process)
-
-    condition = _create_process_condition(company_id, organization_id, **condition_kwargs)
-    parameter_kwargs.update({
-        "company_id": company_id,
-        "organization_id": organization_id,
-        "process_condition_id": condition.id,
-        "param_code": generate_unique_code("PPARA"),
-        "param_source": "unknown",
-    })
-    parameter = ProcessParameter.create_with_check(**parameter_kwargs)
-
-    # 返回前端格式
-    return get_process_parameter_frontend(condition.id)
-
-
-def _get_process_condition_by_id(condition_id: int) -> ProcessCondition:
-    """获取工艺条件对象"""
-    condition_id = validate_pk(condition_id, "工艺条件ID")
-    condition = ProcessCondition.objects.filter(
-        id=condition_id
-    ).prefetch_related(
-        "process_parameters", "mold__gating_systems", "injection_machine__injection_units",
-    ).select_related(
-        "mold", "injection_machine", "polymer"
-    ).first()
-    if not condition:
-        raise BizException(ERROR_DATA_NOT_FOUND, "工艺初始化不存在")
-    return condition
-
-
-def _construct_return_parameter(condition: ProcessCondition):
-    """构造返回工艺参数记录"""
-    ret_dict = condition.to_dict(include_rvs=True)
-    ret_dict.update({
-        "mold_info": condition.mold.to_dict(include_rvs=True),
-        "machine_info": condition.injection_machine.to_dict(include_rvs=True),
-        "polymer_info": condition.polymer.to_dict(include_rvs=True),
-    })
-
-    return ret_dict
-
-
-def get_process_parameter(condition_id: int):
-    """获取工艺参数"""
-    condition = _get_process_condition_by_id(condition_id)
-    return _construct_return_parameter(condition)
-
-
-def get_process_parameter_flat(condition_id: int):
-    """
-    获取工艺参数记录 (扁平化格式)
-    """
-    condition = _get_process_condition_by_id(condition_id)
-    parameter = condition.process_parameters.first()
-    if not parameter:
-        raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
-
-    return parameter.to_dict()
-
-
-def get_process_parameter_frontend(condition_id: int):
-    """
-    获取工艺参数记录 (前端适配格式 - 嵌套结构)
-
-    molding-optima 适配：
-      - 通过 injection_machine + injection_index 推导注射单元
-    """
-    condition = _get_process_condition_by_id(condition_id)
-    parameter = condition.process_parameters.first()
-    if not parameter:
-        raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
-
-    # 推导注射单元（业务规则：injection_machine + injection_index）
-    injection_unit = None
-    if condition.injection_machine and condition.injection_index is not None:
-        units = condition.injection_machine.injection_units.all()
-        idx = condition.injection_index or 0
-        if 0 <= idx < units.count():
-            injection_unit = units[idx]
-
-    return {
-        "condition": {
-            "id": condition.id,
-            "mold_info": condition.mold.to_dict(include_rvs=True),
-            "shot_index": condition.shot_index,
-            "gating_system": (condition.process_context_snapshot or {}).get("mold", {}).get("gating_system"),
-            "machine_info": condition.injection_machine.to_dict(include_rvs=True),
-            "injection_index": condition.injection_index,
-            "injection_unit": injection_unit.to_dict() if injection_unit else None,
-            "polymer_info": condition.polymer.to_dict(include_rvs=True),
-        },
-        "parameter": {
-            "setting_process": _construct_setting_process_frontend(parameter, injection_unit)
-        }
-    }
-
-
-def update_process_parameter(condition_id: int, **kwargs):
-    """更新工艺参数"""
-    condition = _get_process_condition_by_id(condition_id)
-
-    if "condition" in kwargs:
-        condition.update_info(**kwargs.get("condition"))
-
-    if "parameter" in kwargs:
-        parameter = condition.process_parameters.first()
-        parameter.update_info(**kwargs.get("parameter"))
-
-    return _construct_return_parameter(condition)
-
-
-def update_process_parameter_frontend(condition_id: int, **kwargs):
-    """
-    更新工艺参数 (前端嵌套结构格式)
-    """
-    condition = _get_process_condition_by_id(condition_id)
-
-    if "condition" in kwargs:
-        condition.update_info(**kwargs.get("condition"))
-
-    if "parameter" in kwargs:
-        parameter_nested = kwargs.get("parameter", {})
-        setting_process = parameter_nested.get("setting_process")
-        if setting_process:
-            parameter_kwargs = _transform_frontend_to_flat(setting_process)
-            parameter = condition.process_parameters.first()
-            parameter.update_info(**parameter_kwargs)
-
-    return get_process_parameter_frontend(condition_id)
-
-
-def delete_process_parameter(condition_id: int):
-    """删除工艺参数"""
-    condition = _get_process_condition_by_id(condition_id)
-    condition.soft_delete()
-
-
-# ============================================================
-# 列表查询
-# ============================================================
-
-def get_process_parameter_list(
-    company_id: int,
-    status: str = None,
-    origin_type: str = None,
-    mold_no: str = None,
-    machine_model: str = None,
-    polymer_abbreviation: str = None,
-    start_date: date = None,
-    end_date: date = None,
-    sort: str = None,
-    page_no: int = None,
-    page_size: int = None
-):
-    """获取工艺参数列表"""
-    filter_map = {
-        "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
-        "status": {"input": status, "column": "status", "lookup": "exact"},
-        "origin_type": {"input": origin_type, "column": "origin_type", "lookup": "icontains"},
-        "mold_no": {"input": mold_no, "column": "mold__mold_no", "lookup": "icontains"},
-        "machine_model": {"input": machine_model, "column": "injection_machine__model", "lookup": "icontains"},
-        "polymer_abbreviation": {"input": polymer_abbreviation, "column": "polymer__abbreviation", "lookup": "icontains"},
-    }
-    filter_kwargs = build_filters(filter_map)
-    qs = ProcessCondition.objects.filter(
-        **filter_kwargs
-    ).select_related(
-        "mold", "injection_machine", "polymer"
-    ).prefetch_related(
-        "process_parameters"
-    ).annotate(
-        # 调机轮次数（关联的 ProcessParameter 数量）
-        # 注意：annotation 名 = 排序字段名 = 序列化字段名 = 前端字段名
-        # 不可加 _anno 等后缀，否则 parse_ordering 找不到字段
-        parameters_count=Count("process_parameters"),
+    # 一次性查出所有 parameter（按 seq_idx, id 排序——便于稳定遍历）
+    parameters = ProcessParameter.objects.filter(
+        process_condition_id=condition_id,
+        is_deleted=False,
+    ).order_by("seq_idx", "id").values(
+        "id", "seq_idx", "parent_param_id", "param_source",
+        "created_at", "updated_at",
     )
 
-    # 单独处理日期范围：created_at 在 [start_date, end_date] 之间
-    if start_date is not None or end_date is not None:
-        date_filters = Q()
-        if start_date is not None:
-            date_filters &= Q(created_at__gte=datetime.combine(start_date, time.min))
-        if end_date is not None:
-            date_filters &= Q(created_at__lte=datetime.combine(end_date, time.max))
-        qs = qs.filter(date_filters)
+    # 构造节点字典
+    nodes = {}
+    for param in parameters:
+        nodes[param["id"]] = {
+            "id": param["id"],
+            "seq_idx": param["seq_idx"],
+            "parent_param_id": param["parent_param_id"],
+            "param_source": param["param_source"],
+            "created_at": param["created_at"],
+            "updated_at": param["updated_at"],
+            "children": [],
+        }
 
-    # 排序
-    ordering = parse_ordering(sort or "-id")
-    qs = qs.order_by(*ordering)
+    # 构造树（O(N) 单次遍历）
+    roots = []
+    for node in nodes.values():
+        parent_id = node["parent_param_id"]
+        if parent_id and parent_id in nodes:
+            nodes[parent_id]["children"].append(node)
+        else:
+            # parent 不存在（已删除或孤立）→ 作为 root
+            roots.append(node)
 
-    # 数据分页
-    pagination = paginate_queryset(qs, page_no, page_size)
-    results = [{
-        **item.to_dict(),
-        "mold_no": safe_get(item, "mold.mold_no"),
-        "mold_name": safe_get(item, "mold.mold_name"),
-        "mold_type": safe_get(item, "mold.mold_type"),
-        "cavity_layout": safe_get(item, "mold.cavity_layout"),
-        "product_category": safe_get(item, "mold.product_category"),
-        "machine_brand": safe_get(item, "injection_machine.brand"),
-        "machine_model": safe_get(item, "injection_machine.model"),
-        "machine_device_code": safe_get(item, "injection_machine.device_no"),
-        "polymer_abbreviation": safe_get(item, "polymer.abbreviation"),
-        "polymer_grade": safe_get(item, "polymer.grade"),
-        # 调机轮次数（优化记录页核心字段）
-        "parameters_count": item.parameters_count,
-    } for item in pagination["items"]]
-    return pagination["total_count"], results
+    return roots
 
 
-# ============================================================
-# 批量操作
-# ============================================================
-
-def batch_delete_process_parameter(ids: list):
-    """批量删除工艺参数记录"""
-    ids = validate_id_list(ids, "工艺参数ID列表")
-    return ProcessCondition.batch_soft_delete(ids)

@@ -1,6 +1,6 @@
 """
 verify_fail_fast_infer.py
-验证 optimization_infer.infer 在算法无推荐时 fail-fast：
+验证 parameter_optimize.infer 在算法无推荐时 fail-fast：
 - engine_recommendations 为空时抛 BizException(ERROR_OPERATION_FAILED)
 - 不进入 Step 5 事务（不创建新 ProcessParameter / 不更新 TuningRecord）
 
@@ -23,7 +23,7 @@ django.setup()
 
 from unittest.mock import patch, MagicMock
 from extensions.exceptions import BizException, ERROR_OPERATION_FAILED
-from process.services.optimization_infer import OptimizationInferService
+from process.services.parameter_optimize import ParameterOptimizeService
 from process.models import ProcessParameter, TuningRecord
 
 
@@ -37,42 +37,42 @@ def run_case(case_name, feedback, mock_return):
 
     # 先创建 instance（__init__ 会触发 _ensure_engines_registered lazy 注册 FuzzyEngine，
     # 但会被后面的 instance 字段 mock 覆盖）
-    service = OptimizationInferService()
+    service = ParameterOptimizeService()
 
     # mock：跳过所有 DB 副作用 + 让 recommendation_service 返回空
     with patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_validate_feedback",
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_resolve_parent",
         return_value=(MagicMock(), MagicMock()),
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_build_baseline",
         return_value={"dummy": 1},
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_apply_recommendations_to_baseline",
         return_value={"dummy": 1},
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_build_suggestion_payload",
         return_value={"groups": []},
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_update_previous_tuning_record",
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_update_previous_recommendation_is_adopted",
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_create_new_parameter",
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_create_new_tuning_record",
     ), patch.object(
-        OptimizationInferService,
+        ParameterOptimizeService,
         "_create_new_recommendation",
     ), patch.object(
         service,
@@ -119,7 +119,7 @@ def run_case(case_name, feedback, mock_return):
 
 def main():
     print("=" * 70)
-    print("optimization_infer fail-fast 守卫测试")
+    print("parameter_optimize fail-fast 守卫测试")
     print("=" * 70)
 
     cases = [

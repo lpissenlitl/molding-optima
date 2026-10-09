@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'filecenter',
     'reporting',
     'process',
+    'analytic',
     'bootstrap',
 ]
 

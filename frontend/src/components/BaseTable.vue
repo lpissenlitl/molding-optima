@@ -1,43 +1,15 @@
 <!--
-  BaseTable 业务表格封装组件（Vue 3 Composition API 版）
+  BaseTable 业务表格封装组件
+  - 列定义 columns 驱动 + 列筛选（filterable）
+  - 表格密度切换 + 分页 + 用户偏好持久化（density / pageSize / columns）
+  - 行双击 / 选择变化事件透传
+  - responsiveToolbar=true 时，窗口 < mobileBreakpoint 后把 #toolbar-more 折叠到"更多 ▾"
+  - 列显隐偏好持久化依赖 viewName（必须传入）
 
-  设计参考：molding-expert/molding-expert-web/src/components/BaseTable.vue
-  适配 molding-optima 的 Vue 3 + Pinia + TypeScript 技术栈
-
-  功能范围（精简版）：
-    - el-table 动态列定义（columns 驱动）
-    - 列筛选（ColumnFilter 集成，filterable: true 的列自动接入）
-    - 表格密度切换（小/中/大）
-    - 分页（el-pagination）
-    - 用户偏好持久化（density, pageSize, columns 显隐）
-    - 行双击、选择变化事件透传
-    - 响应式 toolbar（可选）：窗口宽度小于断点时折叠次要按钮到下拉
-
-  使用方式：
-    BaseTable
-      :data="list_data.items"
-      :total="list_data.total"
-      :query="query"
-      :columns.sync="table_columns"
-      view-name="user_list"
-      :loading="list_loading"
-      :responsive-toolbar="true"
-      @size-change="..."
-      @current-change="..."
-      @row-dblclick="editUser"
-
-    slot #toolbar       — 主按钮插槽（始终显示）
-    slot #toolbar-more  — 次要按钮插槽（仅在 responsiveToolbar=true 且移动端时折叠）
-    slot #cell-xxx      — 各列自定义单元格插槽
-    slot #append-columns — 业务定制的尾随列（通常用于行操作列）
-
-  响应式 toolbar：
-    - :responsive-toolbar="true" 启用后，窗口宽度小于 mobileBreakpoint（默认 768）时，
-      #toolbar-more 插槽会被收集到“更多”下拉中，避免按钮过多导致换行错乱。
-    - 主按钮请放 #toolbar，次要按钮放 #toolbar-more。
-    - 启用后才会监听 resize，桌面端场景无额外开销。
-
-  注意：列显隐偏好持久化依赖 viewName，必须传入
+  Slots：
+    #toolbar / #toolbar-more  — 顶部按钮插槽
+    #cell-xxx                  — 各列自定义单元格插槽
+    #append-columns             — 行操作列等业务定制的尾随列
 -->
 <template>
   <div class="base-table">
@@ -229,10 +201,6 @@ import ColumnFilter from './ColumnFilter.vue'
 import { loadTablePreference, saveTablePreference } from '@/utils/columns-setting'
 import { calculateTableHeight } from '@/utils/table-size'
 
-// ============================================================================
-// Props
-// ============================================================================
-
 interface Props {
   /** 当前页数据 */
   data?: any[]
@@ -344,10 +312,6 @@ const emit = defineEmits<{
   (e: 'selection-change', rows: any[]): void
 }>()
 
-// ============================================================================
-// 内部状态
-// ============================================================================
-
 /** 列筛选状态：{ prop: { include, exclude } } */
 const column_filters = ref<Record<string, { include: any[]; exclude: any[] }>>({})
 
@@ -368,11 +332,6 @@ function checkMobile() {
 /** 是否折叠 toolbar-more（responsiveToolbar 开启 + 当前为移动端） */
 const shouldFoldToolbar = computed(() => props.responsiveToolbar && isMobile.value)
 
-// ============================================================================
-// Computed
-// ============================================================================
-
-/** 密度双向绑定 */
 const currentTableSize = computed({
   get: () => internal_table_size.value,
   set: (val) => {
@@ -453,10 +412,6 @@ const filteredItems = computed(() => {
   })
 })
 
-// ============================================================================
-// Watch
-// ============================================================================
-
 /** prop tableSize 变更 → 同步到 internal */
 watch(
   () => props.tableSize,
@@ -493,10 +448,6 @@ watch(
   { deep: true }
 )
 
-// ============================================================================
-// Lifecycle
-// ============================================================================
-
 onMounted(() => {
   if (props.responsiveToolbar) {
     checkMobile()
@@ -523,10 +474,6 @@ watch(
     }
   }
 )
-
-// ============================================================================
-// Methods
-// ============================================================================
 
 /**
  * 按列 prop 实时计算列筛选可选项值
@@ -782,15 +729,10 @@ function resolveMinWidth(column: BaseTableColumn): number | string | undefined {
 
 /*
  * .toolbar-buttons: 取代 el-button-group
- *
- * el-button-group 要求子元素全部是 el-button，一旦混入
- * el-upload / el-dropdown / el-popover 等 div 类组件，
- * 会破坏连接样式（圆角、border）→ 按钮错位。
- *
- * 该容器采用 inline-flex + gap: 0：
- * - 按钮独立圆角、不连接（兼容任意子组件）
- * - 按钮贴紧（视觉上与 el-button-group 近似）
- * - flex-wrap: wrap 宽窄屏自动换行兑底
+ * - el-button-group 要求子元素全部是 el-button，一旦混入 el-upload / el-dropdown / el-popover
+ *   等 div 类组件，会破坏连接样式（圆角、border）→ 按钮错位
+ * - 该容器采用 inline-flex + gap: 0：按钮独立圆角、不连接（兼容任意子组件）
+ *   + flex-wrap: wrap 宽窄屏自动换行兑底
  */
 .toolbar-buttons {
   display: inline-flex;
@@ -799,11 +741,7 @@ function resolveMinWidth(column: BaseTableColumn): number | string | undefined {
   flex-wrap: wrap;
 }
 
-/*
- * 覆盖 el-button 默认的 & + & { margin-left: 12px }。
- * element-plus 为了独立按钮场景默认加了间距，但 button-group 内部会主动覆盖为 0。
- * 我们的 .toolbar-buttons 也能在容器内起到同样的作用——手动清除该间距。
- */
+/* 覆盖 el-button 默认的 & + & { margin-left: 12px }：我们用 gap 控间距，避免重复 margin */
 .toolbar-buttons :deep(.el-button + .el-button) {
   margin-left: 0;
 }
@@ -850,10 +788,7 @@ function resolveMinWidth(column: BaseTableColumn): number | string | undefined {
   }
 }
 
-/*
- * popover teleport 到 body，scoped 不生效。
- * 需用 unscoped 块定义 popper-class 内的样式。
- */
+/* popover teleport 到 body，scoped 不生效——用 unscoped 块定义 popper-class 内的样式 */
 .toolbar-more-popover.el-popover {
   padding: 8px;
 

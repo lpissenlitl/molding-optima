@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import {
@@ -107,6 +107,9 @@ function buildOption() {
 
 function renderChart() {
   if (!chartRef.value) return
+  // 防御：layout 仍为 0 时跳过 init（避免 ECharts "Can't get DOM width or height" warning）
+  // 下一次 resize / data 变化时会再尝试
+  if (chartRef.value.clientWidth === 0 || chartRef.value.clientHeight === 0) return
   if (!chart) {
     chart = echarts.init(chartRef.value, undefined, { renderer: 'canvas' })
   }
@@ -117,8 +120,16 @@ function handleResize() {
   chart?.resize()
 }
 
+/*
+ * 渲染时机：使用 requestAnimationFrame 而非 nextTick
+ * - nextTick 是 microtask，触发时机早于浏览器 layout，此时 DOM 节点存在但
+ *   clientWidth/Height 仍为 0，echarts.init() 会触发 "Can't get DOM width or height" warning
+ * - requestAnimationFrame 在浏览器 paint 前回调，到那时 layout 已计算完毕
+ *   （ECharts 5 官方建议在 window.onload 或 RAF 回调中初始化）
+ * - 双重防御：renderChart 内仍检查容器尺寸（0 时跳过，下一次 resize/data 变化会重试）
+ */
 onMounted(() => {
-  nextTick(() => {
+  requestAnimationFrame(() => {
     renderChart()
     window.addEventListener('resize', handleResize)
     if (chartRef.value) {
@@ -137,7 +148,7 @@ onBeforeUnmount(() => {
 
 watch(
   () => [props.data, props.loading],
-  () => nextTick(renderChart),
+  () => requestAnimationFrame(renderChart),
   { deep: true },
 )
 </script>

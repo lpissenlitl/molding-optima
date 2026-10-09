@@ -1,10 +1,10 @@
-"""Step 2 边界验证：_build_engine_context 按 condition 提取算法入参
+"""Step 2 边界验证：_build_algorithm_context 按 condition 提取算法入参
 
 设计意图：
 - 工艺优化算法与工艺初始化算法对 context 的需求不同：
   - 初始化：mold_info + polymer_info + machine_info 完整 → 推导初始工艺
   - 优化：machine（HMI 设定范围）+ baseline + defect → 缺陷修正
-- 故 optimization_infer 的 _build_engine_context：
+- 故 parameter_optimize 的 _build_algorithm_context：
   - 不传 process_condition / mold / polymer 完整 dict
   - machine 按 condition.injection_index 选 InjectionUnit（全字段透传）
   - 传 polymer_abbreviation / product_category（仅用于 FuzzyEngine 规则查询）
@@ -30,18 +30,18 @@ import django
 
 django.setup()
 
-from process.services.optimization_infer import (
-    OptimizationInferService,
+from process.services.parameter_optimize import (
+    ParameterOptimizeService,
     _to_full_dict,
     _normalize_field_name_by_spec,
-    EngineContext,
+    AlgorithmContext,
     _REQUIRED_CONTEXT_KEYS,
 )
-from process.engines.fuzzy import FuzzyEngine
+from process.algorithms.fuzzy import FuzzyEngine
 
 
 print("=" * 70)
-print("Step 2 边界验证：_build_engine_context 按 condition 提取算法入参")
+print("Step 2 边界验证：_build_algorithm_context 按 condition 提取算法入参")
 print("=" * 70)
 
 
@@ -144,8 +144,8 @@ feedback = {
     "tuning_result": "improved",
 }
 
-service = OptimizationInferService()
-context = service._build_engine_context(
+service = ParameterOptimizeService()
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -194,7 +194,7 @@ print(f"[2] machine 按 injection_index=0 选 InjectionUnit（含 HMI 范围字�
 
 # ---------- [3] injection_index=1 → 选第二台 ----------
 condition_mock.injection_index = 1
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -207,7 +207,7 @@ print(f"[3] injection_index=1 → 选第二台 InjectionUnit: OK")
 
 # ---------- [4] injection_index 越界 → {} ----------
 condition_mock.injection_index = 99
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -218,7 +218,7 @@ print(f"[4] injection_index 越界（99 > 3）→ {{}} + warning: OK")
 
 # ---------- [5] injection_index=None → 默认选第一台 ----------
 condition_mock.injection_index = None
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -231,7 +231,7 @@ print(f"[5] injection_index=None → 默认选第一台 InjectionUnit: OK")
 
 # ---------- [6] injection_machine=None → machine={} ----------
 condition_mock.injection_machine = None
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -244,7 +244,7 @@ print(f"[6] injection_machine=None → machine={{}}: OK")
 condition_mock.injection_machine = machine_mock
 condition_mock.polymer = None
 condition_mock.mold = None
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -258,7 +258,7 @@ assert context["product_category"] is None, (
 
 condition_mock.polymer = polymer_mock
 condition_mock.mold = mold_mock
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -274,7 +274,7 @@ print(f"[7] polymer_abbreviation / product_category 单字段提取（含 None �
 
 # ---------- [8] feedback 整体透传（process_parameter 翻译效果在 [14] 验证） ----------
 condition_mock.injection_index = 0
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=parameter_data,
     feedback=feedback,
@@ -295,10 +295,10 @@ print(f"[8] feedback 整体透传 + process_parameter 翻译生效: OK")
 
 
 # ---------- [9] _build_condition_data 已删除（保留回归检查）----------
-from process.services import optimization_infer as service_module
+from process.services import parameter_optimize as service_module
 
-assert not hasattr(service_module.OptimizationInferService, "_build_condition_data"), (
-    "_build_condition_data 应已删除（build condition 移到 Step 2 _build_engine_context）"
+assert not hasattr(service_module.ParameterOptimizeService, "_build_condition_data"), (
+    "_build_condition_data 应已删除（build condition 移到 Step 2 _build_algorithm_context）"
 )
 print(f"\n[9] _build_condition_data 已删除（Step 1 不该有这个方法）: OK")
 
@@ -416,7 +416,7 @@ print(f"[13] 原 dict 不被修改（防御性拷贝）: OK")
 
 # ---------- [14] FuzzyEngine.FIELD_NAME_ALIAS 实际生效（验证业务→算法 真实转换） ----------
 # 验证完整性：表中每个 mapping 都对应实际存在的算法 keyword（以 RuleKeyword 主数据为准则）
-# 调 _build_engine_context 看业务字典中所有工艺字段都被翻译（仅 met_lim_t 为边界 case）
+# 调 _build_algorithm_context 看业务字典中所有工艺字段都被翻译（仅 met_lim_t 为边界 case）
 condition_mock.injection_index = 0
 # 业务字段全集（涵盖注射/保压/嫧胶/温度/松退/VP）
 business_params = {
@@ -440,7 +440,7 @@ business_params = {
     # 边界 case
     "met_lim_t": 8.0,
 }
-context = service._build_engine_context(
+context = service._build_algorithm_context(
     condition=condition_mock,
     parameter=business_params,
     feedback=feedback,
@@ -474,48 +474,48 @@ print(f"[14] FuzzyEngine.FIELD_NAME_ALIAS 实际生效（业务→算法 真实�
 
 
 # ============================================================================
-# Step 3 边界验证：_call_engines 入口验证（EngineContext schema 完整性）
+# Step 3 边界验证：_call_algorithms 入口验证（AlgorithmContext schema 完整性）
 # ============================================================================
 
-# ---------- [15] EngineContext schema 定义验证 ----------
+# ---------- [15] AlgorithmContext schema 定义验证 ----------
 expected_keys = {"machine", "polymer_abbreviation", "product_category", "process_parameter", "feedback"}
-assert set(EngineContext.__annotations__.keys()) == expected_keys, (
-    f"EngineContext schema 应为 5 字段 {expected_keys}，实际 {set(EngineContext.__annotations__.keys())}"
+assert set(AlgorithmContext.__annotations__.keys()) == expected_keys, (
+    f"AlgorithmContext schema 应为 5 字段 {expected_keys}，实际 {set(AlgorithmContext.__annotations__.keys())}"
 )
 assert _REQUIRED_CONTEXT_KEYS == frozenset(expected_keys), (
-    f"_REQUIRED_CONTEXT_KEYS 应与 EngineContext schema 一致"
+    f"_REQUIRED_CONTEXT_KEYS 应与 AlgorithmContext schema 一致"
 )
-print(f"[15] EngineContext schema 定义（5 字段） + _REQUIRED_CONTEXT_KEYS 同步: OK")
+print(f"[15] AlgorithmContext schema 定义（5 字段） + _REQUIRED_CONTEXT_KEYS 同步: OK")
 
 
-# ---------- [16] _call_engines 空 context → 返回空结构 ----------
-service = OptimizationInferService()
-result = service._call_engines({})  # type: ignore[arg-type]
+# ---------- [16] _call_algorithms 空 context → 返回空结构 ----------
+service = ParameterOptimizeService()
+result = service._call_algorithms({})  # type: ignore[arg-type]
 assert result == {
     "recommendations": [],
-    "engine_sources": {},
+    "algorithm_sources": {},
     "best_recommendation": None,
-}, f"空 context 应返回 _empty_engine_result()，实际 {result}"
-print(f"[16] _call_engines 空 context → 返回空结果（_empty_engine_result）: OK")
+}, f"空 context 应返回 _empty_algorithm_result()，实际 {result}"
+print(f"[16] _call_algorithms 空 context → 返回空结果（_empty_algorithm_result）: OK")
 
 
-# ---------- [17] _call_engines 缺字段 context → 返回空结构 + warning ----------
+# ---------- [17] _call_algorithms 缺字段 context → 返回空结构 + warning ----------
 incomplete_context = {
     "machine": {},
     "polymer_abbreviation": "ABS",
     # 缺少: product_category, process_parameter, feedback
 }
-result = service._call_engines(incomplete_context)  # type: ignore[arg-type]
+result = service._call_algorithms(incomplete_context)  # type: ignore[arg-type]
 expected_empty = {
     "recommendations": [],
-    "engine_sources": {},
+    "algorithm_sources": {},
     "best_recommendation": None,
 }
 assert result == expected_empty, (
     f"缺字段 context 应返回空结构，实际 {result}"
 )
 # 缺哪几个字段：product_category, process_parameter, feedback
-print(f"[17] _call_engines 缺字段 context → 返回空结构 + warning 日志: OK")
+print(f"[17] _call_algorithms 缺字段 context → 返回空结构 + warning 日志: OK")
 
 
 print()

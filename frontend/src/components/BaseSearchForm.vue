@@ -169,8 +169,13 @@ const props = withDefaults(
 
     /**
      * label 宽度
-     * - 'auto'（默认）：label 宽度自适应
-     * - 传具体值（如 '6rem' / '80px'）：label 等宽 + 右对齐
+     * - 默认 '100px'：4 字中文 label（≈ 64-80px）留 20% 余量，覆盖偶发长 label；
+     *   业务方如需覆盖，可在子组件传 :label-width="'120px'" 等具体值
+     * - 避免使用 'auto'：Element Plus 2.5.x 在 labelWidth='auto' 模式下，
+     *   el-form-item unmounted 时会重算 labelSize 为 0（DOM 已移除），导致
+     *   deregisterLabelWidth 在 cache 中找不到对应宽度，触发
+     *   '[ElForm] unexpected width 0' 开发期警告（路由切换时高频出现）
+     *   改为固定宽度后该警告消失
      */
     labelWidth?: string
   }>(),
@@ -179,7 +184,7 @@ const props = withDefaults(
     expandable: false,
     size: 'default',
     controlWidth: null,
-    labelWidth: 'auto'
+    labelWidth: '100px'
   }
 )
 

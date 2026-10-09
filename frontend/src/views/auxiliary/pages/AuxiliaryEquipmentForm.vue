@@ -219,9 +219,8 @@ async function handleSave() {
     } else {
       ElMessage.error(res.msg || '保存失败')
     }
-  } catch (err: any) {
-    console.error('[AuxiliaryEquipmentForm] save failed:', err)
-    ElMessage.error(err?.message || '提交异常')
+  } catch {
+    // 拦截器已统一 toast + console
   } finally {
     submitting.value = false
   }
@@ -241,9 +240,8 @@ async function loadDetail(id: number) {
       ElMessage.error(res.msg || '未读取到相关辅助装置信息')
       goBack()
     }
-  } catch (err: any) {
-    console.error('[AuxiliaryEquipmentForm] loadDetail failed:', err)
-    ElMessage.error(err?.message || '加载辅助装置详情异常')
+  } catch {
+    // 拦截器已统一 toast + console
     goBack()
   }
 }
