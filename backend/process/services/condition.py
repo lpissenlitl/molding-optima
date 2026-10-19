@@ -22,7 +22,8 @@
 - record.py（CRUD 子集）
 - parameter.py（CRUD 完整 + frontend 转换 + 列表）
 - parameter_transformer.py（frontend 字段转换）
-- optimization_advice.py（optimization CRUD + chain 调度）
+- optimization_advice.py（optimization CRUD + chain 调度；该文件已于本轮
+  合并完成后被进一步清理为 0 字节空文件并删除，仅留本条考古注脚）
 """
 import logging
 from datetime import datetime, date, time
@@ -45,6 +46,38 @@ from process.services.tuning import TuningService
 
 _logger = logging.getLogger(__name__)
 
+
+# ============================================================================
+# 业务身份锁：condition 哪些字段禁止通过 PUT 修改 (B 方案基础业务逻辑)
+# ============================================================================
+# 业务划分:
+# - 业务身份锁:  origin_type (manual_creation / ai_recommendation / ...) / condition_no
+#   改则 == 重写业务身份, 违反历史引用与 单一真相原则
+# - 后端快照锁:  process_context_snapshot (创建时锁定)
+#   改则覆盖后端入账时的不可变审计数据
+# - 主关联锁:    mold_id / shot_index / injection_machine_id / injection_index / polymer_id
+#   改则违反"同一三联 (mold+machine+polymer) 应对应不同 condition" 的业务约束
+#     如需调整主关联, 应新建 condition 而非修改
+#
+# 允许修改的业务字段 (B 方案:
+# - status           状态流转 (draft / active / archived)
+# - process_context  前端可控覆盖输入 (后端不自动改, 仅前端可补)
+#
+# 注: 本常量仅护 service 逻辑; 补全 1. Docstring + 2. IllegalArgument 错误信息 。
+CONDITION_LOCKED_FIELDS = frozenset({
+    # 系统生成
+    "condition_no",
+    # 业务身份
+    "origin_type",
+    # 后端快照
+    "process_context_snapshot",
+    # 主关联
+    "mold_id",
+    "injection_machine_id",
+    "polymer_id",
+    "shot_index",
+    "injection_index",
+})
 
 # ============================================================================
 # 模块级工具：frontend 字段转换
@@ -482,33 +515,47 @@ def _get_process_condition_by_id(condition_id: int) -> ProcessCondition:
 # CRUD 基础服务
 # ============================================================================
 
+def _apply_parameter(condition, parameter: dict, parameter_id: int = None) -> None:
+    """DEPRECATED: 2026-10 迁到 services/parameter.py.update_parameter_in_condition
+
+    本函数保留仅为后向兼容, 2026-11 后删除。已无内部调用者。
+    """
+
+
 @transaction.atomic
 def create_condition(company_id: int, organization_id: int, **kwargs):
-    """创建工艺条件 + 第一条工艺参数
+    """创建工艺条件 + 可选第一条工艺参数
 
     Args:
         kwargs:
-            - condition: dict 工艺条件字段
-            - parameter: dict 工艺参数字段（DB 扁平格式）
-            - 或 setting_process: dict 工艺参数字段（前端嵌套格式）—— 通过 parameter_nested 传入
+            - condition: dict 工艺条件字段 (必填)
+            - parameter: dict 含 setting_process 的前端嵌套结构 或 flat 92 字段 (可选)
 
     Returns:
-        dict: condition 详情（含 parameter）
+        dict: condition 详情（含 parameter, 如有）
+
+    业务场景:
+    - 完整创建: condition + parameter 一起传 (用户已填好参数)
+    - 骨架创建: 只传 condition (后续调 PUT /records/<id>/ 填数据)
     """
     condition_kwargs = kwargs.get("condition")
-    parameter_kwargs = kwargs.get("parameter")
-    parameter_nested = kwargs.get("parameter_nested", {})
+    parameter = kwargs.get("parameter")
 
     if not condition_kwargs:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺条件信息存在")
-    if not parameter_kwargs and not parameter_nested.get("setting_process"):
-        raise BizException(ERROR_ILLEGAL_ARGUMENT, "请确定工艺参数信息存在")
-
-    # frontend 嵌套格式 → flat
-    if not parameter_kwargs and parameter_nested.get("setting_process"):
-        parameter_kwargs = _frontend_to_condition_dict(parameter_nested["setting_process"])
 
     condition = _create_process_condition(company_id, organization_id, **condition_kwargs)
+
+    # 骨架场景: 用户不传 parameter, 只建工艺骨架 (后续调 PUT 填数据)
+    if not parameter:
+        return get_condition(condition.id, view_type="parameter")
+
+    # parameter 自适应 flat / nested
+    if "setting_process" in parameter:
+        parameter_kwargs = _frontend_to_condition_dict(parameter["setting_process"])
+    else:
+        parameter_kwargs = parameter
+
     parameter_kwargs.update({
         "company_id": company_id,
         "organization_id": organization_id,
@@ -522,42 +569,94 @@ def create_condition(company_id: int, organization_id: int, **kwargs):
 
 @transaction.atomic
 def update_condition(condition_id: int, **kwargs):
-    """更新工艺条件 + 工艺参数
+    """更新工艺条件 (仅 condition, B 方案拆分后)
 
     Args:
         kwargs:
             - condition: dict 要更新的 condition 字段
-            - parameter: dict 要更新的 parameter 字段（DB 扁平格式）
+
+    允许修改的字段 (详见 schemas/record.py ProcessConditionWriteSchema):
+    - status           状态流转 (draft / active / archived)
+    - process_context  前端可控覆盖输入
+
+    禁止修改的字段 (业务身份锁, 由 CONDITION_LOCKED_FIELDS 定义):
+    - condition_no / origin_type / process_context_snapshot  (身份 + 后端快照)
+    - mold_id / injection_machine_id / polymer_id / shot_index / injection_index  (主关联)
+
+    注: 锁定字段被传入时静默忽略（不抛错），保持原值不变。
+    这样前端可以无脑发整个 condition 对象，后端过滤掉不允许修改的字段。
+    如需调整主关联 (模具/机器/材料/射次)，请新建一条工艺条件。
+
+    注: parameter 更新走独立端点 (PUT /parameters/<parameter_id>/),
+        详见 services/parameter.py 的 update_parameter。
     """
     condition = _get_process_condition_by_id(condition_id)
 
-    if "condition" in kwargs:
-        condition.update_info(**kwargs.get("condition"))
+    condition_data = kwargs.get("condition") or {}
 
-    if "parameter" in kwargs:
-        parameter = condition.process_parameters.first()
-        if parameter:
-            parameter.update_info(**kwargs.get("parameter"))
+    if condition_data:
+        # 过滤业务身份锁字段（不抛错，静默忽略）
+        safe_data = {
+            k: v for k, v in condition_data.items()
+            if k not in CONDITION_LOCKED_FIELDS
+        }
+        if safe_data:
+            condition.update_info(**safe_data)
 
     return get_condition(condition_id, view_type="parameter")
 
 
 @transaction.atomic
-def update_condition_frontend(condition_id: int, **kwargs):
-    """更新工艺条件 + 工艺参数（前端嵌套结构格式）"""
-    condition = _get_process_condition_by_id(condition_id)
+def update_record(
+    condition_id: int,
+    condition_data: dict = None,
+    parameter_data: dict = None,
+) -> dict:
+    """业务级更新工艺记录 (condition [+ 最新 parameter], 业务身份锁)
 
-    if "condition" in kwargs:
-        condition.update_info(**kwargs.get("condition"))
+    业务身份锁字段拦截（与 update_condition 一致）:
+    - 允许: status, process_context
+    - 锁定: condition_no / origin_type / process_context_snapshot /
+            mold_id / injection_machine_id / polymer_id / shot_index / injection_index
 
-    if "parameter" in kwargs:
-        parameter_nested = kwargs.get("parameter", {})
-        setting_process = parameter_nested.get("setting_process")
-        if setting_process:
-            parameter_kwargs = _frontend_to_condition_dict(setting_process)
-            parameter = condition.process_parameters.first()
-            if parameter:
-                parameter.update_info(**parameter_kwargs)
+    Args:
+        condition_id: 工艺条件 ID
+        condition_data: condition 字段（业务身份锁字段会被 update_condition 拦截）
+        parameter_data: parameter 业务容器 (Optional)
+            - 不传或空 → 仅改 condition
+            - 传 setting_process → 改 condition + 改 condition 下"最新 parameter"
+              (latest parameter_id 按 created_at desc 取第一条)
+
+    Returns:
+        dict: condition 详情（get_condition_frontend 格式）
+
+    注: 写操作在事务中（@transaction.atomic）保证 condition + parameter 双写原子性。
+
+    实现思路（参考 ConditionDetailView.put / ParameterDetailView.put 设计）:
+    - condition 部分复用 update_condition（业务身份锁拦截逻辑仅维护一处）
+    - parameter 部分复用 parameter_service.update_parameter（单段 PUT, 按 parameter_id 定位,
+      NEST 格式自动识别 + 转 FLAT）
+    - 不需新建 service, 仅组合调用现有 2 个 service
+    """
+    # 1. condition 部分（走 update_condition 的业务身份锁逻辑）
+    if condition_data:
+        # update_condition 会拦截 CONDITION_LOCKED_FIELDS 中的字段, 抛 BizException
+        update_condition(condition_id, condition=condition_data)
+
+    # 2. parameter 部分（找 latest, 调 parameter_service.update_parameter）
+    if parameter_data and "setting_process" in parameter_data:
+        # 局部 import 避免循环引用
+        from process.services.parameter import update_parameter
+        condition = _get_process_condition_by_id(condition_id)
+        latest = (
+            condition.process_parameters
+            .filter(is_deleted=False)
+            .order_by("-created_at")
+            .first()
+        )
+        if not latest:
+            raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
+        update_parameter(latest.id, parameter_data)
 
     return get_condition_frontend(condition_id)
 
@@ -655,11 +754,71 @@ def get_condition_frontend(condition_id: int) -> dict:
     }
 
 
+def get_condition_with_parameter_list(condition_id: int) -> dict:
+    """获取工艺条件 + 该条件下全部 parameter (平铺) - 2026-10-12 新增
+
+    业务 (records/<id>/parameter-list/ 端点支撑):
+    - 响应: {condition, parameters[]}
+    - parameters 按 seq_idx, id 排序 (稳定序列)
+    - 不分页, 一次返回该 condition 下所有 parameter (1–50 条, 性能可接受)
+
+    与现有接口区别:
+    - records/<id>/                -> condition + 最新 1 条 (摘要视图)
+    - conditions/<id>/parameters/  -> 仅 parameter 列表 (数据级, 含分页/过滤)
+    - records/<id>/parameter-list/ -> condition + 全部 parameter (业务级一体化)
+    """
+    condition = _get_process_condition_by_id(condition_id)
+    parameters = ProcessParameter.objects.filter(
+        process_condition_id=condition_id,
+        is_deleted=False,
+    ).order_by("seq_idx", "id").all()
+
+    return {
+        "condition": condition.to_dict(),
+        "parameters": [p.to_dict() for p in parameters],
+    }
+
+
+def get_condition_with_parameter_tree(condition_id: int) -> dict:
+    """获取工艺条件 + 该条件下全部 parameter (树形) - 2026-10-12 新增
+
+    业务 (records/<id>/parameter-tree/ 端点支撑):
+    - 响应: {condition, parameter_tree[]}
+    - parameter_tree 复用 parameter_service.get_parameter_tree 的树形输出
+
+    与现有接口区别:
+    - conditions/<id>/parameter-tree/  -> 仅 parameter 树 (数据级)
+    - records/<id>/parameter-tree/     -> condition + parameter 树 (业务级一体化)
+    """
+    condition = _get_process_condition_by_id(condition_id)
+    # 局部引用避免循环导入风险 (condition.py 与 parameter.py 互依)
+    from process.services.parameter import get_parameter_tree
+    tree = get_parameter_tree(condition_id)
+
+    return {
+        "condition": condition.to_dict(),
+        "parameter_tree": tree,
+    }
+
+
+# ============================================================================
+# 调机起源归一（前端列表按 origin 过滤时的语义映射）
+# 与 ProcessParameter.PARAMETER_SOURCE_CHOICES 保持一致
+# ============================================================================
+
+# 人工调机 = 人工录入 + 人工调整 + 外部导入
+MANUAL_PARAM_SOURCES = ("manual", "manual_adjusted", "import")
+
+# 算法调机 = 算法初始化 + 系统推理 + AI 推荐
+ALGORITHM_PARAM_SOURCES = ("algorithm_init", "system_inferred", "ai_recommended")
+
+
 def get_condition_list(
     view_type: str = "parameter",
     company_id: int = None,
     status: str = None,
     origin_type: str = None,
+    param_source: List[str] = None,
     mold_no: str = None,
     machine_model: str = None,
     polymer_abbreviation: str = None,
@@ -675,6 +834,9 @@ def get_condition_list(
         view_type:
             - 'parameter'    工艺参数视图：每条 condition + 最新 parameter
             - 'optimization' 工艺优化视图：每条 condition + parameters_count
+        param_source:
+            可选 List[str], 用于过滤"该 condition 至少有一条 matching param_source 的 parameter"
+            (人工调机 = MANUAL_PARAM_SOURCES, 算法调机 = ALGORITHM_PARAM_SOURCES)
         company_id, status, origin_type, ...   过滤条件
     """
     filter_map = {
@@ -705,6 +867,13 @@ def get_condition_list(
             date_filters &= Q(created_at__lte=datetime.combine(end_date, time.max))
         qs = qs.filter(date_filters)
 
+    # 按 parameter.param_source 过滤（保留至少有一行 matching param_source 的 condition）
+    if param_source:
+        qs = qs.filter(
+            process_parameters__param_source__in=list(param_source),
+            process_parameters__is_deleted=False,
+        ).distinct()
+
     # 排序
     ordering = parse_ordering(sort or "-id")
     qs = qs.order_by(*ordering)
@@ -729,14 +898,44 @@ def get_condition_list(
             "polymer_grade": safe_get(item, "polymer.grade"),
             "parameters_count": item.parameters_count,
         }
+        # 归一化“起源”：按调机起源 (manual / algorithm / system / unknown)
+        params = list(item.process_parameters.all())
+        origin_summary = {"manual": 0, "algorithm": 0, "system": 0, "unknown": 0}
+        for p in params:
+            category = _param_source_to_origin_category(p.param_source)
+            origin_summary[category] = origin_summary.get(category, 0) + 1
+        result["origin_summary"] = origin_summary
+
         if view_type == "parameter":
-            # 工艺参数模式：附加最新一条 parameter
-            latest = item.process_parameters.order_by("-sequence_index").first()
+            # 工艺参数模式：附加最新一条 parameter (按 created_at 取最近)
+            latest = max(params, key=lambda p: p.created_at, default=None) if params else None
             if latest:
-                result["parameter"] = latest.to_dict()
+                param_data = latest.to_dict()
+                # 补 parent_param_id（to_dict 会排除反向关系）
+                if "parent_param_id" not in param_data:
+                    param_data["parent_param_id"] = latest.parent_param_id
+                result["parameter"] = param_data
         results.append(result)
 
     return pagination["total_count"], results
+
+
+def _param_source_to_origin_category(param_source: str) -> str:
+    """将 ProcessParameter.param_source 归一为 origin_category
+
+    业务语义:
+    - manual        人工调机 (人工录入 + 人工调整 + 外部导入)
+    - algorithm     算法调机 (算法初始化 + 系统推理 + AI 推荐)
+    - system        系统同步 (设备同步 + 模板复制)
+    - unknown       其他 (unknown + 未识别)
+    """
+    if param_source in MANUAL_PARAM_SOURCES:
+        return "manual"
+    if param_source in ALGORITHM_PARAM_SOURCES:
+        return "algorithm"
+    if param_source in ("equipment_sync", "template_copy"):
+        return "system"
+    return "unknown"
 
 
 # ============================================================================

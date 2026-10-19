@@ -27,16 +27,20 @@ def get_auxiliary_equipment_info(auxiliary_equipment_id: int) -> dict:
     return auxiliary_equipment.to_dict()
 
 
-def update_auxiliary_equipment(auxiliary_equipment_id: int, **kwargs) -> dict:
-    """更新辅助设备信息"""
-    auxiliary_equipment = _get_auxiliary_equipment(auxiliary_equipment_id)
+def update_auxiliary_equipment(company_id: int, auxiliary_equipment_id: int, **kwargs) -> dict:
+    """更新辅助设备信息（仅限本公司）"""
+    auxiliary_equipment = AuxiliaryEquipment.objects.filter(pk=auxiliary_equipment_id, company_id=company_id, is_deleted=False).first()
+    if auxiliary_equipment is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"辅助设备不存在: id={auxiliary_equipment_id}")
     auxiliary_equipment.update_info(**kwargs)
     return auxiliary_equipment.to_dict()
 
 
-def delete_auxiliary_equipment(auxiliary_equipment_id: int) -> None:
-    """删除辅助设备"""
-    auxiliary_equipment = _get_auxiliary_equipment(auxiliary_equipment_id)
+def delete_auxiliary_equipment(company_id: int, auxiliary_equipment_id: int) -> None:
+    """删除辅助设备（仅限本公司）"""
+    auxiliary_equipment = AuxiliaryEquipment.objects.filter(pk=auxiliary_equipment_id, company_id=company_id, is_deleted=False).first()
+    if auxiliary_equipment is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"辅助设备不存在: id={auxiliary_equipment_id}")
     auxiliary_equipment.soft_delete()
 
 
@@ -69,8 +73,14 @@ def get_auxiliary_equipment_list(
     return pagination["total_count"], results
 
 
-def batch_delete_auxiliary_equipment(ids: list):
-    """批量删除辅助设备"""
+def batch_delete_auxiliary_equipment(company_id: int, ids: list) -> int:
+    """批量删除辅助设备（仅删本公司存在的）"""
     ids = validate_id_list(ids, "辅助设备ID")
-    AuxiliaryEquipment.batch_soft_delete(ids)
+    # 按 company_id 过滤出本公司的 id（防止跨公司删除）
+    valid_ids = list(
+        AuxiliaryEquipment.objects.filter(pk__in=ids, company_id=company_id, is_deleted=False).values_list('id', flat=True)
+    )
+    if valid_ids:
+        AuxiliaryEquipment.batch_soft_delete(valid_ids)
+    return len(valid_ids)
 

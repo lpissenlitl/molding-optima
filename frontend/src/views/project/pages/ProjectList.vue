@@ -6,7 +6,7 @@
   - 新建项目（跳转 /mold/project/new）
 -->
 <template>
-  <div class="project-list">
+  <div class="page-stack">
     <!-- 搜索表单（配置驱动，复用 BaseSearchForm） -->
     <ProjectSearchForm
       :query-detail="query"
@@ -298,7 +298,7 @@ async function batchDelete() {
     return
   }
   try {
-    const res: any = await projectMethod.multipleDelete({ ids })
+    const res: any = await projectMethod.batchDelete({ ids })
     if (res.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 个项目`)
       selected_rows.value = []
@@ -326,25 +326,4 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.project-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 操作列按钮紧凑显示 */
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
-}
 </style>

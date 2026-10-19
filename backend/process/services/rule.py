@@ -280,24 +280,6 @@ def get_list_of_rule_method(
     }
 
 
-def get_rules_by_defect(defect_code):
-    """根据缺陷 code 获取所有启用的规则（按优先级排序）
-
-    使用 `defect_code` 字段（机器可读标识，如 "SHORTSHOT"），
-    不使用 `defect_label`（中文名称，如 "短射"）。
-    原因：
-    1. code 不依赖语言，国际化友好
-    2. 与 FuzzyEngine 使用的英文 defect_name 对齐（SHORTSHOT/SINK_MARK 等）
-    3. 同一 code 可以对应多个中文译名，不会因译名变动失效
-    """
-    rules = RuleMethod.objects.filter(
-        defect_code=defect_code,
-        is_active=True,
-        is_deleted=False,
-    ).order_by("-priority")
-    return [r.to_dict() for r in rules]
-
-
 # ==================== RuleLibrary ====================
 
 def get_rule_library(rule_library_id):

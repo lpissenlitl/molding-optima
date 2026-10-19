@@ -38,6 +38,6 @@ urlpatterns = [
     # 管理员管理组织信息
     path("organizations/", views.AdminOrganizationListView.as_view()),
     path("organizations/<int:organization_id>/", views.AdminOrganizationDetailView.as_view()),
-    path("organizations/actions/batch-update/", views.AdminOrganizationListView.as_view()),
+    path("organizations/actions/reorder/", views.AdminOrganizationListView.as_view()),
     path("organizations/actions/batch-delete/", views.AdminOrganizationListView.as_view()),
 ]

@@ -753,22 +753,21 @@ export default {
      */
     isFieldChanged(path) {
       if (!this.original_process) return false
-      
+
       const current_value = this.getNestedValue(this.setting_process, path)
       const original_value = this.getNestedValue(this.original_process, path)
-      
-      if (current_value === null && original_value === null) return false
-      if (current_value === undefined && original_value === undefined) return false
-      if (current_value === null && original_value !== null) return true
-      if (current_value !== null && original_value === null) return true
-      if (current_value === undefined && original_value !== undefined) return true
-      if (current_value !== undefined && original_value === undefined) return true
-      
+      // 空值归一化：null / undefined / '' 互为"空"
+      // - 业务语义：input 清空后 v-model 值为 ''，与初始 null 同义
+      // - 双向绑定 input 的常见"空"表示（v-number 不 emit，el-input 已被 Vue 设为 ''）
+      // - 0 / 0.0 不视为空（数值字段 0 有意义）
+      const isEmpty = (v) => v === null || v === undefined || v === ''
+      if (isEmpty(current_value) && isEmpty(original_value)) return false
+      if (isEmpty(current_value) !== isEmpty(original_value)) return true
+      // number 容差比较（NaN 容差）
       if (typeof current_value === "number" && typeof original_value === "number") {
         if (isNaN(current_value) && isNaN(original_value)) return false
         return Math.abs(current_value - original_value) > 0.0001
       }
-      
       return current_value !== original_value
     },
 

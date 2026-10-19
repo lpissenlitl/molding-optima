@@ -1,11 +1,10 @@
 """molding-optima 工艺参数初始化 Schema 定义
 
 包含：
-- 4 个推理输入：MachineInfoSchema / PolymerInfoSchema / MoldInfoSchema / ProcessSetSchema
-- 3 个推理/初始化请求：
-    ProcessInferSchema                              （/infer/ 纯推理，不查库不落库）
-    ProcessInitializationFromSourceConditionSchema  （Mode C：从历史合格工艺复制）
-    ProcessInitializationFromMasterdataSchema       （Mode B：基于 masterdata ID 调推理）
+- 3 个推理/初始化请求（按入口类型排列：masterdata ID / 源 condition / 调用方提供）：
+    ProcessInitializeFromMasterdataSchema       （基于 masterdata ID 调推理 - 业务主流程）
+    ProcessInitializeFromConditionSchema        （从历史合格工艺复制 - 业务另一场景）
+    ProcessInitializeFromProvidedSchema         （纯推理 - 不查库不落库）
 """
 from typing import Optional
 
@@ -103,27 +102,91 @@ class ProcessSetSchema(BaseSchema):
     inj_stg: Optional[int] = Field(1, ge=1, le=6, description="注射段数（1-6）")
     hold_stg: Optional[int] = Field(1, ge=1, le=5, description="保压段数（1-5）")
     met_stg: Optional[int] = Field(1, ge=1, le=4, description="计量段数（1-4）")
-    barrel_temperature_stage: Optional[int] = Field(
+    brl_temp_stg: Optional[int] = Field(
         5, ge=1, le=10, description="料筒温度段数（1-10）",
     )
 
     # 模式设置
-    VP_switch_mode: Optional[str] = Field("位置", description="VP 切换模式：位置/时间/...")
     vps_mode: Optional[int] = Field(None, ge=0, le=2, description="VP切换模式：0=位置 / 1=时间 / 2=其他")
     pre_met_decomp_mode: Optional[int] = Field(None, ge=0, le=2, description="熔胶前松退模式")
     pst_met_decomp_mode: Optional[int] = Field(None, ge=0, le=2, description="熔胶后松退模式")
 
 
-class ProcessInferSchema(BaseSchema):
-    """工艺参数纯推理请求（前端传完整数据，不查库不落库）
+class ProcessInitializeFromMasterdataSchema(BaseSchema):
+    """【业务主流程】基于 masterdata ID 调推理 + 建档
+
+    POST /api/processes/algorithms/initialize/
+
+    业务语义：
+      "基于 masterdata ID 创建一个新的工艺条件（ProcessCondition），
+       并基于该条件生成初始工艺参数（ProcessParameter）"
+
+    Step 1 入口适配：3 个 masterdata ID + shot_index + injection_index
+    Step 2 数据前处理：service 层从 ORM 构建完整快照 (process_context_snapshot)
+    Step 3+4 推理算法 + 落库：创建 Condition（存完整快照）+ ProcessParameter
+
+    shot_index / injection_index 的角色：
+      - shot_index       = 模具的"第几射"（多射模具：0=第一射, 1=第二射, ...）
+      - injection_index  = 注塑机的"第几个射台"（多射台机：0=第一射台, 1=第二射台, ...）
+      - 两个索引一旦确定，本次工艺条件对应的"哪台机哪个射台打哪个产品"也就确定
+      - service 层会用它们从 mold.gating_systems[shot_index] 与 machine.injection_units[injection_index]
+        精确选取子项，构建完整快照
+
+    status / origin_type / condition_no 由后端自动生成。
+    """
+
+    mold_id: int = Field(..., description="模具 ID（必填）")
+    shot_index: int = Field(
+        0, ge=0,
+        description="模具的第几射（0-based，默认 0）。多射模具按此索引从 gating_systems 选取具体浇注系统。",
+    )
+    injection_machine_id: int = Field(..., description="注塑机 ID（必填）")
+    injection_index: int = Field(
+        0, ge=0,
+        description="注塑机的第几个射台（0-based，默认 0）。多射台注塑机按此索引从 injection_units 选取具体射台。",
+    )
+    polymer_id: int = Field(..., description="材料 ID（必填）")
+    process_set: Optional[ProcessSetSchema] = Field(
+        None, description="工艺设置（段数与模式），不传则用 schema 默认值",
+    )
+
+
+class ProcessInitializeFromConditionSchema(BaseSchema):
+    """【业务另一场景】基于源 condition_id 复制初始工艺参数
+
+    POST /api/processes/algorithms/initialize-from-condition/
+
+    业务场景：
+      工艺记录中已有"合格工艺"（condition + 其下的 ProcessParameter），
+      复用该工艺作为新工艺的起点，不调用推理算法。
+      为保证数据不过时，service 层会重新检索当前 masterdata 重构快照。
+
+    请求体：
+    {
+        "source_condition_id": 100,   # 源工艺条件 ID（必填）
+        "process_set": {...}           # 可选：工艺设置覆盖
+    }
+
+    status / origin_type 由后端固定为 draft / legacy_import。
+    process_context 由后端自动写入（调用入参快照）。
+    """
+
+    source_condition_id: int = Field(
+        ..., description="源工艺条件 ID（历史合格工艺，必填）",
+    )
+    process_set: Optional[ProcessSetSchema] = Field(
+        None, description="工艺设置（段数与模式），不传则用 schema 默认值",
+    )
+
+
+class ProcessInitializeFromProvidedSchema(BaseSchema):
+    """【纯推理，不查库不落库】工艺参数纯推理请求
 
     适用场景：
-    - 第三方系统集成：调用方没有我们的 masterdata，只能传完整数据
+    - 第三方系统集成：调用方提供完整数据，后端纯推理
     - 算法试算：仅做参数推荐，不需要保存记录
 
-    数据完整性要求：
-    - 必须按信息归属层级提供完整的输入上下文
-    - 与 /initialization/ 接口的区别：完全由调用方提供数据，后端不查库
+    与 /algorithms/initialize/ 的区别：完全由调用方提供数据，后端不查库
 
     请求体（4 个独立维度，职责清晰）：
     {
@@ -159,74 +222,4 @@ class ProcessInferSchema(BaseSchema):
     )
     process_set: ProcessSetSchema = Field(
         ..., description="工艺设置（段数与模式）",
-    )
-
-
-class ProcessInitializationFromSourceConditionSchema(BaseSchema):
-    """【Mode C】基于源 condition_id 复制初始工艺参数请求
-
-    POST /api/processes/initialization/from-source-condition/
-
-    业务场景：
-      工艺记录中已有“合格工艺”（condition + 其下的 ProcessParameter），
-      复用该工艺作为新工艺的起点，不调用推理算法。
-      为保证数据不过时，service 层会重新检索当前 masterdata 重构快照。
-
-    请求体：
-    {
-        "source_condition_id": 100,   # 源工艺条件 ID（必填）
-        "process_set": {...}           # 可选：工艺设置覆盖
-    }
-
-    status / origin_type 由后端固定为 draft / legacy_import。
-    process_context 由后端自动写入（调用入参快照）。
-    """
-
-    source_condition_id: int = Field(
-        ..., description="源工艺条件 ID（历史合格工艺，必填）",
-    )
-    process_set: Optional[ProcessSetSchema] = Field(
-        None, description="工艺设置（段数与模式），不传则用 schema 默认值",
-    )
-
-
-class ProcessInitializationFromMasterdataSchema(BaseSchema):
-    """【Mode B】基于 masterdata ID 的工艺初始化请求
-
-    POST /api/processes/initialization/from-masterdata/
-
-    业务语义：
-      "基于 masterdata ID 创建一个新的工艺条件（ProcessCondition），
-       并基于该条件生成初始工艺参数（ProcessParameter）"
-
-    Step 1 入口适配：3 个 masterdata ID + shot_index + injection_index
-    Step 2 数据前处理：service 层从 ORM 构建完整快照 (process_context_snapshot)
-    Step 3+4 推理算法 + 落库：创建 Condition（存完整快照）+ ProcessParameter
-
-    shot_index / injection_index 的角色：
-      - shot_index       = 模具的"第几射"（多射模具：0=第一射, 1=第二射, ...）
-      - injection_index  = 注塑机的"第几个射台"（多射台机：0=第一射台, 1=第二射台, ...）
-      - 两个索引一旦确定，本次工艺条件对应的"哪台机哪个射台打哪个产品"也就确定
-      - service 层会用它们从 mold.gating_systems[shot_index] 与 machine.injection_units[injection_index]
-        精确选取子项，构建完整快照
-
-    status / origin_type / condition_no 由后端自动生成。
-    """
-
-    mold_id: int = Field(..., description="模具 ID（必填）")
-    polymer_id: int = Field(..., description="材料 ID（必填）")
-    injection_machine_id: int = Field(..., description="注塑机 ID（必填）")
-
-    # 索引字段（把旧版藏在 process_context 里的关联 ID 提升为显式入参）
-    shot_index: int = Field(
-        0, ge=0,
-        description="模具的第几射（0-based，默认 0）。多射模具按此索引从 gating_systems 选取具体浇注系统。",
-    )
-    injection_index: int = Field(
-        0, ge=0,
-        description="注塑机的第几个射台（0-based，默认 0）。多射台注塑机按此索引从 injection_units 选取具体射台。",
-    )
-
-    process_set: Optional[ProcessSetSchema] = Field(
-        None, description="工艺设置（段数与模式），不传则用 schema 默认值",
     )

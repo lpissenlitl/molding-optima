@@ -12,7 +12,7 @@
   - 跨模块入口多出 moldflow / trial / resume
 -->
 <template>
-  <div class="mold-list">
+  <div class="page-stack">
     <!-- 搜索表单 -->
     <MoldSearchForm
       :query-detail="query"
@@ -81,6 +81,7 @@
           @click="goReservation(row)"
           :disabled="!hasPermission('add_reservation')"
         >
+          <AppIcon icon="mdi:calendar-check-outline" style="margin-right: 2px;" />
           预约
         </el-button>
       </template>
@@ -326,7 +327,7 @@ async function batchDelete() {
     return
   }
   try {
-    const res: any = await moldMethod.multipleDelete({ ids })
+    const res: any = await moldMethod.batchDelete({ ids })
     if (res.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 个模具`)
       selected_rows.value = []
@@ -369,25 +370,4 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.mold-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 操作列按钮紧凑显示（与 project/index.vue 一致） */
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
-}
 </style>

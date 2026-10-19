@@ -21,6 +21,7 @@ class AuxiliaryEquipmentDetailView(BaseView):
     def put(self, request, auxiliary_equipment_id, cleaned_data):
         """更新辅助装置信息"""
         return auxiliary_service.update_auxiliary_equipment(
+            company_id=request.user.company_id,
             auxiliary_equipment_id=auxiliary_equipment_id,
             **cleaned_data
         )
@@ -29,6 +30,7 @@ class AuxiliaryEquipmentDetailView(BaseView):
     def delete(self, request, auxiliary_equipment_id):
         """删除辅助装置"""
         return auxiliary_service.delete_auxiliary_equipment(
+            company_id=request.user.company_id,
             auxiliary_equipment_id=auxiliary_equipment_id
         )
 
@@ -59,5 +61,8 @@ class AuxiliaryEquipmentListView(BaseView, PaginationResponse):
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
         """批量删除辅助装置"""
-        return auxiliary_service.batch_delete_auxiliary_equipment(**cleaned_data)
+        return auxiliary_service.batch_delete_auxiliary_equipment(
+            company_id=request.user.company_id,
+            **cleaned_data
+        )
 

@@ -17,7 +17,10 @@
       <el-row :gutter="24">
         <!-- 简称 autocomplete -->
         <el-col :xs="24" :sm="12" :md="6">
-          <el-form-item label="选择塑料">
+          <el-form-item
+            label="选择塑料"
+            :rules="[{ required: true, message: '请选择塑料简称', trigger: 'change' }]"
+          >
             <el-autocomplete
               v-model="polymerAbbreviation"
               :fetch-suggestions="fetchAbbreviationSuggestions"
@@ -38,7 +41,7 @@
 
         <!-- 牌号 autocomplete（fetch 按当前简称过滤） -->
         <el-col :xs="24" :sm="12" :md="6">
-          <el-form-item label="塑料牌号" prop="polymer_id">
+          <el-form-item label="塑料牌号" prop="polymer_info.id">
             <el-autocomplete
               v-model="selectedGrade"
               :fetch-suggestions="fetchGradeSuggestions"
@@ -164,7 +167,7 @@
 
 <script setup lang="ts">
 import { ref, watch, inject } from 'vue'
-import { polymerList, polymerDetail } from '@/api'
+import { polymerMethod } from '@/api'
 import DerivedField from './DerivedField.vue'
 import { ConditionKey } from './types.js'
 import type { Condition } from './types.js'
@@ -205,13 +208,13 @@ watch(
 watch(polymerAbbreviation, (val) => {
   if (val === '') {
     selectedGrade.value = ''
-    condition.polymer_id = null
+    // 清空嵌套 polymer_info（包含 id），校验自动失败
     condition.polymer_info = null
   }
 })
 watch(selectedGrade, (val) => {
   if (val === '') {
-    condition.polymer_id = null
+    // 清空嵌套 polymer_info（包含 id），校验自动失败
     condition.polymer_info = null
   }
 })
@@ -219,7 +222,7 @@ watch(selectedGrade, (val) => {
 // 简称 autocomplete:输入简称关键词,按 abbreviation 模糊检索
 async function fetchAbbreviationSuggestions(queryString: string, cb: (results: any[]) => void) {
   try {
-    const res: any = await polymerList({
+    const res: any = await polymerMethod.get({
       page_no: 1,
       page_size: 30,
       abbreviation: queryString || undefined,
@@ -248,7 +251,7 @@ async function fetchAbbreviationSuggestions(queryString: string, cb: (results: a
 // 若已选简称则联动过滤(基于 polymerAbbreviation.value)
 async function fetchGradeSuggestions(queryString: string, cb: (results: any[]) => void) {
   try {
-    const res: any = await polymerList({
+    const res: any = await polymerMethod.get({
       page_no: 1,
       page_size: 30,
       grade: queryString || undefined,
@@ -275,7 +278,7 @@ function onAbbreviationSelect(item: any) {
   if (!p) return
   if (condition.polymer_info && condition.polymer_info.abbreviation !== p.abbreviation) {
     selectedGrade.value = ''
-    condition.polymer_id = null
+    // 清空嵌套 polymer_info（包含 id），校验自动失败
     condition.polymer_info = null
   }
 }
@@ -285,7 +288,7 @@ function onAbbreviationSelect(item: any) {
 async function onGradeSelect(item: any) {
   const p = item?.item ?? null
   if (!p) return
-  condition.polymer_id = p.id
+  // id 写入 condition.polymer_info.id（嵌套结构，校验 prop="polymer_info.id"）
   // 同步简称:如果当前简称空或不一致,同步为该 polymer 的 abbreviation
   if (p.abbreviation && polymerAbbreviation.value !== p.abbreviation) {
     polymerAbbreviation.value = p.abbreviation
@@ -293,7 +296,7 @@ async function onGradeSelect(item: any) {
   // 列表 API 不含 Moldflow 参数
   // 必须调详情 API 获取完整数据
   try {
-    const detail: any = await polymerDetail(p.id)
+    const detail: any = await polymerMethod.getDetail(p.id)
     if (detail?.status === 0 && detail.data) {
       condition.polymer_info = detail.data
     } else {

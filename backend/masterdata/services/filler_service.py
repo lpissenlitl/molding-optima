@@ -27,16 +27,20 @@ def get_filler_info(filler_id: int) -> dict:
     return filler.to_dict()
 
 
-def update_filler_info(filler_id: int, **kwargs) -> dict:
-    """更新填充物信息"""
-    filler = _get_filler_by_id(filler_id)
+def update_filler_info(company_id: int, filler_id: int, **kwargs) -> dict:
+    """更新填充物信息（仅限本公司）"""
+    filler = Filler.objects.filter(pk=filler_id, company_id=company_id, is_deleted=False).first()
+    if filler is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"填充物不存在: id={filler_id}")
     filler.update_info(**kwargs)
     return filler.to_dict()
 
 
-def delete_filler(filler_id: int) -> None:
-    """删除填充物"""
-    filler = _get_filler_by_id(filler_id)
+def delete_filler(company_id: int, filler_id: int) -> None:
+    """删除填充物（仅限本公司）"""
+    filler = Filler.objects.filter(pk=filler_id, company_id=company_id, is_deleted=False).first()
+    if filler is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"填充物不存在: id={filler_id}")
     filler.soft_delete()
 
 
@@ -73,7 +77,13 @@ def get_filler_list(
     return pagination["total_count"], results
 
 
-def batch_delete_filler(ids: list) -> int:
-    """批量删除填充物"""
+def batch_delete_filler(company_id: int, ids: list) -> int:
+    """批量删除填充物（仅删本公司存在的）"""
     ids = validate_id_list(ids, "填充物ID")
-    Filler.batch_soft_delete(ids)
+    # 按 company_id 过滤出本公司的 id（防止跨公司删除）
+    valid_ids = list(
+        Filler.objects.filter(pk__in=ids, company_id=company_id, is_deleted=False).values_list('id', flat=True)
+    )
+    if valid_ids:
+        Filler.batch_soft_delete(valid_ids)
+    return len(valid_ids)

@@ -6,7 +6,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 django.setup()
 
 from unittest.mock import patch, MagicMock
-from process.services.parameter_initialize import ParameterInitializeService
+from process.services import parameter_initialize as _init_mod  # 模块顶层函数（整改后 helper 已不在类内）
+from process.services.parameter_initialize import ParameterInitializeService  # noqa: F401 — 仅保留 import 以验证类的公开表面
 
 print("=== Bug 2 修复验证 ===")
 
@@ -19,7 +20,7 @@ with patch("process.models.parameter.ProcessParameter.objects.create", return_va
     fake_condition = MagicMock(id=14)
     fake_result = {"process": {"inj_stg": 3, "inj_pres_steps": [80, 90, None, None, None, None]}}
 
-    new_param = ParameterInitializeService._create_process_parameter(fake_condition, fake_result)
+    new_param = _init_mod._create_process_parameter(fake_condition, fake_result)
 
     assert mock_param_create.called, "BUG: ProcessParameter 未创建"
     print("    [OK] ProcessParameter.objects.create 被调用")
@@ -42,7 +43,7 @@ with patch("process.models.parameter.ProcessParameter.objects.create", return_va
      patch("process.models.tuning_record.TuningRecord.objects.create") as mock_tr_create:
     fake_target_cond = MagicMock(id=15)
 
-    new_param = ParameterInitializeService._copy_process_parameter(fake_source_param, fake_target_cond)
+    new_param = _init_mod._copy_process_parameter(fake_source_param, fake_target_cond)
 
     assert mock_param_create.called, "BUG: ProcessParameter 未创建"
     print("    [OK] ProcessParameter.objects.create 被调用")

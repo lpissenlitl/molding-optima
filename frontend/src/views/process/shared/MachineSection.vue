@@ -139,7 +139,7 @@
 
 <script setup lang="ts">
 import { ref, watch, inject } from 'vue'
-import { injectionMachineList, injectionMachineDetail } from '@/api'
+import { machineMethod } from '@/api'
 import DerivedField from './DerivedField.vue'
 import { useConditionDerived } from './composables/useConditionDerived.js'
 import { ConditionKey } from './types.js'
@@ -206,7 +206,7 @@ watch(injectionIndexStr, (val) => {
 // 注塑机远程拉取 + 选择回调（自包含）
 async function fetchMachineSuggestions(queryString: string, cb: (results: any[]) => void) {
   try {
-    const res: any = await injectionMachineList({
+    const res: any = await machineMethod.get({
       page_no: 1,
       page_size: 30,
       model: queryString || undefined,
@@ -230,11 +230,11 @@ async function fetchMachineSuggestions(queryString: string, cb: (results: any[])
 async function onMachineSelect(item: any) {
   const m = item?.item ?? null
   if (!m) return
-  condition.injection_machine_id = m.id
+  // id 写入 condition.machine_info.id（嵌套结构，校验 prop="machine_info.id"）
   // 列表 API 不返回反向关联
   // 必须调详情 API 获取完整的 injection_units
   try {
-    const detail: any = await injectionMachineDetail(m.id)
+    const detail: any = await machineMethod.getDetail(m.id)
     if (detail?.status === 0 && detail.data) {
       condition.machine_info = detail.data
     } else {
@@ -250,7 +250,7 @@ async function onMachineSelect(item: any) {
 }
 
 function onMachineClear() {
-  condition.injection_machine_id = null
+  // 清空嵌套 machine_info（包含 id），校验自动失败
   condition.machine_info = null
   condition.injection_index = null
   injectionIndexStr.value = ''

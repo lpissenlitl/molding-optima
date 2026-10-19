@@ -185,15 +185,17 @@ def get_polymer_info(polymer_id: int) -> dict:
     return _build_polymer_dict(polymer)
 
 
-def update_polymer_info(polymer_id: int, **kwargs) -> dict:
+def update_polymer_info(company_id: int, polymer_id: int, **kwargs) -> dict:
     """
-    更新聚合物信息
+    更新聚合物信息（仅限本公司）
 
     同步策略：
     - kwargs 中包含的 Moldflow key：根据其值（非空 dict=更新，空 dict=删除，None=不变）
     - kwargs 中未包含的 Moldflow key：保持不变
     """
-    polymer = _get_polymer_by_id(polymer_id)
+    polymer = Polymer.objects.filter(pk=polymer_id, company_id=company_id, is_deleted=False).first()
+    if polymer is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"聚合物不存在: id={polymer_id}")
 
     with transaction.atomic():
         polymer.update_info(**kwargs)
@@ -202,13 +204,15 @@ def update_polymer_info(polymer_id: int, **kwargs) -> dict:
     return _build_polymer_dict(polymer)
 
 
-def delete_polymer(polymer_id: int) -> None:
+def delete_polymer(company_id: int, polymer_id: int) -> None:
     """
     删除聚合物（软删除）
 
     Moldflow 参数子表通过 on_delete=CASCADE 一并删除（物理删除，因为子表本身不维护软删除状态）
     """
-    polymer = _get_polymer_by_id(polymer_id)
+    polymer = Polymer.objects.filter(pk=polymer_id, company_id=company_id, is_deleted=False).first()
+    if polymer is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"聚合物不存在: id={polymer_id}")
     polymer.soft_delete()
 
 
@@ -249,7 +253,13 @@ def get_polymer_list(
     return pagination["total_count"], results
 
 
-def batch_delete_polymer(ids: list) -> None:
-    """批量删除聚合物（软删除）"""
+def batch_delete_polymer(company_id: int, ids: list) -> int:
+    """批量删除聚合物（软删除，仅删本公司存在的）"""
     ids = validate_id_list(ids, "聚合物ID")
-    Polymer.batch_soft_delete(ids)
+    # 按 company_id 过滤出本公司的 id（防止跨公司删除）
+    valid_ids = list(
+        Polymer.objects.filter(pk__in=ids, company_id=company_id, is_deleted=False).values_list('id', flat=True)
+    )
+    if valid_ids:
+        Polymer.batch_soft_delete(valid_ids)
+    return len(valid_ids)

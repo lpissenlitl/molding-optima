@@ -7,7 +7,7 @@
   - 新建/编辑公司（弹窗，含公司管理员子表单）
 -->
 <template>
-  <div class="company-list">
+  <div class="page-stack">
     <!-- 搜索栏 -->
     <div class="search-container">
       <el-form
@@ -394,7 +394,7 @@ async function batchDelete() {
   }
 
   try {
-    const res: any = await companyMethod.multipleDelete({ ids })
+    const res: any = await companyMethod.batchDelete({ ids })
     if (res.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 个公司`)
       selected_rows.value = []
@@ -480,23 +480,6 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.company-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
 .custom-tag {
   display: inline-flex;
   align-items: center;
@@ -523,10 +506,6 @@ onMounted(() => {
 
 .text-success {
   color: #67c23a;
-}
-
-.text-danger {
-  color: #f56c6c;
 }
 
 .text-primary {

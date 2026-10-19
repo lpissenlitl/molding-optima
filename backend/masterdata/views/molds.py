@@ -30,6 +30,7 @@ class MoldDetailView(BaseView):
     def delete(self, request, mold_id):
         """删除模具信息"""
         return mold_service.delete_mold(
+            company_id=request.user.company_id,
             mold_id=mold_id
         )
     
@@ -59,4 +60,7 @@ class MoldListView(BaseView):
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
         """批量删除模具"""
-        return mold_service.batch_delete_mold(**cleaned_data)
+        return mold_service.batch_delete_mold(
+            company_id=request.user.company_id,
+            **cleaned_data
+        )

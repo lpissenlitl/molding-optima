@@ -2,12 +2,15 @@
  * 规则中心 API 封装
  *
  * 后端路径前缀：/api/processes/
- * 路由表：
- * - GET/POST    /api/processes/rule-libraries/                          规则库列表/新建
- * - GET/PATCH/DELETE /api/processes/rule-libraries/<id>/                规则库详情/编辑/删除
- * - GET/POST    /api/processes/rule-libraries/<id>/methods/             库下规则方法
- * - GET/POST    /api/processes/rule-libraries/<id>/expert-rules/        库下专家规则
- * - GET/PATCH/DELETE /api/processes/expert-rules/<id>/                  专家规则详情
+ * 路由表（按业务关联分组）:
+ * - GET/POST    /api/processes/rule-libraries/                       规则库 (基础设施)
+ * - GET/PATCH/DELETE /api/processes/rule-libraries/<id>/
+ * - GET/POST    /api/processes/rules/keywords/                       规则关键词 (与 method 关联)
+ * - GET/PUT/DELETE /api/processes/rules/keywords/<id>/
+ * - GET/POST    /api/processes/rules/methods/                        规则方法 (引用 keyword, ?rule_library_id 过滤)
+ * - GET/PATCH/DELETE /api/processes/rules/methods/<id>/
+ * - GET/POST    /api/processes/expert-rules/                        专家规则 (独立, 不引用 keyword)
+ * - GET/PATCH/DELETE /api/processes/expert-rules/<id>/
  *
  * 设计说明：
  * - 后端响应统一为 { status, msg, data: ... }
@@ -130,8 +133,9 @@ export function deleteRuleKeyword(id: number): Promise<void> {
 // RuleMethod（规则方法，详情页 Tab 1）
 // ============================================================================
 
-/** 库下规则方法列表 */
-export function listRuleMethods(libraryId: number, params?: {
+/** 规则方法列表（?rule_library_id 过滤） */
+export function listRuleMethods(params?: {
+  rule_library_id?: number
   page_no?: number
   page_size?: number
   defect_label?: string
@@ -139,7 +143,7 @@ export function listRuleMethods(libraryId: number, params?: {
   is_active?: boolean
 }): Promise<PageResult<RuleMethod>> {
   return request({
-    url: `/api/processes/rule-libraries/${libraryId}/methods/`,
+    url: '/api/processes/rules/methods/',
     method: 'get',
     params,
   })
@@ -148,7 +152,7 @@ export function listRuleMethods(libraryId: number, params?: {
 /** 规则方法详情 */
 export function getRuleMethod(id: number): Promise<RuleMethod> {
   return request({
-    url: `/api/processes/rule-methods/${id}/`,
+    url: `/api/processes/rules/methods/${id}/`,
     method: 'get',
   })
 }
@@ -156,7 +160,7 @@ export function getRuleMethod(id: number): Promise<RuleMethod> {
 /** 新建规则方法 */
 export function createRuleMethod(payload: RuleMethodCreatePayload): Promise<RuleMethod> {
   return request({
-    url: `/api/processes/rule-libraries/${payload.rule_library_id}/methods/`,
+    url: '/api/processes/rules/methods/',
     method: 'post',
     data: payload,
   })
@@ -168,7 +172,7 @@ export function updateRuleMethod(
   payload: Partial<RuleMethodCreatePayload>,
 ): Promise<RuleMethod> {
   return request({
-    url: `/api/processes/rule-methods/${id}/`,
+    url: `/api/processes/rules/methods/${id}/`,
     method: 'patch',
     data: payload,
   })
@@ -177,7 +181,7 @@ export function updateRuleMethod(
 /** 删除规则方法 */
 export function deleteRuleMethod(id: number): Promise<void> {
   return request({
-    url: `/api/processes/rule-methods/${id}/`,
+    url: `/api/processes/rules/methods/${id}/`,
     method: 'delete',
   })
 }
@@ -186,15 +190,16 @@ export function deleteRuleMethod(id: number): Promise<void> {
 // ExpertRule（专家规则，详情页 Tab 2）
 // ============================================================================
 
-/** 库下专家规则列表 */
-export function listExpertRules(libraryId: number, params?: {
+/** 专家规则列表（?rule_library_id 过滤） */
+export function listExpertRules(params?: {
+  rule_library_id?: number
   page_no?: number
   page_size?: number
   rule_code?: string
   is_active?: boolean
 }): Promise<PageResult<ExpertRule>> {
   return request({
-    url: `/api/processes/rule-libraries/${libraryId}/expert-rules/`,
+    url: '/api/processes/expert-rules/',
     method: 'get',
     params,
   })
@@ -203,7 +208,7 @@ export function listExpertRules(libraryId: number, params?: {
 /** 新建专家规则 */
 export function createExpertRule(payload: ExpertRuleCreatePayload): Promise<ExpertRule> {
   return request({
-    url: `/api/processes/rule-libraries/${payload.rule_library_id}/expert-rules/`,
+    url: '/api/processes/expert-rules/',
     method: 'post',
     data: payload,
   })

@@ -1,22 +1,6 @@
-<!--
-  ProcessParameterList - 工艺参数列表页
-
-  路由：/process/parameter（菜单"工艺参数"）
-  数据源：后端 ProcessCondition 表（一次试模的完整上下文：模具/机器/材料/工艺参数）。
-  业务说明：
-    ProcessCondition 是"试模上下文"的通用载体，不同业务视图（参数/优化/调机）
-    都基于该载体展示不同视角。这里展示的是"工艺参数"视角。
-
-  架构（2026-09-11 重写）：
-    - 搜索：ProcessSearchForm（Vue 3 setup + BaseSearchForm）
-    - 列表：BaseTable 组件（接管 el-table + el-pagination + 列筛选 + 偏好持久化）
-    - 列定义：12 列，含状态/起源/模具/产品/机台/材料/创建时间等
-    - 顶部 toolbar：新建工艺、批量删除、导出
-    - 行操作：编辑 / 删除
-    - 跨模块入口：调整记录（占位，后续接入）
--->
+<!-- 工艺档案列表（/process/library）-->
 <template>
-  <div class="process-condition-list">
+  <div class="page-stack">
     <!-- 搜索表单 -->
     <ProcessSearchForm
       :query-detail="query"
@@ -112,28 +96,12 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 工艺条件列表数据流：
- * - 编辑/新建：路由跳转（/process/parameter/new、/process/parameter/:id/edit）
- * - 列表字段顺序/列显隐/密度/pageSize 通过 view-name="process_condition_list" 持久化
- * - 列表查询走 processParameterMethod（BaseRequest 实例），URL = /api/processes/parameter/
- *
- * 后端响应结构（main_service.get_process_parameter_list）：
- *   {
- *     id, condition_no, status, origin_type,
- *     mold_no, mold_name, mold_type, cavity_layout, product_category,
- *     machine_brand, machine_model, machine_device_code,
- *     polymer_abbreviation, polymer_grade,
- *     shot_index, injection_index,
- *     created_at, updated_at
- *   }
- */
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import ProcessSearchForm from '../components/ProcessSearchForm.vue'
-import { processParameterMethod, processParameterBatchDelete } from '@/api'
+import { processRecordMethod } from '@/api'
 
 // ============================================================================
 // 类型
@@ -195,6 +163,7 @@ const table_columns = ref<BaseTableColumn[]>([
 // ============================================================================
 
 const STATUS_MAP: Record<string, string> = {
+  draft: '草稿',
   active: '使用中',
   archived: '已归档',
 }
@@ -224,7 +193,7 @@ function originLabel(o: string) {
 async function fetchList() {
   list_loading.value = true
   try {
-    const res: any = await processParameterMethod.get({
+    const res: any = await processRecordMethod.get({
       page_no: query.page_no,
       page_size: query.page_size,
       status: query.status || undefined,
@@ -262,11 +231,11 @@ function onReset() {
 // ============================================================================
 
 function goCreate() {
-  router.push('/process/parameter/new')
+  router.push('/process/library/new')
 }
 
 function goEdit(row: any) {
-  router.push(`/process/parameter/${row.id}/edit`)
+  router.push(`/process/library/${row.id}/edit`)
 }
 
 async function deleteOne(row: any) {
@@ -280,7 +249,7 @@ async function deleteOne(row: any) {
     return
   }
   try {
-    const res: any = await processParameterMethod.delete(row.id)
+    const res: any = await processRecordMethod.delete(row.id)
     if (res?.status === 0) {
       ElMessage.success('删除成功')
       fetchList()
@@ -305,8 +274,7 @@ async function batchDelete() {
     return
   }
   try {
-    // 后端用 processParameterBatchDelete（POST /api/processes/parameter/batch_delete/）
-    const res: any = await processParameterBatchDelete(ids)
+    const res: any = await processRecordMethod.batchDelete({ ids })
     if (res?.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 条工艺`)
       selected_rows.value = []
@@ -329,24 +297,4 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.process-condition-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
-}
 </style>

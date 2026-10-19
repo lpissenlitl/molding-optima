@@ -15,7 +15,7 @@ _logger = logging.getLogger(__name__)
 
 
 # 前端 tuning_result 枚举 → TuningRecord.result choices 映射
-# 与 optimization_infer._update_previous_tuning_record 保持一致
+# 与 parameter_optimize._update_previous_tuning_record 保持一致
 _TUNING_RESULT_MAP = {
     "effective": "improved",
     "ineffective": "worse",
@@ -36,12 +36,12 @@ class TuningService:
         业务 1:1 创建或更新 parameter 关联的 TuningRecord
 
         业务说明：
-        - 本方法供 POST /api/processes/tuning/record/ 调用
+        - 本方法供 POST /api/processes/tunings/feedback/ 调用
         - 业务层保证每 parameter 至少有 1 条 TuningRecord（infer 已创建）
         - 用户保存当前试模结果 → 覆盖更新
         - 若 infer 链路未运行过（本参数无 TuningRecord）→ 新建一条
 
-        mapping 规则（与 optimization_infer 保持一致）：
+        mapping 规则（与 parameter_optimize 保持一致）：
         - effective       → improved
         - ineffective     → worse
         - qualified / unqualified / pending / null → 原样存

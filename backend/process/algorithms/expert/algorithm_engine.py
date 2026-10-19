@@ -226,7 +226,7 @@ class AlgorithmEngine:
         # ======== 分支 2：液压机（或默认）→ 3 维公式 ========
         # 读取输入值
         nozzle_type = mach.get('nozzle_type', '直通型')
-        max_metering_pres = mach.get('max_set_metering_pressure', 20)
+        max_metering_pres = mach['max_set_metering_pressure']  # 液压机必填，audit 兑底
 
         # 维度 1：base_ratio（按喷嘴类型区分）
         if nozzle_type == '锁定型':
@@ -349,9 +349,9 @@ class AlgorithmEngine:
             float: 计量螺杆转速 [rpm]
         """
         # 读取输入值
-        max_screw_speed = mach.get('max_set_screw_rotation_speed', 150)        # [rpm]
-        screw_diameter = mach.get('screw_diameter', 40)                          # [mm]
-        recommend_shear_speed = mat.get('recommend_shear_linear_speed', 160) or 160  # [mm/s]
+        max_screw_speed = mach['max_set_screw_rotation_speed']           # [rpm] 必填，audit 兑底
+        screw_diameter = mach['screw_diameter']                          # [mm] 必填，audit 兑底
+        recommend_shear_speed = mat['recommend_shear_linear_speed']      # [mm/s] 必填，audit 兑底
 
         # 维度 1：family 剪切敏感度修正（3 级兜底：abbreviation → family → default）
         family_factor, family_level, family_key = self._get_family_meter_shear_ratio(abbreviation, c_met)
@@ -489,7 +489,7 @@ class AlgorithmEngine:
             float: 计量背压 [MPa]
         """
         # 读取输入值
-        max_screw_speed = mach.get('max_set_screw_rotation_speed', 150)
+        max_screw_speed = mach['max_set_screw_rotation_speed']  # 必填，audit 兑底
         recommend_back_pressure = mat.get('recommend_back_pressure') or c_back.get('default_recommend_back_pressure', 10.0)
 
         # 维度 1：family 排气需求修正（3 级兑底：abbreviation → family → default）
@@ -1302,7 +1302,7 @@ class AlgorithmEngine:
             }
 
         # 液压机分支
-        max_set_meter_pres = mach.get('max_set_metering_pressure', 14.0)
+        max_set_meter_pres = mach['max_set_metering_pressure']  # 液压机必填，audit 兑底
 
         # 1. family 黏度修正（4 档，与 #11 计量压力同语义）
         # 这里不依赖 c_suck，而是复用 #11 的 family_pres_map（设计上一致）
@@ -1402,7 +1402,7 @@ class AlgorithmEngine:
         # 液压机分支
         if mach is None:
             mach = {}
-        max_decomp_velo = mach.get('max_set_decompression_velocity', 50.0)
+        max_decomp_velo = mach.get('max_set_decompression_velocity') or 50.0
 
         # 1. family 速度因子（3 级兑底）
         family_velo_map = c_suck.get('family_velo_factor', {})
@@ -2001,18 +2001,21 @@ class AlgorithmEngine:
         c_temp = {'nozzle': c_noz, 'barrel': c_brl}          # 向后兼容（可兑底）
 
         # ========== 基础计算 ==========
+        # runner_weight 可能为 None（热流道场景，无凝料重量），用 `or 0` 兑底（业务合法）
+        # 其他必填字段（product_weight / melt_density / max_length / ave_thickness 等）
+        # 不兑底，假设 audit 已拦住（值必为非 None）
         total_weight = prod['product_weight']
-        runner_weight = prod.get('runner_weight', 0)
+        runner_weight = prod.get('runner_weight') or 0
         product_weight = total_weight - runner_weight
-        melt_density = mat.get('melt_density', 0.95)
+        melt_density = mat['melt_density']
 
         # 流长比
-        max_length = prod.get('max_length', 100)
-        avg_thickness = prod.get('ave_thickness', 2)
+        max_length = prod['max_length']
+        avg_thickness = prod['ave_thickness']
         inj_ratio = max_length / avg_thickness
 
         # 注射行程
-        screw_diameter = mach.get('screw_diameter', 35)
+        screw_diameter = mach['screw_diameter']
         a_screw = compute_screw_cross_area(screw_diameter)
         total_len = compute_total_injection_length(total_weight, melt_density, screw_diameter)
 
@@ -2045,8 +2048,8 @@ class AlgorithmEngine:
         )
 
         # ========== 注射参数 ==========
-        max_inj_pres = mach.get('max_set_injection_pressure', 150)
-        max_inj_velo = mach.get('max_set_injection_velocity', 100)
+        max_inj_pres = mach['max_set_injection_pressure']  # 必填，audit 兑底
+        max_inj_velo = mach['max_set_injection_velocity']  # 必填，audit 兑底
 
         # 【重构】注射压力 = 材料黏度等级 × 流长比修正（二维物理推导）
         # 推导链：流变学定律 → 材料黏度等级（base_ratio） × 流长比修正（length_factor）
@@ -2070,10 +2073,12 @@ class AlgorithmEngine:
 
         # 【重构】注射速度 = 材料流动性等级 × 流长比修正 × 模温修正（三维物理推导）
         # 推导链：体积流量恒等式 + 剪切速率约束 → 流动性等级 × 几何修正 × 温度修正
-        # 数据源：3 级兜底（精确值 / 大类查表 / 默认值）
+        # 数据源：3 级兑底（精确值 / 大类查表 / 默认值）
         # 复用上层已计算的 family（同函数中 inj_pres 也用），inj_ratio
         # 物理详见 _dev_refs/2026-07-05-injection-velocity-physics-design.md
-        mold_temp = mat.get('recommended_mold_temp', 50)
+        # 必填字段，audit 兑底
+        # 注意：algorithm 入参 dict key 是 spec key（无 ed），不是 ORM 字段名（有 ed）
+        mold_temp = mat['recommend_mold_temperature']
         base_velo_ratio, base_velo_level = self._get_base_velocity_ratio(family, c_inj)
         length_velo_factor, length_velo_level = self._get_length_velocity_factor(inj_ratio, c_inj)
         temp_velo_modifier, temp_velo_level = self._get_temp_velocity_modifier(mold_temp, c_inj)
@@ -2095,7 +2100,7 @@ class AlgorithmEngine:
         # 推导链：体积守恒 → 几何下限 (inj_len / inj_velo) → 材料×壁厚钳制窗口 (min_t, max_t)
         # 数据源：3 级兜底（精确值 / 大类×壁厚查表 / 默认值）
         # 物理详见 _dev_refs/2026-07-05-injection-time-physics-design.md
-        max_thickness = prod.get('max_thickness', 0)
+        max_thickness = prod.get('max_thickness') or 0
         bucket, bucket_level = self._get_thickness_bucket(max_thickness, c_inj)
         (min_t, max_t), window_level = self._get_inj_time_window(family, bucket, c_inj)
 
@@ -2189,8 +2194,9 @@ class AlgorithmEngine:
         )
 
         # ========== 保压参数 ==========
-        max_hold_pres = mach.get('max_set_holding_pressure', 100)
-        max_hold_velo = mach.get('max_set_holding_velocity', 100)
+        # 必填字段，audit 兑底
+        max_hold_pres = mach['max_set_holding_pressure']
+        max_hold_velo = mach['max_set_holding_velocity']
 
         # 【重构】保压压力 = 注射压力 × 材料相对保压比例 × 壁厚修正 × 浇口修正 × 流道修正
         # 推导链：保压是注射的延续 → 材料黏度等级 × 几何修正（壁厚/浇口） × 流道状态 → 安全钳制
@@ -2198,9 +2204,9 @@ class AlgorithmEngine:
         # 物理详见 _dev_refs/2026-07-05-holding-pressure-physics-design.md
         inj_pres_1st = proc.inj_pres_steps[0] if proc.inj_pres_steps else inj_pres
         gate_type = prod.get('gate_type', '其他')
-        max_thickness = prod.get('max_thickness', 0)
+        max_thickness = prod.get('max_thickness') or 0
         runner_type = prod.get('runner_type', '')
-        runner_weight = prod.get('runner_weight', 0)
+        runner_weight = prod.get('runner_weight') or 0
 
         family_hold_ratio, hold_level = self._get_family_hold_ratio(family, c_hold)
         bucket, bucket_level = self._get_thickness_bucket(max_thickness, c_inj)
@@ -2290,13 +2296,15 @@ class AlgorithmEngine:
         family_cool_factor_map = c_cool.get('family_cool_factor', {})
         default_cool_factor = c_cool.get('default_cool_factor', 1.2)
         family_factor = family_cool_factor_map.get(family, default_cool_factor)
-        max_thickness_cool = prod.get('max_thickness', 2.0)
+        max_thickness_cool = prod['max_thickness']  # 必填，audit 兑底
         t_cool_raw = (max_thickness_cool ** 2) * family_factor
 
-        # Step 2: 模温修正（温差比 → ΔT_factor 5 档，缺失数据兜底 1.0）
-        t_mold_cool = mat.get('recommended_mold_temp', 0) or 0
-        t_melt_cool = mat.get('recommended_melt_temp', 0) or 0
-        t_eject_cool = mat.get('ejection_temp', 0) or 0
+        # Step 2: 模温修正（温差比 → ΔT_factor 5 档，缺失数据兑底 1.0）
+        # 必填字段，audit 兑底（spec key 无 ed）
+        t_mold_cool = mat['recommend_mold_temperature']
+        t_melt_cool = mat['recommend_melt_temperature']
+        # ejection_temp 是可选字段，未填兑 0
+        t_eject_cool = mat.get('ejection_temp') or 0
         delta_factor, delta_level = self._get_delta_temp_factor(
             t_mold_cool, t_melt_cool, t_eject_cool
         )
@@ -2339,11 +2347,11 @@ class AlgorithmEngine:
             f"[meter_pres] power={mach.get('power_method', '液压机')}, "
             f"nozzle={mach.get('nozzle_type', '直通型')}, "
             f"abbreviation={abbreviation}, "
-            f"max={mach.get('max_set_metering_pressure', 20)}, "
+            f"max={mach['max_set_metering_pressure']}, "
             f"final={meter_pres}"
         )
 
-        max_screw_speed = mach.get('max_set_screw_rotation_speed', 150)
+        max_screw_speed = mach['max_set_screw_rotation_speed']  # 必填，audit 兑底
         # v1.0 物理化：family 修正（必须） + L/D 修正（条件性启用）
         # 不分支动力源（全电机/液压机走同一公式）
         # 60 = s→min 单位换算因子（v_surface × 60 / (π × D) = rpm）
@@ -2351,8 +2359,8 @@ class AlgorithmEngine:
         logger.debug(
             f"[meter_speed] abbreviation={abbreviation}, "
             f"max_screw_speed={max_screw_speed}, "
-            f"screw_diameter={mach.get('screw_diameter', 40)}, "
-            f"recommend_shear={mat.get('recommend_shear_linear_speed', 160)}, "
+            f"screw_diameter={mach['screw_diameter']}, "
+            f"recommend_shear={mat['recommend_shear_linear_speed']}, "
             f"final={meter_speed}"
         )
 
@@ -2406,7 +2414,7 @@ class AlgorithmEngine:
 
         # 读取制品上下文
         runner_type = prod.get('runner_type', '')
-        runner_weight = prod.get('runner_weight', 0)
+        runner_weight = prod.get('runner_weight') or 0
         gate_type = prod.get('gate_type', '侧浇口')
 
         # ========== #15：松退模式决策（3 级兑底）==========
@@ -2478,7 +2486,8 @@ class AlgorithmEngine:
         # ========== #19+#20 温度族参数 ==========
         # #19 喷嘴温度（2 维物理化：nozzle_offset + family_offset）
         nozzle_type = mach.get('nozzle_type', '直通型')
-        recommend_melt_temp = mat.get('recommended_melt_temp', 250)
+        # 必填字段，audit 兑底（spec key 无 ed）
+        recommend_melt_temp = mat['recommend_melt_temperature']
         min_melt_temp = mat.get('min_melt_temp')
         max_melt_temp = mat.get('max_melt_temp')
         glass_transition_temp = mat.get('glass_transition_temp')
@@ -2498,7 +2507,8 @@ class AlgorithmEngine:
         proc.noz_temp = round(noz_temp, 1)
 
         # #20 料筒温度分布（4 维物理化：family_decrement × stages × 幂函数k × 双层边界钳制）
-        proc.brl_temp_stg = prod.get('barrel_temperature_stage', 5)
+        # 算法内部字段（不在 spec 里），未填兑 5
+        proc.brl_temp_stg = prod.get('barrel_temperature_stage') or 5
         brl_temp_steps, brl_info = self._compute_brl_temp_steps(
             recommend_melt_temp=recommend_melt_temp,
             stages=proc.brl_temp_stg,
@@ -2530,7 +2540,8 @@ class AlgorithmEngine:
         """推导模温机工艺参数 - 来自 MOLD_TEMP_DEFAULTS 规则"""
         mat = self.material
 
-        recommend_mold_temp = mat.get('recommended_mold_temp', 0)
+        # 算法内部字段（不在 spec 里），未填兑 0
+        recommend_mold_temp = mat.get('recommended_mold_temp') or 0
         if recommend_mold_temp != 0:
             params.mold_temp.mold_temp = recommend_mold_temp
             return
@@ -2548,7 +2559,8 @@ class AlgorithmEngine:
         """推导热流道工艺参数"""
         prod = self.mold
 
-        valve_num = prod.get('valve_num', 0)
+        # 算法内部字段（不在 spec 里），未填兑 0
+        valve_num = prod.get('valve_num') or 0
         params.hot_runner.valve_num = valve_num
         if valve_num:
             params.hot_runner.valve_time_steps = list(range(1, int(valve_num) + 1))
@@ -2567,7 +2579,8 @@ class AlgorithmEngine:
         分支策略仍在 Python 中实现，公式系数从规则读取。
         """
         gate_type = prod.get('gate_type', '直浇口')
-        avg_thickness = prod.get('ave_thickness', 2)
+        # 必填字段，audit 兑底
+        avg_thickness = prod['ave_thickness']
 
         c_hold = self._coeffs.get('holding', {})
         time_min = c_hold.get('hold_time_min', 2.0)
@@ -2616,33 +2629,44 @@ class AlgorithmEngine:
         proc = params.process
 
         # 计算注射行程
-        total_weight = prod['product_weight']
-        runner_weight = prod.get('runner_weight', 0)
-        melt_density = mat.get('melt_density', 0.95)
-        screw_diameter = self.machine.get('screw_diameter', 35)
+        # 注意：total_weight = product_weight + runner_weight（按 compute_total_injection_length docstring 约定）
+        # 热流道 runner_weight 可能为 None，用 `or 0` 兜底（业务合法）
+        runner_weight = prod.get('runner_weight') or 0  # 热流道兑 0
+        total_weight = prod['product_weight'] + runner_weight
+        melt_density = mat['melt_density']  # 必填，audit 兑底
+        screw_diameter = self.machine['screw_diameter']  # 必填，audit 兑底
         total_len = compute_total_injection_length(total_weight, melt_density, screw_diameter)
 
         # ========== 1. 确定注射段数 ==========
+        # 边界值用 >=（与注释一致）：
+        #   >=40→4段, 20-39→3段, 10-19→2段, <10→1段
         if total_len >= 40:
             inj_stg = 4
-        elif total_len > 20:
+        elif total_len >= 20:
             inj_stg = 3
-        elif total_len > 10:
+        elif total_len >= 10:
             inj_stg = 2
         else:
             inj_stg = 1
 
-        if ps.get('inj_stg'):
+        # process_set 覆盖：用 `is not None` 而非 falsy 判断
+        # （修复 bug：用户传 inj_stg=1 会被 `if ps.get('inj_stg'):` 跳过覆盖）
+        if ps.get('inj_stg') is not None:
             inj_stg = ps['inj_stg']
 
         proc.inj_stg = inj_stg
 
         # ========== 2. 确定保压段数 ==========
+        # 同样用 `is not None`（修复 bug）
         prod_hold_stg = ps.get('hold_stg', 2)
+        if ps.get('hold_stg') is not None:
+            prod_hold_stg = ps['hold_stg']
         proc.hold_stg = prod_hold_stg
 
         # ========== 3. 确定计量段数 ==========
         prod_met_stg = ps.get('met_stg', 1)
+        if ps.get('met_stg') is not None:
+            prod_met_stg = ps['met_stg']
         proc.met_stg = prod_met_stg
 
         # ========== 4. 多级注射 ==========

@@ -2,7 +2,7 @@
   RuleLibraryDetail.vue - 规则库详情页（瘦身后的调度组件）
 
   布局：
-  - 顶部：返回按钮 + 库元信息卡片
+  - 顶部：库元信息卡片
   - 内容区：根据 library_type 渲染对应 section（RuleMethod / ExpertRule）
   - 编辑规则库弹窗
 
@@ -17,10 +17,6 @@
   <div class="rule-library-detail" v-loading="libraryLoading">
     <!-- 顶部导航 -->
     <div class="page-header">
-      <el-button text @click="goBack">
-        <el-icon style="margin-right: 4px"><ArrowLeft /></el-icon>
-        返回列表
-      </el-button>
       <div class="page-title">
         <h2>{{ library?.library_name || '规则库详情' }}</h2>
         <el-tag v-if="library" :type="library.owner_type === 'system' ? 'info' : 'success'">

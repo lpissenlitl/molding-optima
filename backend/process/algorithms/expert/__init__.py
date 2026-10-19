@@ -24,6 +24,17 @@ from .algorithm_engine import AlgorithmEngine
 from .rule_loader import InitRuleLoader
 from .rule_matcher import InitRuleMatcher
 from .data_validator import DataValidator
+from .material_db import MaterialDatabase, MATERIAL_DEFAULTS
+from .process_set import PROCESS_SET_FIELDS, PROCESS_SET_DEFAULTS, ProcessSetDefaults
+from .specs import (
+    MACHINE_INFO_FIELDS,
+    POLYMER_INFO_FIELDS,
+    MOLD_INFO_SPEC,
+    REQUIRED_MOLD_INFO_FIELDS,
+    REQUIRED_MACHINE_FIELDS,
+    REQUIRED_POLYMER_FIELDS,
+    audit_field_completeness,
+)
 from .param_types import (
     ProcessParams,
     MoldTempParams,
@@ -44,6 +55,18 @@ __all__ = [
     "InitRuleLoader",
     "InitRuleMatcher",
     "DataValidator",
+    "MaterialDatabase",
+    "MATERIAL_DEFAULTS",
+    "PROCESS_SET_FIELDS",
+    "PROCESS_SET_DEFAULTS",
+    "ProcessSetDefaults",
+    "MACHINE_INFO_FIELDS",
+    "POLYMER_INFO_FIELDS",
+    "MOLD_INFO_SPEC",
+    "REQUIRED_MOLD_INFO_FIELDS",
+    "REQUIRED_MACHINE_FIELDS",
+    "REQUIRED_POLYMER_FIELDS",
+    "audit_field_completeness",
     "ProcessParams",
     "MoldTempParams",
     "HotRunnerParams",

@@ -201,7 +201,8 @@ const methodQuery = reactive({
 async function loadMethods() {
   methodLoading.value = true
   try {
-    const res: any = await listRuleMethods(props.libraryId, {
+    const res: any = await listRuleMethods({
+      rule_library_id: props.libraryId,
       page_no: methodQuery.page_no,
       page_size: methodQuery.page_size,
       defect_code: methodQuery.defect_code || undefined,

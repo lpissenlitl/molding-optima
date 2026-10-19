@@ -13,14 +13,6 @@
 -->
 <template>
   <div class="mold-form">
-    <!-- 顶部：返回列表 -->
-    <div class="page-header">
-      <el-button text @click="goBack">
-        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
-        返回列表
-      </el-button>
-    </div>
-
     <!-- 编辑模式的加载占位 -->
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
 
@@ -200,7 +192,10 @@
 
     <!-- 操作按钮（fixed bottom，全局样式） -->
     <div v-if="loaded" class="form-actions">
-      <el-button @click="goBack">取消</el-button>
+      <el-button @click="goBack">
+              <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+              取消
+            </el-button>
       <el-button
         type="primary"
         :loading="submitting"

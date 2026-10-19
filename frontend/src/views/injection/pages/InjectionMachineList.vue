@@ -9,7 +9,7 @@
     - 行操作列：编辑、删除
 -->
 <template>
-  <div class="injection-machine-list">
+  <div class="page-stack">
     <!-- 搜索表单 -->
     <InjectionSearchForm
       :query-detail="query"
@@ -275,25 +275,4 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.injection-machine-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 操作列按钮紧凑显示 */
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
-}
 </style>

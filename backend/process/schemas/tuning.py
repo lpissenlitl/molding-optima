@@ -1,21 +1,22 @@
 """
-调参记录 Schema
+调机反馈 Schema
 
-对应接口：
-- POST /api/processes/tuning/record/
+对应 URL 段: processes/conditions/<id>/parameters/<pid>/tuning-feedback/  业务对象 ID: condition_id + parameter_id
 
-业务语义（与前端 processTuningRecord 对齐）：
-- 用户在 OptimizationCreate 页填写完反馈 + 实测结果后点"保存当前工艺"
-- 不创建新 ProcessParameter（不调算法），仅保存/更新 TuningRecord
+tuning-feedback 子资源 (2026-10-12 改造):
+- 原归属: tunings/feedback/<condition_id>/ (李鬼归属, tuning 实际属于 parameter)
+- 新归属: parameters/<pid>/tuning-feedback/ (parameter 是 tuning 的真正父资源)
 
-入参字段来源：
-- parameter_id：必填（前端从 activeRound.parameter_id 取）
-- defect_feedbacks：缺陷反馈列表（结构对齐 DefectFeedbackDataSchema）
-- observations：实测观察（过程观测数据；本接口不存储，仅 schema 校验透传）
-- tuning_result：调机效果评价（前端枚举 effective/ineffective/qualified/unqualified/pending）
-- result_detail：结果详情文本（≤ 500 字，与模型 result_detail 对齐）
+业务语义:
+- parameter_id 从 URL 限定, 不再从 body 传入 (一意唯一)
+- 调机反馈隶属于某个具体 parameter (多轮迭代场景)
+- 缺陷反馈/调整记录随 parameter 归属
+
+独立 tuning service 契约:
+- TuningRecordRequestSchema    人工调机反馈 (写 TuningRecord)
+- TuningBatchDeleteSchema      批量删除 (仍按 condition_id, 与 records/batch-delete 职责重复, 保留备用)
 """
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from pydantic import Field
 
@@ -23,12 +24,13 @@ from extensions.schemas import BaseSchema
 
 
 class TuningRecordRequestSchema(BaseSchema):
-    """保存当前试模结果请求 Schema
+    """人工调机反馈 (写 TuningRecord)
 
-    与前端 api/index.ts 进程的 processTuningRecord 参数对齐。
+    业务语义:
+    - parameter_id 从 URL 限定 (POST /conditions/<id>/parameters/<pid>/tuning-feedback/)
+    - 不再从 body 传 parameter_id (URL 已表达)
+    - 反馈字段: defect_feedbacks / observations / tuning_result / result_detail
     """
-
-    parameter_id: int = Field(..., description="工艺参数 ID（必填）")
 
     defect_feedbacks: Optional[List[Dict[str, Any]]] = Field(
         None,
@@ -63,4 +65,13 @@ class TuningRecordRequestSchema(BaseSchema):
     )
 
 
-__all__ = ["TuningRecordRequestSchema"]
+class TuningBatchDeleteSchema(BaseSchema):
+    """批量删除调机记录（按 condition_id, 级联软删其下 parameter）"""
+
+    ids: list[int] = Field(..., min_length=1, description="工艺条件 ID 列表")
+
+
+__all__ = [
+    "TuningRecordRequestSchema",
+    "TuningBatchDeleteSchema",
+]

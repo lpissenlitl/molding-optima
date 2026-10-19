@@ -185,7 +185,10 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="keywordDrawerVisible = false">取消</el-button>
+        <el-button @click="keywordDrawerVisible = false">
+          <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+          取消
+        </el-button>
         <el-button type="primary" :loading="keywordDialogSubmitting" @click="submitKeyword">
           保存
         </el-button>
@@ -447,16 +450,11 @@ watch(() => props.activeTab, (val, oldVal) => {
 </script>
 
 <!--
-  本组件 scoped style（仅 .text-danger）：
+  本组件 scoped style（仅 .field-tip）：
   - 复用父组件 RuleLibraryList.vue 提供的共享样式类
-  - .text-danger 用于删除按钮颜色（与其他列表页保持一致）
-  - 后续可考虑提升到全局 custom-form.scss 复用
+  - .text-danger 已提升到全局 custom-table.scss，无需重复定义
 -->
 <style lang="scss" scoped>
-.text-danger {
-  color: #f56c6c;
-}
-
 /* 表单字段提示文字（紧贴在 el-input 下方）*/
 .field-tip {
   font-size: 12px;

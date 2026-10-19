@@ -11,13 +11,6 @@
 -->
 <template>
   <div class="filler-form">
-    <div class="page-header">
-      <el-button text @click="goBack">
-        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
-        返回列表
-      </el-button>
-    </div>
-
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
 
     <el-form
@@ -87,7 +80,10 @@
     </el-form>
 
     <div v-if="loaded" class="form-actions">
-      <el-button @click="goBack">取消</el-button>
+      <el-button @click="goBack">
+              <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+              取消
+            </el-button>
       <el-button
         type="primary"
         :loading="submitting"

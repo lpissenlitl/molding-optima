@@ -36,16 +36,20 @@ def get_project_info(project_id: int) -> dict:
     return project.to_dict()
 
 
-def update_project_info(project_id: int, **kwargs) -> dict:
-    """更新项目信息"""
-    project = _get_project_by_id(project_id)
+def update_project_info(company_id: int, project_id: int, **kwargs) -> dict:
+    """更新项目信息（仅限本公司）"""
+    project = Project.objects.filter(pk=project_id, company_id=company_id, is_deleted=False).first()
+    if project is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"项目不存在: id={project_id}")
     project.update_info(**kwargs)
     return project.to_dict()
 
 
-def delete_project(project_id: int) -> None:
-    """删除项目"""
-    project = _get_project_by_id(project_id)
+def delete_project(company_id: int, project_id: int) -> None:
+    """删除项目（仅限本公司）"""
+    project = Project.objects.filter(pk=project_id, company_id=company_id, is_deleted=False).first()
+    if project is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"项目不存在: id={project_id}")
     project.soft_delete()
 
 
@@ -97,7 +101,13 @@ def get_project_list(
     return pagination["total_count"], results
 
 
-def batch_delete_project(ids: list) -> None:
-    """批量删除项目"""
+def batch_delete_project(company_id: int, ids: list) -> int:
+    """批量删除项目（仅删本公司存在的）"""
     ids = validate_id_list(ids, "项目ID")
-    Project.batch_soft_delete(ids)
+    # 按 company_id 过滤出本公司的 id（防止跨公司删除）
+    valid_ids = list(
+        Project.objects.filter(pk__in=ids, company_id=company_id, is_deleted=False).values_list('id', flat=True)
+    )
+    if valid_ids:
+        Project.batch_soft_delete(valid_ids)
+    return len(valid_ids)

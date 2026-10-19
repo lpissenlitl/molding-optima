@@ -143,12 +143,20 @@ const props = withDefaults(
 
 const route = useRoute()
 
-// 当前路由匹配：激活态判断（自身或子路由匹配都算激活）
+// 当前路由匹配：激活态判断
+// - 父菜单（带 children）：保留前缀匹配
+//   - 子菜单激活时父级也要高亮（提示"在哪个父级下"）
+// - 叶菜单（无 children）：精确匹配
+//   - 避免与兄弟路由同时高亮（例：/optimization 与 /optimization/history 路径有前缀关系）
 const isActive = computed(() => {
-  return (
-    route.path === props.item.path ||
-    route.path.startsWith(props.item.path + '/')
-  )
+  const hasChildren = props.item.children && props.item.children.length > 0
+  if (hasChildren) {
+    return (
+      route.path === props.item.path ||
+      route.path.startsWith(props.item.path + '/')
+    )
+  }
+  return route.path === props.item.path
 })
 
 // 展开状态：默认展开（当路由匹配到子路由时展开）

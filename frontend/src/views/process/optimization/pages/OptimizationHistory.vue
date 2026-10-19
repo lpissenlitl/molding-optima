@@ -1,22 +1,27 @@
 <!--
-  OptimizationList - 优化记录列表
+  OptimizationHistory - 调机记录列表
 
-  路由：/process/optimization-records
+  路由：/process/optimization/history
   数据源：后端 /api/processes/parameter/（同 ProcessParameterList，复用通用工艺条件表）
   业务说明：
-    列出每条 ProcessCondition 对应的工艺优化全链路状态：调机轮次数、模具/机台/材料等
-    与"工艺参数列表"的区别：聚焦在"调机迭代"视角，凸显调机轮次 + 调机历史入口
+    列出每条 ProcessCondition 对应的调机任务全链路状态：调机轮次数、模具/机台/材料等
+    与“工艺参数列表”的区别：聚焦在“调机迭代”视角，凸显调机轮次 + 调机记录入口
+
+    范围演进：
+      v1：仅智能调机（origin_type=optimization / 'AI 调机'）；view_type=optimization
+      v2+：预计合并人工调机记录（origin_type=manual），入口统一为“调机记录”
+            不再区分智能 / 人工入口（二者同为“调机任务”）。具体范围等人工调机设计完成后再定。
 
   设计要点：
     - 复用 BaseTable / ProcessSearchForm：避免重复开发搜索 + 列表 + 列偏好持久化
     - 调机轮次列（parameters_count）：后端 annotation 注入（2026-09-23 加）
     - 行操作：
-      - 查看调机历史（dialog，调用 /api/processes/optimization/<id>/history/）
-      - 启动新优化（跳转 OptimizationCreate，但 OptimizationCreate 是空白表单场景，
-        见 v1 暂不预填 condition，用户需手动填条件生成新优化）
+      - 查看调机历史（dialog，调用 /api/processes/conditions/<id>/parameters/history/）
+      - 启动新调机（跳转 OptimizationCreate，但 OptimizationCreate 是空白表单场景，
+        见 v1 暂不预填 condition，用户需手动填条件生成新调机）
 -->
 <template>
-  <div class="optimization-list">
+  <div class="page-stack">
     <!-- 搜索表单（复用工艺参数搜索） -->
     <ProcessSearchForm
       :query-detail="query"
@@ -178,11 +183,11 @@
 <script setup lang="ts">
 /**
  * 优化记录列表数据流：
- * - 列表查询走 processParameterMethod.get（BaseRequest 实例），URL = /api/processes/parameter/
+ * - 列表查询走 processRecordList (URL = /api/processes/records/?view_type=optimization, 拿 parameters_count annotation)
  * - 列表字段顺序/列显隐/密度/pageSize 通过 view-name="optimization_list" 持久化
- * - 调机历史：调用 /api/processes/optimization/<id>/history/（后端已有 get_optimization_history）
+ * - 调机历史：调用 /api/processes/conditions/<id>/parameters/history/ (后端 get_condition_history)
  *
- * 后端响应结构（main_service.get_process_parameter_list）：
+ * 后端响应结构（condition.get_condition_list view_type=parameter）：
  *   {
  *     id, condition_no, status, origin_type,
  *     mold_no, mold_name, mold_type, cavity_layout, product_category,
@@ -198,8 +203,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
-import ProcessSearchForm from '@/views/process/parameter/components/ProcessSearchForm.vue'
-import { processParameterMethod, processParameterBatchDelete } from '@/api'
+import ProcessSearchForm from '@/views/process/library/components/ProcessSearchForm.vue'
+import { processRecordMethod } from '@/api'
 
 // ============================================================================
 // 类型
@@ -299,9 +304,10 @@ function originLabel(o: string) {
 async function fetchList() {
   list_loading.value = true
   try {
-    const res: any = await processParameterMethod.get({
+    const res: any = await processRecordMethod.get({
       page_no: query.page_no,
       page_size: query.page_size,
+      view_type: 'optimization',
       status: query.status || undefined,
       origin_type: query.origin_type || undefined,
       mold_no: query.mold_no || undefined,
@@ -351,17 +357,11 @@ async function openHistory(row: any) {
   history_items.value = []
   history_loading.value = true
   try {
-    const res: any = await request({
-      url: `/api/processes/optimization/${row.id}/history/`,
-      method: 'get',
-    })
-    if (res?.status === 0) {
-      const data = res.data
-      // 后端历史接口可能返回 list 或 {items: [...]}；都兼容
-      history_items.value = Array.isArray(data) ? data : (data?.items ?? [])
-    } else {
-      ElMessage.error(res?.msg || '加载调机历史失败')
-    }
+    // TODO: 后端调机历史接口暂未实现, 先给空数据并提示
+    // 原实现调用 processParameterHistory(row.id), 对应 /api/processes/records/<id>/history/
+    // 后端 urls.py + view 暂未挂出此端点 (2026-10-13), 功能待补
+    ElMessage.warning('调机历史功能开发中')
+    history_items.value = []
   } catch {
     // 拦截器已统一 toast
   } finally {
@@ -402,7 +402,7 @@ async function deleteOne(row: any) {
     return
   }
   try {
-    const res: any = await processParameterBatchDelete([row.id])
+    const res: any = await processRecordMethod.batchDelete({ ids: [row.id] })
     if (res?.status === 0) {
       ElMessage.success('删除成功')
       fetchList()
@@ -427,7 +427,7 @@ async function batchDelete() {
     return
   }
   try {
-    const res: any = await processParameterBatchDelete(ids)
+    const res: any = await processRecordMethod.batchDelete({ ids })
     if (res?.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 条记录`)
       selected_rows.value = []
@@ -450,12 +450,6 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.optimization-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .history-item {
   &__header {
     display: flex;
@@ -468,20 +462,5 @@ onMounted(() => {
     font-weight: 600;
     color: var(--el-text-color-primary);
   }
-}
-
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
 }
 </style>

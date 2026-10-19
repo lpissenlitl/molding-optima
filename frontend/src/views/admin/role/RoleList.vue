@@ -7,7 +7,7 @@
   - 新建/编辑角色（弹窗，含权限树选择）
 -->
 <template>
-  <div class="role-list">
+  <div class="page-stack">
     <!-- 搜索栏 -->
     <div class="search-container">
       <el-form
@@ -335,7 +335,7 @@ async function batchDelete() {
   }
 
   try {
-    const res: any = await roleMethod.multipleDelete({ ids })
+    const res: any = await roleMethod.batchDelete({ ids })
     if (res.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 个角色`)
       selected_rows.value = []
@@ -358,24 +358,6 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.role-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 操作列按钮紧凑显示 */
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
 /* 自定义 tag */
 .custom-tag {
   display: inline-flex;
@@ -404,10 +386,6 @@ onMounted(() => {
 
 .text-success {
   color: #67c23a;
-}
-
-.text-danger {
-  color: #f56c6c;
 }
 
 /* 等宽字体显示编码 */

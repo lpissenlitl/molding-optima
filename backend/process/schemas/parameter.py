@@ -6,9 +6,27 @@
 
 包含：注射参数（6 段）、VP 切换、保压参数（5 段）、冷却参数、熔胶参数（4 段）、
       松退参数、料筒温度参数（10 段）。
+
+独立 parameter service 的三类契约:
+- ProcessParameterSchema       入参（flat 92 字段, 算法/优化/移植用）
+- ProcessParameterListSchema   列表查询条件（按 parameter 字段过滤）
+
+注 (2026-10-10): BatchDeleteParameterSchema 已删除, 批量删除 parameter 需求
+应走 /processes/records/batch-delete/ (级联软删 condition + parameter)
+
+UI 嵌套格式（前端 records 写入用, 独立于上面 92 字段 flat 契约）:
+- SettingProcessSchema         嵌套结构 (5 段: injection/vp_switch/holding/metering/barrel_temperature)
+- ProcessParameterNestSchema   顶层包装 (parameter 业务容器, 当前含 setting_process, 未来可扩展)
+
+records 段子资源端点写入契约 (B 方案拆分后, condition_id 与 parameter_id 同在 URL):
+- ProcessParameterUpdateSchema     更新 parameter (PUT /records/<condition_id>/parameter/<parameter_id>/)
+                                 内部为 NEST 验证 (setting_process)
+
+注: ProcessParameterSchema (FLAT) 与 ProcessParameterNestSchema (NEST) 互不替代,
+    分别服务算法 / 移植 (FLAT) 与前端 UI (NEST) 两个业务场景。
 """
-from typing import Optional
 from datetime import date
+from typing import Optional
 
 from pydantic import Field
 
@@ -16,7 +34,11 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 
 
 class ProcessParameterSchema(BaseSchema):
-    """工艺参数记录"""
+    """工艺参数记录（DB 扁平字段, 与 ProcessParameter model 一一对应）
+
+    用于算法/优化/移植场景的入参, 直接覆盖 DB 扁平列,
+    方便算法以数字特征 (inj_pres_1, hold_pres_1 ...) 直接处理。
+    """
 
     process_condition_id: Optional[int] = Field(None, description="所属工艺条件 ID")
 
@@ -141,18 +163,117 @@ class ProcessParameterSchema(BaseSchema):
 
 
 class ProcessParameterListSchema(PaginationBaseSchema):
-    """工艺参数列表查询条件"""
+    """工艺参数列表查询条件（按 parameter 字段过滤）
 
-    status: Optional[str] = Field(None, description="状态")
-    origin_type: Optional[str] = Field(None, description="工艺起源类型")
-    mold_id: Optional[int] = Field(None, description="模具 ID")
-    injection_machine_id: Optional[int] = Field(None, description="注塑机 ID")
-    polymer_id: Optional[int] = Field(None, description="材料 ID")
-    start_date: Optional[date] = Field(None, description="开始日期")
-    end_date: Optional[date] = Field(None, description="结束日期")
+    2026-10-12 改造:
+    - URL 不再嵌套 /conditions/<id>/parameters/, condition_id 变 query 参数
+    - condition_id 不传 -> 查全表 (后台 / 集成 API 场景)
+    """
+
+    condition_id: Optional[int] = Field(
+        None,
+        description="工艺条件 ID (可选, 过滤该 condition 下的 parameter)",
+    )
+    parent_seq_idx: Optional[int] = Field(None, description="父参数业务编号")
+    seq_idx: Optional[int] = Field(None, description="序列序号")
+    param_code: Optional[str] = Field(None, description="工艺参数编号（模糊匹配）")
+    param_source: Optional[str] = Field(None, description="参数来源")
+    created_after: Optional[date] = Field(None, description="创建起始日期")
+    created_before: Optional[date] = Field(None, description="创建结束日期")
 
 
-class BatchDeleteProcessParameterSchema(BaseSchema):
-    """批量删除工艺参数"""
+class ProcessParameterTreeSchema(BaseSchema):
+    """工艺参数版本树查询条件
 
-    ids: list[int] = Field(..., min_length=1, description="工艺参数 ID 列表")
+    2026-10-12 改造:
+    - URL 不再嵌套 /conditions/<id>/parameter-tree/, condition_id 变 query 参数
+    - condition_id 不传 -> 查全表 (后台 / 集成 API 场景)
+    """
+
+    condition_id: Optional[int] = Field(
+        None,
+        description="工艺条件 ID (可选, 过滤该 condition 下的 parameter)",
+    )
+
+
+# BatchDeleteParameterSchema 已删除 (2026-10-10):
+# - 原用于 /processes/parameters/batch_delete/ 端点
+# - 该端点已废弃 (单段 /parameters/ 段不再提供写操作)
+# - 批量删除 parameter 需求应走 /processes/records/batch-delete/ (软删 condition, 级联 parameter)
+#   参数: BatchIdsSchema (extensions.schemas 通用)
+
+
+class SettingProcessSchema(BaseSchema):
+    """前端 UI 嵌套结构（setting_process 内部）
+
+    对应前端的 settingProcessForm, 用于 UI 提交 records 写入。
+    service 内部通过 _frontend_to_condition_dict 转 130+ flat 字段写入 DB。
+
+    设计选择: 内部字段用 dict (而非强类型子 schema), 因为:
+    - table_data 是动态结构 `[{label, unit, sections: [n, ...]}, ...]`, 段数由 max_stage 决定
+    - 子结构由前端 SettingProcess 组件维护, 后端只透传
+    - 业务上 schema 只需保证 "五大段存在" 这层结构
+    """
+
+    injection: Optional[dict] = Field(
+        None,
+        description=(
+            "注射参数 {max_stage, stage, table_data, injection_time, delay_time, cooling_time}"
+        ),
+    )
+    vp_switch: Optional[dict] = Field(
+        None,
+        description="VP 切换 {mode, position, time, pressure, velocity}",
+    )
+    holding: Optional[dict] = Field(
+        None,
+        description="保压参数 {max_stage, stage, table_data}",
+    )
+    metering: Optional[dict] = Field(
+        None,
+        description=(
+            "熔胶参数 {max_stage, stage, table_data, pre_decompress_mode, "
+            "post_decompress_mode, decompress_table_data, delay_time, ending_position}"
+        ),
+    )
+    barrel_temperature: Optional[dict] = Field(
+        None,
+        description="料筒温度 {max_stage, stage, table_data}",
+    )
+
+
+class ProcessParameterNestSchema(BaseSchema):
+    """parameter 业务容器（前端 records 写入用）
+
+    当前含:
+    - setting_process: 5 段嵌套 (NEST 强验证)
+
+    未来可扩展字段（直接平铺到本 schema, 不另起 schema）:
+    - metadata: 参数元数据
+    - algorithm_hint: 算法侧配置
+    - 其他 parameter 业务相关字段
+    """
+
+    setting_process: Optional[SettingProcessSchema] = Field(
+        None,
+        description="工艺参数嵌套结构 (5 段: injection/vp_switch/holding/metering/barrel_temperature)",
+    )
+
+
+class ProcessParameterUpdateSchema(BaseSchema):
+    """工艺参数更新（PUT /records/<condition_id>/parameter/<parameter_id>/ 写入契约, NEST 强验证）
+
+    URL 同时含 condition_id + parameter_id (B 方案拆分后),
+    业务上必校验 parameter_id belongs to condition_id (service 层负责)。
+
+    注: body 仅含 parameter 业务容器 (未来可扩展字段), 无 condition 字段 (URL 提供)。
+    """
+
+    parameter: ProcessParameterNestSchema = Field(
+        ...,
+        description=(
+            "parameter 业务容器 (当前含 setting_process)。"
+            "PUT 时整个覆盖该 parameter 的字段 (NEST 强验证)。"
+            "算法 / 移植请用 ProcessParameterSchema (FLAT)。"
+        ),
+    )

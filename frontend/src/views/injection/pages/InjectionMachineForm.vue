@@ -9,20 +9,12 @@
   架构（2026-09-09 重写）：
     - 5 个 section：机器描述 / 注射单元（el-tabs）/ 锁模单元 / 顶出单元 / 配套参数
     - 4 列布局（el-row + el-col + gutter:24），divider 占满一行
-    - 顶部 page-header（返回列表）+ 底部 form-actions（取消 / 保存）
+    - 底部 form-actions（取消 / 保存）
     - 单位系统（7 个）从机器顶层同步到所有注射单元（InjectionUnitForm）
     - InjectionUnitForm 子组件用 Vue3 script setup，通过 ref.checkFormDataValid() 校验
 -->
 <template>
   <div class="injection-machine-form">
-    <!-- 顶部 page-header（仅返回按钮，与 PolymerForm 风格一致） -->
-    <div class="page-header">
-      <el-button text @click="goBack">
-        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
-        返回列表
-      </el-button>
-    </div>
-
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
 
     <el-form
@@ -297,7 +289,10 @@
 
     <!-- 底部 form-actions（全局统一样式：src/styles/utilities/custom-form.scss） -->
     <div v-if="loaded" class="form-actions">
-      <el-button @click="goBack">取消</el-button>
+      <el-button @click="goBack">
+              <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+              取消
+            </el-button>
       <el-button
         type="primary"
         :loading="submitting"

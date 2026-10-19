@@ -8,10 +8,10 @@ AI 推理类算法基类 + 注册中心
 
 algorithm_type 含义：
 - 'optimization': 工艺参数**优化**（请求-响应式推荐）
-  - 由 optimization_advice service 通过 AlgorithmRegistry 编排 chain
+  - 由 condition service 通过 AlgorithmRegistry 编排 chain
   - 实现类：FuzzyEngine / LLMEngine / EmpiricalReasoning
 - 'initialization': 工艺参数**初始化**（机器+材料+模具 → ProductionParams）
-  - 由 parameter_init service 直调 ProcessInitializer，不走 Registry
+  - 由 parameter_initialize service 直调 ProcessInitializer，不走 Registry
   - 实现类：ProcessInitializer
 - 'mining': 规则**挖掘**（历史数据 → 规则集，离线/异步）
   - 未来由独立 mining_service 编排
@@ -134,7 +134,7 @@ class AlgorithmRegistry:
         # 注册（在 algorithms/<subtype>/__init__.py 触发）
         AlgorithmRegistry.register('fuzzy', FuzzyEngine())
 
-        # 查询（optimization_advice service 编排 chain 时）
+        # 查询（condition service 通过 AlgorithmRegistry 编排 chain 时）
         fuzzy = AlgorithmRegistry.get_algorithm('fuzzy')
         candidates = AlgorithmRegistry.get_algorithms_by_type('optimization')
     """

@@ -7,7 +7,7 @@
 <template>
   <el-card
     class="process-condition-card"
-    :class="{ 'is-collapsed': !expanded, 'is-readonly': isReadOnly }"
+    :class="{ 'is-collapsed': !internalExpanded, 'is-readonly': isReadOnly }"
     shadow="never"
   >
     <!-- 卡片 header：可点击切换 -->
@@ -19,14 +19,14 @@
       >
         <div class="process-condition-card__header-left">
           <AppIcon
-            :icon="expanded ? 'mdi:chevron-down' : 'mdi:chevron-right'"
+            :icon="internalExpanded ? 'mdi:chevron-down' : 'mdi:chevron-right'"
             class="process-condition-card__toggle-icon"
           />
           <span class="custom-form__title">工艺条件</span>
         </div>
 
         <!-- 折叠态简要信息 -->
-        <div v-show="!expanded" class="process-condition-card__summary">
+        <div v-show="!internalExpanded" class="process-condition-card__summary">
           <span class="summary-item">
             <AppIcon icon="mdi:identifier" class="summary-item__icon" />
             <span class="summary-item__value">
@@ -80,7 +80,7 @@
         <!-- 右侧展开/收起按钮（仅非只读时显示） -->
         <div v-if="!isReadOnly" class="process-condition-card__header-right">
           <el-button text size="small" @click.stop="toggle">
-            {{ expanded ? '收起' : '展开编辑' }}
+            {{ internalExpanded ? '收起' : '展开编辑' }}
           </el-button>
         </div>
       </div>
@@ -88,7 +88,7 @@
 
     <!-- 卡片 body：可折叠 -->
     <transition name="process-condition-collapse">
-      <div v-show="expanded" class="process-condition-card__body">
+      <div v-show="internalExpanded" class="process-condition-card__body">
         <el-form
           ref="formRef"
           :model="condition"
@@ -167,6 +167,8 @@ const props = withDefaults(
     mode?: 'new' | 'edit' | 'view' | 'transplant'
     /** 默认展开状态（仅在非 view 模式生效） */
     defaultExpanded?: boolean
+    /** 受控展开状态（父组件 v-model:expanded 绑定） */
+    expanded?: boolean
     /** 禁用所有输入（与 mode='view' 区别：保留折叠切换能力） */
     disabled?: boolean
   }>(),
@@ -177,18 +179,39 @@ const props = withDefaults(
   },
 )
 
+const emit = defineEmits<{
+  /** v-model:expanded 同步（父组件与子组件双向绑定折叠状态） */
+  'update:expanded': [value: boolean]
+}>()
+
 const formRef = ref<FormInstance>()
 
 // 只读模式：mode='view' 或 disabled=true 时强制折叠
 const isReadOnly = computed(() => props.mode === 'view' || props.disabled)
 
-const expanded = ref<boolean>(
-  isReadOnly.value ? false : props.defaultExpanded,
+// 内部 expanded：受控时跟随 props.expanded；非受控时遵循 defaultExpanded
+const internalExpanded = ref<boolean>(
+  isReadOnly.value ? false : (props.expanded ?? props.defaultExpanded),
 )
+// isReadOnly 强制折叠时，同步给父组件：emit update:expanded 让父 conditionExpanded 跟随
+// - 刷新页面场景：hasInitialProcess=true → isReadOnly=true → internalExpanded 被强制设为 false
+//   但 cached conditionExpanded=true → 按钮 label="折叠工艺条件"，UI 已折叠，不一致
+// - 解决：setup 同步 emit 让父组件 conditionExpanded 同步成 false，按钮 label 变为"展开工艺条件"
+// - 同步 emit 是必要的：内部 expand 受 props.disabled stale snapshot 影响（详见 expand 注释）
+if (isReadOnly.value && props.expanded) {
+  emit('update:expanded', false)
+}
+// 父组件 v-model:expanded 同步：prop 变化时回写到内部状态
+watch(() => props.expanded, (val) => {
+  if (val !== undefined && val !== internalExpanded.value) {
+    internalExpanded.value = val
+  }
+})
 
 function toggle() {
   if (isReadOnly.value) return
-  expanded.value = !expanded.value
+  internalExpanded.value = !internalExpanded.value
+  emit('update:expanded', internalExpanded.value)
 }
 
 // 响应式 condition：provide 给所有 Section 使用（子组件可直接 mutate）
@@ -205,11 +228,13 @@ const {
 } = useConditionDerived(condition)
 
 const rules: FormRules = {
-  mold_id: [{ required: true, message: '请选择模具', trigger: 'change' }],
+  // *_id 是嵌套结构 *_info 内的字段，校验走 prop="*_info.id"
+  // 后端 DTO (ProcessConditionSchema) 接收顶层 *_id，buildPayload 从嵌套推导
+  'mold_info.id': [{ required: true, message: '请选择模具', trigger: 'change' }],
   shot_index: [{ required: true, message: '请选择工艺射次', trigger: 'change' }],
-  injection_machine_id: [{ required: true, message: '请选择注塑机', trigger: 'change' }],
+  'machine_info.id': [{ required: true, message: '请选择注塑机', trigger: 'change' }],
   injection_index: [{ required: true, message: '请选择射台', trigger: 'change' }],
-  polymer_id: [{ required: true, message: '请选择塑料', trigger: 'change' }],
+  'polymer_info.id': [{ required: true, message: '请选择塑料牌号', trigger: 'change' }],
 }
 
 defineExpose({
@@ -220,8 +245,9 @@ defineExpose({
    */
   async checkFormDataValid(): Promise<boolean> {
     if (!formRef.value) return false
-    if (!expanded.value) {
-      expanded.value = true
+    if (!internalExpanded.value) {
+      internalExpanded.value = true
+      emit('update:expanded', true)
       // 等待展开 transition 完成 + DOM 更新，避免 scrollIntoView 滚到错位置
       await nextTick()
       await new Promise((r) => setTimeout(r, 200))
@@ -248,16 +274,34 @@ defineExpose({
   },
   /** 切换展开/折叠 */
   toggle,
-  /** 强制展开（非只读时） */
+  /**
+   * 强制展开（父组件主动触发，不检查 isReadOnly）
+   *
+   * 为什么绕过 isReadOnly 检查：
+   * - expand 由父组件主动调用（目前仅 resetForm 使用），调用前父组件已
+   *   判断是否需要展开（例如已清空 form.condition.id）
+   * - isReadOnly 依赖子组件 props.disabled，props.disabled 是父 render 时的快照
+   * - 在 resetForm 同步代码中清除 form.condition.id 后，父 render effect
+   *   要到 microtask 才 flush，子 props.disabled 还是旧值（stale snapshot）
+   * - 此时 expand 中 isReadOnly 检查会错误返回 true，expand 被跳过
+   * - microtask flush 后 props.disabled 更新，但 props.expanded 没变化，
+   *   子 watch(props.expanded) 不被调度，UI 永远折叠
+   *
+   * 设计权衡：
+   * - toggle 仍检查 isReadOnly（用户主动折叠时 disabled 应阻止）
+   * - expand 不检查（父组件主动强制展开，由父组件负责判断）
+   */
   expand: () => {
-    if (!isReadOnly.value) expanded.value = true
+    internalExpanded.value = true
+    emit('update:expanded', true)
   },
   /** 强制折叠 */
   collapse: () => {
-    expanded.value = false
+    internalExpanded.value = false
+    emit('update:expanded', false)
   },
   /** 当前是否展开（父组件同步按钮状态用） */
-  isExpanded: () => expanded.value,
+  isExpanded: () => internalExpanded.value,
 })
 
 // 监听 prop 变化，同步内部 condition

@@ -9,7 +9,7 @@
     - 行操作：编辑 + 复制 + 删除（el-button type="text" 紧凑风格）
 -->
 <template>
-  <div class="polymer-list">
+  <div class="page-stack">
     <!-- 搜索表单（配置驱动，复用 PolymerSearchForm） -->
     <PolymerSearchForm
       :query-detail="query"
@@ -299,7 +299,7 @@ async function batchDelete() {
     return
   }
   try {
-    const res: any = await polymerMethod.multipleDelete({ ids })
+    const res: any = await polymerMethod.batchDelete({ ids })
     if (res.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 条材料`)
       selected_rows.value = []
@@ -346,25 +346,4 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.polymer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 操作列按钮紧凑显示 */
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
-}
 </style>

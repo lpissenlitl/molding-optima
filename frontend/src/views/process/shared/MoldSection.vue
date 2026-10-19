@@ -253,7 +253,7 @@
 
 <script setup lang="ts">
 import { ref, watch, inject, computed } from 'vue'
-import { moldList, moldDetail } from '@/api'
+import { moldMethod } from '@/api'
 import DerivedField from './DerivedField.vue'
 import { useConditionDerived } from './composables/useConditionDerived.js'
 import { ConditionKey } from './types.js'
@@ -327,7 +327,7 @@ watch(shotIndexStr, (val) => {
 // 模具远程拉取 + 选择回调（自包含，不依赖父组件）
 async function fetchMoldSuggestions(queryString: string, cb: (results: any[]) => void) {
   try {
-    const res: any = await moldList({
+    const res: any = await moldMethod.get({
       page_no: 1,
       page_size: 30,
       mold_no: queryString || undefined,
@@ -349,14 +349,14 @@ async function fetchMoldSuggestions(queryString: string, cb: (results: any[]) =>
 async function onMoldSelect(item: any) {
   const mold = item?.item ?? null
   if (!mold) return
-  condition.mold_id = mold.id
+  // id 写入 condition.mold_info.id（嵌套结构，校验 prop="mold_info.id"）
   // 切换模具后,射次统一重置为第 1 射(避免前一个模具的射次选择残留)
   condition.shot_index = 0
   shotIndexStr.value = '1'
   // 列表 API(to_dict() 不带 include_rvs=True)不返回反向关联
   // 必须调详情 API 获取完整的 gating_systems / cavities / gates
   try {
-    const detail: any = await moldDetail(mold.id)
+    const detail: any = await moldMethod.getDetail(mold.id)
     if (detail?.status === 0 && detail.data) {
       condition.mold_info = detail.data
     } else {
@@ -369,7 +369,7 @@ async function onMoldSelect(item: any) {
 }
 
 function onMoldClear() {
-  condition.mold_id = null
+  // 清空嵌套 mold_info（包含 id），校验自动失败
   condition.mold_info = null
   condition.shot_index = null
   shotIndexStr.value = ''

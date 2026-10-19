@@ -12,10 +12,10 @@
     - 不允许用户直接编辑规则文本（防止填写错误）
 
   架构（2026-09-16 重构）：
-    - 顶部 page-header（返回规则库 + 标题）
+    - 顶部 page-header（标题）
     - 左编辑区（70%）：元数据卡 / IF 条件卡 / THEN 动作卡 / 文本预览卡
     - 右流程图预览（30%，sticky）：RuleMethodGraph 组件
-    - 底部 form-actions：取消 / 重置（new）/ 撤销修改（edit）/ 保存
+    - 底部 form-actions：取消 / 重置（new）/ 保存
 
   模式行为：
     - new    → 空 form + 默认值；保存后 router.replace 到 edit 模式
@@ -24,7 +24,7 @@
 
   数据流：
     - 加载：edit/detail 调用 getRuleMethod(id) 拉数据
-    - 字典：listRuleKeywords + polymerList 一次性加载，按 category 分组
+    - 字典：listRuleKeywords + polymerMethod.get 一次性加载，按 category 分组
     - 提交：构造后端 payload（含自动生成的 rule_description / rule_explanation）
 
   样式规范：
@@ -34,12 +34,8 @@
 -->
 <template>
   <div :class="['rule-method-form', embedded ? 'rule-method-form--embedded' : '']">
-    <!-- 顶部 page-header（全局类 + 自定义标题） -->
+    <!-- 顶部 page-header（标题） -->
     <div v-if="showPageHeader" class="page-header">
-      <el-button text @click="goBack">
-        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
-        返回规则库
-      </el-button>
       <h2 class="page-title">
         {{ mode === 'new' ? '新建规则方法' : mode === 'edit' ? '编辑规则方法' : '规则方法详情' }}
       </h2>
@@ -356,7 +352,7 @@
       <!-- 底部操作（全局 .form-actions） -->
       <!-- 两类模式：
            - detail：   只显示【返回】
-           - new/edit： 显示【取消 / 重置 · 撤销 / 保存 · 更新】
+           - new/edit： 显示【取消 / 重置 / 保存 · 更新】
            （drawer 嵌入与独立路由共用同一套按钮，内部按 props.embedded 分流行为）
       -->
       <div v-if="showFormActions" class="form-actions">
@@ -370,10 +366,16 @@
 
         <!-- new/edit 模式（drawer / 独立路由共用）：完整操作 -->
         <template v-else>
-          <el-button @click="onCancel">取消</el-button>
-          <el-button v-if="mode === 'new'" type="warning" @click="resetForm">重置</el-button>
-          <el-button v-else-if="mode === 'edit'" type="warning" @click="resetForm">撤销修改</el-button>
+          <el-button @click="onCancel">
+            <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+            取消
+          </el-button>
+          <el-button v-if="mode === 'new'" type="warning" @click="resetForm">
+            <AppIcon icon="mdi:refresh" style="margin-right: 4px; font-size: 14px;" />
+            重置
+          </el-button>
           <el-button type="primary" :loading="save_loading" @click="onSubmit">
+            <AppIcon icon="mdi:content-save-outline" style="margin-right: 4px; font-size: 14px;" />
             {{ mode === 'new' ? '保存' : '更新' }}
           </el-button>
         </template>
@@ -403,7 +405,7 @@ import {
   updateRuleMethod,
   listRuleKeywords,
 } from '@/api/rule'
-import { polymerList } from '@/api'
+import { polymerMethod } from '@/api'
 import type { RuleKeyword, RuleMethodCreatePayload } from '@/types/rule'
 
 // ============================================================================
@@ -528,7 +530,7 @@ async function loadDictionaries() {
   allKeywords.value = kwRes.data?.items || kwRes.items || []
 
   // 材料字典
-  const polyRes: any = await polymerList({ page_no: 1, page_size: 1000 })
+  const polyRes: any = await polymerMethod.get({ page_no: 1, page_size: 1000 })
   polymers.value = polyRes.data?.items || polyRes.items || []
 }
 
@@ -608,8 +610,29 @@ const form = reactive<{
   actions: [{ keyword: '', action: 'add', value: '' }],
 })
 
-/** 用于"撤销修改"的快照 */
-let formSnapshot: any = null
+/**
+ * new 模式下重置为空白默认状态
+ * - edit 模式已无"撤销修改"按钮（功能与"取消"重复，且刷新即失效）
+ */
+const initialFormState = () => ({
+  rule_library_id: 0,
+  polymer_abbreviation: '',
+  product_category: '',
+  priority: 1,
+  confidence: 1.0,
+  source: 'expert' as const,
+  is_active: true,
+  rule_description: '',
+  rule_explanation: '',
+  preconditions: [{ keyword: '', level: '' }],
+  actions: [{ keyword: '', action: 'add', value: '' }],
+})
+
+function resetForm() {
+  if (mode.value === 'new') {
+    Object.assign(form, initialFormState(), { rule_library_id: effectiveLibraryId.value })
+  }
+}
 
 const loaded = ref(false)
 const save_loading = ref(false)
@@ -761,7 +784,6 @@ async function loadForm() {
     if (mode.value === 'new') {
       // 新建：空 form + 规则库 ID 来自 props 或 route
       form.rule_library_id = effectiveLibraryId.value
-      formSnapshot = JSON.parse(JSON.stringify(form))
     } else {
       // 编辑 / 详情：拉取后端数据
       const id = effectiveMethodId.value
@@ -787,9 +809,6 @@ async function loadForm() {
           preconditions: [{ keyword: '', level: '' }],
           actions: [{ keyword: '', action: 'add', value: '' }],
         })
-        if (mode.value === 'edit') {
-          formSnapshot = JSON.parse(JSON.stringify(form))
-        }
       } else {
         ElMessage.error(res?.msg || '加载失败')
         goBack()
@@ -802,12 +821,6 @@ async function loadForm() {
     return
   } finally {
     loaded.value = true
-  }
-}
-
-function resetForm() {
-  if (formSnapshot) {
-    Object.assign(form, JSON.parse(JSON.stringify(formSnapshot)))
   }
 }
 

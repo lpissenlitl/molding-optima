@@ -30,6 +30,7 @@ class InjectionMachineDetailView(BaseView):
     def delete(self, request, injection_machine_id):
         """删除注塑机"""
         return injection_service.delete_injection_machine(
+            company_id=request.user.company_id,
             injection_machine_id=injection_machine_id
         )
 
@@ -60,4 +61,7 @@ class InjectionMachineListView(BaseView):
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
         """批量删除注塑机"""
-        return injection_service.batch_delete_injection_machine(**cleaned_data)
+        return injection_service.batch_delete_injection_machine(
+            company_id=request.user.company_id,
+            **cleaned_data
+        )

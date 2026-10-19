@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class FuzzyEngine(AlgorithmBase):
     """模糊推理算法 - 基于模糊规则进行缺陷修正。
 
-    algorithm_type='optimization'，由 optimization_advice service 编排 chain。
+    algorithm_type='optimization'，由 condition service 通过 AlgorithmRegistry 编排 chain。
     适用于已知规则的场景，如工艺缺陷修正。
     """
 
@@ -115,10 +115,16 @@ class FuzzyEngine(AlgorithmBase):
                 },
                 'process_parameter': {...},          # 当前参数
                 'iteration_trend': {...},            # 迭代趋势
-                'machine': {...},
-                # --- FuzzyEngine 扩展上下文 ---
-                'polymer_abbreviation': 'PE',
-                'product_category': '酒瓶',
+                'machine_info': {...},               # 设备 dict（与 HTTP schema / service 接口对齐）
+                # --- FuzzyEngine 扩展上下文（以子对象形态传，避免后续动算法接口） ---
+                'polymer_info': {                    # 完整材料 dict（与 schema 字段名对齐）
+                    'abbreviation': 'PE',
+                    # 预留：melt_flow_rate / density / ...
+                },
+                'mold_info': {                       # 完整模具 dict（与 schema 字段名对齐）
+                    'product_category': '酒瓶',
+                    # 预留：cavity_count / gate_type / ...
+                },
                 'rule_library_code': 'packaging',    # 可选
             }
 
@@ -139,10 +145,13 @@ class FuzzyEngine(AlgorithmBase):
             return []
 
         # 1) 拉规则
+        # context['polymer_info'] / context['mold_info'] 是子对象 dict
+        # （字段名与 HTTP schema / service 接口对齐，避免命名割裂），这里只取算法关心的字段
+        # （abbreviation / product_category），后续若算法需新字段直接从对应子对象取。
         query_ctx = RuleQueryContext(
             defect_name=defect_name,
-            polymer_abbreviation=context.get('polymer_abbreviation'),
-            product_category=context.get('product_category'),
+            polymer_abbreviation=(context.get('polymer_info') or {}).get('abbreviation'),
+            product_category=(context.get('mold_info') or {}).get('product_category'),
             rule_library_code=context.get('rule_library_code'),
         )
         all_rules = RuleQueryService.get_rules(query_ctx)

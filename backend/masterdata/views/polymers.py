@@ -21,6 +21,7 @@ class PolymerDetailView(BaseView):
     def put(self, request, polymer_id, cleaned_data):
         """更新单个聚合物信息"""
         return polymer_service.update_polymer_info(
+            company_id=request.user.company_id,
             polymer_id=polymer_id,
             **cleaned_data
         )
@@ -29,6 +30,7 @@ class PolymerDetailView(BaseView):
     def delete(self, request, polymer_id):
         """删除单个聚合物"""
         return polymer_service.delete_polymer(
+            company_id=request.user.company_id,
             polymer_id=polymer_id
         )
 
@@ -59,4 +61,7 @@ class PolymerListView(BaseView, PaginationResponse):
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
         """批量删除聚合物信息"""
-        return polymer_service.batch_delete_polymer(**cleaned_data)
+        return polymer_service.batch_delete_polymer(
+            company_id=request.user.company_id,
+            **cleaned_data
+        )

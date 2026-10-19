@@ -103,7 +103,10 @@
     </el-form>
 
     <template #footer>
-      <el-button @click="emit('update:visible', false)">取消</el-button>
+      <el-button @click="emit('update:visible', false)">
+        <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+        取消
+      </el-button>
       <el-button type="primary" :loading="submitting" @click="handleSubmit">
         保存
       </el-button>

@@ -34,7 +34,9 @@
             第 {{ round.seq_idx ?? idx + 1 }} 轮
             <el-tag size="small" :type="TYPE_TAG[round.type]">{{ TYPE_LABEL[round.type] }}</el-tag>
           </div>
-          <div class="round-item__time">{{ round.created_at }}</div>
+          <!-- 占位 round（parameter_id 为 null）不显示时间：占位是页面初始化时建的，时间不准确
+            只有 infer / 优化 / 手动保存后真正“创建” round 时才显示 -->
+          <div v-if="round.parameter_id" class="round-item__time">{{ formatLocalTime(round.created_at) }}</div>
           <div v-if="round.summary" class="round-item__summary">{{ round.summary }}</div>
         </div>
       </li>
@@ -43,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import dayjs from 'dayjs'
 /**
  * RoundTimeline - 调机过程时间线
  *
@@ -57,6 +60,8 @@ defineProps<{
     summary?: string
     /** 业务轮次号（后端 ProcessParameter.seq_idx）；未调过后端接口时为 null */
     seq_idx?: number | null
+    /** 后端 ProcessParameter.id：占位 round 为 null（页面初始化时建的未提交 round） */
+    parameter_id?: number | null
   }>
   activeId?: number | string | null
 }>()
@@ -75,6 +80,19 @@ const TYPE_TAG: Record<string, 'success' | 'warning' | 'info'> = {
   initial: 'success',
   optimized: 'warning',
   manual: 'info',
+}
+
+/**
+ * 把 round.created_at（ISO 8601 字符串，如 "2026-10-14T01:25:49.458Z"）按浏览器本地时区格式化显示。
+ * - 后端 DB 字面值是 Asia/Shanghai 系统时刻，前端 makeRound 写入的是 ISO 8601 UTC 字符串
+ * - 两者表示同一时刻，浏览器本地区别只是时区
+ * - 避免直接显示 ISO 原始串（如 "2026-10-14T01:25:49.458Z"）让用户看到 UTC 时刻
+ */
+function formatLocalTime(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return dayjs(d).format('YYYY-MM-DD HH:mm:ss')
 }
 </script>
 
@@ -113,7 +131,7 @@ const TYPE_TAG: Record<string, 'success' | 'warning' | 'info'> = {
   }
 
   &.is-active {
-    background-color: var(--el-color-primary-light-9, #ecf5ff);
+    background-color: #f5f9ff;
     border-left-color: var(--el-color-primary);
   }
 

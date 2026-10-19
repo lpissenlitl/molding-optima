@@ -86,7 +86,7 @@
           <div class="widget widget--activity">
             <div class="widget__header">
               <span class="widget__title">最近活动</span>
-              <el-link type="primary" :underline="false" @click="go('/process/parameter')">
+              <el-link type="primary" :underline="false" @click="go('/process/library')">
                 查看全部
               </el-link>
             </div>
@@ -132,7 +132,7 @@
           <div class="widget widget--tuning">
             <div class="widget__header">
               <span class="widget__title">调机进行中</span>
-              <el-link type="primary" :underline="false" @click="go('/process/optimization-records')">
+              <el-link type="primary" :underline="false" @click="go('/process/optimization/history')">
                 查看全部
               </el-link>
             </div>
@@ -189,7 +189,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  processParameterMethod,
+  processConditionMethod,
   dashboardStatistics,
 } from '@/api'
 import { useUserStore } from '@/stores/user'
@@ -318,9 +318,9 @@ const kpi_cards = computed<KpiCardConfig[]>(() => [
 // ============================================================================
 
 const quick_actions = [
-  { label: '新建工艺', icon: 'mdi:plus-circle-outline', path: '/process/parameter/new' },
-  { label: '工艺优化', icon: 'mdi:lightbulb-on-outline', path: '/process/optimization' },
-  { label: '优化记录', icon: 'mdi:history', path: '/process/optimization-records' },
+  { label: '新建工艺', icon: 'mdi:plus-circle-outline', path: '/process/library/new' },
+  { label: '智能调机', icon: 'mdi:lightbulb-on-outline', path: '/process/optimization' },
+  { label: '调机记录', icon: 'mdi:history', path: '/process/optimization/history' },
   { label: '规则中心', icon: 'mdi:format-list-checks', path: '/process/rules' },
   { label: '模具库', icon: 'mdi:cube-outline', path: '/mold/list' },
   { label: '材料库', icon: 'mdi:flask-outline', path: '/material/polymer/list' },
@@ -376,11 +376,11 @@ function activityType(item: ProcessItem) {
 }
 
 function goActivity(item: ProcessItem) {
-  router.push(`/process/parameter/${item.id}/detail`)
+  router.push(`/process/library/${item.id}/detail`)
 }
 
 function goOptimization(_item: ProcessItem) {
-  router.push('/process/optimization-records')
+  router.push('/process/optimization/history')
 }
 
 // ============================================================================
@@ -403,13 +403,13 @@ async function safeCall<T>(fn: () => Promise<any>, fallback: T): Promise<T> {
 async function loadAll() {
   await Promise.allSettled([
     // 大 KPI 1：进行中工艺 total
-    safeCall(() => processParameterMethod.get({ page_size: 1, status: 'active' }), { total: 0 })
+    safeCall(() => processConditionMethod.get({ page_size: 1, status: 'active' }), { total: 0 })
       .then(r => (stat_active.value.value = r.total || 0))
       .finally(() => (stat_active.value.loading = false)),
 
     // 大 KPI 2：今日新增 total
     safeCall(
-      () => processParameterMethod.get({ page_size: 1, start_date: today.value, end_date: today.value }),
+      () => processConditionMethod.get({ page_size: 1, start_date: today.value, end_date: today.value }),
       { total: 0 },
     )
       .then(r => (stat_today.value.value = r.total || 0))
@@ -418,7 +418,7 @@ async function loadAll() {
     // 大 KPI 3：待调机迭代（active 中 parameters_count > 1 的数量）
     // 取足够多条 active 工艺（page_size=100），客户端筛 count > 1
     safeCall(
-      () => processParameterMethod.get({ page_size: 100, status: 'active' }),
+      () => processConditionMethod.get({ page_size: 100, status: 'active' }),
       { total: 0, items: [] },
     )
       .then(r => {
@@ -429,7 +429,7 @@ async function loadAll() {
 
     // 最近活动：5 条按更新时间倒序
     safeCall(
-      () => processParameterMethod.get({ page_size: 5, sort: '-updated_at' }),
+      () => processConditionMethod.get({ page_size: 5, sort: '-updated_at' }),
       { items: [] },
     )
       .then(r => {
@@ -439,7 +439,7 @@ async function loadAll() {
 
     // 调机进行中：active 且 parameters_count > 0，按 parameters_count 倒序
     safeCall(
-      () => processParameterMethod.get({
+      () => processConditionMethod.get({
         page_size: 5,
         status: 'active',
         sort: '-parameters_count',

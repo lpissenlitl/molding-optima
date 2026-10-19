@@ -21,13 +21,6 @@
 -->
 <template>
   <div class="project-form">
-    <div class="page-header">
-      <el-button text @click="goBack">
-        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
-        返回列表
-      </el-button>
-    </div>
-
     <el-form
       v-if="loaded"
       ref="formRef"
@@ -147,7 +140,10 @@
          - 与 el-form 的 v-if="loaded" 显隐同步，视觉一致
     -->
     <div v-if="loaded" class="form-actions">
-      <el-button @click="goBack">取消</el-button>
+      <el-button @click="goBack">
+              <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+              取消
+            </el-button>
       <el-button type="primary" :loading="submitting" @click="handleSubmit">
         {{ is_edit ? '保存' : '创建' }}
       </el-button>
@@ -372,15 +368,6 @@ async function handleSubmit() {
    */
   padding: 16px 16px 96px;
   box-sizing: border-box;
-}
-
-.page-header {
-  /*
-   * 只保留"返回列表"按钮（退出路径）
-   * 页面标识由 navbar 面包屑 + URL 路径承担，避免信息冗余
-   * 与 polymer/PolymerForm / admin/RoleCreate 等保持一致
-   */
-  margin-bottom: 16px;
 }
 
 /*

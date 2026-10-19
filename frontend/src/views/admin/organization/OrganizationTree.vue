@@ -5,7 +5,7 @@
   - 支持拖拽调整层级（含跨公司拒绝、根节点保护）
 -->
 <template>
-  <div class="org-list">
+  <div class="page-stack">
     <!-- 顶部信息条 -->
     <div class="page-header">
       <div class="header-left">
@@ -149,7 +149,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import OrganizationFormDrawer from './OrganizationFormDrawer.vue'
-import { organizationMethod } from '@/api'
+import { organizationMethod, reorderOrganizations } from '@/api'
 import { useUserStore } from '@/stores/user'
 
 // ============================================================================
@@ -410,9 +410,7 @@ async function handleDragEnd(
   }))
 
   try {
-    const res: any = await organizationMethod.multipleUpdate({
-      org_list: org_list_payload,
-    })
+    const res: any = await reorderOrganizations(org_list_payload)
     if (res.status === 0) {
       ElMessage.success('组织结构调整成功')
       // 重新拉数据保证 path 字段一致（后端可能补充了 path 字段）
@@ -447,12 +445,6 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.org-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .page-header {
   display: flex;
   justify-content: space-between;

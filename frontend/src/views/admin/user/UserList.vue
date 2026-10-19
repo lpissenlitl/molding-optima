@@ -7,7 +7,7 @@
   - 新建用户（弹窗）
 -->
 <template>
-  <div class="user-list">
+  <div class="page-stack">
     <!-- 搜索栏 -->
     <div class="search-container">
       <el-form
@@ -177,7 +177,10 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="reset_pwd_visible = false">取消</el-button>
+        <el-button @click="reset_pwd_visible = false">
+          <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+          取消
+        </el-button>
         <el-button
           type="primary"
           :loading="reset_pwd_loading"
@@ -395,7 +398,7 @@ async function batchDelete() {
   }
 
   try {
-    const res: any = await userMethod.multipleDelete({ ids })
+    const res: any = await userMethod.batchDelete({ ids })
     if (res.status === 0) {
       ElMessage.success(`成功删除 ${ids.length} 个用户`)
       selected_rows.value = []
@@ -477,24 +480,6 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.user-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 操作列按钮紧凑显示 */
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
 /* 自定义 tag */
 .custom-tag {
   display: inline-flex;
@@ -523,9 +508,5 @@ onMounted(() => {
 
 .text-success {
   color: #67c23a;
-}
-
-.text-danger {
-  color: #f56c6c;
 }
 </style>

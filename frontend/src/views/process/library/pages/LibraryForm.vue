@@ -2,51 +2,58 @@
   ProcessParameterForm - 工艺参数表单（new / edit / detail 三模式共用）
 
   数据模型：操作 Condition（试模上下文）+ Parameter（工艺参数）两块数据
-  样式约束：本文件无任何自定义 SCSS（条件卡折叠样式在 shared/ProcessCondition.vue）
 -->
 <template>
   <div class="process-condition-form">
-    <!-- 顶部 page-header（全局类） -->
-    <div class="page-header">
-      <el-button text @click="goBack">
-        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
-        返回列表
-      </el-button>
-    </div>
-
     <div v-if="!loaded" v-loading="true" class="loading-placeholder" />
 
     <template v-else>
-      <!-- 工艺条件卡（可折叠：展开=表单 / 折叠=简要信息） -->
+      <!-- 工艺条件卡：编辑/详情模式默认折叠 -->
       <ProcessCondition
         ref="conditionRef"
         :process-condition="form.condition"
         :mode="mode === 'detail' ? 'view' : mode"
-        :default-expanded="true"
+        :default-expanded="mode === 'new'"
       />
 
-      <!-- 工艺参数卡（始终展开） -->
-      <SettingProcess
+      <!-- 工艺参数卡：视觉对齐 OptimizationCreate 的“工作台”风格 -->
+      <el-card
         v-if="form.parameter.setting_process"
-        ref="parameterRef"
-        :setting-process="form.parameter.setting_process"
-        :machine-info="form.condition.machine_info ?? {}"
-        :disabled="mode === 'detail'"
-      />
+        class="parameter-card"
+        shadow="never"
+        style="margin-top: 16px"
+      >
+        <template #header>
+          <div class="parameter-card__header">
+            <AppIcon icon="mdi:cog-outline" class="parameter-card__header-icon" />
+            <span class="custom-form__title">工艺参数</span>
+          </div>
+        </template>
+        <SettingProcess
+          ref="parameterRef"
+          :setting-process="form.parameter.setting_process"
+          :machine-info="form.condition.machine_info ?? {}"
+          :disabled="mode === 'detail'"
+        />
+      </el-card>
     </template>
 
     <!-- 底部操作（全局 .form-actions） -->
     <div v-if="mode !== 'detail' && loaded" class="form-actions">
-      <el-button @click="goBack">取消</el-button>
-      <el-button v-if="mode === 'new'" @click="resetForm">重置</el-button>
-      <el-button v-else-if="mode === 'edit'" @click="resetForm">
-        撤销修改
+      <el-button @click="goBack">
+        <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+        取消
+      </el-button>
+      <el-button v-if="mode === 'new'" @click="resetForm">
+        <AppIcon icon="mdi:refresh" style="margin-right: 4px; font-size: 14px;" />
+        重置
       </el-button>
       <el-button
         type="primary"
         :loading="save_loading"
         @click="onSubmit"
       >
+        <AppIcon icon="mdi:content-save-outline" style="margin-right: 4px; font-size: 14px;" />
         {{ mode === 'new' ? '保存' : '更新' }}
       </el-button>
     </div>
@@ -61,11 +68,7 @@ import { ElMessage } from 'element-plus'
 import ProcessCondition from '@/views/process/shared/ProcessCondition.vue'
 import SettingProcess from '../components/SettingProcess.vue'
 import { injectionProcessForm, settingProcessForm } from '@/constants/process-const'
-import {
-  getProcessParameterFrontend,
-  saveProcessParameterFrontend,
-  updateProcessParameterFrontend,
-} from '@/api'
+import { processRecordMethod } from '@/api'
 
 // ============================================================================
 // 路由
@@ -76,7 +79,7 @@ const router = useRouter()
 
 /** mode 派生（由 route 决定） */
 const mode = computed<'new' | 'edit' | 'detail'>(() => {
-  if (route.name === 'process-parameter-detail') return 'detail'
+  if (route.name === 'process-library-detail') return 'detail'
   if (route.params?.id) return 'edit'
   return 'new'
 })
@@ -96,8 +99,6 @@ const save_loading = ref(false)
 const conditionRef = ref<InstanceType<typeof ProcessCondition> | null>(null)
 const parameterRef = ref<InstanceType<typeof SettingProcess> | null>(null)
 
-let formSnapshot: any = null
-
 // ============================================================================
 // 数据加载
 // ============================================================================
@@ -107,7 +108,6 @@ async function loadForm() {
   try {
     if (mode.value === 'new') {
       Object.assign(form, structuredClone(injectionProcessForm))
-      formSnapshot = null
     } else {
       const id = Number(route.params.id)
       if (!id) {
@@ -115,18 +115,16 @@ async function loadForm() {
         goBack()
         return
       }
-      const res: any = await getProcessParameterFrontend(id)
+      const res: any = await processRecordMethod.getDetail(id)
       if (res?.status === 0 && res.data) {
         const { condition, parameter } = res.data
         // condition 字段深合并（保留 form 初始字段）
+        // *_info.id 是 id 的唯一来源（嵌套结构，校验规则走 prop="*_info.id"）
         form.condition = { ...form.condition, ...(condition ?? {}) }
         form.parameter = {
           ...form.parameter,
           ...(parameter ?? {}),
           setting_process: parameter?.setting_process ?? structuredClone(settingProcessForm),
-        }
-        if (mode.value === 'edit') {
-          formSnapshot = JSON.parse(JSON.stringify(form))
         }
       } else {
         ElMessage.error(res?.msg || '加载失败')
@@ -146,8 +144,6 @@ async function loadForm() {
 function resetForm() {
   if (mode.value === 'new') {
     Object.assign(form, structuredClone(injectionProcessForm))
-  } else if (mode.value === 'edit' && formSnapshot) {
-    Object.assign(form, JSON.parse(JSON.stringify(formSnapshot)))
   }
 }
 
@@ -169,25 +165,21 @@ async function onSubmit() {
   save_loading.value = true
   try {
     if (mode.value === 'new') {
-      const res: any = await saveProcessParameterFrontend(payload)
+      const res: any = await processRecordMethod.add(payload)
       if (res?.status === 0) {
         ElMessage.success('工艺保存成功')
-        const newId = res.data?.id ?? form.condition.id
-        if (newId) {
-          router.replace(`/process/parameter/${newId}/edit`)
-        } else {
-          goBack()
-        }
+        // 跳转到列表：list 看到刚刚创建的记录
+        goBack()
       } else {
         ElMessage.error(res?.msg || '保存失败')
       }
     } else if (mode.value === 'edit') {
       const id = Number(route.params.id)
-      const res: any = await updateProcessParameterFrontend(id, payload)
+      const res: any = await processRecordMethod.edit(payload, id)
       if (res?.status === 0) {
         ElMessage.success('工艺更新成功')
-        // 重新拉取以刷新快照
-        await loadForm()
+        // 跳转到列表：list 看到刚刚更新的记录
+        goBack()
       } else {
         ElMessage.error(res?.msg || '更新失败')
       }
@@ -200,18 +192,24 @@ async function onSubmit() {
 }
 
 // 仅回传后端可识别的字段；condition.*_info 是前端缓存，不需要回传
+// - status / process_context / mold_id / shot_index / injection_machine_id / injection_index / polymer_id / origin_type
+//   这些字段后端都能识别，前端发整个 condition 对象方便
+// - process_context 由后端管理（前端 form 无此字段，不主动构造空 dict）
+// - 业务身份锁字段（mold_id/machine_id/polymer_id/shot_index/injection_index/origin_type）
+//   发到后端后由 service.update_condition 静默忽略（业务身份不变）
+// - 后端 DTO 要求顶层 *_id（不接 *_info 嵌套），从 *_info.id 推导平铺
 function buildPayload() {
   return {
     condition: {
       status: form.condition.status || 'active',
       origin_type: form.condition.origin_type || 'manual_creation',
-      mold_id: form.condition.mold_id,
+      mold_id: form.condition.mold_info?.id ?? null,
       shot_index: Number(form.condition.shot_index ?? 0),
-      injection_machine_id: form.condition.injection_machine_id,
+      injection_machine_id: form.condition.machine_info?.id ?? null,
       injection_index: Number(form.condition.injection_index ?? 0),
-      polymer_id: form.condition.polymer_id,
-      process_context: form.condition.process_context ?? {},
+      polymer_id: form.condition.polymer_info?.id ?? null,
     },
+    // 后端 service 调 _frontend_to_condition_dict 转平铺 130+ 字段
     parameter: {
       setting_process: form.parameter.setting_process,
     },
@@ -223,7 +221,7 @@ function buildPayload() {
 // ============================================================================
 
 function goBack() {
-  router.push('/process/parameter')
+  router.push('/process/library')
 }
 
 // ============================================================================
@@ -241,5 +239,21 @@ onMounted(() => {
 .process-condition-form {
   padding: 16px 16px 96px;
   box-sizing: border-box;
+}
+
+// 工艺参数卡 header：视觉对齐 OptimizationCreate
+.parameter-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 0;
+
+  &-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #606266;
+  }
 }
 </style>

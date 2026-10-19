@@ -186,7 +186,10 @@
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="expertDialogVisible = false">取消</el-button>
+      <el-button @click="expertDialogVisible = false">
+        <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+        取消
+      </el-button>
       <el-button type="primary" :loading="expertSubmitting" @click="submitExpertRule">
         保存
       </el-button>
@@ -238,7 +241,8 @@ const expertQuery = reactive({
 async function loadExpertRules() {
   expertLoading.value = true
   try {
-    const res: any = await listExpertRules(props.libraryId, {
+    const res: any = await listExpertRules({
+      rule_library_id: props.libraryId,
       page_no: expertQuery.page_no,
       page_size: expertQuery.page_size,
       rule_code: expertQuery.rule_code || undefined,

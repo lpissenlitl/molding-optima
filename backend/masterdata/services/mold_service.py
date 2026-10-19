@@ -180,9 +180,11 @@ def update_mold_info(company_id: int, mold_id: int, **kwargs) -> dict:
     return _build_mold_dict(mold)
 
 
-def delete_mold(mold_id: int) -> None:
-    """删除模具"""
-    mold = _get_mold_by_id(mold_id)
+def delete_mold(company_id: int, mold_id: int) -> None:
+    """删除模具（仅限本公司）"""
+    mold = Mold.objects.filter(pk=mold_id, company_id=company_id, is_deleted=False).first()
+    if mold is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"模具不存在: id={mold_id}")
     mold.soft_delete()
 
 
@@ -230,7 +232,13 @@ def get_mold_list(
     return pagination["total_count"], results
 
 
-def batch_delete_mold(ids: list) -> None:
-    """批量删除模具"""
+def batch_delete_mold(company_id: int, ids: list) -> int:
+    """批量删除模具（仅删本公司存在的）"""
     ids = validate_id_list(ids, "模具ID列表")
-    Mold.batch_soft_delete(ids)
+    # 按 company_id 过滤出本公司的 id（防止跨公司删除）
+    valid_ids = list(
+        Mold.objects.filter(pk__in=ids, company_id=company_id, is_deleted=False).values_list('id', flat=True)
+    )
+    if valid_ids:
+        Mold.batch_soft_delete(valid_ids)
+    return len(valid_ids)

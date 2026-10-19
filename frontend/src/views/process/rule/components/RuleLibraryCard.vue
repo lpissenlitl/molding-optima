@@ -285,10 +285,6 @@ function handleDelete() {
   padding: 4px 0px;
 }
 
-.text-danger {
-  color: var(--el-color-danger, #f56c6c);
-}
-
 /* 描述 */
 .library-desc {
   font-size: 13px;

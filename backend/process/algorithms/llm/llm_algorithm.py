@@ -20,7 +20,7 @@ class LLMEngine(AlgorithmBase):
     """
     大模型推理算法（占位）
 
-    algorithm_type='optimization'，由 optimization_advice service 编排 chain。
+    algorithm_type='optimization'，由 condition service 通过 AlgorithmRegistry 编排 chain。
     使用大语言模型进行工艺参数推荐。is_available() 始终返回 False，
     chain 调用时会跳过本算法。
     """

@@ -92,9 +92,11 @@ def update_injection_machine(company_id: int, injection_machine_id: int, **kwarg
     return _build_injection_machine_dict(injection_machine)
 
 
-def delete_injection_machine(injection_machine_id: int) -> None:
-    """删除注塑机"""
-    injection_machine = _get_injection_machine(injection_machine_id)
+def delete_injection_machine(company_id: int, injection_machine_id: int) -> None:
+    """删除注塑机（仅限本公司）"""
+    injection_machine = InjectionMoldingMachine.objects.filter(pk=injection_machine_id, company_id=company_id, is_deleted=False).first()
+    if injection_machine is None:
+        raise BizException(ERROR_DATA_NOT_FOUND, f"注塑机不存在: id={injection_machine_id}")
     injection_machine.soft_delete()
 
 
@@ -140,7 +142,13 @@ def get_injection_machine_list(
     return pagination["total_count"], results
 
 
-def batch_delete_injection_machine(ids: list) -> None:
-    """批量删除注塑机"""
+def batch_delete_injection_machine(company_id: int, ids: list) -> int:
+    """批量删除注塑机（仅删本公司存在的）"""
     ids = validate_id_list(ids, "注塑机ID")
-    InjectionMoldingMachine.batch_soft_delete(ids)
+    # 按 company_id 过滤出本公司的 id（防止跨公司删除）
+    valid_ids = list(
+        InjectionMoldingMachine.objects.filter(pk__in=ids, company_id=company_id, is_deleted=False).values_list('id', flat=True)
+    )
+    if valid_ids:
+        InjectionMoldingMachine.batch_soft_delete(valid_ids)
+    return len(valid_ids)

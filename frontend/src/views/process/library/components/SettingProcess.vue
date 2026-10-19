@@ -23,23 +23,10 @@
     - pressure_unit / speed_unit / screw_rotation_unit / back_pressure_unit
 -->
 <template>
-  <!--
-    外层 el-card：与 ProcessCondition 视觉对齐
-    - shadow="never" 与上方工艺条件卡一致（无阴影）
-    - header 明确标识"工艺参数"区块
-    - 内部 box-card 保留作为左右列子分组
-  -->
-  <el-card class="setting-process-card" shadow="never">
-    <template #header>
-      <div class="setting-process-card__header">
-        <AppIcon icon="mdi:tune-variant" class="setting-process-card__icon" />
-        <span class="custom-form__title">工艺参数</span>
-      </div>
-    </template>
-
-    <el-row :gutter="0">
-      <!-- 左列：注射 + VP + 保压 -->
-      <el-col :xs="24" :lg="13" :xl="13">
+  <!-- 工艺参数设定区：直接以 el-row 作为根，无外层 el-card 包装 -->
+  <el-row :gutter="0">
+    <!-- 左列：注射 + VP + 保压 -->
+    <el-col :xs="24" :lg="13" :xl="13">
         <el-card class="box-card" style="min-height: 750px">
           <!-- 区域 1：注射参数 -->
           <div class="section-header">注射参数</div>
@@ -469,8 +456,7 @@
           </el-table>
         </el-card>
       </el-col>
-    </el-row>
-  </el-card>
+  </el-row>
 </template>
 
 <script setup lang="ts">
@@ -748,52 +734,4 @@ watch(
   }
 }
 
-/*
- * 外层 card 样式
- * - header 用左对齐的图标 + 标题，与 ProcessCondition 的折叠 header 视觉一致
- * - 与 ProcessCondition 一样用 shadow="never"（border 而非阴影）
- *
- * 参考 molding-expert 旧版布局：
- * - 旧版无 el-row gutter、box-card 直接嵌入页面
- * - 新版保留外层 card 以匹配 ProcessCondition（用户上次明确要求），但去掉 gutter
- * - box-card 仍保留自身边框 + 阴影与旧版一致，保持“卡片嵌套”视觉
- */
-.setting-process-card {
-  &__header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  &__icon {
-    width: 18px;
-    height: 18px;
-    color: var(--el-color-primary);
-    flex-shrink: 0;
-  }
-
-  /*
-   * 在 card header 上下文内覆盖全局 .custom-form__title
-   * - 原样式有 padding-left: 10px + border-left: 3px 主题色竖条
-   * - 问题：在 card header 中竖条颜色与 icon 同色（都是主题色），视觉上连成一体
-   *   让人误以为 icon 和文字“贴在一起”，但物理距离实际有 18px
-   * - 解决：去掉 padding-left + border-left（icon 已作为视觉标识，不需要重复主题色）
-   * - 顺手调整字号：card header 不需要 16px/700，改 15px/600 更轻量
-   */
-  :deep(.custom-form__title) {
-    padding-left: 0;
-    border-left: none;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  /*
-   * 内部 box-card：去掉自身 margin-bottom
-   * - box-card 仍保留边框 + 阴影 + 自身 padding（参考旧版 box-card 样式）
-   * - 这样视觉上保留“卡片嵌套”的层次感，与旧版 box-card 一致
-   */
-  :deep(.box-card) {
-    margin-bottom: 0;
-  }
-}
 </style>

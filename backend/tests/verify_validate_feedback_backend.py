@@ -18,10 +18,13 @@ import django
 django.setup()
 
 from extensions.exceptions import BizException, ERROR_REQUIRED_FIELD
+from process.services import parameter_optimize as _opt_mod  # 模块顶层函数（整改后 helper 已不在类内）
 from process.services.parameter_optimize import (
-    ParameterOptimizeService,
+    ParameterOptimizeService,  # noqa: F401 — 仅保留 import 以验证类的公开表面
     _DEFECTFREE_KEYWORD_NAME,
 )
+
+_opt_mod._validate_feedback.__name__  # noqa: B018 — 仅验证模块可加载
 
 
 print("=" * 70)
@@ -31,7 +34,7 @@ print("=" * 70)
 
 def expect_fail(feedback: dict, expected_substr: str, case_name: str):
     try:
-        ParameterOptimizeService._validate_feedback(feedback)
+        _opt_mod._validate_feedback(feedback)
     except BizException as e:
         assert e.error_code == ERROR_REQUIRED_FIELD, (
             f"[{case_name}] expected ERROR_REQUIRED_FIELD, got {e.error_code}"
@@ -47,7 +50,7 @@ def expect_fail(feedback: dict, expected_substr: str, case_name: str):
 
 def expect_ok(feedback: dict, case_name: str):
     try:
-        ParameterOptimizeService._validate_feedback(feedback)
+        _opt_mod._validate_feedback(feedback)
         print(f"[PASS] {case_name}: 合法")
     except Exception as e:
         print(f"[FAIL] {case_name}: 不应抛错但抛了: {e}")

@@ -16,6 +16,8 @@ from typing import Dict, Any, Optional
 from .param_types import ProcessParams, MoldTempParams, HotRunnerParams, ProductionParams
 from .rule_matcher import InitRuleMatcher
 from .data_validator import DataValidator
+from .process_set import ProcessSetDefaults
+from .specs import drive_system_to_power_method
 from .algorithm_engine import AlgorithmEngine
 from .helpers import parse_material_family
 
@@ -67,12 +69,34 @@ class ProcessInitializer:
         if not polymer_info:
             raise ValueError("材料信息不能为空")
 
+        # 业务上下文：判断液压机（影响 condition='液压机必填' 的校验）
+        # 算法层负责 drive_system → power_method 转换（ORM 原始值多样，标准化为'液压机'/'电动机'）
+        if not machine_info.get('power_method'):
+            drive_system = machine_info.get('drive_system')
+            power_method = drive_system_to_power_method(drive_system)
+            if power_method:
+                machine_info['power_method'] = power_method
+        is_hydraulic = machine_info.get('power_method') == '液压机'
+
+        # process_set 默认值填充（前端不传时按默认填充，不参与 DataValidator 校验）
+        # process_set 全部 condition='可选'，缺失不报错，用 default 兜底
+        process_set = process_set or {}
+        ProcessSetDefaults.fill_defaults(process_set)
+
+        # 算法层校验（接口契约 + 智能默认值）
+        # 任何调用方（service / 第三方 / CLI）都自动获得校验，不需额外检查
+        # 校验失败 raise ValueError，调用方在 service 层负责转 BizException 400
+        self._validator = DataValidator()
+        self._validator.validate(
+            mold_info, machine_info, polymer_info,
+            is_hydraulic=is_hydraulic,
+        )
+
         self.mold = mold_info
         self.machine = machine_info
         self.material = polymer_info
-        self.process_set = process_set or {}
+        self.process_set = process_set
         self.rule_matcher = rule_matcher or InitRuleMatcher()
-        self._validator = DataValidator()
 
     # ========== 工具方法（供测试和调试用）==========
 
@@ -98,13 +122,12 @@ class ProcessInitializer:
         推导初始工艺参数
 
         流程：
-        1. 数据校验（DataValidator）
+        1. 数据校验（DataValidator）— __init__ 已完成，derive 不重复
         2. 规则加载（InitRuleMatcher）
         3. 算法推理（AlgorithmEngine）
         4. 返回 ProductionParams
         """
-        # 1. 数据校验
-        self._validator.validate(self.machine, self.material, self.mold)
+        # 1. 数据校验已在 __init__ 做过，derive 不重复（避免位置参数错乱）
 
         # 2. 规则加载
         coeffs = self.rule_matcher.match({

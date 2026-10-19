@@ -21,6 +21,7 @@ class ProjectDetailView(BaseView):
     def put(self, request, project_id, cleaned_data):
         """修改项目信息"""
         return project_service.update_project_info(
+            company_id=request.user.company_id,
             project_id=project_id,
             **cleaned_data
         )
@@ -29,6 +30,7 @@ class ProjectDetailView(BaseView):
     def delete(self, request, project_id):
         """删除项目"""
         return project_service.delete_project(
+            company_id=request.user.company_id,
             project_id=project_id
         )
 
@@ -60,4 +62,7 @@ class ProjectListView(BaseView):
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
         """批量删除项目"""
-        return project_service.batch_delete_project(**cleaned_data)
+        return project_service.batch_delete_project(
+            company_id=request.user.company_id,
+            **cleaned_data
+        )

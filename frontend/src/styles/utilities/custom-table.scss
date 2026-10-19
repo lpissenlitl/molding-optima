@@ -1,0 +1,44 @@
+/*
+ * Custom Table 公共样式
+ *
+ * 包含两个跨页面复用的类：
+ *   1. .row-action-buttons   行操作列按钮容器（编辑/删除等）
+ *   2. .text-danger           危险操作文本色（如删除按钮）
+ *
+ * 命名空间策略：
+ *   - 全局 SCSS（不在 scoped 内），所有页面自动应用
+ *   - 遵循项目 utilities 目录约定（与 custom-form / custom-tag 同级）
+ *   - 引入位置：src/main.ts
+ *
+ * 适用范围：
+ *   10+ 个 List/Form 页（process/mold/project/polymer/injection/filler/admin/rule）
+ *   已删除各文件 scoped 重复定义，统一从此处引用。
+ */
+
+.row-action-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+}
+
+.text-danger {
+  color: #f56c6c;
+}
+
+/*
+ * .page-stack
+ * 页面根容器：垂直堆叠 + 16px 间隔。
+ *
+ * 适用于 List / Tree 等以"上下结构"为主的页面（搜索区 + 表格区）。
+ * 替换之前 10+ 个 List 页各自定义的 .mold-list / .project-list 等重复块。
+ */
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

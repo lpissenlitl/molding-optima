@@ -21,6 +21,7 @@ class FillerDetailView(BaseView):
     def put(self, request, filler_id, cleaned_data):
         """修改填充物信息"""
         return filler_service.update_filler_info(
+            company_id=request.user.company_id,
             filler_id=filler_id,
             **cleaned_data
         )
@@ -29,6 +30,7 @@ class FillerDetailView(BaseView):
     def delete(self, request, filler_id):
         """删除填充物信息"""
         return filler_service.delete_filler(
+            company_id=request.user.company_id,
             filler_id=filler_id
         )
 
@@ -59,4 +61,7 @@ class FillerListView(BaseView):
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
         """批量删除填充物"""
-        return filler_service.batch_delete_filler(**cleaned_data)
+        return filler_service.batch_delete_filler(
+            company_id=request.user.company_id,
+            **cleaned_data
+        )

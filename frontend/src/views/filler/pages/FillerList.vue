@@ -9,7 +9,7 @@
     - 删除确认：ElMessageBox.confirm
 -->
 <template>
-  <div class="filler-list">
+  <div class="page-stack">
     <FillerSearchForm
       :query-detail="query"
       @search="handleSearch"
@@ -236,24 +236,4 @@ async function exportListToExcel() {
 </script>
 
 <style scoped lang="scss">
-.filler-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.row-action-buttons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-
-  .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-.text-danger {
-  color: #f56c6c;
-}
 </style>

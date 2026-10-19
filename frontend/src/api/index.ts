@@ -1,327 +1,135 @@
-/**
+﻿/**
  * molding-optima 前端 API 入口
  *
  * 按模块拆分，所有请求走 /api/ 前缀
  * 后端路由参考 molding-optima/backend/_moldx/urls.py
+ *
+ * 模块顺序（自上而下）：
+ *   1. 基础类（BaseRequest 通用 CRUD）
+ *   2. 身份/权限（identity）—— 公司/组织/角色/用户
+ *   3. 主数据（masterdata） —— 模具/注塑机/材料/填充物/项目/辅机
+ *   4. 工艺管理（process）—— 核心
+ *   5. 通用工具/横切
  */
 import request from '@/utils/request'
+import type { ProcessParameterFlat } from '@/views/process/optimization/components/parameterTransform'
 
-// ==================== 身份/用户/角色/公司 ====================
 
-export const companyList = (params?: any) =>
-  request({ url: '/api/companies/', method: 'get', params })
+// ==================== 基础类（BaseRequest 通用 CRUD）====================
 
-export const userList = (params?: any) =>
-  request({ url: '/api/users/', method: 'get', params })
-
-export const userCreate = (data: any) =>
-  request({ url: '/api/users/', method: 'post', data })
-
-export const userUpdate = (id: number, data: any) =>
-  request({ url: `/api/users/${id}/`, method: 'put', data })
-
-export const userDelete = (id: number) =>
-  request({ url: `/api/users/${id}/`, method: 'delete' })
-
-export const roleList = (params?: any) =>
-  request({ url: '/api/roles/', method: 'get', params })
-
-export const organizationList = (params?: any) =>
-  request({ url: '/api/organizations/', method: 'get', params })
+/** HTTP 方法类型 */
+type HttpMethod = 'get' | 'post' | 'put' | 'delete'
 
 /**
- * 获取组织树（用于前端 el-tree-select 等场景）
- * 后端在 list 端点加 tree=true 返回完整树形结构
+ * 通用 CRUD 请求基类
+ *
+ * 适用场景：标准 REST 资源（5 种基本操作 + 2 种批量操作）
+ *
+ * URL 拼接规则（这是 BaseRequest 的核心约束）:
+ * - list / create       → {baseUrl}                       e.g. GET  /api/companies/
+ * - detail              → {baseUrl}{id}/                 e.g. GET  /api/companies/123/
+ * - 批量操作             → {baseUrl}actions/batch-{verb}/  e.g. DEL  /api/companies/actions/batch-delete/
+ *
+ * actions/ 段子端点模式:
+ *   所有资源统一走 {baseUrl}actions/batch-delete/ 端点
+ *   不再有特殊例外（2026-10-13 records 段已对齐）
+ *   后续如需新增通用 batch action, 加在 batchDelete 同区段
+ *
+ * 泛型说明（默认 any，调用方可传业务类型）:
+ * - TQuery      list 查询参数类型
+ * - TPayload    create / update 提交数据类型
+ *
+ * 注：response 返回类型不固定为 Promise<T>，由 request 工具推导
+ *   原因是 axios + 自定义 response 拦截器之间存在类型伪冲突（request.ts L62 已返回 response.data，
+ *   但 axios 类型仍包装为 AxiosResponseResult），若需强类型请用函数式 API（见本文件其他区段）
+ *
+ * 兼容性与例外（重要）:
+ * （无）所有资源都走 BaseRequest 通用规则
+ *
+ * 不适用场景（请用函数式 API，见本文件其他区段）:
+ * - 路径不在以上规则内的（如 /api/processes/records/{id}/parameter-list/）
+ * - 后端要求 PATCH 或自定义 Content-Type
+ * - 强类型 + 复杂 payload 的资源（见 @/api/rule）
  */
-export const getOrganizationTree = (params?: any) =>
-  request({ url: '/api/organizations/', method: 'get', params: { tree: true, ...params } })
+class BaseRequest<TQuery = any, TPayload = any> {
+  readonly url: string
 
-// ==================== 主数据：模具/注塑机/材料/填充物 ====================
-
-export const moldList = (params?: any) =>
-  request({ url: '/api/molds/', method: 'get', params })
-
-export const moldCreate = (data: any) =>
-  request({ url: '/api/molds/', method: 'post', data })
-
-export const moldDetail = (id: number) =>
-  request({ url: `/api/molds/${id}/`, method: 'get' })
-
-export const moldUpdate = (id: number, data: any) =>
-  request({ url: `/api/molds/${id}/`, method: 'put', data })
-
-export const moldDelete = (id: number) =>
-  request({ url: `/api/molds/${id}/`, method: 'delete' })
-
-export const injectionMachineList = (params?: any) =>
-  request({ url: '/api/injection-machines/', method: 'get', params })
-
-export const injectionMachineCreate = (data: any) =>
-  request({ url: '/api/injection-machines/', method: 'post', data })
-
-export const injectionMachineDetail = (id: number) =>
-  request({ url: `/api/injection-machines/${id}/`, method: 'get' })
-
-export const polymerList = (params?: any) =>
-  request({ url: '/api/polymers/', method: 'get', params })
-
-export const polymerCreate = (data: any) =>
-  request({ url: '/api/polymers/', method: 'post', data })
-
-export const polymerDetail = (id: number) =>
-  request({ url: `/api/polymers/${id}/`, method: 'get' })
-
-export const fillerList = (params?: any) =>
-  request({ url: '/api/fillers/', method: 'get', params })
-
-export const fillerCreate = (data: any) =>
-  request({ url: '/api/fillers/', method: 'post', data })
-
-// ==================== 工艺管理（核心）====================
-
-// ==================== 工艺参数（对齐 molding-expert url 4-16）====================
-
-export const processParameterList = (params?: any) =>
-  request({ url: '/api/processes/parameter/', method: 'get', params })
-
-export const processParameterCreate = (data: any) =>
-  request({ url: '/api/processes/parameter/frontend/', method: 'post', data })
-
-export const processParameterDetail = (id: number) =>
-  request({ url: `/api/processes/parameter/${id}/`, method: 'get' })
-
-export const processParameterUpdate = (id: number, data: any) =>
-  request({ url: `/api/processes/parameter/${id}/`, method: 'put', data })
-
-export const processParameterDelete = (id: number) =>
-  request({ url: `/api/processes/parameter/${id}/`, method: 'delete' })
-
-export const processParameterBatchDelete = (ids: number[]) =>
-  request({ url: '/api/processes/parameter/batch_delete/', method: 'post', data: { ids } })
-
-// ==================== 工艺优化/调优 ====================
-
-export const processTransplant = (data: { source_parameter_id: number; target_machine_spec: any }) =>
-  request({ url: '/api/processes/parameter/transplant/', method: 'post', data })
-
-/**
- * 工艺参数初始化（Mode B：基于 masterdata ID，算法生成 + 落库）
- *
- * 5 个必填项（在后端 schema 层面补齐）：
- * - mold_id / polymer_id / injection_machine_id：3 个 masterdata ID
- * - shot_index / injection_index：多射模具 / 多射台机的索引
- *
- * 后端响应：
- * - condition_id / parameter_id：新创建的 Condition + ProcessParameter ID
- * - shot_index / injection_index：实际使用的索引
- * - matched_rules / param_source：推理元信息
- * - process / mold_temp / hot_runner / summary：推理结果（扁平结构）
- *
- * 关联文档：docs/process-get-initial-frontend-integration-2026-09-23.md
- */
-export const processInitializationFromMasterdata = (data: {
-  mold_id: number
-  polymer_id: number
-  injection_machine_id: number
-  shot_index?: number
-  injection_index?: number
-  process_set?: any
-}) =>
-  request({ url: '/api/processes/initialization/from-masterdata/', method: 'post', data })
-
-export const processOptimization = (conditionId: number) =>
-  request({ url: `/api/processes/optimization/${conditionId}/`, method: 'get' })
-
-export const processOptimizationCreate = (data: { condition_id: number; target_defect?: string }) =>
-  request({ url: `/api/processes/optimization/${data.condition_id || 0}/`, method: 'post', data })
-
-/**
- * 工艺优化 infer（调机迭代核心接口）
- *
- * 必填项：
- * - condition_id：工艺条件 ID（必须先调 initialization 生成）
- * - parent_seq_idx：基准业务编号（上一轮 ProcessParameter.seq_idx）
- *
- * 可选项：
- * - parameter：手动修改覆盖（结构化 dict，与 settingProcessForm 对齐）
- * - feedback：嵌套反馈（defect / observations / tuning_result）
- *
- * 后端响应：
- * - new_parameter：含 parameter_id / seq_idx（新创建的 ProcessParameter）
- * - suggestion：算法建议（source_type / recommendation_id / groups）
- *
- * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
- */
-export const processOptimizationInfer = (data: {
-  condition_id: number
-  parent_seq_idx: number
-  parameter?: any
-  feedback?: {
-    defect?: any[]
-    observations?: any[]
-    tuning_result?: 'effective' | 'ineffective' | null
-  }
-}) =>
-  request({ url: '/api/processes/optimization/infer/', method: 'post', data })
-
-/**
- * 提交当前轮次试模结果（TuningRecord 幂等落库）
- *
- * 业务语义：
- * - 不同于 infer（创建新轮次）：这里只保存当前轮次的实测 + 缺陷反馈
- * - 不创建新 ProcessParameter，也不污染 source_type
- * - 幂等键：parameter_id；同一 parameter 重复提交 → 覆盖更新
- *
- * 必填：parameter_id
- * 可选：defect_feedbacks / observations / tuning_result / result_detail
- *
- * 后端响应：{ status, msg, data: { tuning_record_id, parameter_id, created, updated_at } }
- *
- * 关联文档：_refs/module/process/process-get-initial-frontend-integration-2026-09-23.md
- *
- * 前端兜底（已实现）：
- * - onSubmit 检查 activeRound.value.parameter_id == null → warning + return
- * - 保存按钮 :disabled="!hasActiveParameter"（未调过 infer 时点不动）
- *
- * TODO 后端：补 POST /api/processes/tuning/record/ 接口
- *   - service 层按 parameter_id 做 update_or_create（业务 1:1 保证）
- *   - 若 parameter 已被新版本取代（status=archived），返回 409 拒绝
- *   - 参数不存在返回 404（防御性检查）
- *   - 跨 company_id / organization_id 越权返回 403
- */
-export const processTuningRecord = (data: {
-  parameter_id: number
-  defect_feedbacks?: any[]
-  observations?: any[]
-  tuning_result?: 'effective' | 'ineffective' | 'qualified' | 'unqualified' | 'pending' | null
-  result_detail?: string
-}) =>
-  request({ url: '/api/processes/tuning/record/', method: 'post', data })
-
-/**
- * 仪表板统计聚合（近 30 天趋势 + 起源类型分布）
- *
- * 后端一次性返回 dashboard 全部图表数据，避免前端 N+1 查询：
- * - trend：近 30 天每日新增工艺数（dates/counts）
- * - origin_distribution：按 origin_type 分组的工艺数（饼图用）
- *
- * 响应：{status, msg, data: {trend: {...}, origin_distribution: [...]}}
- *
- * 迁移记录：
- *   2026-10-08 v1 从 /api/processes/statistics/dashboard/ 迁出至 dashboard app
- *   2026-10-08 v2 dashboard → analytic（无 -s 后缀，与 reporting 互补）
- *   现 URL：/api/analytic/process-statistics/
- */
-export const dashboardStatistics = () =>
-  request({ url: '/api/analytic/process-statistics/', method: 'get' })
-
-// ==================== 规则管理 ====================
-
-export const ruleKeywordList = (params?: any) =>
-  request({ url: '/api/processes/rules/keywords/', method: 'get', params })
-
-export const ruleKeywordCreate = (data: any) =>
-  request({ url: '/api/processes/rules/keywords/', method: 'post', data })
-
-export const ruleMethodList = (params?: any) =>
-  request({ url: '/api/processes/rules/methods/', method: 'get', params })
-
-export const ruleMethodCreate = (data: any) =>
-  request({ url: '/api/processes/rules/methods/', method: 'post', data })
-
-export const ruleByDefect = (defectName: string) =>
-  request({ url: '/api/processes/rules/by-defect/', method: 'get', params: { defect_name: defectName } })
-
-// ==================== 搜索建议 ====================
-
-export const getSelectionOptions = (params: any) =>
-  request({ url: '/api/selection-options/', method: 'get', params })
-
-// ==================== 报表导出 ====================
-
-export const processExport = (processConditionIds: number[], includeSnapshots = false) =>
-  request({
-    url: '/api/process/export/',
-    method: 'post',
-    data: { process_condition_ids: processConditionIds, include_snapshots: includeSnapshots },
-  })
-
-export const processReport = (processConditionId: number, format = 'pdf') =>
-  request({
-    url: '/api/process/report/',
-    method: 'post',
-    data: { process_condition_id: processConditionId, format },
-  })
-
-
-// ==================== BaseRequest 通用 CRUD 类（参考 molding-expert）====================
-
-class BaseRequest {
-  url: string
   constructor(url: string) {
     this.url = url
   }
-  add(data: object) {
+
+  /** 列表查询 GET {baseUrl} */
+  get(params?: TQuery) {
     return request({
-      url: `${this.url}`,
-      method: 'post',
-      data,
+      url: this.url,
+      method: 'get',
+      params,
     })
   }
+
+  /** 详情 GET {baseUrl}{id}/ */
   getDetail(id: number) {
     return request({
       url: `${this.url}${id}/`,
       method: 'get',
     })
   }
-  edit(data: object, id: number) {
+
+  /** 创建 POST {baseUrl} */
+  add(data: TPayload) {
+    return request({
+      url: this.url,
+      method: 'post',
+      data,
+    })
+  }
+
+  /** 更新 PUT {baseUrl}{id}/ */
+  edit(data: TPayload, id: number) {
     return request({
       url: `${this.url}${id}/`,
       method: 'put',
       data,
     })
   }
+
+  /** 删除 DELETE {baseUrl}{id}/ */
   delete(id: number) {
     return request({
       url: `${this.url}${id}/`,
       method: 'delete',
     })
   }
-  get(params: object) {
-    return request({
-      url: `${this.url}`,
-      method: 'get',
-      params,
-    })
-  }
-  multipleDelete(params: object) {
+
+  /**
+   * 批量删除
+   * 路径: DELETE {baseUrl}actions/batch-delete/
+   */
+  batchDelete(params: object) {
     return request({
       url: `${this.url}actions/batch-delete/`,
       method: 'delete',
       data: params,
     })
   }
-  multipleUpdate(params: object) {
-    return request({
-      url: `${this.url}actions/batch-update/`,
-      method: 'put',
-      data: params,
-    })
-  }
-  editAction(data: object, id: number, actionName: string, method: 'get' | 'post' | 'put' | 'delete' = 'put') {
-    return request({
-      url: `${this.url}${id}/actions/${actionName}/`,
-      method,
-      data,
-    })
-  }
 }
 
 
-// ==================== 身份/权限（公司/组织/角色/用户）====================
+// ==================== 身份/权限（identity）====================
+//
+// 公司 / 组织 / 角色 / 用户
+//
+// ---- 标准 CRUD（BaseRequest 实例）----
 
 export const companyMethod = new BaseRequest('/api/companies/')
+export const organizationMethod = new BaseRequest('/api/organizations/')
+export const roleMethod = new BaseRequest('/api/roles/')
+export const userMethod = new BaseRequest('/api/users/')
 
+
+// ---- 业务专属函数（按子模块聚合）----
+
+// 公司：状态切换 / 接管 / 释放
 export function enableCompany(id: number) {
   return request({
     url: `/api/companies/${id}/enable/`,
@@ -347,10 +155,30 @@ export function releaseCompany(id: number) {
   })
 }
 
-export const organizationMethod = new BaseRequest('/api/organizations/')
+// 组织：树形结构
+/** 获取组织树形结构（?tree=true） */
+export const getOrganizationTree = (params?: any) =>
+  request({ url: '/api/organizations/', method: 'get', params: { tree: true, ...params } })
 
-export const roleMethod = new BaseRequest('/api/roles/')
+/**
+ * 调整组织架构
+ * 业务场景：用户拖拽组织节点后，提交受影响兄弟节点的新位置
+ */
+export interface OrganizationStructureItem {
+  id: number
+  parent_id: number | null
+  sort_order: number
+  path: string
+}
+export function reorderOrganizations(orgList: OrganizationStructureItem[]) {
+  return request({
+    url: '/api/organizations/actions/reorder/',
+    method: 'put',
+    data: { org_list: orgList },
+  })
+}
 
+// 角色：启用/禁用 + 权限树
 export function enableRole(id: number) {
   return request({
     url: `/api/roles/${id}/enable/`,
@@ -370,8 +198,7 @@ export function getPermissionTree() {
   })
 }
 
-export const userMethod = new BaseRequest('/api/users/')
-
+// 用户：启用/禁用 + 重置密码
 export function enableUser(id: number) {
   return request({
     url: `/api/users/${id}/enable/`,
@@ -393,7 +220,11 @@ export function resetPassword(id: number, data: object) {
 }
 
 
-// ==================== 主数据（BaseRequest 风格）====================
+// ==================== 主数据（masterdata）====================
+//
+// 项目 / 模具 / 聚合物 / 填充物 / 注塑机 / 辅机
+//
+// ---- 标准 CRUD（BaseRequest 实例）----
 
 export const projectMethod = new BaseRequest('/api/projects/')
 export const moldMethod = new BaseRequest('/api/molds/')
@@ -402,47 +233,150 @@ export const fillerMethod = new BaseRequest('/api/fillers/')
 export const machineMethod = new BaseRequest('/api/injection-machines/')
 export const auxiliaryMethod = new BaseRequest('/api/auxiliary-equipments/')
 
+ 
+// ==================== 工艺管理（process）====================
+//
+// URL 段：records (业务级) / conditions / parameters (数据级) / algorithms (触发器)
+//        rules/ (keywords / methods / libraries / expert-rules 子段)
+// 业务级 vs 数据级：records 携 condition+latest parameter 一起返回（id=condition_id）；
+//                 conditions / parameters 仅当前对象（id=对应对象 id，condition_id 走 query）
+// 规则的复杂接口（带强类型 / 详细 payload）见 `@/api/rule`
+// 参数版本树端点暂未挂出, view + service 保留
 
-// ==================== 工艺管理（BaseRequest 风格）====================
+// ---- 业务级 / 数据级 入口（BaseRequest 实例）----
 
-export const processParameterMethod = new BaseRequest('/api/processes/parameter/')
+export const processRecordMethod = new BaseRequest('/api/processes/records/')
+export const processConditionMethod = new BaseRequest('/api/processes/conditions/')
+export const processParameterMethod = new BaseRequest('/api/processes/parameters/')
 
 
-// ==================== 工艺前端 API（molding-optima 老的设计，与 molding-expert 不一致；保留过渡期使用）====================
+// ---- records 业务子资源（GET-only）----
 
-export function getProcessParameterFrontend(id: number) {
-  return request({
-    url: `/api/processes/parameter/${id}/frontend/`,
-    method: 'get',
-  })
+/** 获取某 condition 下的所有 parameter 列表 */
+export const processRecordParameterList = (conditionId: number) =>
+  request({ url: `/api/processes/records/${conditionId}/parameter-list/`, method: 'get' })
+
+/** 获取某 condition 下的 parameter 版本树 */
+export const processRecordParameterTree = (conditionId: number) =>
+  request({ url: `/api/processes/records/${conditionId}/parameter-tree/`, method: 'get' })
+
+
+// ---- algorithms 段（业务专属 API）----
+
+/** 工艺参数移植：把 source parameter 移植到 target machine */
+export const processTransplant = (data: { source_parameter_id: number; target_machine_spec: any }) =>
+  request({ url: '/api/processes/algorithms/transplant/', method: 'post', data })
+
+/**
+ * 工艺参数初始化（Mode B：基于 masterdata ID 算法生成 + 落库）
+ * 返回 condition_id / parameter_id / seq_idx / process
+ * 关联文档：docs/process-get-initial-frontend-integration-2026-09-23.md
+ */
+export const processInitializationFromMasterdata = (data: {
+  mold_id: number
+  polymer_id: number
+  injection_machine_id: number
+  shot_index?: number
+  injection_index?: number
+  process_set?: any
+}) =>
+  request({ url: '/api/processes/algorithms/initialize/', method: 'post', data })
+
+/**
+ * 工艺优化 infer（调机迭代核心接口）
+ * 必填 condition_id / parent_seq_idx，返回 new_parameter / suggestion
+ *
+ * 入参 parameter 的形状：
+ * - 若用户在 settingProcessForm 改了参数：先由前端 parameterToFlat 翻译为
+ *   ProcessParameterFlat 再传入（flat 字段对齐后端 ProcessParameterSchema）
+ * - 若用户没改参数：传 undefined / 不传（service 从 ORM 反查 parent_param 作 baseline）
+ * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
+ */
+export const processOptimizationInfer = (data: {
+  condition_id: number
+  parent_seq_idx: number
+  parameter?: ProcessParameterFlat
+  feedback?: {
+    defect?: any[]
+    observations?: any[]
+    tuning_result?: 'effective' | 'ineffective' | null
+  }
+}) =>
+  request({ url: '/api/processes/algorithms/optimize/', method: 'post', data })
+
+
+// ---- 人工调机反馈（tuning 业务上属于 parameter）----
+
+/**
+ * 提交人工调机反馈（TuningRecord 落库，幂等覆盖）
+ * URL: POST /api/processes/parameters/<parameter_id>/tuning-feedback/
+ * 关联文档：docs/process-tuning-feedback-frontend-2026-10-12.md
+ */
+export interface TuningFeedbackPayload {
+  defect_feedbacks?: any[]
+  observations?: any[]
+  tuning_result?: 'effective' | 'ineffective' | 'qualified' | 'unqualified' | 'pending' | null
+  result_detail?: string
 }
-
-export function saveProcessParameterFrontend(data: object) {
-  return request({
-    url: '/api/processes/parameter/save-frontend/',
+export const tuningFeedback = (parameterId: number, payload: TuningFeedbackPayload) =>
+  request({
+    url: `/api/processes/parameters/${parameterId}/tuning-feedback/`,
     method: 'post',
-    data,
+    data: payload,
   })
-}
 
-export function updateProcessParameterFrontend(id: number, data: object) {
-  return request({
-    url: `/api/processes/parameter/${id}/update-frontend/`,
-    method: 'put',
-    data,
-  })
-}
 
-export function transplantProcessParameter(data: object) {
-  return request({
-    url: '/api/processes/parameter/transplant/',
+// ---- 仪表板统计（analytic：近 30 天趋势 + 起源类型分布）----
+
+/**
+ * 仪表板统计聚合（近 30 天趋势 + 起源类型分布）
+ *
+ * 后端一次性返回 dashboard 全部图表数据，避免前端 N+1 查询：
+ * - trend：近 30 天每日新增工艺数（dates/counts）
+ * - origin_distribution：按 origin_type 分组的工艺数（饼图用）
+ *
+ * 响应：{status, msg, data: {trend: {...}, origin_distribution: [...]}}
+ *
+ * 迁移记录：
+ *   2026-10-08 v1 从 /api/processes/statistics/dashboard/ 迁出至 dashboard app
+ *   2026-10-08 v2 dashboard → analytic（无 -s 后缀，与 reporting 互补）
+ *   现 URL：/api/analytic/process-statistics/
+ */
+export const dashboardStatistics = () =>
+  request({ url: '/api/analytic/process-statistics/', method: 'get' })
+
+
+// ---- 报表导出 ----
+
+export const processExport = (processConditionIds: number[], includeSnapshots = false) =>
+  request({
+    url: '/api/process/export/',
     method: 'post',
-    data,
+    data: { process_condition_ids: processConditionIds, include_snapshots: includeSnapshots },
   })
-}
+
+export const processReport = (processConditionId: number, format = 'pdf') =>
+  request({
+    url: '/api/process/report/',
+    method: 'post',
+    data: { process_condition_id: processConditionId, format },
+  })
 
 
-// ==================== 通用工具 ====================
+// ==================== 文件中心（filecenter）====================
+//
+// ---- 标准 CRUD（BaseRequest 实例）----
+
+export const fileMethod = new BaseRequest('/api/files/')
+
+// 下载/预览 URL 构造不走 request 拦截器（需在 query 里手动带 token）
+// 已在 utils/assert.ts 提供 getFileDownloadUrl / getFilePreviewUrl
+
+
+// ==================== 通用工具/横切 ====================
+
+export const getSelectionOptions = (params: any) =>
+  request({ url: '/api/selection-options/', method: 'get', params })
 
 export function exportListData(params: object) {
   return request({

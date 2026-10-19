@@ -100,7 +100,10 @@
     </div>
 
     <template #footer>
-      <el-button @click="onVisibleChange(false)">取消</el-button>
+      <el-button @click="onVisibleChange(false)">
+        <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+        取消
+      </el-button>
       <el-button type="primary" :loading="submitting" @click="submit">确定</el-button>
     </template>
   </el-drawer>

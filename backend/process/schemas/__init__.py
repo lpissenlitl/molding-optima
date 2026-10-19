@@ -1,21 +1,26 @@
 """molding-optima 工艺参数 Schema 集中导出
 
 约定：
-- 每个 schema 按业务对象拆到独立文件（condition.py / parameter.py / initialization.py）
+- 每个 schema 按业务对象拆到独立文件（condition.py / parameter.py / record.py / tuning.py / ...）
 - 本文件统一 re-export，外部统一 `from process.schemas import XxxSchema`
-- 跨文件依赖：condition.py 引用 parameter.py（ProcessConditionAndParameterSchema 嵌套 parameter）
+- 跨文件依赖单向: record.py → condition.py (records 写入强验证 condition 字段)
 """
 # ===== 工艺条件 =====
 from .condition import (
     ProcessConditionSchema,
-    ProcessConditionAndParameterSchema,
+    ProcessConditionListSchema,
+    BatchDeleteConditionSchema,
 )
 
-# ===== 工艺参数 =====
+# ===== 工艺参数（独立 parameter service 契约）=====
+#   FLAT (算法 / 移植) + NEST (前端 UI) 两种格式都独立导出
 from .parameter import (
     ProcessParameterSchema,
     ProcessParameterListSchema,
-    BatchDeleteProcessParameterSchema,
+    ProcessParameterTreeSchema,
+    SettingProcessSchema,
+    ProcessParameterNestSchema,
+    ProcessParameterUpdateSchema,
 )
 
 # ===== 初始化 / 推理 =====
@@ -24,66 +29,88 @@ from .initialization import (
     PolymerInfoSchema,
     MoldInfoSchema,
     ProcessSetSchema,
-    ProcessInferSchema,
-    ProcessInitializationFromSourceConditionSchema,
-    ProcessInitializationFromMasterdataSchema,
+    ProcessInitializeFromMasterdataSchema,
+    ProcessInitializeFromConditionSchema,
+    ProcessInitializeFromProvidedSchema,
 )
 
-# ===== 工艺优化（infer）=====
-from .optimization_infer import (
+# ===== 工艺参数调优（optimize）=====
+from .optimization import (
     DefectFeedbackDataSchema,
     CycleObservationSchema,
     FeedbackSchema,
-    InferRequestSchema,
+    # 三维上下文（调优精度旋钮）
+    OptimizeMoldInfoSchema,
+    OptimizeMachineInfoSchema,
+    OptimizePolymerInfoSchema,
+    # 两个入口
+    ProcessOptimizeFromConditionSchema,
+    ProcessOptimizeFromProvidedSchema,
     SuggestionItemSchema,
     SuggestionGroupSchema,
     SuggestionSchema,
 )
 
-# ===== 调参记录 =====
-from .tuning import (
-    TuningRecordRequestSchema,
+# ===== 工艺记录（独立 records service 契约）=====
+from .record import (
+    ProcessRecordListSchema,
+    ProcessConditionAndParameterSchema,
+    ProcessConditionWriteSchema,
+    ProcessRecordBatchDeleteSchema,
 )
 
-# ===== 仪表板统计 =====
-from .statistics import (
-    DashboardTrendSchema,
-    DashboardOriginItemSchema,
-    DashboardStatisticsSchema,
+# ===== 调机动作 (人工调机反馈 + 批量删除) =====
+from .tuning import (
+    TuningRecordRequestSchema,
+    TuningBatchDeleteSchema,
+)
+
+# ===== 工艺参数移植 =====
+from .transplant import (
+    TransplantRequestSchema,
 )
 
 
 __all__ = [
     # 工艺条件
     "ProcessConditionSchema",
-    "ProcessConditionAndParameterSchema",
-    # 工艺参数
+    "ProcessConditionListSchema",
+    "BatchDeleteConditionSchema",
+    # 工艺参数（独立 parameter service 契约）
     "ProcessParameterSchema",
     "ProcessParameterListSchema",
-    "BatchDeleteProcessParameterSchema",
+    "ProcessParameterTreeSchema",
+    "SettingProcessSchema",
+    "ProcessParameterNestSchema",
+    "ProcessParameterUpdateSchema",
     # 初始化 / 推理
     "MachineInfoSchema",
     "PolymerInfoSchema",
     "MoldInfoSchema",
     "ProcessSetSchema",
-    "ProcessInferSchema",
-    "ProcessInitializationFromSourceConditionSchema",
-    "ProcessInitializationFromMasterdataSchema",
-    # 工艺优化（infer）
+    "ProcessInitializeFromMasterdataSchema",
+    "ProcessInitializeFromConditionSchema",
+    "ProcessInitializeFromProvidedSchema",
+    # 工艺参数调优（optimize）
     "DefectFeedbackDataSchema",
     "CycleObservationSchema",
     "FeedbackSchema",
-    "InferRequestSchema",
+    "OptimizeMoldInfoSchema",
+    "OptimizeMachineInfoSchema",
+    "OptimizePolymerInfoSchema",
+    "ProcessOptimizeFromConditionSchema",
+    "ProcessOptimizeFromProvidedSchema",
     "SuggestionItemSchema",
     "SuggestionGroupSchema",
     "SuggestionSchema",
-    # 调参记录
+    # 工艺记录（独立 records service 契约）
+    "ProcessRecordListSchema",
+    "ProcessConditionAndParameterSchema",
+    "ProcessConditionWriteSchema",
+    "ProcessRecordBatchDeleteSchema",
+    # 调机动作 (人工调机反馈 + 批量删除)
     "TuningRecordRequestSchema",
-    # 仪表板统计
-    "DashboardTrendSchema",
-    "DashboardOriginItemSchema",
-    "DashboardStatisticsSchema",
+    "TuningBatchDeleteSchema",
+    # 工艺参数移植
+    "TransplantRequestSchema",
 ]
-
-# 重建 ProcessConditionAndParameterSchema（其字段是 forward reference，需要在所有类加载完后解析）
-ProcessConditionAndParameterSchema.model_rebuild()

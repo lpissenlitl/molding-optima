@@ -1,6 +1,6 @@
 <!--
-  OptimizationCreate - 工艺优化（工作台）
-  - 工艺优化 = 基于工艺条件 + 缺陷反馈，迭代优化工艺参数
+  OptimizationCreate - 智能调机（工作台）
+  - 智能调机 = 基于工艺条件 + 缺陷反馈，迭代推荐工艺参数
   - 工艺条件复用 shared/ProcessCondition
   - 工作台：入口单一，无返回按钮
 -->
@@ -13,18 +13,19 @@
       <ProcessCondition
         ref="conditionRef"
         :process-condition="form.condition"
+        v-model:expanded="conditionExpanded"
         mode="edit"
         :default-expanded="!hasConditionData"
         :disabled="hasInitialProcess"
       />
 
-      <!-- 工艺优化工作台 -->
+      <!-- 智能调机工作台 -->
       <el-card class="box-card optimization-card" style="margin-top: 16px">
         <template #header>
           <div class="optimization-card__header">
             <div class="optimization-card__header-left">
               <AppIcon icon="mdi:tune-vertical" class="optimization-card__header-icon" />
-              <span class="custom-form__title">工艺优化</span>
+              <span class="custom-form__title">智能调机</span>
             </div>
           </div>
         </template>
@@ -184,13 +185,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { RefreshLeft, Check } from '@element-plus/icons-vue'
 import { settingProcessForm } from '@/constants/process-const'
 import { DEFECTFREE_KEYWORD_NAME } from '@/constants/special-keywords'
 import { listRuleKeywords } from '@/api/rule'
-import { processInitializationFromMasterdata, processOptimizationInfer, processTuningRecord } from '@/api/index'
+import {
+  processInitializationFromMasterdata,
+  processOptimizationInfer,
+  tuningFeedback,
+} from '@/api/index'
 import type { RuleKeyword } from '@/types/rule'
 import type { Suggestion } from '@/types/optimization'
 import {
@@ -205,13 +210,14 @@ import RoundTimeline from '../components/RoundTimeline.vue'
 import DefectFeedback from '../components/DefectFeedback.vue'
 import ProcessActualFeedback from '../components/ProcessActualFeedback.vue'
 import PreviousSuggestion from '../components/PreviousSuggestion.vue'
+import { parameterToFlat, isEmptyFlatParameter } from '../components/parameterTransform'
 
 // sessionStorage 持久化（避免切页面后丢失未提交的工艺数据）
 
 /**
  * sessionStorage key（带软件版本号）
  * - 保存：form / conditionExpanded / observationExpanded
- * - 不保存：loaded / *_loading / defectKeywords / previousSuggestion（mock） / conditionSyncTimer
+ * - 不保存：loaded / *_loading / defectKeywords / previousSuggestion（mock）
  */
 const STORAGE_KEY = createSessionStorageKey('optimization-create-draft')
 
@@ -246,6 +252,8 @@ function persistDraft() {
   }
   setSessionStorage(STORAGE_KEY, {
     form: plain,
+    // 保存基线快照：刷新后能恢复变更高亮（避免 watch(activeRound) 重新覆盖）
+    originalParameter: originalParameter.value,
     conditionExpanded: conditionExpanded.value,
     observationExpanded: observationExpanded.value,
   })
@@ -269,6 +277,7 @@ function flushPersist() {
 function restoreDraft(): boolean {
   const cached = getSessionStorage<{
     form: typeof form
+    originalParameter: any
     conditionExpanded: boolean
     observationExpanded: boolean
   }>(STORAGE_KEY)
@@ -284,6 +293,17 @@ function restoreDraft(): boolean {
   form.active_round_id = c.active_round_id ?? c.rounds[0]?.id ?? null
   conditionExpanded.value = cached.conditionExpanded ?? true
   observationExpanded.value = cached.observationExpanded ?? false
+  // 恢复原始基线（关键：放在 Object.assign 后、nextTick 前）
+  // - watch(activeRound) 会在 nextTick 异步触发
+  // - 在 nextTick 之前用 isRestoring=true 标记跳过本次更新
+  isRestoring = true
+  if (cached.originalParameter) {
+    originalParameter.value = cached.originalParameter
+  }
+  // nextTick 后释放标志：下次 watch(activeRound) 触发时（用户主动切 round）正常更新
+  void nextTick(() => {
+    isRestoring = false
+  })
   return true
 }
 
@@ -328,18 +348,25 @@ const activeRound = computed(() =>
 )
 
 /**
- * 当前活动轮次的参数快照（用于 SettingProcess 的变更高亮对比）
- * - 切到哪个 round 就 snapshot 哪个 round.parameter
- * - resetForm 时随 activeRound 切换自动重置
- * - 用户手动修改 activeRound.parameter 后该快照保持不变，与原值对比触发高亮
+ * 当前活动轮次的参数基线（用于 SettingProcess 的变更高亮对比）
+ * - 语义：基线 = "进入该 round 那一刻的 parameter 快照"
+ *   * 首轮首次进入 → parameter 是空 form → 从空到有值（infer）= 变更 → 高亮 ✓
+ * - 刷新问题（2026-10-13 修复）：原 watch(activeRound) 每次 activeRound 引用
+ *   变化（包括 restoreDraft 触发的变化）都会用当前 parameter 重新覆盖 originalParameter
+ *   → 刷新后 originalParameter = 修改后的 parameter → 不高亮
+ * - 修复：
+ *   * persistDraft 同步保存 originalParameter
+ *   * restoreDraft 同步恢复 originalParameter（用 isRestoring 标志跳过本次 watch 触发）
+ *   * watch(activeRound) 只在切 round / infer 完成后由用户主动触发时更新
  */
-const originalParameter = ref<typeof settingProcessForm | null>(null)
+const originalParameter = ref<any>(null)
+
+/** restoreDraft 进行中标志：让 watch(activeRound) 跳过本次由 restoreDraft 触发的更新 */
+let isRestoring = false
 
 watch(activeRound, (newRound) => {
+  if (isRestoring) return
   if (newRound?.parameter) {
-    // JSON 深拷贝：structuredClone 对 Vue 3 reactive Proxy 可能抛 DataCloneError；
-    // settingProcessForm 全是简单数值/数组/对象，JSON 拷贝足够
-    // （SettingProcess 原 saveOriginalSnapshot() 在 2026-10-08 删除，本组件承担唯一的快照职责）
     originalParameter.value = JSON.parse(JSON.stringify(newRound.parameter))
   } else {
     originalParameter.value = null
@@ -392,9 +419,6 @@ const observationExpanded = ref(false)
 /** 工艺参数区是否只读（用户手动切换，跨调机轮次保留） */
 const isProcessReadonly = ref(false)
 
-/** 子组件内部 toggle 不会通知父组件，定时 poll 同步 */
-let conditionSyncTimer: ReturnType<typeof setInterval> | null = null
-
 const loaded = ref(false)
 const save_loading = ref(false)
 const initial_loading = ref(false)
@@ -437,16 +461,8 @@ async function loadDefectKeywords() {
 const previousSuggestion = ref<Suggestion | null>(null)
 
 function toggleCondition() {
-  conditionRef.value?.toggle()
-  syncConditionExpanded()
-}
-
-/** 同步子组件折叠状态（如点 header）→ 修正按钮文字 */
-function syncConditionExpanded() {
-  const cur = conditionRef.value?.isExpanded?.()
-  if (typeof cur === 'boolean' && cur !== conditionExpanded.value) {
-    conditionExpanded.value = cur
-  }
+  // 走 v-model:expanded：父组件 toggle → 子组件 prop → 子组件 toggle → 卡片折叠
+  conditionExpanded.value = !conditionExpanded.value
 }
 
 // 数据加载
@@ -526,7 +542,13 @@ async function resetForm() {
   // activeRound watch 会自动 snapshot 新 round.parameter 到 originalParameter，
   // 实现 SettingProcess 变更高亮同步重置（无需穿透调组件方法）
 
+  // 主动设置 conditionExpanded + 强制子组件同步，避免 watch 时序不一致
+  // 导致「重置后 UI 仍折叠但按钮 label 已是『折叠工艺条件』」的 UI 错位
+  // - conditionExpanded.value = true → 父组件按钮 label 同步
+  // - conditionRef.value?.expand?.() → 直接设子组件 internalExpanded + emit
+  //   （不走 watch props.expanded 的 pre-flush 时序，最稳）
   conditionExpanded.value = true
+  conditionRef.value?.expand?.()
   observationExpanded.value = false
 
   ElMessage.success('优化页面已重置')
@@ -657,6 +679,9 @@ function applyInferResultToForm(result: any) {
 
   if (data.parameter_id != null) {
     activeRound.value.parameter_id = data.parameter_id
+    // 同步更新 created_at：占位 round 是在“用户进入页面”那刻建的（不准确），
+    // parameter_id 写入的瞬间才是 round 真正“创建”的时间点。
+    activeRound.value.created_at = new Date().toISOString()
   }
   if (data.seq_idx != null) {
     activeRound.value.seq_idx = data.seq_idx
@@ -686,9 +711,10 @@ async function getInitialProcess() {
   initial_loading.value = true
   try {
     const result: any = await processInitializationFromMasterdata({
-      mold_id: form.condition.mold_id,
-      polymer_id: form.condition.polymer_id,
-      injection_machine_id: form.condition.injection_machine_id,
+      // 字段在 ProcessCondition 内以嵌套结构存储（mold_info/machine_info/polymer_info）
+      mold_id: form.condition.mold_info?.id,
+      polymer_id: form.condition.polymer_info?.id,
+      injection_machine_id: form.condition.machine_info?.id,
       shot_index: form.condition.shot_index ?? 0,
       injection_index: form.condition.injection_index ?? 0,
     })
@@ -696,14 +722,7 @@ async function getInitialProcess() {
     // 集中应用响应，保证原子性
     applyInferResultToForm(result)
 
-    const ruleHint = Array.isArray(result?.data?.matched_rules) && result.data.matched_rules.length > 0
-      ? `（命中 ${result.data.matched_rules.length} 条规则）`
-      : ''
-    ElMessage.success(
-      `初始工艺已生成 condition_id=${result?.data?.condition_id ?? '-'}, `
-      + `parameter_id=${result?.data?.parameter_id ?? '-'}, `
-      + `seq_idx=${result?.data?.seq_idx ?? '-'}${ruleHint}`,
-    )
+    ElMessage.success('已生成初始工艺参数')
   } catch {
     // 拦截器已统一 toast
   } finally {
@@ -782,9 +801,17 @@ async function getOptimizedProcess() {
 
   optimize_loading.value = true
   try {
+    // 工艺参数：嵌套 form → flat 后端契约（算法契约源头就是 flat）
+    // - 用户没改参数：parameter 字段不传（service 从 ORM 反查 parent_param）
+    // - 用户改了参数：传 flat dict（后端 _parameter_must_have_override 会校验「至少一个工艺字段」，
+    //   「忘翻译 / 误传空 dict」会在 HTTP 边界报错而非污染 baseline）
+    const flatParameter = parameterToFlat(activeRound.value?.parameter)
+    const parameterPayload = isEmptyFlatParameter(flatParameter) ? undefined : flatParameter
+
     const result: any = await processOptimizationInfer({
       condition_id: form.condition.id,
       parent_seq_idx: activeRound.value.seq_idx,
+      parameter: parameterPayload,
       feedback: activeRound.value.feedback,
     })
 
@@ -844,8 +871,9 @@ async function getOptimizedProcess() {
  * - 不创建新 ProcessParameter / 不调算法 / 不污染 source_type
  * - 幂等：同一 parameter 重复提交 → 覆盖更新
  *
- * 关联：api/index.ts → processTuningRecord
- * 后端接口：POST /api/processes/tuning/record/（待后端补）
+ * 关联：api/index.ts → tuningFeedback
+ * 后端接口：POST /api/processes/parameters/<parameter_id>/tuning-feedback/
+ * 2026-10-12 URL 单段化: parameter_id 从 URL 限定 (tuning 业务上属 parameter)
  */
 async function onSubmit() {
   if (!activeRound.value) {
@@ -860,8 +888,7 @@ async function onSubmit() {
   save_loading.value = true
   try {
     const feedback = activeRound.value.feedback || {}
-    const res: any = await processTuningRecord({
-      parameter_id: activeRound.value.parameter_id,
+    const res: any = await tuningFeedback(activeRound.value.parameter_id, {
       defect_feedbacks: feedback.defect ?? [],
       observations: feedback.observations ?? [],
       tuning_result: feedback.tuning_result ?? null,
@@ -883,17 +910,6 @@ async function onSubmit() {
 onMounted(() => {
   loadForm()
   loadDefectKeywords()
-  syncConditionExpanded()
-  /*
-   * 工艺条件折叠态同步定时器（2026-10-08：250ms → 1000ms）
-   * - 250ms 是历史默认值，但工艺条件塌缩/展开是低频操作（用户手工点击 header 触发），
-   *   不需要 4Hz 同步频率
-   * - 1000ms 仍保证按钮标签最多 1s 内跟上，UX 可接受
-   * - 每秒 4 次 → 每秒 1 次，CPU 占用降低 ~75%
-   * - 注意：1000ms 是 dev-only 优化（这轮 setInterval 是开发期体验问题）；
-   *     若用户对同步延迟敏感，可改用 ProcessCondition watchExpanded 事件回调（消除轮询）
-   */
-  conditionSyncTimer = setInterval(syncConditionExpanded, 1000)
 
   /*
    * 持久化 watch —— 挂载后才挂（不 immediate）
@@ -913,10 +929,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (conditionSyncTimer) {
-    clearInterval(conditionSyncTimer)
-    conditionSyncTimer = null
-  }
   if (persistTimer) {
     clearTimeout(persistTimer)
     persistTimer = null

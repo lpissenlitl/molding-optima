@@ -8,6 +8,8 @@
  * - Suggestion：上一轮调整建议（多模态内容）
  */
 
+import type { settingProcessForm } from '@/constants/process-const'
+
 // ============================================================================
 // RoundForm（单轮调机数据）
 // ============================================================================
@@ -17,7 +19,9 @@ export type RoundType = 'initial' | 'optimized' | 'manual'
 
 /**
  * 单轮调机数据
- * - parameter：当前轮次的工艺参数（结构化，复用 settingProcessForm）
+ * - parameter：当前轮次的工艺参数（嵌套，详见 constants/process-const.ts 的
+ *   settingProcessForm）。提交调优前需经 views/process/optimization/components/
+ *   parameterTransform.ts 的 parameterToFlat 翻译为 flat dict。
  * - feedback：当前轮次的反馈（缺陷 / 模温机 / 热流道...）
  * - type：该轮是如何产生的（初始 / 优化算法 / 手动调整）
  */
@@ -25,7 +29,7 @@ export interface RoundForm {
   id: number
   type: RoundType
   created_at: string
-  parameter: any  // 结构化工艺参数，参见 constants/process-const.ts 的 settingProcessForm
+  parameter: typeof settingProcessForm
   feedback: {
     /**
      * 缺陷反馈列表（数组）
