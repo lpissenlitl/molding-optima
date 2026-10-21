@@ -26,6 +26,9 @@ molding-optima demo 数据初始化命令
     - 命名采用业务化命名（"注塑车间"、"班组长"），不加 demo 前缀
     - 用户名加 demo_ 前缀（用户名全局唯一性要求，避免与真实用户冲突）
 """
+import math
+from typing import Optional
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -978,56 +981,230 @@ DEMO_INJECTION_MACHINES = [
 
 # ----------------------------------------------------------------------------
 # 注射单元（injection_unit）—— 按注塑机 device_no 映射
-# 设计：
-# - 键为注塑机的 device_no，值为该机器每个射台的规格列表
-# - 列表顺序即为射台编号（idx=0 对应第 1 射台）
-# - 列表长度应与对应机器的 unit_count 一致
-# - unit_code 自动生成："{device_no}-U{idx+1}"（idx 为 0-based）
-# 规格选型参考：
-# - 螺杆直径按吨位近似（160T→Φ36、200T→Φ40、双射台一大一小）
-# - 注射行程/射胶量与螺杆直径对应（行程 ~5.5×Φ，重量按 PS 密度换算）
+#
+# 字段完整性（2026-10-20 修复）：
+#   工艺推理（initialize）与调优（optimize）的入参契约都把 InjectionUnit 的
+#   max_set_* 列为「必填」——它们是模糊判级的论域上界，缺失不是精度下降而是判级错误。
+#   早期 demo 数据只填了 6 个基础字段（喷嘴/螺杆/直径/行程/射胶量/塑化量），
+#   导致算法入参校验直接拦截，报错形如：
+#     machine_info.max_set_injection_pressure (最大可设定注射压力 [MPa]（HMI）)
+#     machine_info.max_set_injection_velocity (最大可设定注射速度 [mm/s]（HMI）)
+#     ... 共 8 项（5 项必填 + 3 项「液压机必填」）
+#   → 此处补齐「设备极限（max_*）」与「HMI 可设定上限（max_set_*）」两组字段。
+#
+# 物理约束（demo 数据必须自洽，勿随意改数）：
+#   1. HMI 可设定上限（max_set_*）恒 ≤ 设备极限（max_*）：界面限值比机械极限保守
+#   2. 全电机无油压回路 → 计量压力 / 松退压力在 HMI 上无输入栏，留 None
+#      （与算法契约「液压机必填」的判定口径一致：drive_system 非液压 → 不强制）
+#   3. 螺杆几何量（截面积/周长/理论射胶量）由螺杆直径与行程派生，不写死
+#   4. 压力值单位统一 MPa（InjectionUnit.pressure_unit 默认值，算法亦按 MPa 解读）
 # ----------------------------------------------------------------------------
+def _make_injection_unit(
+    *,
+    nozzle_type: str,
+    screw_type: str,
+    screw_diameter: float,
+    max_injection_stroke: float,
+    max_injection_weight: float,
+    plasticizing_capacity: float,
+    # ---- 设备极限（设备能达到的物理上限，max_*）----
+    max_injection_pressure: float,
+    max_injection_speed: float,
+    max_holding_pressure: float,
+    max_holding_speed: float,
+    max_screw_rotation_speed: float,
+    max_metering_pressure: Optional[float],
+    max_metering_back_pressure: Optional[float],
+    max_decompression_pressure: Optional[float],
+    max_decompression_speed: float,
+    # ---- HMI 可设定上限（界面允许输入的上限，max_set_*）----
+    max_set_injection_pressure: float,
+    max_set_injection_speed: float,
+    max_set_holding_pressure: float,
+    max_set_holding_speed: float,
+    max_set_screw_rotation_speed: float,
+    max_set_metering_pressure: Optional[float],
+    max_set_metering_back_pressure: Optional[float],
+    max_set_decompression_pressure: Optional[float],
+    max_set_decompression_speed: float,
+    screw_length_to_diameter_ratio: float = 24.0,
+    screw_compression_ratio: float = 2.0,
+    screw_enhancement_ratio: float = 1.3,
+) -> dict:
+    """生成一条完整的注射单元（射台）数据
+
+    螺杆几何量按直径派生（不写死，避免与 screw_diameter 打架）：
+    - 截面积       A = π/4 · D²
+    - 周长         C = π · D
+    - 理论射胶量   V = A · 行程 / 1000（mm³ → cm³）
+    """
+    cross_area = math.pi / 4 * screw_diameter ** 2
+    return {
+        # --- 喷嘴与螺杆 ---
+        "nozzle_type": nozzle_type,
+        "screw_type": screw_type,
+        "screw_diameter": screw_diameter,
+        "screw_length_to_diameter_ratio": screw_length_to_diameter_ratio,
+        "screw_cross_sectional_area": round(cross_area, 2),
+        "screw_circumference": round(math.pi * screw_diameter, 2),
+        "screw_compression_ratio": screw_compression_ratio,
+        "screw_enhancement_ratio": screw_enhancement_ratio,
+        # --- 塑化与注射能力 ---
+        "plasticizing_capacity": plasticizing_capacity,
+        "max_injection_stroke": max_injection_stroke,
+        "max_injection_volume": round(cross_area * max_injection_stroke / 1000, 2),
+        "max_injection_weight": max_injection_weight,
+        # --- 单位（与模型默认值一致；压力值统一 MPa）---
+        "pressure_unit": "MPa",
+        "speed_unit": "mm/s",
+        "back_pressure_unit": "MPa",
+        "screw_rotation_unit": "rpm",
+        # --- 成型能力（设备极限）---
+        "max_injection_pressure": max_injection_pressure,
+        "max_injection_speed": max_injection_speed,
+        "max_holding_pressure": max_holding_pressure,
+        "max_holding_speed": max_holding_speed,
+        "max_screw_rotation_speed": max_screw_rotation_speed,
+        "max_metering_pressure": max_metering_pressure,
+        "max_metering_back_pressure": max_metering_back_pressure,
+        "max_decompression_pressure": max_decompression_pressure,
+        "max_decompression_speed": max_decompression_speed,
+        # --- HMI 可设定范围（界面限制）---
+        "max_set_injection_pressure": max_set_injection_pressure,
+        "max_set_injection_speed": max_set_injection_speed,
+        "max_set_holding_pressure": max_set_holding_pressure,
+        "max_set_holding_speed": max_set_holding_speed,
+        "max_set_screw_rotation_speed": max_set_screw_rotation_speed,
+        "max_set_metering_pressure": max_set_metering_pressure,
+        "max_set_metering_back_pressure": max_set_metering_back_pressure,
+        "max_set_decompression_pressure": max_set_decompression_pressure,
+        "max_set_decompression_speed": max_set_decompression_speed,
+    }
+
+
 DEMO_INJECTION_UNITS = {
     # 160T 海天 MA1600/540 —— 液压、单射台、肘杆锁模
     "IMM-DEMO-001": [
-        {
-            "nozzle_type": "直通式",
-            "screw_type": "通用型",
-            "screw_diameter": 36.0,
-            "max_injection_stroke": 200.0,
-            "max_injection_weight": 240.0,
-            "plasticizing_capacity": 80.0,
-        },
+        _make_injection_unit(
+            nozzle_type="直通式",
+            screw_type="通用型",
+            screw_diameter=36.0,
+            max_injection_stroke=200.0,
+            max_injection_weight=240.0,
+            plasticizing_capacity=80.0,
+            # 设备极限
+            max_injection_pressure=160.0,
+            max_injection_speed=100.0,
+            max_holding_pressure=160.0,
+            max_holding_speed=50.0,
+            max_screw_rotation_speed=150.0,
+            max_metering_pressure=12.0,
+            max_metering_back_pressure=10.0,
+            max_decompression_pressure=15.0,
+            max_decompression_speed=100.0,
+            # HMI 可设定上限
+            max_set_injection_pressure=140.0,
+            max_set_injection_speed=90.0,
+            max_set_holding_pressure=140.0,
+            max_set_holding_speed=45.0,
+            max_set_screw_rotation_speed=130.0,
+            max_set_metering_pressure=10.0,
+            max_set_metering_back_pressure=8.0,
+            max_set_decompression_pressure=12.0,
+            max_set_decompression_speed=80.0,
+        ),
     ],
     # 200T 长飞亚 Zeres 200T —— 全电动、单射台、伺服锁模
     "IMM-DEMO-002": [
-        {
-            "nozzle_type": "针阀式",
-            "screw_type": "混炼型",
-            "screw_diameter": 40.0,
-            "max_injection_stroke": 220.0,
-            "max_injection_weight": 320.0,
-            "plasticizing_capacity": 100.0,
-        },
+        _make_injection_unit(
+            nozzle_type="针阀式",
+            screw_type="混炼型",
+            screw_diameter=40.0,
+            max_injection_stroke=220.0,
+            max_injection_weight=320.0,
+            plasticizing_capacity=100.0,
+            # 设备极限
+            max_injection_pressure=200.0,
+            max_injection_speed=150.0,
+            max_holding_pressure=200.0,
+            max_holding_speed=80.0,
+            max_screw_rotation_speed=250.0,
+            # 全电机无油压回路 → HMI 上无「计量压力 / 松退压力」输入栏
+            max_metering_pressure=None,
+            max_metering_back_pressure=10.0,
+            max_decompression_pressure=None,
+            max_decompression_speed=150.0,
+            # HMI 可设定上限
+            max_set_injection_pressure=180.0,
+            max_set_injection_speed=130.0,
+            max_set_holding_pressure=180.0,
+            max_set_holding_speed=70.0,
+            max_set_screw_rotation_speed=220.0,
+            max_set_metering_pressure=None,
+            max_set_metering_back_pressure=8.0,
+            max_set_decompression_pressure=None,
+            max_set_decompression_speed=120.0,
+        ),
     ],
     # 200T 伊之密 UN200A —— 液压、双射台
     "IMM-DEMO-003": [
-        {  # 第 1 射台（大）
-            "nozzle_type": "直通式",
-            "screw_type": "通用型",
-            "screw_diameter": 36.0,
-            "max_injection_stroke": 200.0,
-            "max_injection_weight": 240.0,
-            "plasticizing_capacity": 80.0,
-        },
-        {  # 第 2 射台（小）
-            "nozzle_type": "针阀式",
-            "screw_type": "通用型",
-            "screw_diameter": 32.0,
-            "max_injection_stroke": 180.0,
-            "max_injection_weight": 200.0,
-            "plasticizing_capacity": 70.0,
-        },
+        _make_injection_unit(  # 第 1 射台（大）
+            nozzle_type="直通式",
+            screw_type="通用型",
+            screw_diameter=36.0,
+            max_injection_stroke=200.0,
+            max_injection_weight=240.0,
+            plasticizing_capacity=80.0,
+            # 设备极限
+            max_injection_pressure=180.0,
+            max_injection_speed=110.0,
+            max_holding_pressure=180.0,
+            max_holding_speed=60.0,
+            max_screw_rotation_speed=180.0,
+            max_metering_pressure=12.0,
+            max_metering_back_pressure=10.0,
+            max_decompression_pressure=15.0,
+            max_decompression_speed=110.0,
+            # HMI 可设定上限
+            max_set_injection_pressure=160.0,
+            max_set_injection_speed=100.0,
+            max_set_holding_pressure=160.0,
+            max_set_holding_speed=55.0,
+            max_set_screw_rotation_speed=160.0,
+            max_set_metering_pressure=10.0,
+            max_set_metering_back_pressure=8.0,
+            max_set_decompression_pressure=12.0,
+            max_set_decompression_speed=90.0,
+        ),
+        _make_injection_unit(  # 第 2 射台（小）
+            nozzle_type="针阀式",
+            screw_type="通用型",
+            screw_diameter=32.0,
+            max_injection_stroke=180.0,
+            max_injection_weight=200.0,
+            plasticizing_capacity=70.0,
+            # 设备极限：压力上限与同机大射台一致（由油缸/溢流阀决定，非螺杆决定）；
+            # 速度上限略高（螺杆截面积小，同等流量下螺杆线速度更快）
+            max_injection_pressure=180.0,
+            max_injection_speed=120.0,
+            max_holding_pressure=180.0,
+            max_holding_speed=65.0,
+            max_screw_rotation_speed=180.0,
+            max_metering_pressure=12.0,
+            max_metering_back_pressure=10.0,
+            max_decompression_pressure=15.0,
+            max_decompression_speed=120.0,
+            # HMI 可设定上限
+            max_set_injection_pressure=160.0,
+            max_set_injection_speed=110.0,
+            max_set_holding_pressure=160.0,
+            max_set_holding_speed=60.0,
+            max_set_screw_rotation_speed=160.0,
+            max_set_metering_pressure=10.0,
+            max_set_metering_back_pressure=8.0,
+            max_set_decompression_pressure=12.0,
+            max_set_decompression_speed=100.0,
+        ),
     ],
 }
 
@@ -1245,20 +1422,53 @@ class Command(BaseCommand):
                     is_deleted=False,
                 ).first()
                 if existing:
-                    # 主表已存在：仅按需补齐缺失的 Unit（不重建主表）
-                    # 场景：旧版 init_demo 跳过了射台生成
-                    existing_unit_codes = set(
-                        existing.injection_units.values_list("unit_code", flat=True)
-                    )
+                    # 主表已存在：自动识别并补齐缺失数据（不重建主表、不覆盖已有值）
+                    # 场景：
+                    # - 旧版 init_demo 跳过了射台生成 → 补建缺失的 Unit
+                    # - 旧版射台字段不全（缺 max_set_*，导致算法入参校验失败）
+                    #   → 补齐 Unit 内为空的字段
                     added_units = 0
+                    updated_units = 0
+                    existing_units = {
+                        u.unit_code: u for u in existing.injection_units.all()
+                    }
                     for unit_payload in injection_units_payload:
-                        if unit_payload["unit_code"] not in existing_unit_codes:
+                        unit = existing_units.get(unit_payload["unit_code"])
+                        if unit is None:
                             InjectionUnit.create_with_check(
                                 machine=existing,
                                 **unit_payload,
                             )
                             added_units += 1
-                    suffix = f"（已补 {added_units} 个 Unit）" if added_units else ""
+                            continue
+                        # 只补 None 的字段：已有值可能是人工维护的，不覆盖
+                        # （payload 中的 None 视为「物理上不存在该输入栏」，不写入）
+                        patch = {
+                            k: v for k, v in unit_payload.items()
+                            if k != "unit_code"
+                            and v is not None
+                            and getattr(unit, k, None) is None
+                        }
+                        if patch:
+                            unit.update_info(**patch)
+                            updated_units += 1
+
+                    # 主表字段同样自动补齐（drive_system 缺失会让「液压机必填」判级失败）
+                    machine_patch = {
+                        k: v for k, v in item.items()
+                        if v is not None and getattr(existing, k, None) is None
+                    }
+                    if machine_patch:
+                        existing.update_info(**machine_patch)
+
+                    detail = []
+                    if added_units:
+                        detail.append("补 %d 个 Unit" % added_units)
+                    if updated_units:
+                        detail.append("补全 %d 个 Unit 的字段" % updated_units)
+                    if machine_patch:
+                        detail.append("补全主表 %d 个字段" % len(machine_patch))
+                    suffix = ("（%s）" % "，".join(detail)) if detail else ""
                     self.stdout.write(f"    - 已存在: {item['device_no']}{suffix}")
                     skipped_total += 1
                     continue

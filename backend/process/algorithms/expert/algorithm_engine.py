@@ -217,8 +217,12 @@ class AlgorithmEngine:
         Returns:
             float: 计量压力（同源数值，不假设 MPa；具体单位由设备 HMI 决定）
         """
-        # ======== 分支 1：全电机 → meter_pres = 0 ========
-        if mach.get('power_method') == '全电机':
+        # ======== 分支 1：全电机（电动机）→ meter_pres = 0 ========
+        # power_method 词表由 field_contract.drive_system_to_power_method 标准化：
+        #   '液压机' / '电动机'（不是 '全电机'）。
+        # 判定口径与 _compute_suckback_pres（松退压力）保持一致：非液压机 → 0。
+        power_method = mach.get('power_method', '液压机')
+        if power_method != '液压机':
             # 物理依据：全电机没有液压油缸，HMI 无“计量压力”输入栏
             # 这不是 bug，而是物理正确。
             return 0.0

@@ -22,12 +22,17 @@ import numpy as np
 
 from ..functional import gauss_mf, tri_mf, defuzz
 from ..macros import (
+    ALL_LEVEL_WORDS,
     DEFECT_CONST,
-    FUZZY_LEVELS,
     HS_MAPPING_DICT,
     MIN_ACTIVATION_THRESHOLD,
     MAMDANI_SAMPLE_POINTS,
     EPSILON,
+)
+from ..parsing import (
+    classify_name as _classify_name,   # noqa: F401  保留旧名，历史 import 不断裂
+    is_level_word,
+    split_phase as _split_phase,       # noqa: F401  保留旧名，历史 import 不断裂
 )
 
 
@@ -38,85 +43,8 @@ logger = logging.getLogger(__name__)
 # 词法解析辅助
 # ============================================================================
 
-# 把 FUZZY_LEVELS 展平成所有合法 level 词集合
-_ALL_LEVEL_WORDS = set()
-for _levels in FUZZY_LEVELS.values():
-    _ALL_LEVEL_WORDS.update(_levels)
-# 也兼容老 fuzzykit 写法（level1..level9）
-for _i in range(1, 10):
-    _ALL_LEVEL_WORDS.add(f'level{_i}')
-# 解模糊化辅助时也用得到
-_ALL_LEVEL_WORDS.update({'low', 'mid', 'high', 'very_low', 'very_high'})
-
-
-def _split_phase(phase: str):
-    """将规则词法单元（已按空格 split 后的一项）解析为结构化字段。
-
-    支持以下三种形式：
-
-    1. 前提词（条件）  `<param_name>_<level>`
-       例： ``MEL_low``           → name='MEL',     level='low'
-            ``inj_pres_1_low``    → name='inj_pres_1', level='low'
-            ``SHORTSHOT_high``    → name='SHORTSHOT', level='high'
-
-    2. 结论词（修正）  `<param_name>_<action>_<value>`
-       例： ``MEL_add_low``       → name='MEL',     action='add',    value='low'
-            ``inj_pres_1_add_10`` → name='inj_pres_1', action='add', value='10'
-            ``hold_time_reduce_5%`` → name='hold_time', action='reduce', value='5%'
-            ``alert_popup_sugg``  → name='alert',   action='popup', value='sugg'
-
-    3. 代数结论词      ``<name>=a*X+b*Y+...``（极少见，预留）
-
-    Parameters
-    ----------
-    phase : str
-        词法单元（不包含 IF / AND / THEN 等关键字）
-
-    Returns
-    -------
-    dict
-        至少包含 ``name``；若是结论词则还含 ``action``、``value``；
-        若是前提词则还含 ``level``。
-    """
-    if '=' in phase:
-        # 代数式结论（预留接口，由 NumTskRule._rule_process 内部进一步处理）
-        return {'name': phase.split('=', 1)[0], 'kind': 'algebra'}
-
-    parts = phase.split('_')
-    # ---- 情形 1: 弹窗结论  `<name>_popup_<text>` ---------------------------
-    #   形式：弹窗词总是以 `_popup_` 标识（特例：`_popup_xxx` 整体作 r_extra）
-    for i in range(1, len(parts) - 1):
-        if parts[i] == 'popup':
-            name = '_'.join(parts[:i])
-            value = '_'.join(parts[i + 1:]) or parts[-1]
-            return {'name': name, 'action': 'popup', 'value': value, 'kind': 'solution'}
-
-    # ---- 情形 2: 标准结论  `<name>_<action>_<value>` -----------------------
-    #   action 必为 add/reduce/adjust 之一
-    for i in range(1, len(parts) - 1):
-        if parts[i] in {'add', 'reduce', 'adjust'}:
-            name = '_'.join(parts[:i])
-            action = parts[i]
-            value = '_'.join(parts[i + 1:])
-            return {'name': name, 'action': action, 'value': value, 'kind': 'solution'}
-
-    # ---- 情形 3: 前提词  `<name>_<level>` ----------------------------------
-    #   从右往左找到第一个已知 level 词，剩下的 prefix 全部是 name
-    for i in range(len(parts) - 1, 0, -1):
-        if parts[i] in _ALL_LEVEL_WORDS:
-            name = '_'.join(parts[:i])
-            level = parts[i]
-            return {'name': name, 'level': level, 'kind': 'precondition'}
-
-    # ---- 兜底：老 fuzzykit 风格（按空格 + 第一段下划线拆分）---------------
-    return {'name': parts[0], 'level': parts[1] if len(parts) > 1 else '', 'kind': 'precondition'}
-
-
-def _classify_name(name: str) -> str:
-    """根据名称区分是工艺参数还是缺陷。"""
-    if name in DEFECT_CONST:
-        return 'defect'
-    return 'process'
+# 合法等级词全集（含前端/规则库用的 'medium' 与老 fuzzykit 的 'mid'）
+_ALL_LEVEL_WORDS = set(ALL_LEVEL_WORDS)
 
 
 # ============================================================================
@@ -334,13 +262,22 @@ class FuzzyRuleNet:
 
         for row_idx, rule in self.rule_dict.items():
             for name, value in rule.r_preconditions.items():
+                level = str(value.get('level', '')).lower()
+                if not is_level_word(level):
+                    # 不可判级的前件（'worse' / 缺陷名）→ 不作为门控
+                    continue
                 if name in self.pre_dict:
-                    p_col_idx = self.pre_dict[name]['index'] + HS_MAPPING_DICT[value['level'].lower()]
+                    p_col_idx = self.pre_dict[name]['index'] + HS_MAPPING_DICT[level]
                     self.connected_matrix[row_idx][p_col_idx] = 1
 
             for name, value in rule.r_solutions.items():
+                level = str(value.get('level', '')).lower()
+                if not is_level_word(level):
+                    # Mamdani 层的结论必须是模糊等级（add_low / reduce_mid），
+                    # 数值结论（add_2）属于工厂级 TSK 层
+                    continue
                 if name in self.sol_dict:
-                    s_col_idx = self.sol_dict[name]['index'] + HS_MAPPING_DICT[value['level'].lower()]
+                    s_col_idx = self.sol_dict[name]['index'] + HS_MAPPING_DICT[level]
                     self.solution_matrix[row_idx][s_col_idx] = 1 * value['action']
 
     def inference(self, x):
@@ -577,25 +514,51 @@ class NumTskRuleNet:
         self._construct_numtskruleNet()
 
     def resolve_input_paras(self, rule_array: list, keyword_array: list):
-        """解析传入的规则和关键词。"""
+        """解析传入的规则和关键词。
+
+        规则筛选原则（2026-10-20 修正）：
+        - 只排除**结论是检查/弹窗**的规则（`X_adjust_提示语`）：这类规则的结论
+          不是数值，放进数值推理层会产生 9999.9 的垃圾值。
+        - 旧实现是"规则串里出现 worse 就整条跳过"，但规则库里 154 条含 worse
+          的规则中有 55 条结论是数值（`X_reduce_2`），worse 只是前件里的人工
+          判断词（"该参数不合理"）。按旧逻辑跳过会：
+            1) 白白丢掉 55 条可用的数值规则；
+            2) 让 rule_dict 的下标出现空洞，而矩阵按 rule_nums 行开，
+               空洞之后的规则行号与矩阵行错位（甚至越界被丢）；
+            3) `self.rule_dict[i]` 取不到被跳过的规则 → KeyError，整个推理崩掉。
+          现在改为：被排除的规则不再占用下标（重新连续编号），priority 同步对齐。
+        """
         self.rule_dict = {}
         self.pre_set = set()
         self.sol_set = set()
-        self.rule_nums = len(rule_array)
-        self.rule_classify = [0] * self.rule_nums
+        self.rule_solution = []
+        self.rule_classify = []
+        kept_priorities = []
 
-        for i, rule in enumerate(rule_array):
-            if 'worse' in rule.get('rule_description', ''):
-                self.rule_nums -= 1
-                self.rule_classify[i] = -1  # 标记为跳过
+        for orig_idx, rule in enumerate(rule_array):
+            desc = rule.get('rule_description', '')
+            num_rule = NumTskRule(desc)
+            if self._is_check_rule(num_rule):
+                # 结论是检查/弹窗类（adjust / popup）：不参与数值推理
                 continue
-            if '%' in rule.get('rule_description', ''):
-                self.rule_classify[i] = 1
-            self.rule_dict[i] = NumTskRule(rule.get('rule_description'))
-            self.pre_set.update(self.rule_dict[i].r_preconditions.keys())
-            self.sol_set.update(self.rule_dict[i].r_solutions.keys())
-            if self.rule_dict[i].r_solutions:
-                self.rule_solution.append(list(self.rule_dict[i].r_solutions.keys())[0])
+
+            idx = len(self.rule_dict)
+            self.rule_dict[idx] = num_rule
+            # 数值规则为 0，百分比规则为 1
+            self.rule_classify.append(1 if '%' in desc else 0)
+            if orig_idx < len(self.priority_array):
+                kept_priorities.append(self.priority_array[orig_idx])
+            else:
+                kept_priorities.append(1.0)
+            self.pre_set.update(num_rule.r_preconditions.keys())
+            self.sol_set.update(num_rule.r_solutions.keys())
+            # 无结论的规则也要占位，否则 rule_solution 与 rule_dict 下标错位
+            self.rule_solution.append(
+                list(num_rule.r_solutions.keys())[0] if num_rule.r_solutions else None
+            )
+
+        self.rule_nums = len(self.rule_dict)
+        self.priority_array = kept_priorities
 
         self.pre_dict = defaultdict(dict)
         self.sol_dict = defaultdict(dict)
@@ -615,6 +578,16 @@ class NumTskRuleNet:
                     'max_val': item['max_val'],
                     'step': item['step'],
                 })
+
+    @staticmethod
+    def _is_check_rule(num_rule) -> bool:
+        """规则结论是否是检查/弹窗类（`X_adjust_提示语` / `X_popup_xxx`）。
+
+        这类规则的结论不是数值（弹窗标记值为 9999.9），不能进数值推理层。
+        """
+        if num_rule.r_extra:
+            return True
+        return any(sol.get('action') == -2 for sol in num_rule.r_solutions.values())
 
     def _construct_numtskruleNet(self):
         """构建网络（连接矩阵 + 解决方案矩阵）。"""
@@ -646,40 +619,49 @@ class NumTskRuleNet:
 
         for row_idx, rule in self.rule_dict.items():
             for name, value in rule.r_preconditions.items():
-                if self.pre_dict.get(name):
-                    p_col_idx = self.pre_dict[name]['index'] + HS_MAPPING_DICT[value['level'].lower()]
-                    if row_idx < len(self.connected_matrix):
-                        self.connected_matrix[row_idx][p_col_idx] = 1
-                    else:
-                        logger.error(
-                            f"index {row_idx} is out of bounds for axis 0 with size {len(self.connected_matrix)}"
-                        )
+                level = str(value.get('level', '')).lower()
+                if not is_level_word(level):
+                    # 不可判级的前件，不作为门控：
+                    #   - 'worse'：人工判断词（"该参数不合理"），没有隶属度可言
+                    #   - 缺陷名：缺陷程度在规则匹配阶段（defect_code + level）
+                    #     已经保证，缺陷本身也没有数值论域
+                    continue
+                if not self.pre_dict.get(name):
+                    # 无 RuleKeyword 元数据 → 建不了论域 → 不作为门控
+                    logger.debug('[NumTskRuleNet] pre_dict 中没有 %s，跳过该前件', name)
+                    continue
+                p_col_idx = self.pre_dict[name]['index'] + HS_MAPPING_DICT[level]
+                if row_idx < len(self.connected_matrix):
+                    self.connected_matrix[row_idx][p_col_idx] = 1
                 else:
-                    logger.error(f"self.pre_dict 中没有 {name}")
+                    logger.error(
+                        f"index {row_idx} is out of bounds for axis 0 with size {len(self.connected_matrix)}"
+                    )
 
             for name, value in rule.r_solutions.items():
-                if self.sol_dict.get(name):
-                    s_col_idx = self.sol_dict[name]['index']
-                    # 特殊规则结论（弹窗）
-                    if value.get('action') == -2:
-                        self.solution_matrix[row_idx][s_col_idx] = 9999.9
-                    else:
-                        if row_idx < len(self.solution_matrix):
-                            if '%' in value['level']:
-                                self.percent_set.append(name)
-                                self.solution_matrix[row_idx][s_col_idx] = (
-                                    float(value['level'].rstrip('%')) * value['action'] / 100
-                                )
-                            else:
-                                self.solution_matrix[row_idx][s_col_idx] = (
-                                    float(value['level']) * value['action']
-                                )
-                        else:
-                            logger.error(
-                                f"index {row_idx} is out of bounds for axis 0 with size {len(self.solution_matrix)}"
-                            )
+                if not self.sol_dict.get(name):
+                    # 结论参数无 RuleKeyword 元数据 → 调整量无处安放，丢弃该结论
+                    logger.debug('[NumTskRuleNet] sol_dict 中没有 %s，跳过该结论', name)
+                    continue
+                s_col_idx = self.sol_dict[name]['index']
+                # 特殊规则结论（弹窗）
+                if value.get('action') == -2:
+                    self.solution_matrix[row_idx][s_col_idx] = 9999.9
                 else:
-                    logger.error(f"self.sol_dict 中没有 {name}")
+                    if row_idx < len(self.solution_matrix):
+                        if '%' in value['level']:
+                            self.percent_set.append(name)
+                            self.solution_matrix[row_idx][s_col_idx] = (
+                                float(value['level'].rstrip('%')) * value['action'] / 100
+                            )
+                        else:
+                            self.solution_matrix[row_idx][s_col_idx] = (
+                                float(value['level']) * value['action']
+                            )
+                    else:
+                        logger.error(
+                            f"index {row_idx} is out of bounds for axis 0 with size {len(self.solution_matrix)}"
+                        )
 
             for name, value in rule.r_extra.items():
                 self.extra_dict[name] = value
@@ -736,7 +718,7 @@ class NumTskRuleNet:
             if i >= len(self.rule_solution):
                 continue
             k = self.rule_solution[i]
-            if k not in x:
+            if k is None or k not in x:
                 continue
             if self.rule_classify[i] == 1:  # 百分比规则
                 cur_params[i] = x[k]
@@ -813,12 +795,11 @@ class ParticularRules:
                         else:
                             a_rule_list['rule_defect'] = words[0]
                     else:
-                        words = phase.split('_')
-                        # 弹窗结论
-                        if len(words) >= 3:
-                            a_rule_list['rule_output'] = words[2]
-                        elif len(words) == 2:
-                            a_rule_list['rule_output'] = words[1]
+                        # 弹窗/检查类结论：用词法解析取完整提示语
+                        # （提示语本身可能含下划线，不能按 split('_')[2] 截断）
+                        info = _split_phase(phase)
+                        if info.get('action') in ('adjust', 'popup') and info.get('value'):
+                            a_rule_list['rule_output'] = info['value']
             output_list.append(a_rule_list)
         return output_list
 

@@ -4,7 +4,7 @@ RuleMethod / RuleKeyword 适配层
 将 DB 模型与 fuzzy_core 算法层的数据结构互转。
 
 主要职责：
-- RuleMethodAdapter：RuleMethod.rule_content JSON ↔ 算法层可解析的规则字符串
+- RuleMethodAdapter：RuleMethod → fuzzykit 规则字符串（旧 JSON 路径，权威来源是 rule_description）
 - RuleKeywordAdapter：RuleKeyword (Django model) ↔ FuzzyFeature 输入 dict
 """
 
@@ -18,7 +18,7 @@ from process.models.rules import RuleKeyword
 # ============================================================================
 
 class RuleMethodAdapter:
-    """RuleMethod.rule_content JSON ↔ fuzzykit 规则字符串。
+    """RuleMethod → fuzzykit 规则字符串（旧 JSON 路径）。
 
     算法层（FuzzyRule / NumTskRule）期望的字符串格式：
         'IF X1_low AND X2_high THEN Y1_add_10 AND Y2_reduce_5%'
@@ -33,18 +33,31 @@ class RuleMethodAdapter:
                  "action": "add", "value": 4, "value_type": "absolute"},
             ],
         }
+
+    ⚠️ 0005 迁移已删除 `RuleMethod.rule_content` / `defect_name` 字段，
+    规则字符串的**唯一权威来源**是 `RuleMethod.rule_description`。
+    取规则请直接用 `RuleQueryService.get_rules()`（它已经直接读 rule_description）。
     """
 
     @staticmethod
     def to_rule_string(rule_method) -> str:
-        """RuleMethod 模型实例（或 dict）→ fuzzykit 规则字符串。"""
-        # 兼容传入 ORM 实例或 dict
-        if hasattr(rule_method, 'rule_content'):
-            content = rule_method.rule_content or {}
-            defect_name = getattr(rule_method, 'defect_name', '')
-        else:
-            content = rule_method.get('rule_content', {}) or {}
-            defect_name = rule_method.get('defect_name', '')
+        """RuleMethod 模型实例（或 dict）→ fuzzykit 规则字符串。
+
+        ⚠️ **仅服务 dict 输入的旧 JSON 路径**，不要对 ORM 实例走 JSON 分支：
+        `rule_content` / `defect_name` 字段已被 0005 迁移删除，
+        ORM 实例走该分支必然抛 AttributeError。
+
+        ORM 实例这里做了兼容处理：直接返回 `rule_description`
+        （权威来源），而不是抛异常，避免后人再踩同一个坑。
+        """
+        # ORM 实例：走权威来源 rule_description
+        rule_description = getattr(rule_method, 'rule_description', None)
+        if rule_description is not None:
+            return (rule_description or '').strip()
+
+        # dict 输入：旧 JSON 路径（rule_content 已废弃，仅保留兼容）
+        content = rule_method.get('rule_content', {}) or {}
+        defect_name = rule_method.get('defect_name', '')
 
         conditions = content.get('conditions', []) or []
         adjustments = content.get('adjustments', []) or []

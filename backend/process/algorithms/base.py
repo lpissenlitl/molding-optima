@@ -40,6 +40,11 @@ class Recommendation:
         confidence: 置信度 (0-1)
         reason: 推荐原因
         source: 来源算法 (fuzzy/llm/empirical)
+        direction: 调整方向（increase/decrease/hold/check）
+
+            经验推理只给方向不给数值（recommended_value=None），
+            方向必须显式携带：否则消费方只能从 reason 文本里猜，
+            会把「建议调高」误渲染成「维持不变」。
     """
     param_name: str
     current_value: float
@@ -47,6 +52,7 @@ class Recommendation:
     confidence: float
     reason: str = ""
     source: str = ""
+    direction: Optional[str] = None
 
     def to_dict(self) -> dict:
         """转换为字典"""
@@ -57,6 +63,7 @@ class Recommendation:
             'confidence': self.confidence,
             'reason': self.reason,
             'source': self.source,
+            'direction': self.direction,
         }
 
 

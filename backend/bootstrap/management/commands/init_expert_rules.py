@@ -11,6 +11,8 @@ from django.core.management.base import BaseCommand
 from identity.const import SYSTEM_DEMO_COMPANY_CODE
 from identity.models.company import Company
 from process.models.rules import RuleLibrary, ExpertRule
+from utils.console import configure_console_encoding
+from utils.refs import EXPERT_RULES_JSON, resolve_data_path
 
 
 class Command(BaseCommand):
@@ -29,6 +31,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        configure_console_encoding()
+
         json_path = options.get('json')
         force_update = options.get('force', False)
 
@@ -36,7 +40,8 @@ class Command(BaseCommand):
 
         # 默认 JSON 路径（专家规则数据文件，与 rule_loader.py 共享）
         if json_path is None:
-            json_path = 'process/engines/expert/expert_rules/expert_rules.json'
+            json_path = EXPERT_RULES_JSON
+        json_path = resolve_data_path(json_path)
 
         # 读取 JSON 文件
         try:
@@ -101,12 +106,10 @@ class Command(BaseCommand):
                     # 更新已有规则
                     rule = ExpertRule.objects.get(rule_library=library, rule_code=rule_code)
                     rule.rule_name = rule_name
-                    rule.description = rule_data.get('description', '')
                     rule.priority = rule_data.get('priority', 100)
                     rule.is_active = rule_data.get('is_active', True)
                     rule.conditions = rule_data.get('conditions', [])
                     rule.coefficients = rule_data.get('coefficients', {})
-                    rule.source = 'expert'
                     rule.save()
                     updated += 1
                     self.stdout.write(f'  更新: {rule_code}')
@@ -115,16 +118,15 @@ class Command(BaseCommand):
                     self.stdout.write(f'  跳过(已存在): {rule_code}')
             else:
                 # 创建新规则
+                # 注意：ExpertRule 无 description / source 字段（已在 0005 迁移中移除）
                 ExpertRule.objects.create(
                     rule_library=library,
                     rule_code=rule_code,
                     rule_name=rule_name,
-                    description=rule_data.get('description', ''),
                     priority=rule_data.get('priority', 100),
                     is_active=rule_data.get('is_active', True),
                     conditions=rule_data.get('conditions', []),
                     coefficients=rule_data.get('coefficients', {}),
-                    source='expert',
                 )
                 imported += 1
                 self.stdout.write(self.style.SUCCESS(f'  导入: {rule_code}'))

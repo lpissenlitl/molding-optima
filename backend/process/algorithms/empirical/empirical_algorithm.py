@@ -34,7 +34,7 @@ class EmpiricalReasoning(AlgorithmBase):
     经验推理引擎 - 工程师硬编码的工艺知识
 
     输入：
-        context.feedback.defect: 缺陷列表（取第一个的 defect_name）
+        context.feedback.defect: 缺陷列表（取第一个的 keyword_name）
 
     输出：
         Recommendation 列表（increase / decrease 方向）
@@ -58,7 +58,7 @@ class EmpiricalReasoning(AlgorithmBase):
         Args:
             context: {
                 'feedback': {
-                    'defect': [{'defect_name': '短射'}, ...]
+                    'defect': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}, ...]
                 },
                 'process_parameter': {...}   # 可选，用于填充 current_value
             }
@@ -70,12 +70,15 @@ class EmpiricalReasoning(AlgorithmBase):
         if not defects:
             return []
 
-        # 取第一个缺陷的 defect_name（与 FuzzyEngine 处理一致）
+        # 取第一个缺陷的英文缺陷码（与 FuzzyEngine 处理一致）：
+        # 反馈传的是 keyword_name（SHORTSHOT / SHRINKAGE / ...），
+        # 与 RuleMethod.defect_code、RuleKeyword.keyword_name 对齐。
+        # 历史实现读的是中文 defect_name / defect_name_zh，
+        # 与 hints 表的英文 key 永远对不上 → 经验引擎恒返回空。
         first = defects[0]
         if not isinstance(first, dict):
             return []
-        # 优先看中文（defect_name_zh），回退到英文（defect_name）
-        defect_name = first.get('defect_name_zh') or first.get('defect_name')
+        defect_name = first.get('keyword_name')
         if not defect_name:
             return []
 
@@ -96,6 +99,7 @@ class EmpiricalReasoning(AlgorithmBase):
                 confidence=None,        # 经验无置信度
                 reason=f"经验推理：缺陷 {defect_name} 建议调高 {param_code}",
                 source='empirical',
+                direction='increase',
             ))
 
         # decrease 方向
@@ -108,6 +112,7 @@ class EmpiricalReasoning(AlgorithmBase):
                 confidence=None,
                 reason=f"经验推理：缺陷 {defect_name} 建议调低 {param_code}",
                 source='empirical',
+                direction='decrease',
             ))
 
         return recommendations
@@ -124,8 +129,8 @@ class EmpiricalReasoning(AlgorithmBase):
         first = defects[0]
         if not isinstance(first, dict):
             return False
-        # 优先看中文（defect_name_zh），回退到英文（defect_name）
-        defect_name = first.get('defect_name_zh') or first.get('defect_name')
+        # 缺陷码取 keyword_name（英文码，与 hints 表 key 对齐）
+        defect_name = first.get('keyword_name')
         if not defect_name:
             return False
         return defect_name in self.hints

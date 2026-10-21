@@ -1133,7 +1133,7 @@ def _recommendations_to_adjustments(recommendations: list, context: dict) -> Lis
         current_val = parameter_snapshot.get(rec.param_name)
         adjustments.append({
             "param": rec.param_name,
-            "direction": _infer_direction(current_val, rec.recommended_value),
+            "direction": _adjustment_direction(rec, current_val),
             "current_value": current_val,
             "recommended_value": rec.recommended_value,
             "confidence": rec.confidence,
@@ -1141,6 +1141,20 @@ def _recommendations_to_adjustments(recommendations: list, context: dict) -> Lis
             "source": rec.source or "engine",
         })
     return adjustments
+
+
+def _adjustment_direction(rec, current_value) -> str:
+    """推荐方向 → 旧版 adjustments 的值域（increase / decrease / adjust）
+
+    优先用 ``Recommendation.direction``：经验推理只给方向不给数值，
+    从 current/recommended 推不出来，推出来的永远是 ``adjust``。
+    """
+    direction = getattr(rec, "direction", None)
+    if direction in ("increase", "decrease"):
+        return direction
+    if direction in ("hold", "check"):
+        return "adjust"
+    return _infer_direction(current_value, rec.recommended_value)
 
 
 def _run_optimization_chain(context: dict) -> Tuple[List[dict], str]:

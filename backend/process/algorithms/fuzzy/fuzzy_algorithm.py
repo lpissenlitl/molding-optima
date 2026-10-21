@@ -4,9 +4,14 @@
 基于模糊规则进行缺陷修正推荐。
 
 采用"双层并行架构"（见 fuzzy-engine-reference.md §2）：
-- 工厂级 (NumTskRuleNet)   → 处理精确数值/百分比规则
-- 兜底层 (FuzzyRuleNet)    → 处理模糊级结论规则（兼容 Rule.dat 风格）
-- 合并策略                 → 同层聚合 + 跨层覆盖（方案 B）
+
+⚠️ 这里的"层"按**结论形态**划分（这条规则的结论能不能算出数值），
+   与规则库层级（base / 产品库 / specificity）**完全无关**：
+
+- 数值层 (NumTskRuleNet)   → 数值/百分比结论（``X_add_3.8`` / ``X_reduce_30%``）
+- 提示层 (FuzzyRuleNet)    → 检查/弹窗结论（``X_adjust_请检查锁模力是否不合理。``）
+                            + 模糊等级结论（``X_add_low``，兼容 Rule.dat 风格）
+- 合并策略                → 同层聚合 + 跨层覆盖（方案 B）
 """
 
 import logging
@@ -18,6 +23,10 @@ from process.algorithms.fuzzy.fuzzy_core.models.nets import (
     FuzzyRuleNet,
     NumTskRuleNet,
     ParticularRules,
+)
+from process.algorithms.fuzzy.fuzzy_core.parsing import (
+    collect_param_names,
+    parse_rule,
 )
 from process.algorithms.fuzzy.services.rule_query_service import (
     RuleQueryService,
@@ -92,6 +101,91 @@ class FuzzyEngine(AlgorithmBase):
         "vps_t":    "VPTT",      # VP 切换时间 → VPTT
     }
 
+    # 分段参数的序号偏移（业务 1-based → 规则库 0-based）
+    #
+    # 事实依据：规则库段号以 0-based 为主（IV0 719 次 / IV1 38 次 / IV2 15 次），
+    # 与 RuleKeyword 的 IV0~IV5 / PP0~PP4 完全吻合；而业务字段是 1-based
+    # （inj_spd_1..6）。翻译层统一对齐规则库，故分段参数偏移 -1。
+    #
+    # 不在表里的前缀偏移为 0（整段参数，不带序号）。
+    FIELD_INDEX_OFFSET: Dict[str, int] = {
+        "inj_pos": -1,      # 注射位置 1-6 → IL0-IL5
+        "inj_spd": -1,      # 注射速度 1-6 → IV0-IV5
+        "inj_pres": -1,     # 注射压力 1-6 → IP0-IP5
+        "hold_pres": -1,    # 保压压力 1-5 → PP0-PP4
+        "hold_spd": -1,     # 保压速度 1-5 → PV0-PV4
+        "hold_t": -1,       # 保压时间 1-5 → PT0-PT4
+        "met_pos": -1,      # 熔胶位置 1-4 → ML0-ML3
+        "met_pres": -1,     # 熔胶压力 1-4 → MP0-MP3
+        "met_back_pres": -1,  # 背压 1-4 → MBP0-MBP3
+        "met_rot_spd": -1,  # 螺杆转速 1-4 → MSR0-MSR3
+    }
+
+    # 整段族参数：业务侧 N 个独立段，规则库侧只认一个名字
+    #
+    # 规则库用单一 `BT` 表示整体料筒温度（334 次），业务侧是 brl_temp_1..9。
+    # 翻译规则：段 1 → 家族名（BT），段 N → 家族名 + N（BT2..BT9）。
+    # 规则库实际只引用 BT（BT1 是历史 1-based 写法，少量），其余段无害。
+    FAMILY_FIELD_ALIAS: Dict[str, str] = {
+        "brl_temp": "BT",
+    }
+
+    # ------------------------------------------------------------------
+    # 反向映射：算法字段名 → 业务字段名
+    # ------------------------------------------------------------------
+    @classmethod
+    def to_business_name(cls, algo_name: str) -> Optional[str]:
+        """算法字段名 → 业务字段名（FIELD_NAME_ALIAS 的反向映射）。
+
+        与「业务 → 算法」的翻译共用同一份声明（FIELD_NAME_ALIAS /
+        FIELD_INDEX_OFFSET / FAMILY_FIELD_ALIAS），保证两向一致：
+
+        - 整段族（brl_temp_1..9 → BT / BT2..BT9）：``BT`` → ``brl_temp_1``，
+          ``BT3`` → ``brl_temp_3``
+        - 分段参数（业务 1-based → 规则库 0-based）：``IV0`` → ``inj_spd_1``
+        - 完整字段名：``NT`` → ``noz_temp``、``MEL`` → ``met_end_pos``
+
+        编排层（parameter_optimize）用它把算法推荐写回业务字段：
+        算法名与业务字段名不在同一个命名空间，直接覆盖 baseline 必然落空。
+
+        Returns:
+            业务字段名；无对应业务字段时返回 None
+            （如 ``IPOS`` / ``CUSION`` 这类规则库专用参数，ProcessParameter
+            里没有对应列），调用方应原样保留。
+        """
+        name = (algo_name or '').strip()
+        if not name:
+            return None
+
+        # 1) 整段族参数（BT → brl_temp_1；BT3 → brl_temp_3）
+        for business_prefix, family_name in cls.FAMILY_FIELD_ALIAS.items():
+            if name == family_name:
+                return f'{business_prefix}_1'
+            if not name.startswith(family_name):
+                continue
+            suffix = name[len(family_name):]
+            if suffix.isdigit():
+                return f'{business_prefix}_{suffix}'
+
+        # 2) 分段参数（IV0 → inj_spd_1）
+        for business_prefix, offset in cls.FIELD_INDEX_OFFSET.items():
+            algo_prefix = cls.FIELD_NAME_ALIAS.get(business_prefix)
+            if not algo_prefix or not name.startswith(algo_prefix):
+                continue
+            suffix = name[len(algo_prefix):]
+            if not suffix.isdigit():
+                continue
+            return f'{business_prefix}_{int(suffix) - offset}'
+
+        # 3) 完整字段名（NT → noz_temp）
+        for business_key, algo_full in cls.FIELD_NAME_ALIAS.items():
+            if business_key in cls.FIELD_INDEX_OFFSET or business_key in cls.FAMILY_FIELD_ALIAS:
+                continue
+            if algo_full == name:
+                return business_key
+
+        return None
+
     # 工厂级网络和兜底层网络（每次 recommend 时构造；可考虑缓存）
     def __init__(self):
         self._rule_net = None  # 兼容旧接口，不使用
@@ -101,7 +195,7 @@ class FuzzyEngine(AlgorithmBase):
 
         核心流程（见 fuzzy-engine-reference.md §4.8）：
           1) 拉规则（RuleQueryService + 三级特异性匹配）
-          2) 双层分流（factory / fallback）
+          2) 双层分流（按结论形态：numeric 数值结论 / advisory 提示类结论）
           3) 构造 NumTskRuleNet + FuzzyRuleNet，并行推理
           4) 合并：方案 B（同层聚合 + 跨层覆盖）
           5) 返回 Recommendation 列表
@@ -135,13 +229,11 @@ class FuzzyEngine(AlgorithmBase):
         if not defects:
             return []
 
-        # 兼容 defect_name 来自 defects[0] 或顶层 context
-        defect_name = (
-            context.get('defect_name')
-            or (defects[0].get('defect_name') if isinstance(defects[0], dict) else None)
-        )
+        # 缺陷上下文（缺陷名 / 严重程度 / 位置）——算法自己从 input 推导
+        defect_ctx = self._extract_defect_context(context)
+        defect_name = defect_ctx.get('defect_name')
         if not defect_name:
-            logger.warning('[FuzzyEngine] 未指定 defect_name，跳过推荐')
+            logger.warning('[FuzzyEngine] 反馈中未指定缺陷类型（keyword_name），跳过推荐')
             return []
 
         # 1) 拉规则
@@ -150,6 +242,8 @@ class FuzzyEngine(AlgorithmBase):
         # （abbreviation / product_category），后续若算法需新字段直接从对应子对象取。
         query_ctx = RuleQueryContext(
             defect_name=defect_name,
+            defect_level=defect_ctx.get('level'),
+            defect_position=defect_ctx.get('position'),
             polymer_abbreviation=(context.get('polymer_info') or {}).get('abbreviation'),
             product_category=(context.get('mold_info') or {}).get('product_category'),
             rule_library_code=context.get('rule_library_code'),
@@ -159,24 +253,28 @@ class FuzzyEngine(AlgorithmBase):
             logger.info('[FuzzyEngine] 未找到适用规则: %s', query_ctx)
             return []
 
-        # 2) 双层分流
-        split = RuleQueryService.split_by_level(all_rules)
-        factory_rules = split['factory']
-        fallback_rules = split['fallback']
+        # 2) 双层分流（按结论形态：数值结论 / 提示类结论）
+        split = RuleQueryService.split_by_conclusion_kind(all_rules)
+        numeric_rules = split['numeric']
+        advisory_rules = split['advisory']
 
         # 收集涉及的 RuleKeyword 名称（避免全表扫描）
-        process_parameter = context.get('process_parameter') or {}
+        # 去掉空值字段：论域计算需要数值，None 会让隶属度函数直接抛错
+        process_parameter = {
+            k: v for k, v in (context.get('process_parameter') or {}).items()
+            if v is not None
+        }
         trend = context.get('iteration_trend', {}) or {}
         adjustment_factor = self._trend_to_factor(trend.get('trend', 'unknown'))
 
         # 3) 双层并行推理
-        factory_results = self._infer_factory_layer(factory_rules, process_parameter)
-        fallback_results = self._infer_fallback_layer(fallback_rules, process_parameter)
+        numeric_results = self._infer_numeric_layer(numeric_rules, process_parameter)
+        advisory_results = self._infer_advisory_layer(advisory_rules, process_parameter)
 
         # 4) 合并（方案 B）：同层聚合 + 跨层覆盖
         merged = self._merge_layer_results(
-            factory_results=factory_results,
-            fallback_results=fallback_results,
+            numeric_results=numeric_results,
+            advisory_results=advisory_results,
             adjustment_factor=adjustment_factor,
             current_params=process_parameter,
         )
@@ -185,10 +283,10 @@ class FuzzyEngine(AlgorithmBase):
 
     def is_available(self, context: dict) -> bool:
         """判断是否可用。"""
-        if not (context.get('feedback') or {}).get('defect'):
+        if not self._extract_defect_context(context):
             return False
 
-        trend = context.get('iteration_trend', {})
+        trend = context.get('iteration_trend', {}) or {}
         if trend.get('trend') == 'final':
             return False
 
@@ -206,6 +304,33 @@ class FuzzyEngine(AlgorithmBase):
     # -----------------------------------------------------------------------
 
     @staticmethod
+    def _extract_defect_context(context: dict) -> Dict[str, Any]:
+        """从 feedback 里取缺陷上下文（缺陷名 / 严重程度 / 位置）。
+
+        前端 DefectFeedback 传的是 `{keyword_id, keyword_name, level, position}`：
+        - `keyword_name`：英文缺陷码（SHORTSHOT / FLASH / ...），
+          与 `RuleMethod.defect_code`、`RuleKeyword.keyword_name` 对齐
+        - `level`：严重程度（low / medium / high），与规则前件的档位词一致
+        - `position`：缺陷位置（`DL` + 缺陷名 + 段号）
+
+        历史实现读的是 `defect_name`（中文名），与规则库的英文缺陷码完全对不上，
+        必然查不到规则——这是整条 optimize 链路 400 的最外层症状。
+        """
+        defects = (context.get('feedback') or {}).get('defect') or []
+        for defect in defects:
+            if not isinstance(defect, dict):
+                continue
+            keyword_name = defect.get('keyword_name')
+            if not keyword_name:
+                continue
+            return {
+                'defect_name': keyword_name,
+                'level': defect.get('level'),
+                'position': defect.get('position'),
+            }
+        return {}
+
+    @staticmethod
     def _trend_to_factor(trend: str) -> float:
         """迭代趋势 → 调整系数。"""
         return {
@@ -218,55 +343,76 @@ class FuzzyEngine(AlgorithmBase):
 
     @staticmethod
     def _collect_keyword_names(rules: List[ResolvedRule]) -> set:
-        """从规则字符串中提取所有涉及的参数名（粗略解析）。"""
-        names = set()
-        for r in rules:
-            for word in r.rule_str.split():
-                if '_' in word and word.isupper() is False:
-                    token = word.split('_')[0]
-                    if token and not token[0].isupper():
-                        names.add(token)
-        return names
+        """从规则字符串中提取所有涉及的工艺参数名。
 
-    def _infer_factory_layer(
+        复用 fuzzykit 的词法解析（`fuzzy_core/parsing.py`）：
+        - 剔除缺陷名（缺陷前件在规则匹配阶段已经保证，不参与论域；
+          若把缺陷名当成参数收进来，缺陷会多出一个"参数论域"，
+          规则的缺陷前件被当成可判级条件，而缺陷没有数值，
+          激活度被 EPSILON 压到 ~0，整类规则全部失活）
+        - 剔除缺陷位置名（DL*）
+
+        前件与结论的参数都要收：结论参数缺 RuleKeyword 元数据时，
+        该条规则的调整量会整体丢失。
+        """
+        return collect_param_names(r.rule_str for r in rules)
+
+    def _load_keyword_dicts(
         self,
-        factory_rules: List[ResolvedRule],
-        process_parameter: Dict[str, float],
+        param_names,
+        process_parameter: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
-        """工厂级推理（NumTskRuleNet）。"""
-        if not factory_rules:
-            return []
-
-        param_names = self._collect_keyword_names(factory_rules)
-        keyword_dicts = []
+        """按参数名批量拉 RuleKeyword 论域元数据（缺失的走兜底分支）。"""
+        keyword_dicts: List[Dict[str, Any]] = []
         if param_names:
             try:
-                keyword_dicts = RuleKeywordAdapter.get_keywords_by_names(list(param_names))
+                keyword_dicts = RuleKeywordAdapter.get_keywords_by_names(sorted(param_names))
             except Exception as e:
                 logger.warning('[FuzzyEngine] 加载 RuleKeyword 失败: %s', e)
 
         # 兜底：用 process_parameter 实时值补全 keyword 元数据
         known_keywords = {kw['keyword'] for kw in keyword_dicts}
         for name in param_names:
-            if name not in known_keywords and name in process_parameter:
-                keyword_dicts.append({
-                    'keyword': name,
-                    'lvl': 3,
-                    'min_val': 0.0,
-                    'max_val': float(process_parameter[name]) * 2,
-                    'step': max(float(process_parameter[name]) * 0.1, 0.01),
-                })
+            if name in known_keywords:
+                continue
+            value = process_parameter.get(name)
+            if value is None:
+                continue
+            try:
+                current = float(value)
+            except (TypeError, ValueError):
+                continue
+            keyword_dicts.append({
+                'keyword': name,
+                'lvl': 3,
+                'min_val': 0.0,
+                'max_val': current * 2,
+                'step': max(current * 0.1, 0.01),
+            })
+        return keyword_dicts
 
-        if not keyword_dicts:
-            logger.info('[FuzzyEngine] 工厂级无可用 RuleKeyword，跳过')
+    def _infer_numeric_layer(
+        self,
+        numeric_rules: List[ResolvedRule],
+        process_parameter: Dict[str, float],
+    ) -> List[Dict[str, Any]]:
+        """数值层推理（NumTskRuleNet，数值/百分比结论）。"""
+        if not numeric_rules:
             return []
 
-        rule_array = RuleQueryService.to_rule_array(factory_rules)
-        priority_array = RuleQueryService.get_priority_array(factory_rules)
+        param_names = self._collect_keyword_names(numeric_rules)
+        keyword_dicts = self._load_keyword_dicts(param_names, process_parameter)
+
+        if not keyword_dicts:
+            logger.info('[FuzzyEngine] 数值层无可用 RuleKeyword，跳过')
+            return []
+
+        rule_array = RuleQueryService.to_rule_array(numeric_rules)
+        priority_array = RuleQueryService.get_priority_array(numeric_rules)
 
         try:
             net = NumTskRuleNet(rule_array, keyword_dicts, priority_array)
-            results, extra = net.predict(process_parameter, top_k=len(factory_rules))
+            results, extra = net.predict(process_parameter, top_k=len(numeric_rules))
         except Exception as e:
             logger.exception('[FuzzyEngine] NumTskRuleNet 推理失败: %s', e)
             return []
@@ -276,7 +422,7 @@ class FuzzyEngine(AlgorithmBase):
         for rule_str, activation, adjustments in results:
             for param, value in adjustments.items():
                 out.append({
-                    'source': 'factory',
+                    'source': 'numeric',
                     'param': param,
                     'delta': float(value) * float(activation),
                     'activation': float(activation),
@@ -284,70 +430,110 @@ class FuzzyEngine(AlgorithmBase):
                 })
         return out
 
-    def _infer_fallback_layer(
+    def _infer_advisory_layer(
         self,
-        fallback_rules: List[ResolvedRule],
+        advisory_rules: List[ResolvedRule],
         process_parameter: Dict[str, float],
     ) -> List[Dict[str, Any]]:
-        """兜底层推理（FuzzyRuleNet）。"""
-        if not fallback_rules:
+        """提示层推理。
+
+        提示层有两类规则，必须分开处理：
+
+        1) 检查/弹窗类结论（`X_adjust_请检查锁模力是否不合理。`）
+           → 提取提示文本，作为**文本建议**输出（不给数值）。
+           这类规则绝不能进 Mamdani 数值层：它的结论值是提示语而不是模糊等级，
+           查 HS_MAPPING_DICT 会 KeyError；就算不崩也算不出有意义的数值。
+
+        2) 模糊等级结论（`X_add_low`）
+           → Mamdani 全模糊推理（历史路径，规则库当前没有这种结论）。
+        """
+        if not advisory_rules:
             return []
 
-        param_names = self._collect_keyword_names(fallback_rules)
-        keyword_dicts = []
-        if param_names:
-            try:
-                keyword_dicts = RuleKeywordAdapter.get_keywords_by_names(list(param_names))
-            except Exception as e:
-                logger.warning('[FuzzyEngine] 加载 RuleKeyword 失败: %s', e)
+        check_rules: List[ResolvedRule] = []
+        mamdani_rules: List[ResolvedRule] = []
+        for r in advisory_rules:
+            if self._is_check_rule(r.rule_str):
+                check_rules.append(r)
+            else:
+                mamdani_rules.append(r)
 
-        known_keywords = {kw['keyword'] for kw in keyword_dicts}
-        for name in param_names:
-            if name not in known_keywords and name in process_parameter:
-                keyword_dicts.append({
-                    'keyword': name,
-                    'lvl': 3,
-                    'min_val': 0.0,
-                    'max_val': float(process_parameter[name]) * 2,
-                    'step': max(float(process_parameter[name]) * 0.1, 0.01),
+        out: List[Dict[str, Any]] = []
+
+        # 1) 检查/弹窗类 → 文本建议
+        for r in check_rules:
+            for sol in parse_rule(r.rule_str)['solutions']:
+                if sol.get('action') not in ('adjust', 'popup'):
+                    continue
+                advice = sol.get('value')
+                if not advice:
+                    continue
+                out.append({
+                    'source': 'advisory',
+                    'param': sol.get('name', ''),
+                    'delta': 0.0,
+                    'activation': 0.0,
+                    'rule': r.rule_str,
+                    'advice': advice,
                 })
 
-        if not keyword_dicts:
-            return []
+        # 2) 模糊等级结论 → Mamdani
+        if not mamdani_rules:
+            return out
 
-        rule_array = RuleQueryService.to_rule_array(fallback_rules)
+        param_names = self._collect_keyword_names(mamdani_rules)
+        keyword_dicts = self._load_keyword_dicts(param_names, process_parameter)
+        if not keyword_dicts:
+            return out
+
+        rule_array = RuleQueryService.to_rule_array(mamdani_rules)
         try:
             net = FuzzyRuleNet(rule_array, keyword_dicts)
-            results = net.predict(process_parameter, top_k=len(fallback_rules))
+            results = net.predict(process_parameter, top_k=len(mamdani_rules))
         except Exception as e:
             logger.exception('[FuzzyEngine] FuzzyRuleNet 推理失败: %s', e)
-            return []
+            return out
 
-        out = []
         for param_name, value, _ in results:
             out.append({
-                'source': 'fallback',
+                'source': 'advisory',
                 'param': param_name,
                 'delta': float(value),
                 'activation': float(_[0]) if isinstance(_, tuple) else 1.0,
-                'rule': 'fallback',
+                'rule': 'advisory',
             })
         return out
 
     @staticmethod
+    def _is_check_rule(rule_str: str) -> bool:
+        """规则结论是否是检查/弹窗类（`X_adjust_提示语` / `X_popup_xxx`）。"""
+        for sol in parse_rule(rule_str)['solutions']:
+            if sol.get('action') in ('adjust', 'popup'):
+                return True
+        return False
+
+    @staticmethod
     def _merge_layer_results(
-        factory_results: List[Dict[str, Any]],
-        fallback_results: List[Dict[str, Any]],
+        numeric_results: List[Dict[str, Any]],
+        advisory_results: List[Dict[str, Any]],
         adjustment_factor: float,
         current_params: Dict[str, float],
     ) -> List[Recommendation]:
         """合并双层结果（方案 B：同层聚合 + 跨层覆盖）。
 
+        两层按**结论形态**划分，与规则库层级无关：
+
+        - 数值层（numeric）：能算出数值的结论，delta 参与聚合
+        - 提示层（advisory）：检查/弹窗类文本结论，不参与数值聚合
+
+        跨层规则：数值层胜出，提示层只作 `advisory_reference` 注释。
+
         返回 Recommendation 列表。
         """
         merged: Dict[str, Dict[str, Any]] = {}
+        advice_items: List[Dict[str, Any]] = []
 
-        for rec in factory_results:
+        for rec in numeric_results:
             p = rec['param']
             if p not in merged:
                 merged[p] = {
@@ -355,15 +541,21 @@ class FuzzyEngine(AlgorithmBase):
                     'delta': rec['delta'],
                     'activation_sum': rec['activation'],
                     'rule_count': 1,
-                    'sources': ['factory'],
-                    'fallback_reference': None,
+                    'sources': ['numeric'],
+                    'advisory_reference': None,
                 }
             else:
                 merged[p]['delta'] += rec['delta']
                 merged[p]['activation_sum'] += rec['activation']
                 merged[p]['rule_count'] += 1
 
-        for rec in fallback_results:
+        for rec in advisory_results:
+            # 检查/弹窗类结论（`X_adjust_提示语`）是**文本建议**：
+            # delta 恒为 0，混进数值聚合会产生"保持不变"的假推荐，
+            # 必须单独输出（recommended_value=None）。
+            if rec.get('advice'):
+                advice_items.append(rec)
+                continue
             p = rec['param']
             if p not in merged:
                 merged[p] = {
@@ -371,14 +563,13 @@ class FuzzyEngine(AlgorithmBase):
                     'delta': rec['delta'],
                     'activation_sum': rec['activation'],
                     'rule_count': 1,
-                    'sources': ['fallback'],
-                    'fallback_reference': None,
+                    'sources': ['advisory'],
+                    'advisory_reference': None,
                 }
-                merged[p]['sources'] = ['fallback']
             else:
-                # 工厂级已覆盖，仅作 fallback_reference 注释
-                merged[p]['fallback_reference'] = rec['delta']
-                merged[p]['sources'].append('fallback')
+                # 数值层已覆盖，仅作 advisory_reference 注释
+                merged[p]['advisory_reference'] = rec['delta']
+                merged[p]['sources'].append('advisory')
 
         # 转换为 Recommendation
         recommendations: List[Recommendation] = []
@@ -394,7 +585,26 @@ class FuzzyEngine(AlgorithmBase):
                 recommended_value=recommended_value,
                 confidence=min(info['activation_sum'] / max(info['rule_count'], 1), 1.0),
                 reason=f"模糊推理 (sources={info['sources']})",
-                source='fuzzy.factory' if 'factory' in info['sources'] else 'fuzzy.fallback',
+                source='fuzzy.numeric' if 'numeric' in info['sources'] else 'fuzzy.advisory',
+                direction=(
+                    'increase' if adjusted_delta > 0
+                    else 'decrease' if adjusted_delta < 0
+                    else 'hold'
+                ),
+            ))
+
+        # 检查/弹窗类建议：文本建议，不给数值，方向为「检查」
+        for rec in advice_items:
+            param_name = rec.get('param') or ''
+            raw_current = current_params.get(param_name)
+            recommendations.append(Recommendation(
+                param_name=param_name,
+                current_value=float(raw_current) if raw_current is not None else 0.0,
+                recommended_value=None,
+                confidence=None,
+                reason=f"模糊推理建议：{rec.get('advice')}",
+                source='fuzzy.check',
+                direction='check',
             ))
 
         return recommendations

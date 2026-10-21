@@ -2,8 +2,8 @@
 
 **状态**：✅ 已完成
 **日期**：2026-09-15（创建与落地）
-**关联数据**：`backend/process/refs/rule_keyword_curated.json`（310 条，已人工审校）
-**关联备份**：`backend/process/refs/rule_keyword_extracted.original.json`（原始 1614 条备份）
+**关联数据**：`backend/_refs/module/process/data/rule_keyword_curated.json`（310 条，已人工审校）
+**关联备份**：`backend/_refs/module/process/data/rule_keyword_extracted.original.json`（原始 1614 条备份）
 **关联代码**：`backend/process/models/rules.py` RuleKeyword、`backend/bootstrap/management/commands/init_rule_keyword.py`
 
 ---
@@ -244,8 +244,8 @@ JSON 数据没有 `unit` 字段，但 Model 必填。
 | 文件 | 状态 |
 |------|------|
 | `process/refs/rule_keyword_extracted.json` | ❌ 已删除（被 curated 取代） |
-| `process/refs/rule_keyword_extracted.original.json` | ✅ 备份保留 |
-| `process/refs/rule_keyword_curated.json` | ✅ 生产用（310 条） |
+| `_refs/module/process/data/rule_keyword_extracted.original.json` | ✅ 备份保留 |
+| `_refs/module/process/data/rule_keyword_curated.json` | ✅ 生产用（310 条） |
 | `bootstrap/management/commands/init_fuzzy_demo.py` | ❌ 已删除（废弃脚本） |
 | `bootstrap/management/commands/init_rule_keyword.py` | ✅ 已修复（重命名自 init_fuzzy_keyword） |
 

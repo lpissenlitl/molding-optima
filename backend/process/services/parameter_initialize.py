@@ -1,7 +1,7 @@
 """
-工艺参数初始化推理服务（对应文件：原 initialization_service.py）
+工艺参数初始化推理服务
 
-对应接口（2026-10-14 更新）：
+对应接口：
 - POST /api/processes/algorithms/initialize/                  业务主流程：基于 masterdata ID 推理初始工艺
 - POST /api/processes/algorithms/initialize-from-condition/   业务另一场景：基于源 condition 复制初始工艺
 - POST /api/processes/algorithms/initialize-from-provided/    纯推理：调用方提供完整 4 维 dict
@@ -54,9 +54,7 @@ from utils.objects import safe_json
 logger = logging.getLogger(__name__)
 
 
-# ============================================================
-# 快照构建层：ORM → 完整快照（process_context_snapshot）
-# ============================================================
+# --- 快照构建层：ORM → 完整快照（process_context_snapshot） ---
 # 设计原则：
 #   - 快照是"完整的工艺上下文"，落库到 ProcessCondition.process_context_snapshot
 #   - 快照包含：模具 + 选定 GatingSystem（含全部 cavities/gates）+ 选定 InjectionUnit + Polymer
@@ -188,9 +186,7 @@ def _build_process_context_snapshot(
     return safe_json(raw)
 
 
-# ============================================================
-# 快照 → 算法入参：从完整快照中抽取 algorithm 需要的扁平字段
-# ============================================================
+# --- 快照 → 算法入参：从完整快照中抽取 algorithm 需要的扁平字段 ---
 # 设计原则：
 #   - 算法入参（_infer_kernel）依然是扁平 dict，不变
 #   - 这里只是"快照 → 算法入参"的转换层，算法不直接看快照
@@ -251,7 +247,7 @@ def _build_mold_info_from_snapshot(
     # 1. 通用提取：按 MOLD_INFO_SPEC 遍历，每个字段都提取（含 None）
     #    - attr_name=None 的计算字段跳过（单独处理）
     #    - 可选/推荐字段提取 None（前端能编辑/展示）
-    #    - source_model 缺失时（Cavity/Gate 无数据）取空 dict 兑底
+    #    - source_model 缺失时（Cavity/Gate 无数据）取空 dict 兜底
     for target_key, spec in MOLD_INFO_SPEC.items():
         attr_name = spec.get('attr_name')
         if not attr_name:
@@ -364,10 +360,7 @@ def _build_polymer_info_from_snapshot(
 # 快照保留完整 masterdata 上下文（便于反查/复现/历史回溯），两个 Mode 共享同一套 snapshot builders。
 # initialize-from-provided 入口跳过这一步（前端已直接提供完整 4 维 dict）。
 
-# ============================================================
-# 顶层常量 + 核心推理算法（2026-10-15 整改：从 ParameterInitializeService 类内移出）
-# ============================================================
-
+# --- 顶层常量 + 核心推理算法 ---
 _INIT_PARAM_SOURCE = "algorithm_init"  # 工艺参数源标记，写入 ProcessParameter.param_source
 
 
@@ -416,10 +409,7 @@ class ParameterInitializeService:
 
     入口见模块 docstring。
     """
-
-    # ============================================================
-    # from_masterdata 入口（Step 1-4 完整链路：入口适配 + 快照 + 推理 + 落库）
-    # ============================================================
+    # --- from_masterdata 入口（Step 1-4 完整链路：入口适配 + 快照 + 推理 + 落库） ---
     @classmethod
     def infer(
         cls,
@@ -509,7 +499,7 @@ class ParameterInitializeService:
             )
             result['condition_id'] = condition.id
             result['parameter_id'] = parameter.id
-            # 补上 seq_idx：前端进入下一个 infer 调用需要作为 parent_seq_idx（2026-09-23 轮 6）
+            # 补上 seq_idx：前端进入下一个 infer 调用需要作为 parent_seq_idx
             result['seq_idx'] = parameter.seq_idx
             result['shot_index'] = shot_index
             result['injection_index'] = injection_index
@@ -632,10 +622,7 @@ class ParameterInitializeService:
                 "param_source": "template_copy",
             }
 
-    # ============================================================
-    # initialize-from-provided 入口（只跑 Step 3，跳过 Step 1 适配和 Step 4 落库）
-    # ============================================================
-
+    # --- initialize-from-provided 入口（只跑 Step 3，跳过 Step 1 适配和 Step 4 落库） ---
     @classmethod
     def infer_from_provided(
         cls,
@@ -656,9 +643,7 @@ class ParameterInitializeService:
             process_set=process_set,
         )
 
-    # ============================================================
-    # 核心算法（Step 3）—— 私有方法，三个入口共用
-    # ============================================================
+    # --- 核心算法（Step 3）—— 私有方法，三个入口共用 ---
     @staticmethod
     def _infer_kernel(
         mold_info: Dict[str, Any],
@@ -668,10 +653,8 @@ class ParameterInitializeService:
     ) -> Dict[str, Any]:
         """【Step 3】纯算法推理：4 维输入 → 4 维参数输出（不查 DB、不写 DB、不涉及 ID）
 
-        私有方法（_ 前缀）：从类内 classmethod 调整为类内 @staticmethod
-        - 三个公开入口（infer / infer_from_condition / infer_from_provided）共用本方法
-        - 不依赖 self/cls，无副作用（其他 _helper 全是模块顶层函数）
-
+        三个公开入口（infer / infer_from_condition / infer_from_provided）共用本方法；
+        不依赖 self/cls，无副作用（其他 _helper 全是模块顶层函数）。
         对应 parameter_optimize.py 的 _infer_kernel（同构、同名）。
 
         Args:
@@ -683,12 +666,6 @@ class ParameterInitializeService:
                 "process": {...}, "mold_temp": {...}, "hot_runner": {...},
                 "summary": {...}
             }
-
-        设计变迁（2026-10-15）：
-        - 1.0: 类内 @classmethod（持有 _shared_rule_matcher 类级缓存）
-        - 2.0: 模块顶层函数（整改后，删除类级缓存）
-        - 3.0: 类内 @staticmethod（语义内聚）
-        - 4.0: 重命名为 _infer_kernel（与 parameter_optimize 对称）—— 当前形态
         """
         process_set = process_set or {}
         # 每次新建实例（不做类级缓存）—— 实测无性能问题（用户手动触发，低频）

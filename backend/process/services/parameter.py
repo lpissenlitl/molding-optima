@@ -9,6 +9,15 @@
 - parameter 之间通过 parent_param 自关联，构成版本树
 - seq_idx 在同一父节点下递增（全局自增也保留语义：condition 内创建顺序）
 
+软删管理器约定（extensions.models.BaseModel）：
+- objects        = SoftDeleteManager，get_queryset() 已自动过滤 is_deleted=False
+- all_objects    = 普通 Manager，不过滤软删记录
+因此：
+- 查未删除记录 → 用 .objects，无需再显式写 is_deleted=False
+- 需跨越软删边界（如查“已删记录本身”）→ 用 .all_objects，此时才需显式加 is_deleted 条件
+- 例外：跨表 join 过滤（filter(related__field=...)）走 _base_manager（普通 Manager），
+  不会自动排除软删，需显式写 related__is_deleted=False（见 condition.py 的用法）
+
 应用场景 (B 方案简化后, 2026-10-10):
 - 单段 GET 详情       按 parameter_id 查单条 (供前端只读使用)
 - 按 condition_id 查树  查 condition 下所有 parameter 的版本树
@@ -39,6 +48,37 @@ from process.models import ProcessParameter, ProcessCondition
 from utils.db import build_filters, parse_ordering, paginate_queryset
 
 _logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# 业务身份锁：不允许通过 update_parameter 修改的字段
+# ============================================================================
+# 与 condition.py 的 CONDITION_LOCKED_FIELDS 同一范式（白名单式 allow_fields 扣除）。
+#
+# 分类依据：
+# - 主关联：参数归属的工艺条件，改挂等于换业务对象
+# - 调机树：parent_param 父链 + seq_idx 版本序号（由 model.save() 自动分配）
+# - 系统生成：parameter_no 编号
+# - 来源标记：param_source 记录本轮参数的产生方式，字段编辑不应改变它
+# - 软删标记：走 delete_parameter 专用路径
+PARAMETER_LOCKED_FIELDS = frozenset({
+    # 主键
+    "id",
+    # 主关联
+    "process_condition",
+    "process_condition_id",
+    # 调机树结构
+    "parent_param",
+    "parent_param_id",
+    "seq_idx",
+    # 系统生成
+    "parameter_no",
+    # 来源标记
+    "param_source",
+    # 软删标记
+    "is_deleted",
+    "deleted_at",
+})
 
 
 # ============================================================================
@@ -77,27 +117,6 @@ def _serializable_parameter_dict(parameter: ProcessParameter) -> dict:
 # 单条 CRUD（按 parameter_id）
 # ============================================================================
 
-def get_parameter(parameter_id: int) -> dict:
-    """获取工艺参数详情（按 parameter_id）
-
-    区别于 condition.get_condition(condition_id)：
-    - condition.get_condition 返回 condition + 最新 parameter
-    - 本函数返回**具体某一条** parameter（任意版本）
-
-    Args:
-        parameter_id: 工艺参数 ID
-
-    Returns:
-        dict: 工艺参数详情（含 process_condition_id, parent_param_id, seq_idx 等）
-
-    B 方案设计决定 (2026-10-10):
-    - 本函数保留作为单段 GET 详情 ("GET /api/processes/records/parameter/<id>/")
-    - 不再提供 update_parameter / delete_parameter / batch_delete_parameter
-      (写操作必须走双段 + _verify_parameter_in_condition 校验, 走 services.parameter.*_in_condition)
-    """
-    parameter = _get_parameter_by_id(parameter_id)
-    return _serializable_parameter_dict(parameter)
-
 
 # ============================================================================
 # 版本树查询（只读）
@@ -133,12 +152,12 @@ def get_parameter_tree(condition_id: int = None) -> List[dict]:
     """
     # condition_id 仅在传时才校验存在 (过滤前预检, 避免空结果歧义)
     if condition_id is not None and not ProcessCondition.objects.filter(
-        id=condition_id, is_deleted=False
+        id=condition_id
     ).exists():
         raise BizException(ERROR_DATA_NOT_FOUND, f"工艺条件不存在: id={condition_id}")
 
     # 一次性查出所有 parameter（按 seq_idx, id 排序——便于稳定遍历）
-    qs = ProcessParameter.objects.filter(is_deleted=False)
+    qs = ProcessParameter.objects.all()
     if condition_id is not None:
         qs = qs.filter(process_condition_id=condition_id)
     parameters = qs.order_by("seq_idx", "id").values(
@@ -240,7 +259,9 @@ def list_parameters(
     }
     filter_kwargs = build_filters(filter_map)
 
-    qs = ProcessParameter.all_objects.filter(**filter_kwargs)
+    # 只列未删除记录：objects 是 SoftDeleteManager（自动过滤 is_deleted=False）；
+    # all_objects 是普通 Manager，会把已删版本一并返回
+    qs = ProcessParameter.objects.filter(**filter_kwargs)
     if condition_id is not None:
         qs = qs.filter(process_condition_id=condition_id)
 
@@ -272,18 +293,17 @@ def get_parameter(parameter_id: int) -> dict:
     - 旧: get_parameter_in_condition(condition_id, parameter_id) (双段强校验)
     - 新: get_parameter(parameter_id) (仅凭 ID 定位, parameter.process_condition_id 自带)
 
+    区别于 condition.get_condition(condition_id)：
+    - condition.get_condition 返回 condition + 最新 parameter
+    - 本函数返回**具体某一条** parameter（任意版本）
+
     Returns:
-        dict: parameter 序列化字典
+        dict: parameter 序列化字典（含 process_condition_id / parent_param_id / seq_idx 等）
 
     Raises:
-        BizException: parameter 不存在
+        BizException: parameter 不存在或已软删
     """
-    parameter_obj = ProcessParameter.all_objects.filter(id=parameter_id).first()
-    if not parameter_obj:
-        raise BizException(
-            ERROR_DATA_NOT_FOUND,
-            f"parameter 不存在: id={parameter_id}",
-        )
+    parameter_obj = _get_parameter_by_id(parameter_id)
     return _serializable_parameter_dict(parameter_obj)
 
 
@@ -297,6 +317,9 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
     parameter 自适应两种格式, 由本函数智能识别:
     - 含 'setting_process' key → NEST (前端 UI 格式), 调 _frontend_to_condition_dict 转 FLAT
     - 否则 → FLAT 92 字段 (算法/移植直传), 透传给 parameter.update_info
+
+    两者都经 PARAMETER_LOCKED_FIELDS 过滤：关系字段 / 版本序号 / 来源标记
+    不允许通过本服务修改（见模块 docstring 设计原则）。
 
     Returns:
         dict: 更新后的 parameter 序列化字典
@@ -328,7 +351,9 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
     else:
         parameter_kwargs = parameter
 
-    parameter_obj.update_info(**parameter_kwargs)
+    # 业务身份锁：白名单式扣除受保护字段
+    allowed_fields = ProcessParameter.get_allowed_fields() - PARAMETER_LOCKED_FIELDS
+    parameter_obj.update_info(allow_fields=allowed_fields, **parameter_kwargs)
     return _serializable_parameter_dict(parameter_obj)
 
 
@@ -338,6 +363,9 @@ def delete_parameter(parameter_id: int) -> None:
     2026-10-12 改造:
     - 旧: delete_parameter_in_condition(condition_id, parameter_id)
     - 新: delete_parameter(parameter_id)
+
+    调机树完整性：存在未删除子节点时拒绝删除——否则子节点会被 get_parameter_tree
+    当作孤儿“提根”，丢失其版本归属。需先删子节点。
     """
     parameter_obj = ProcessParameter.all_objects.filter(id=parameter_id).first()
     if not parameter_obj:
@@ -345,4 +373,14 @@ def delete_parameter(parameter_id: int) -> None:
             ERROR_DATA_NOT_FOUND,
             f"parameter 不存在: id={parameter_id}",
         )
+
+    has_children = ProcessParameter.objects.filter(
+        parent_param_id=parameter_id,
+    ).exists()
+    if has_children:
+        raise BizException(
+            ERROR_ILLEGAL_ARGUMENT,
+            f"该工艺参数存在子版本，请先删除子版本: id={parameter_id}",
+        )
+
     parameter_obj.soft_delete()

@@ -3,6 +3,12 @@ verify_fuzzy_nested_context.py
 验证 fuzzy_algorithm.recommend() 正确从嵌套对象 context['polymer'] / context['mold']
 取出 abbreviation / product_category 传给 RuleQueryContext。
 
+契约说明（2026-10-20 随 optimize 链路打通同步）：
+- 缺陷名取 `feedback.defect[].keyword_name`（英文缺陷码，如 SHORTSHOT），
+  与 RuleMethod.defect_code / RuleKeyword.keyword_name 对齐；
+  旧的 `defect_name`（中文或 snake_case）已不再被读取
+- process_parameter 是算法命名空间（IV0 / IP0 / ...，0-based）
+
 策略：spy RuleQueryService.get_rules（不 mock 返回值，只看传入的 RuleQueryContext 字段）。
 """
 import os
@@ -27,9 +33,9 @@ def main():
     engine = FuzzyEngine()
     context = {
         "feedback": {
-            "defect": [{"defect_name": "short_shot", "keyword_name": "短射", "level": "high", "position": "DL1"}],
+            "defect": [{"keyword_name": "SHORTSHOT", "level": "high", "position": "DL1"}],
         },
-        "process_parameter": {"inj_pres_1": 60.0},
+        "process_parameter": {"IP0": 60.0},
         "machine_info": {"drive_system": "hydraulic"},
         "polymer_info": {"abbreviation": "PE", "melt_flow_rate": 7.0},
         "mold_info": {"product_category": "酒瓶", "cavity_count": 4},
@@ -57,7 +63,7 @@ def main():
         f"product_category 应取 context['mold']['product_category']='酒瓶', "
         f"got {qctx.product_category!r}"
     )
-    assert qctx.defect_name == "short_shot"
+    assert qctx.defect_name == "SHORTSHOT"
     print(f"[1/3] RuleQueryContext 正确接收: "
           f"polymer_abbreviation={qctx.polymer_abbreviation!r}, "
           f"product_category={qctx.product_category!r}, "
@@ -66,7 +72,7 @@ def main():
     # 退化：polymer_info / mold_info 缺失时走空 dict，不应抛错
     captured.clear()
     context_empty = {
-        "feedback": {"defect": [{"defect_name": "short_shot", "level": "high"}]},
+        "feedback": {"defect": [{"keyword_name": "SHORTSHOT", "level": "high"}]},
         "process_parameter": {},
         "machine_info": {},
     }
@@ -83,7 +89,7 @@ def main():
     # 退化：polymer_info / mold_info 是 None（极端 case）
     captured.clear()
     context_none = {
-        "feedback": {"defect": [{"defect_name": "short_shot", "level": "high"}]},
+        "feedback": {"defect": [{"keyword_name": "SHORTSHOT", "level": "high"}]},
         "process_parameter": {},
         "machine_info": {},
         "polymer_info": None,

@@ -28,6 +28,17 @@
     <!-- ============== 右侧：登录表单 ============== -->
     <div class="form-side">
       <div class="form-card">
+        <!-- 移动端品牌标识：单栏布局时替代左侧品牌区，避免页面过于单调 -->
+        <div class="mobile-brand">
+          <span class="mobile-brand__logo">
+            <AppIcon icon="mdi:cube-outline" />
+          </span>
+          <span class="mobile-brand__text">
+            <span class="mobile-brand__name">{{ appStore.name }}</span>
+            <span class="mobile-brand__subtitle">智能工艺系统</span>
+          </span>
+        </div>
+
         <div class="form-header">
           <h3 class="form-title">欢迎登录</h3>
           <p class="form-subtitle">Welcome to {{ appStore.name }}</p>
@@ -156,16 +167,24 @@ const handleLogin = async () => {
 <style scoped lang="scss">
 .login-page {
   min-height: 100vh;
+  /* dvh 适配移动端浏览器地址栏占位，避免 100vh 超出可视区域 */
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   background: #f5f7fa;
   color: #1f2937;
   position: relative;
-  overflow: hidden;
+  /* 横向裁剪但不做滚动容器：clip 不会把 overflow-y 的 visible 降级为 auto，
+     纵向仍由 body 整页滚动（不会出现内层滚动条），横向不产生滚动条 */
+  overflow-x: clip;
 }
 
 /* ============== 左侧品牌区（参考主题色 var(--theme-primary)） ============== */
 .brand-side {
-  flex: 1;
+  /* 1 1 0：可伸缩且不被内容最小宽度锁死，min-width: 0 允许收缩到内容下限以下 */
+  flex: 1 1 0;
+  min-width: 0;
   position: relative;
   @include flex-column-center;
   background: var(--theme-primary);
@@ -277,7 +296,9 @@ const handleLogin = async () => {
 
 /* ============== 右侧表单区 ============== */
 .form-side {
+  /* 桌面端固定 460px 基础宽度；min-width: 0 允许在空间不足时被压缩 */
   flex: 0 0 460px;
+  min-width: 0;
   @include flex-center;
   background: #f5f7fa;
   padding: 40px;
@@ -285,7 +306,56 @@ const handleLogin = async () => {
 
 .form-card {
   width: 100%;
+  /* 卡片最大宽度：移动端/平板下保持 360px 居中，不随容器拉宽 */
   max-width: 360px;
+  min-width: 0;
+}
+
+/* 移动端品牌标识：仅单栏布局显示，替代被隐藏的左侧品牌区
+   - 垂直堆叠居中：Logo → 产品名 → 副标题，视觉重心明确
+   - 不与下方左对齐的表单标题争抢同一层级，单独作为顶部品牌头 */
+.mobile-brand {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.mobile-brand__logo {
+  width: 60px;
+  height: 60px;
+  @include flex-center;
+  border-radius: 16px;
+  background: var(--theme-primary);
+  color: #fff;
+  font-size: 32px;
+  box-shadow: var(--shadow-md);
+}
+
+.mobile-brand__logo :deep(svg) {
+  color: #fff;
+}
+
+.mobile-brand__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.25;
+}
+
+.mobile-brand__name {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: 0.5px;
+}
+
+.mobile-brand__subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  letter-spacing: 3px;
 }
 
 .form-header {
@@ -405,18 +475,46 @@ const handleLogin = async () => {
 }
 
 /* ============== 响应式 ============== */
-@media (max-width: 900px) {
+/* 中小屏（<1024px）：单栏布局
+   - 隐藏左侧品牌区，登录卡片水平居中（保持 360px 上限，不被拉宽）
+   - margin: auto 实现垂直居中；内容高于视口时 auto 归零，
+     保证顶部不被裁切、整页由 body 滚动（无内层滚动条）
+   - 断点用 1024px（md），因为两栏布局的最小可用宽度约为
+     品牌区 560px + 表单区 460px = 1020px
+*/
+@include breakpoint-down(md) {
+  .login-page {
+    flex-direction: column;
+  }
   .brand-side {
     display: none;
   }
   .form-side {
-    flex: 1;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    margin: auto 0;
+    padding: 24px;
+  }
+  .form-card {
+    max-width: 360px;
+  }
+  .mobile-brand {
+    display: flex;
+  }
+  /* 品牌区已展示系统名，隐藏重复的英文副标题 */
+  .form-subtitle {
+    display: none;
   }
 }
 
+/* 超小屏（<480px）：收紧留白，按钮字间距压缩避免文字换行 */
 @include breakpoint-down(xs) {
   .form-side {
-    padding: 24px;
+    padding: 16px;
+  }
+  .login-btn {
+    letter-spacing: 2px;
   }
 }
 </style>

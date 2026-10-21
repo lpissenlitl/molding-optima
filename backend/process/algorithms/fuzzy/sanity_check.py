@@ -2,14 +2,18 @@
 FuzzyEngine 端到端 sanity check（不依赖 Django ORM，使用 mock 替换 RuleQueryService）
 
 运行：
-  cd backend/process/engines/fuzzy
-  python3 sanity_check.py
+  cd backend/process/algorithms/fuzzy
+  python sanity_check.py
 
 覆盖：
-  1) 工厂级 NumTskRuleNet 单层推理
-  2) 兜底层 FuzzyRuleNet 单层推理
+  1) 数值层 NumTskRuleNet 单层推理
+  2) 提示层 FuzzyRuleNet 单层推理
   3) 双层合并（同层聚合 + 跨层覆盖，方案 B）
   4) 优先级加权（priority=3 胜出）
+
+⚠️ 术语：本文件中的"层"指**结论形态**（结论能不能算出数值），
+   与规则库层级（base / 产品库 / specificity）无关。
+   数值层 = numeric，提示层 = advisory。
 """
 
 import os
@@ -28,11 +32,11 @@ sys.path.insert(0, os.path.dirname(FUZZY_DIR))
 
 
 # ---------------------------------------------------------------------------
-# 1. 工厂级 NumTskRuleNet 推理
+# 1. 数值层 NumTskRuleNet 推理
 # ---------------------------------------------------------------------------
 
-def case_factory_layer():
-    print('\n========== CASE 1: 工厂级 NumTskRuleNet 推理 ==========')
+def case_numeric_layer():
+    print('\n========== CASE 1: 数值层 NumTskRuleNet 推理 ==========')
     from fuzzy_core.models.nets import NumTskRuleNet
 
     # 场景：PE 酒瓶短射，调高注射压力 10 单位
@@ -55,18 +59,18 @@ def case_factory_layer():
     assert len(results) == 2, f'期望 2 条结果，实际 {len(results)}'
     # priority=10 规则排在前面
     assert 'add_10' in results[0][0], f'priority=10 应胜出，但实际 {results[0][0]}'
-    print(f'[OK] 工厂级返回 {len(results)} 条；优先级胜出：{results[0][0]}')
+    print(f'[OK] 数值层返回 {len(results)} 条；优先级胜出：{results[0][0]}')
     print(f'   results[0] = {results[0]}')
     print(f'   results[1] = {results[1]}')
     return True
 
 
 # ---------------------------------------------------------------------------
-# 2. 兜底层 FuzzyRuleNet 推理
+# 2. 提示层 FuzzyRuleNet 推理
 # ---------------------------------------------------------------------------
 
-def case_fallback_layer():
-    print('\n========== CASE 2: 兜底层 FuzzyRuleNet 推理 ==========')
+def case_advisory_layer():
+    print('\n========== CASE 2: 提示层 FuzzyRuleNet 推理 ==========')
     from fuzzy_core.models.nets import FuzzyRuleNet
 
     rule_array = [
@@ -78,24 +82,25 @@ def case_fallback_layer():
     net = FuzzyRuleNet(rule_array, keyword_array)
     results = net.predict({'SHORTSHOT': -0.7, 'hold_time': 3}, top_k=1)
     assert len(results) >= 1, f'期望至少 1 条结果，实际 {len(results)}'
-    print(f'[OK] 兜底层返回 {len(results)} 条；首个 = {results[0]}')
+    print(f'[OK] 提示层返回 {len(results)} 条；首个 = {results[0]}')
 
 
 # ---------------------------------------------------------------------------
 # 3. FuzzyEngine 双层合并（mock RuleQueryService）
 # ---------------------------------------------------------------------------
 
-def _mock_resolved_rule(rule_id, rule_str, level, polymer=None, product=None, priority=1):
+def _mock_resolved_rule(rule_id, rule_str, conclusion_kind, polymer=None, product=None, priority=1):
     """模拟 RuleQueryService 返回的 ResolvedRule"""
     # 直接构造 ResolvedRule（绕过 rule_query_service 包的 Django 依赖）
     from collections import namedtuple
     ResolvedRule = namedtuple('ResolvedRule', [
-        'rule_id', 'rule_str', 'level', 'polymer_abbreviation', 'product_category', 'priority', 'library_code',
+        'rule_id', 'rule_str', 'conclusion_kind',
+        'polymer_abbreviation', 'product_category', 'priority', 'library_code',
     ])
     return ResolvedRule(
         rule_id=rule_id,
         rule_str=rule_str,
-        level=level,
+        conclusion_kind=conclusion_kind,
         polymer_abbreviation=polymer,
         product_category=product,
         priority=priority,
@@ -111,10 +116,10 @@ def case_double_layer_merge():
     # 由于 FuzzyEngine 的 import 链需要 adapters / rule_query_service，
     # 我们重新组织：仅提取 _merge_layer_results 这一个静态方法的逻辑来验证
     # 用一份简化版函数验证合并结果。
-    def merge_layer_results(factory_results, fallback_results, adjustment_factor, current_params):
+    def merge_layer_results(numeric_results, advisory_results, adjustment_factor, current_params):
         """复刻 FuzzyEngine._merge_layer_results，便于独立验证。"""
         merged = {}
-        for rec in factory_results:
+        for rec in numeric_results:
             p = rec['param']
             if p not in merged:
                 merged[p] = {
@@ -122,14 +127,14 @@ def case_double_layer_merge():
                     'delta': rec['delta'],
                     'activation_sum': rec['activation'],
                     'rule_count': 1,
-                    'sources': ['factory'],
-                    'fallback_reference': None,
+                    'sources': ['numeric'],
+                    'advisory_reference': None,
                 }
             else:
                 merged[p]['delta'] += rec['delta']
                 merged[p]['activation_sum'] += rec['activation']
                 merged[p]['rule_count'] += 1
-        for rec in fallback_results:
+        for rec in advisory_results:
             p = rec['param']
             if p not in merged:
                 merged[p] = {
@@ -137,51 +142,50 @@ def case_double_layer_merge():
                     'delta': rec['delta'],
                     'activation_sum': rec['activation'],
                     'rule_count': 1,
-                    'sources': ['fallback'],
-                    'fallback_reference': None,
+                    'sources': ['advisory'],
+                    'advisory_reference': None,
                 }
-                merged[p]['sources'] = ['fallback']
             else:
-                merged[p]['fallback_reference'] = rec['delta']
-                merged[p]['sources'].append('fallback')
+                merged[p]['advisory_reference'] = rec['delta']
+                merged[p]['sources'].append('advisory')
         return merged
 
-    # 场景：PE 酒瓶短射 → 同时有 2 条工厂级规则 + 1 条兜底层规则
-    factory_results = [
+    # 场景：PE 酒瓶短射 → 同时有 2 条数值层规则 + 1 条提示层规则
+    numeric_results = [
         {'param': 'inj_pres_1', 'delta': 10.0, 'activation': 0.9, 'rule': 'r1'},
         {'param': 'inj_pres_2', 'delta': 5.0,  'activation': 0.7, 'rule': 'r2'},
         # 同参数多条规则 → 同层聚合
         {'param': 'inj_pres_1', 'delta': 5.0,  'activation': 0.6, 'rule': 'r3'},
     ]
-    fallback_results = [
+    advisory_results = [
         {'param': 'hold_time', 'delta': 1.5, 'activation': 0.5, 'rule': 'r4'},
-        # inj_pres_1 已被工厂级覆盖 → 应作为 fallback_reference，不覆盖
+        # inj_pres_1 已被数值层覆盖 → 应作为 advisory_reference，不覆盖
         {'param': 'inj_pres_1', 'delta': 999, 'activation': 0.4, 'rule': 'r5'},
     ]
     current_params = {'inj_pres_1': 50, 'inj_pres_2': 80, 'hold_time': 3}
     factor = 1.2
 
-    merged = merge_layer_results(factory_results, fallback_results, factor, current_params)
+    merged = merge_layer_results(numeric_results, advisory_results, factor, current_params)
 
-    # 1) inj_pres_1: 同层聚合 + 兜底只作 fallback_reference
+    # 1) inj_pres_1: 同层聚合 + 提示层只作 advisory_reference
     inj1 = merged['inj_pres_1']
-    assert inj1['sources'] == ['factory', 'fallback'], f'sources={inj1["sources"]}'
+    assert inj1['sources'] == ['numeric', 'advisory'], f'sources={inj1["sources"]}'
     assert abs(inj1['delta'] - 15.0) < 1e-6, f'aggregated delta={inj1["delta"]}'
-    assert inj1['fallback_reference'] == 999, f'fallback_reference={inj1["fallback_reference"]}'
+    assert inj1['advisory_reference'] == 999, f'advisory_reference={inj1["advisory_reference"]}'
     assert inj1['rule_count'] == 2
     assert abs(inj1['activation_sum'] - 1.5) < 1e-6, f'activation_sum={inj1["activation_sum"]}'
 
-    # 2) inj_pres_2: 仅工厂级
+    # 2) inj_pres_2: 仅数值层
     inj2 = merged['inj_pres_2']
-    assert inj2['sources'] == ['factory'], f'sources={inj2["sources"]}'
+    assert inj2['sources'] == ['numeric'], f'sources={inj2["sources"]}'
 
-    # 3) hold_time: 仅兜底层
+    # 3) hold_time: 仅提示层
     hold = merged['hold_time']
-    assert hold['sources'] == ['fallback'], f'sources={hold["sources"]}'
+    assert hold['sources'] == ['advisory'], f'sources={hold["sources"]}'
 
     print('[OK] 合并覆盖 3 个参数：')
     for k, v in merged.items():
-        print(f'   {k}: delta={v["delta"]:.2f}, sources={v["sources"]}, fb_ref={v["fallback_reference"]}')
+        print(f'   {k}: delta={v["delta"]:.2f}, sources={v["sources"]}, advisory_ref={v["advisory_reference"]}')
 
 
 # ---------------------------------------------------------------------------
@@ -212,8 +216,8 @@ def case_priority_ordering():
 
 def main():
     cases = [
-        case_factory_layer,
-        case_fallback_layer,
+        case_numeric_layer,
+        case_advisory_layer,
         case_double_layer_merge,
         case_priority_ordering,
     ]
@@ -229,9 +233,10 @@ def main():
 
     print('\n' + '=' * 60)
     if failed == 0:
-        print('✅ 所有 sanity check 通过')
+        # 注意：这里不要用 emoji，Windows 默认 GBK 控制台会抛 UnicodeEncodeError
+        print('[PASS] 所有 sanity check 通过')
         return 0
-    print(f'❌ {failed} 个 case 失败')
+    print(f'[FAIL] {failed} 个 case 失败')
     return 1
 
 

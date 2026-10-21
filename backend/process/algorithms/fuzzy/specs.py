@@ -7,10 +7,14 @@ masterdata 字段的依赖强度并不相同，继承别人的字典等于替别
 
 命名空间（易错点，务必看清再抄字段名）：
 - 本契约的 target_key == ORM 字段名（max_set_injection_speed）。
-  依据：FuzzyEngine.FIELD_NAME_ALIAS 是空 dict，即 fuzzy 的端口命名空间就是
-  业务/ORM 名；service 侧按本契约的白名单（`source_model` + `attr_name`）
-  从 ORM 提取，不是直接 `_to_full_dict(InjectionUnit)`（那是旧做法，
-  会把 ORM 元数据也传给算法）。
+  依据：本契约描述的是 machine_info / polymer_info / mold_info 三维上下文，
+  它的 target_key 就是 ORM 字段名；service 侧按本契约的白名单
+  （`source_model` + `attr_name`）从 ORM 提取，不是直接
+  `_to_full_dict(InjectionUnit)`（那是旧做法，会把 ORM 元数据也传给算法）。
+- ⚠️ 别把 process_parameter 也当成本契约的一部分：工艺参数走的是**另一套**
+  命名空间——由 `FuzzyEngine.FIELD_NAME_ALIAS` + `FIELD_INDEX_OFFSET` 翻译
+  （业务 1-based → 算法 0-based，如 `inj_spd_1` → `IV0`），
+  见 `parameter_optimize._normalize_field_name_by_spec`。
 - expert（initialize）用的是它自己的契约名（max_set_injection_velocity，
   其 attr_name 才指向 ORM 的 max_set_injection_speed）。
 - 跨算法抄名字的后果：audit 按 target_key 取值，名字对不上就取不到，

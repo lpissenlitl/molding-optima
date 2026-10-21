@@ -3,6 +3,10 @@ from django.core.paginator import Paginator, Page, EmptyPage, PageNotAnInteger
 from typing import List, Any, Type, Set
 from django.db import models
 
+# 分页默认值（与 extensions.schemas.PaginationBaseSchema 保持一致）
+DEFAULT_PAGE_NO = 1
+DEFAULT_PAGE_SIZE = 30
+
 def parse_ordering(sort: str, allowed_fields: set = None, strict = True) -> List[str]:
     """
     将类似 "+username,-age" 的排序字符串解析为 Django order_by 兼容的字段列表。
@@ -46,7 +50,17 @@ def paginate_queryset(
 ):
     """
     对 Queryset 进行分页。
+
+    page_no / page_size 传 None 时取默认值（1 / 30），与
+    extensions.schemas.PaginationBaseSchema 的字段默认保持一致。
+    各 service 的签名普遍写 `page_no: int = None, page_size: int = None`，
+    而 HTTP 层总是由 PaginationBaseSchema 填好值；但 service 被直接调用
+    （脚本 / 内部编排 / 测试）时不传分页参数会直接抛 TypeError
+    （Paginator(queryset, None)），故在此兜底。
     """
+    page_no = page_no or DEFAULT_PAGE_NO
+    page_size = page_size or DEFAULT_PAGE_SIZE
+
     paginator = Paginator(queryset, page_size)
     
     try:

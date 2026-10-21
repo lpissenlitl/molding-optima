@@ -1,7 +1,7 @@
 """
 Django management command: 导入规则方法（RuleMethod / 模糊规则）到数据库
 
-数据源：process/refs/rule_method_by_library.json（旧系统导出的按库分组的模糊规则清单）
+数据源：_refs/module/process/data/rule_method_by_library.json（旧系统导出的按库分组的模糊规则清单）
 
 策略：
 - 基础库（JSON 中 rule_type='基础库'）→ DB library_code='base'，主基础库，priority=100
@@ -30,7 +30,6 @@ Django management command: 导入规则方法（RuleMethod / 模糊规则）到�
 """
 
 import json
-from pathlib import Path
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -38,10 +37,12 @@ from django.db import transaction
 from identity.const import SYSTEM_DEMO_COMPANY_CODE
 from identity.models.company import Company
 from process.models.rules import RuleLibrary, RuleMethod
+from utils.console import configure_console_encoding
+from utils.refs import RULE_METHOD_JSON, resolve_data_path
 
 
 # 默认 JSON 路径
-DEFAULT_JSON_PATH = 'process/refs/rule_method_by_library.json'
+DEFAULT_JSON_PATH = RULE_METHOD_JSON
 
 # 基础库优先级（最高，定义为系统默认基础库）
 BASE_LIBRARY_PRIORITY = 100
@@ -126,7 +127,7 @@ def normalize_is_active(value) -> bool:
 
 
 class Command(BaseCommand):
-    help = '从 process/refs/rule_method_by_library.json 导入 RuleMethod 模糊规则'
+    help = f'从 {DEFAULT_JSON_PATH} 导入 RuleMethod 模糊规则'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -148,7 +149,9 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        json_path = Path(options['json'])
+        configure_console_encoding()
+
+        json_path = resolve_data_path(options['json'])
         dry_run = options['dry_run']
         force_update = options['force']
 
@@ -230,7 +233,8 @@ class Command(BaseCommand):
             if dry_run:
                 self.stdout.write(f'  [DRY-RUN] 将创建/复用: {lib_def["library_code"]}')
             elif created:
-                self.stdout.write(self.style.SUCCESS(f'  ✓ 创建规则库'))
+                # 注意：不要用 ✓（U+2713），Windows 控制台默认 GBK 编码无法输出
+                self.stdout.write(self.style.SUCCESS(f'  → 创建规则库'))
                 lib_imported += 1
             else:
                 self.stdout.write(f'  → 使用已有规则库')

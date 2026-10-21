@@ -1,7 +1,7 @@
 """
 Django management command: 导入 RuleKeyword 主数据
 
-数据源：process/refs/rule_keyword_curated.json（旧系统导出的关键词清单，已人工审校）
+数据源：_refs/module/process/data/rule_keyword_curated.json（旧系统导出的关键词清单，已人工审校）
 
 字段映射（按 2026-09-15 设计文档）：
   JSON.keyword_type (中文)  →  Model.category (3 类业务角色)
@@ -37,7 +37,6 @@ Django management command: 导入 RuleKeyword 主数据
 """
 
 import json
-from pathlib import Path
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -45,9 +44,11 @@ from django.db import transaction
 from identity.const import SYSTEM_DEMO_COMPANY_CODE
 from identity.models.company import Company
 from process.models.rules import RuleKeyword
+from utils.console import configure_console_encoding
+from utils.refs import RULE_KEYWORD_JSON, resolve_data_path
 
 
-DEFAULT_JSON_PATH = 'process/refs/rule_keyword_curated.json'
+DEFAULT_JSON_PATH = RULE_KEYWORD_JSON
 
 # ============================================================================
 # JSON.keyword_type (中文) → Model.category (英文) 的映射
@@ -220,7 +221,7 @@ def should_exclude(keyword_name: str) -> bool:
 
 
 class Command(BaseCommand):
-    help = '从 process/refs/rule_keyword_curated.json 导入 RuleKeyword 主数据'
+    help = f'从 {DEFAULT_JSON_PATH} 导入 RuleKeyword 主数据'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -242,7 +243,9 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        json_path = Path(options['json'])
+        configure_console_encoding()
+
+        json_path = resolve_data_path(options['json'])
         dry_run = options['dry_run']
         force_update = options['force']
 

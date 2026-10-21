@@ -6,6 +6,25 @@
 >
 > 适用范围：`backend/process/engines/fuzzy/` 模块与 `RuleMethod` / `RuleKeyword` / `RuleLibrary` 规则相关业务
 
+## 术语勘误（2026-10-20）
+
+本文档沿用 fuzzykit 旧架构的术语，其中一组命名**与实际语义已经脱节**。阅读时按下表理解：
+
+| 本文档中的旧称 | 实际含义 | 代码中的现名 |
+|---|---|---|
+| **工厂级**（factory） | 规则的结论是**数值/百分比**（`X_add_3.8` / `X_reduce_30%`）→ 走零阶 TSK 数值推理 | `numeric`（数值层） |
+| **兜底层**（fallback） | 规则的结论**算不出数值**：检查/弹窗文本（`X_adjust_请检查锁模力是否不合理。`）或模糊等级（`X_add_low`） | `advisory`（提示层） |
+| `RuleMethod.rule_level` | 已于 0005 迁移删除的字段 | `ResolvedRule.conclusion_kind`（运行时计算） |
+| `split_by_level()` | 按**结论形态**分流，不是按档位 | `split_by_conclusion_kind()` |
+
+⚠️ **两个易踩的坑**：
+
+1. **"层"指结论形态，不指规则库层级。** 同一个规则库里既有数值规则也有提示类规则；`base` / 产品库 / `specificity` 是另一套正交的维度（见 §6）。分流发生在**每条规则**上。
+2. **"level" 在本模块统一指「档位」**（low/medium/high，或 `HS_MAPPING_DICT` / `FUZZY_LEVELS` 里的分级）。所以旧名 `rule_level`（结论形态）与 `_match_defect_level` 里的局部变量 `rule_level`（缺陷档位）曾长期一名两义，现已分别改为 `conclusion_kind` 与 `defect_level`。
+
+本次改造仅涉及命名与注释，**推理行为零变化**。同时参见
+`_refs/system/algorithm/2026-10-20-fuzzy-inference-review-and-roadmap.md`（模糊推理能力评估与改良路线）。
+
 ## 0. 阅读指引
 
 | 角色 | 推荐阅读顺序 |

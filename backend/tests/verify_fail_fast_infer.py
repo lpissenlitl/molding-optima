@@ -1,19 +1,24 @@
 """
 verify_fail_fast_infer.py
 验证 parameter_optimize.infer 在算法无推荐时 fail-fast：
-- engine_recommendations 为空时抛 BizException(ERROR_OPERATION_FAILED)
+- _call_algorithms 返回空 recommendations 时抛 BizException(ERROR_OPERATION_FAILED)
 - 不进入 Step 5 事务（不创建新 ProcessParameter / 不更新 TuningRecord）
 
-策略：mock _recommendation_service.get_recommendations 返回空 recommendations，
+策略：patch 模块顶层 _call_algorithms 返回空结果，
 然后调一次 infer，断言：
 1. 抛 BizException
 2. e.error_code == ERROR_OPERATION_FAILED
 3. e.detail_message 含"推荐算法暂不可用"
 4. 没有新 ProcessParameter 创建（count 与调用前一致）
+
+注：2026-10-20 修复——上一阶段重构把 helper 从类内移到模块顶层函数，
+原测试 patch 类属性（ParameterOptimizeService._xxx）已全部失效，
+改为 patch 模块级 _opt_mod._call_algorithms。
 """
 
 import os
 import sys
+
 import django
 
 # 让 Django settings 可用
@@ -21,65 +26,51 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 django.setup()
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from extensions.exceptions import BizException, ERROR_OPERATION_FAILED
+from process.services import parameter_optimize as _opt_mod
 from process.services.parameter_optimize import ParameterOptimizeService
 from process.models import ProcessParameter, TuningRecord
 
 
-def run_case(case_name, feedback, mock_return):
+def run_case(case_name, feedback, algorithm_result):
     print(f"\n[{case_name}]")
     print(f"  feedback={feedback}")
-    print(f"  mock get_recommendations 返回={mock_return}")
+    print(f"  mock _call_algorithms 返回={algorithm_result}")
 
     before_param_count = ProcessParameter.objects.count()
     before_record_count = TuningRecord.objects.count()
 
-    # 先创建 instance（__init__ 会触发 _ensure_engines_registered lazy 注册 FuzzyEngine，
-    # 但会被后面的 instance 字段 mock 覆盖）
     service = ParameterOptimizeService()
 
-    # mock：跳过所有 DB 副作用 + 让 recommendation_service 返回空
+    # patch 模块顶层 helper（重构后 helper 已移出类）
+    # _resolve_parent / _resolve_baseline / _extract_* 需 mock 掉（无真实 condition）
     with patch.object(
-        ParameterOptimizeService,
-        "_validate_feedback",
-    ), patch.object(
-        ParameterOptimizeService,
+        _opt_mod,
         "_resolve_parent",
         return_value=(MagicMock(), MagicMock()),
     ), patch.object(
-        ParameterOptimizeService,
-        "_build_baseline",
+        _opt_mod,
+        "_resolve_baseline",
         return_value={"dummy": 1},
     ), patch.object(
-        ParameterOptimizeService,
-        "_apply_recommendations_to_baseline",
-        return_value={"dummy": 1},
+        _opt_mod,
+        "_extract_machine_info",
+        return_value={},
     ), patch.object(
-        ParameterOptimizeService,
-        "_build_suggestion_payload",
-        return_value={"groups": []},
+        _opt_mod,
+        "_extract_polymer_info",
+        return_value={},
     ), patch.object(
-        ParameterOptimizeService,
-        "_update_previous_tuning_record",
+        _opt_mod,
+        "_extract_mold_info",
+        return_value={},
     ), patch.object(
-        ParameterOptimizeService,
-        "_update_previous_recommendation_is_adopted",
-    ), patch.object(
-        ParameterOptimizeService,
-        "_create_new_parameter",
-    ), patch.object(
-        ParameterOptimizeService,
-        "_create_new_tuning_record",
-    ), patch.object(
-        ParameterOptimizeService,
-        "_create_new_recommendation",
-    ), patch.object(
-        service,
-        "_recommendation_service",
-    ) as mock_svc:
-        mock_svc.get_recommendations.return_value = mock_return
-
+        _opt_mod,
+        "_call_algorithms",
+        return_value=algorithm_result,
+    ):
         try:
             service.infer(
                 condition_id=1,
@@ -127,21 +118,21 @@ def main():
         (
             "case1_无可用引擎",
             {"defect": [{"keyword_id": 1, "keyword_name": "DEFECTFREE"}]},
-            {"recommendations": [], "engine_sources": {}, "best_recommendation": None},
+            {"recommendations": [], "algorithm_sources": {}, "best_recommendation": None},
         ),
         # 模拟 FuzzyEngine 失败、其他引擎也未命中 → 空 recommendations
         (
             "case2_引擎失败_无recommendations",
             {"defect": [{"keyword_id": 1, "keyword_name": "DEFECTFREE"}]},
-            {"recommendations": [], "engine_sources": {"fuzzy.factory": []}, "best_recommendation": None},
+            {"recommendations": [], "algorithm_sources": {"fuzzy.factory": []}, "best_recommendation": None},
         ),
     ]
 
     passed = 0
     total = 0
-    for case_name, feedback, mock_return in cases:
+    for case_name, feedback, algorithm_result in cases:
         total += 1
-        if run_case(case_name, feedback, mock_return):
+        if run_case(case_name, feedback, algorithm_result):
             passed += 1
 
     print("\n" + "=" * 70)

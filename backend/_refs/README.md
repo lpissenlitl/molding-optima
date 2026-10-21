@@ -20,7 +20,7 @@ backend/_refs/
 
 ## 📂 system/（25 个文件）—— 跨模块基础设施
 
-### algorithm/（16 篇）—— 物理建模 / 算法重构
+### algorithm/（17 篇）—— 物理建模 / 算法重构
 
 | 文件 | 说明 |
 |---|---|
@@ -40,6 +40,7 @@ backend/_refs/
 | `2026-07-05-suckback-decompression-physics-design.md` | 抽吸/释压物理设计 |
 | `2026-07-05-temperature-physics-design.md` | 温度物理设计 |
 | `2026-07-05-vp-switch-mode-physics-design.md` | VP 切换模式物理设计 |
+| `2026-09-30-infer-context-boundary-redesign.md` | 推理入参边界重构设计 |
 
 ### ai/（5 篇）—— AI 架构
 
@@ -57,15 +58,14 @@ backend/_refs/
 |---|---|
 | `process-models-design.md` | 工艺数据模型设计 |
 
-### verify/（3 篇）—— 验证脚本
+### verify/（2 篇）—— 验证脚本
 
 | 文件 | 说明 |
 |---|---|
 | `verify_parameters_count_fix.py` | parameters_count 字段修复验证 |
-| `verify_statistics_service.py` | statistics service 验证 |
 | `verify_statistics_url.py` | statistics URL 验证 |
 
-## 📂 module/（22 个文件）—— 模块设计
+## 📂 module/（21 个文件）—— 模块设计
 
 ### process/（8 篇设计文档 + data/ 子目录）
 
@@ -131,9 +131,11 @@ Session 工作记录和交接文档放在 **frontend/_refs/session/**（前端�
 - 2026-09-24：从 `docs/` 迁移 3 个后端相关文档（process）
 - 2026-09-24：`refs/backend/` → 移动到 `backend/_refs/`（前后端拆分）
 - 2026-09-24：补迁 `backend/process/refs/` 的 7 个主文件到 `module/process/data/`，删除 `_archive/`（按其 README 建议）
+- 2026-10-20：删除 `backend/process/refs/` 原目录；导入脚本改用 `backend/_refs/module/process/data/`，路径统一由 `backend/utils/refs.py` 解析
 
 ## ⚠️ 维护说明
 
 - 原 `backend/_dev_refs/` 和 `backend/filecenter/_dev_refs/` 目录暂未删除，如需清理请先确认所有引用方已切换。
 - 新增 dev_ref 文档请按"是否跨模块"放到 `system/<sub>/` 或 `module/<name>/`。
-- `process/refs/` 原目录暂未删除（保留 7 个主文件作为追溯）；`_archive/` 已删除（按其 README 建议）。
+- `process/refs/` 原目录已删除（数据文件已全部迁至 `module/process/data/`）；`_archive/` 已删除（按其 README 建议）。
+- `module/process/data/` 下的 JSON 是导入脚本的数据源，路径由 `backend/utils/refs.py` 统一解析（基于 `settings.BASE_DIR`，不依赖执行命令时的工作目录）。

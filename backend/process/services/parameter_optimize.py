@@ -4,7 +4,8 @@
 - FromCondition：POST /api/processes/algorithms/optimize/
 - FromProvided：POST /api/processes/algorithms/optimize-from-provided/
 
-职责：Step 1 反查 parent → Step 2 构建基线 → Step 3 调算法 → Step 4 原子落库（仅 FromCondition）
+职责：Step 0 校验 feedback → Step 1 反查 parent → Step 2 构建基线
+      → Step 3 调算法 → Step 5 原子落库（仅 FromCondition）
 
 设计要点：
 - infer 只处理算法优化（人工调整走 manual-adjust 接口）
@@ -13,10 +14,8 @@
 - is_adopted 自动维护：下一轮 ineffective 时改 False
 - FromCondition 落库，FromProvided 纯推理（无 DB 读写，与 initialize.infer_from_provided 同构）
 
-代码组织（2026-10-15 整改）：
-- 模块顶层放所有 helper（纯函数，不依赖 self）
-- 类内只保留 infer / infer_from_provided 两个公开入口 + __init__
-- 遵循 Guido / Hettinger 的"static method 没什么用"建议
+代码组织：helper 全部为模块顶层函数（不依赖 self），类内只保留
+infer / infer_from_provided 两个公开入口 + __init__。
 """
 import logging
 from typing import Dict, Any, List, Optional, Tuple, TypedDict
@@ -30,7 +29,8 @@ from process.models import (
     Recommendation,
     TuningRecord,
 )
-from process.algorithms.base import AlgorithmRegistry, Recommendation
+from process.algorithms.base import AlgorithmRegistry
+from process.algorithms.base import Recommendation as AlgoRecommendation
 from process.algorithms.fuzzy import FuzzyEngine  # 用于字段命名约束（FIELD_NAME_ALIAS）
 from process.algorithms.fuzzy.specs import (
     OPTIMIZE_MACHINE_INFO_FIELDS,
@@ -41,14 +41,20 @@ from process.algorithms.fuzzy.specs import (
 _logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# 模块级 lazy 引擎注册（避免重复注册 + 避免循环依赖）
-# ============================================================================
+# --- 模块级 lazy 引擎注册（避免重复注册 + 避免循环依赖） ---
 _engines_registered = False
 
 
 def _ensure_engines_registered() -> None:
-    """模块级 lazy 触发引擎注册（幂等）"""
+    """模块级 lazy 触发引擎注册（幂等）
+
+    显式注册两个 optimization 引擎：
+    - `fuzzy`：模糊推理（规则库驱动）
+    - `empirical`：经验推理（硬编码经验表，兜底）
+
+    不依赖 `process/algorithms/__init__.py` 的隐式 import 副作用：
+    那种注册方式只要有人调整 import 顺序就会静默丢失引擎。
+    """
     global _engines_registered
     if _engines_registered:
         return
@@ -58,27 +64,29 @@ def _ensure_engines_registered() -> None:
             AlgorithmRegistry.register("fuzzy", FuzzyEngine())
     except Exception as e:  # noqa: BLE001
         _logger.warning("[optimize] FuzzyEngine 注册失败: %s", e)
+    try:
+        from process.algorithms.empirical.empirical_algorithm import EmpiricalReasoning
+        if not AlgorithmRegistry.get_algorithm("empirical"):
+            AlgorithmRegistry.register("empirical", EmpiricalReasoning())
+    except Exception as e:  # noqa: BLE001
+        _logger.warning("[optimize] EmpiricalReasoning 注册失败: %s", e)
     _engines_registered = True
 
 
-# ============================================================================
-# 算法接口契约（AlgorithmContext schema）
+# --- 算法接口契约（AlgorithmContext schema） ---
 #
-# 设计（2026-09-30 确认）：
-# - 虽然算法侧 AIEngineBase.recommend 接受 Dict[str, Any]（不限严格 schema），
-#   但 Step 2 → Step 3 之间应有明确的契约文档，否则字段缺失只能运行时发现。
-# - 使用 TypedDict：保留 Dict 调用风格 + 提供类型提示 + 0 运行成本。
-# - _REQUIRED_CONTEXT_KEYS 是运行期 fail-fast 验证集合。
-# ============================================================================
+# 算法侧 recommend 接受 Dict[str, Any]（不限严格 schema），但 Step 2 → Step 3
+# 之间需要明确契约，否则字段缺失只能运行时发现。TypedDict 保留 Dict 调用风格
+# + 提供类型提示 + 0 运行成本。
 class AlgorithmContext(TypedDict):
     """算法引擎输入 context 的标准格式
 
     由 Step 2 _compose_algorithm_context 构造，Step 3 _call_algorithms 使用。
 
     字段语义（均为子对象，避免平铺字符串的语义丢失）：
-    - machine_info: 设备信息（按 injection_index 选中的 InjectionUnit 完整 dict，含 HMI 范围字段）
-    - polymer_info: 材料信息（必填 dict，算法内部按需取 abbreviation 等。允许为空 {}）
-    - mold_info: 模具信息（必填 dict，算法内部按需取 product_category 等。允许为空 {}）
+    - machine_info: 设备信息（按 specs 白名单从 InjectionMoldingMachine + 选中的 InjectionUnit 提取）
+    - polymer_info: 材料信息（按 specs 白名单从 Polymer 提取，算法内部按需取 abbreviation 等）
+    - mold_info: 模具信息（按 specs 白名单从 Mold 提取，算法内部按需取 product_category 等）
     - process_parameter: 工艺参数（已翻译为算法侧命名，如 IL1/NT/CT）
     - feedback: 反馈信息（整体透传，不拆分）
 
@@ -95,9 +103,7 @@ class AlgorithmContext(TypedDict):
 _REQUIRED_CONTEXT_KEYS = frozenset(AlgorithmContext.__annotations__.keys())
 
 
-# ============================================================================
-# 参数分类（按 prefix 分组，与 Recommendation.recommendations 对齐）
-# ============================================================================
+# --- 参数分类（按 prefix 分组，与 Recommendation.recommendations 对齐） ---
 _PARAM_CATEGORY_RULES = (
     ('inj_', ('注射参数', 'mdi:speedometer')),
     ('hold_', ('保压参数', 'mdi:gauge')),
@@ -134,9 +140,7 @@ def _direction_from_delta(before: Optional[float], after: Optional[float]) -> Op
     return 'hold'
 
 
-# ============================================================================
-# snapshot 字段排除集（用于 _snapshot_parameter）
-# ============================================================================
+# --- snapshot 字段排除集（用于 _snapshot_parameter） ---
 _NON_SNAPSHOT_FIELDS = frozenset({
     # 元数据
     "id", "created_at", "updated_at", "deleted", "deleted_at", "is_deleted",
@@ -151,9 +155,7 @@ _NON_SNAPSHOT_FIELDS = frozenset({
 _DEFECTFREE_KEYWORD_NAME = "DEFECTFREE"
 
 
-# ============================================================================
-# ORM 序列化 + 字段命名翻译 helper
-# ============================================================================
+# --- ORM 序列化 + 字段命名翻译 helper ---
 def _to_full_dict(instance: Any) -> Dict[str, Any]:
     """ORM → 完整 dict（仅排除 ORM 关系字段）"""
     if instance is None:
@@ -168,32 +170,90 @@ def _to_full_dict(instance: Any) -> Dict[str, Any]:
 def _normalize_field_name_by_spec(
     params: Dict[str, Any],
     field_spec: Dict[str, str],
+    index_offset: Optional[Dict[str, int]] = None,
+    family_spec: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """按算法侧声明的字段命名约束做字段名翻译（业务 → 算法）
 
     Port-Adapter 模式：算法侧声明字段命名约定（FIELD_NAME_ALIAS），
     数据准备层按约束翻译（不感知业务语义）。
+
+    三类映射：
+
+    1. 完整字段名：``noz_temp`` → ``NT``
+    2. 分段前缀 + 序号偏移：``inj_spd_1`` → ``IV0``
+       （新序号 = 原序号 + offset；规则库段号以 0-based 为主）
+    3. 整段族：``brl_temp_1`` → ``BT``、``brl_temp_2`` → ``BT2``
+       （规则库用单一 BT 表示整体料筒温度，业务侧是 brl_temp_1..9）
     """
     if not field_spec:
         return dict(params)
 
+    index_offset = index_offset or {}
+    family_spec = family_spec or {}
+
     normalized: Dict[str, Any] = {}
     for key, value in params.items():
+        # 1) 整段族（无序号）：brl_temp → BT
+        if key in family_spec:
+            normalized[family_spec[key]] = value
+            continue
+
+        prefix, sep, suffix = key.rpartition('_')
+
+        # 2) 整段族（带序号）：brl_temp_1 → BT / brl_temp_2 → BT2
+        if sep and suffix.isdigit() and prefix in family_spec:
+            family_name = family_spec[prefix]
+            new_key = family_name if int(suffix) == 1 else f"{family_name}{suffix}"
+            normalized[new_key] = value
+            continue
+
+        # 3) 完整字段名：noz_temp → NT
         if key in field_spec:
             normalized[field_spec[key]] = value
             continue
-        prefix, sep, suffix = key.rpartition('_')
+
+        # 4) 分段前缀 + 序号偏移：inj_spd_1 → IV0
         if sep and suffix.isdigit() and prefix in field_spec:
-            new_key = f"{field_spec[prefix]}{suffix}"
-        else:
-            new_key = key
-        normalized[new_key] = value
+            offset = index_offset.get(prefix, 0)
+            normalized[f"{field_spec[prefix]}{int(suffix) + offset}"] = value
+            continue
+
+        normalized[key] = value
     return normalized
 
 
-# ============================================================================
-# Step 0 — feedback 校验（两个 inference 入口共用）
-# ============================================================================
+def _to_business_param_name(param_name: str) -> str:
+    """算法字段名 → 业务字段名（无法翻译时原样返回）
+
+    算法侧返回的 ``param`` 是算法命名空间（``IV0`` / ``BT`` / ...），
+    业务侧字段名是 ``inj_spd_1`` / ``brl_temp_1`` / ...。
+    两者不在同一命名空间：不翻译就永远匹配不上 baseline，
+    推荐值会被静默丢弃（表现为“算法有推荐，但参数没变”）。
+    """
+    if not param_name or not isinstance(param_name, str):
+        return param_name
+    return FuzzyEngine.to_business_name(param_name) or param_name
+
+
+def _param_label(business_name: str) -> str:
+    """业务字段名 → 中文标签（取 ProcessParameter 字段的 verbose_name）
+
+    例：``inj_pres_1`` → ``一段注射压力``。
+
+    建议文案面向的是工艺员，必须用中文标签而不是 ``inj_pres_1`` / ``IP0``。
+    参数不在 ProcessParameter 里时（规则库专用参数如 ``IPOS`` / ``CUSION``）
+    回落到业务字段名本身。
+    """
+    if not business_name:
+        return business_name
+    try:
+        return ProcessParameter._meta.get_field(business_name).verbose_name
+    except Exception:  # noqa: BLE001 —— 字段不存在 / 非模型字段
+        return business_name
+
+
+# --- Step 0：feedback 校验（两个 inference 入口共用） ---
 def _validate_feedback(feedback: Dict[str, Any]) -> None:
     """Step 0 —— feedback 防御性校验（与前端 validateFeedback 是同一套约束镜像）
 
@@ -217,9 +277,7 @@ def _validate_feedback(feedback: Dict[str, Any]) -> None:
                 raise BizException(ERROR_REQUIRED_FIELD, f"第 {i} 项缺陷未填写缺陷位置")
 
 
-# ============================================================================
-# Step 1 — ORM 反查
-# ============================================================================
+# --- Step 1：ORM 反查 ---
 def _resolve_parent(
     condition_id: int,
     parent_seq_idx: int,
@@ -254,20 +312,15 @@ def _resolve_parent(
     return condition, parent_param
 
 
-# ============================================================================
-# Step 2 — 解析 baseline
-# ============================================================================
+# --- Step 2：解析 baseline ---
 def _resolve_baseline(
     user_parameter: Optional[Dict[str, Any]],
     base_param_orm: ProcessParameter,
 ) -> Dict[str, Any]:
     """Step 2 —— 解析 baseline（与 condition+seq_idx 对应的基准 parameter 值）
 
-    base_param_orm 命名说明：
-    - DB 字段 ProcessParameter.parent_param 是模型层定义，
-      表示「基于哪个参数进行调整」，这个语义保留在数据模型中
-    - 本函数形参叫 base_param_orm，强调「基准起点 / 推理上下文」语义
-      （区别于落库时 parent_param 的父子链语义）
+    base_param_orm 与 ORM 字段 parent_param 指同一实例，但语义不同：
+    base = 推理上下文，parent = 落库父子链。
 
     优先级：
     1. user_parameter 非空 → 先把入参字段持久化到 base_param_orm
@@ -304,14 +357,13 @@ def _snapshot_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
     return snapshot
 
 
-# ============================================================================
-# Step 3 — 算法调用与上下文构造
-# ============================================================================
+# --- Step 3：算法调用与上下文构造 ---
 def _empty_algorithm_result() -> Dict[str, Any]:
     """统一空返回结构（避免在 _call_algorithms 里重复字面量）"""
     return {
         "recommendations": [],
         "algorithm_sources": {},
+        "algorithm_names": {},
         "best_recommendation": None,
     }
 
@@ -322,13 +374,15 @@ def _call_algorithms(context: AlgorithmContext) -> Dict[str, Any]:
     Returns:
         {
             'recommendations': [...],       # 合并后的扁平推荐列表
-            'algorithm_sources': {name: [...]},
+            'algorithm_sources': {subtype: [...]},   # key = algorithm_subtype（fuzzy / empirical）
+            'algorithm_names': {name: [...]},        # key = algorithm_name（展示用）
             'best_recommendation': {...} | None,
         }
 
-    TODO（后续迭代）：
-    - trend 后处理
-    - 多引擎同参数合并
+    说明：`algorithm_sources` 的 key 用 **subtype** 而不是 name。
+    下游 `_resolve_primary_source` 按 subtype 优先级表（fuzzy / llm / ...）
+    匹配 primary source；用中文 name（'模糊推理'）当 key 时永远匹配不到，
+    `source_type` 恒为 'none'。
     """
     if not context:
         _logger.warning("[optimize] _call_algorithms context 为空")
@@ -341,27 +395,31 @@ def _call_algorithms(context: AlgorithmContext) -> Dict[str, Any]:
     engines = AlgorithmRegistry.get_available_algorithms(context)
     engines = sorted(
         engines,
-        key=lambda a: AlgorithmRegistry.get_priority(a.algorithm_name),
+        key=lambda a: AlgorithmRegistry.get_priority(a.algorithm_subtype),
     )
     if not engines:
         _logger.info("[optimize] 无可用引擎")
         return _empty_algorithm_result()
 
-    all_recommendations: List[Recommendation] = []
+    all_recommendations: List[AlgoRecommendation] = []
     algorithm_sources: Dict[str, List[Dict[str, Any]]] = {}
+    algorithm_names: Dict[str, List[Dict[str, Any]]] = {}
     for algorithm in engines:
         try:
             recs = algorithm.recommend(context) or []
         except Exception as e:  # noqa: BLE001
             _logger.warning("[optimize] 引擎 %s 推理失败: %s", algorithm.algorithm_name, e)
             recs = []
-        algorithm_sources[algorithm.algorithm_name] = [r.to_dict() for r in recs]
+        payload = [r.to_dict() for r in recs]
+        algorithm_sources[algorithm.algorithm_subtype] = payload
+        algorithm_names[algorithm.algorithm_name] = payload
         all_recommendations.extend(recs)
 
     merged = [r.to_dict() for r in all_recommendations]
     return {
         "recommendations": merged,
         "algorithm_sources": algorithm_sources,
+        "algorithm_names": algorithm_names,
         "best_recommendation": merged[0] if merged else None,
     }
 
@@ -381,7 +439,10 @@ def _compose_algorithm_context(
     - 上下文组装
     """
     algorithm_params = _normalize_field_name_by_spec(
-        parameter, FuzzyEngine.FIELD_NAME_ALIAS,
+        parameter,
+        FuzzyEngine.FIELD_NAME_ALIAS,
+        FuzzyEngine.FIELD_INDEX_OFFSET,
+        FuzzyEngine.FAMILY_FIELD_ALIAS,
     )
     return {
         'machine_info': machine_info,
@@ -392,9 +453,7 @@ def _compose_algorithm_context(
     }
 
 
-# ============================================================================
-# Step 3 字段提取（按 specs.py 白名单）
-# ============================================================================
+# --- Step 3：字段提取（按 specs.py 白名单） ---
 def _select_injection_unit(condition: ProcessCondition) -> Optional[Any]:
     """按 condition.injection_index 从 InjectionMoldingMachine.injection_units 选一台
 
@@ -426,9 +485,8 @@ def _extract_orm_fields_by_spec(
     遍历 spec_dict，对每个 entry 按 source_model 选对应 ORM 实例，
     用 getattr 取 attr_name 值。None 值不纳入返回 dict。
 
-    与 field_contract 的关系：
-    - field_contract 提供【校验机制】（audit_field_completeness）
-    - 本函数提供【提取机制】（按 spec 从 ORM 取值）
+    与 field_contract 的关系：field_contract 提供【校验机制】
+    （audit_field_completeness），本函数提供【提取机制】。
     """
     extracted: Dict[str, Any] = {}
     for spec_key, spec in spec_dict.items():
@@ -448,10 +506,8 @@ def _extract_orm_fields_by_spec(
 def _extract_machine_info(condition: ProcessCondition) -> Dict[str, Any]:
     """按 OPTIMIZE_MACHINE_INFO_FIELDS 契约提取 machine_info（白名单）
 
-    跨两张表合并：
-    - InjectionMoldingMachine.drive_system（机器主表）
-    - InjectionUnit.max_set_*（按 injection_index 选 unit）
-
+    跨两张表合并：InjectionMoldingMachine.drive_system（机器主表）
+    + InjectionUnit.max_set_*（按 injection_index 选 unit）。
     只返回 specs 声明的字段；ORM 元数据不传给算法。
     """
     machine = condition.injection_machine
@@ -492,17 +548,19 @@ def _extract_mold_info(condition: ProcessCondition) -> Dict[str, Any]:
     )
 
 
-# ============================================================================
-# Step 4 — 应用推荐 + 构造 suggestion
-# ============================================================================
+# --- Step 4：应用推荐 + 构造 suggestion ---
 def _apply_recommendations_to_baseline(
     baseline: Dict[str, Any],
     algorithm_recommendations: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """Step 4a —— 用推荐值覆盖基线字段（仅覆盖基线中存在的字段）"""
+    """Step 4a —— 用推荐值覆盖基线字段（仅覆盖基线中存在的字段）
+
+    注意：算法返回的 ``param`` 是算法命名空间（``IV0`` / ``BT``），
+    必须先译回业务字段名（``inj_spd_1`` / ``brl_temp_1``）才能命中 baseline。
+    """
     new_parameter = dict(baseline)
     for rec in algorithm_recommendations:
-        param_name = rec.get("param")
+        param_name = _to_business_param_name(rec.get("param"))
         recommended_value = rec.get("recommended_value")
         if param_name and param_name in new_parameter and recommended_value is not None:
             new_parameter[param_name] = recommended_value
@@ -524,25 +582,58 @@ def _resolve_primary_source(algorithm_sources: Dict[str, List[Dict[str, Any]]]) 
     return None
 
 
-def _build_description(rec: Dict[str, Any]) -> str:
-    """构造建议文本。优先 reason，否则 "调整 {param} {direction} → {value}"。"""
-    reason = rec.get("reason") or ""
-    if reason:
-        return reason
+def _format_value(value: Any) -> str:
+    """数值 → 建议文案用的短字符串（最多 2 位小数，去掉尾随 0）
 
-    param = rec.get("param", "")
+    例：``5.61938912816577`` → ``5.62``；``70.0`` → ``70``。
+
+    模糊推理的推荐值是浮点运算结果，直接渲染会是一长串小数，
+    工艺员读不动也没法照着调机。
+    """
+    if value is None:
+        return ''
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if abs(num - round(num)) < 1e-9:
+        return str(int(round(num)))
+    return f"{num:.2f}".rstrip('0').rstrip('.')
+
+
+def _build_description(rec: Dict[str, Any]) -> str:
+    """构造面向用户的建议文案。
+
+    契约（前端 types/optimization.ts 的 SuggestionItem.description）：
+    形如 ``降低一段注射压力：70 → 60``，而不是算法内部状态。
+
+    - 参数名用中文标签（``一段注射压力``），不用 ``inj_pres_1`` / ``IP0``
+    - 方向优先取 ``rec['direction']``（经验推理只给方向不给数值，
+      从 before/after 推不出来）；没有则从数值差推
+    - 经验推理无数值（recommended_value=None）→ 只说方向
+    - 检查/弹窗类（``fuzzy.check``）→ 保留算法给出的提示文本
+    """
+    label = rec.get("param_label") or rec.get("param", "")
     before = rec.get("current_value")
     after = rec.get("recommended_value")
-    direction = _direction_from_delta(before, after)
-    direction_cn = {
-        "increase": "增大",
-        "decrease": "减小",
-        "hold": "保持",
-    }.get(direction or "", "调整")
+    direction = rec.get("direction") or _direction_from_delta(before, after)
+    source = rec.get("source") or ""
 
-    if before is not None and after is not None:
-        return f"{direction_cn} {param}: {before} → {after}"
-    return f"{direction_cn} {param}: {after}"
+    # 检查/弹窗类建议：算法已给出提示文本，直接用
+    if source == "fuzzy.check":
+        return rec.get("reason") or f"建议检查{label}"
+
+    prefix = "经验推理建议" if source.startswith("empirical") else "模糊推理建议"
+    action_cn = _DIRECTION_CN.get(direction or "", "调整")
+
+    if before is not None and after is not None and before != after:
+        return (
+            f"{prefix}{action_cn}{label}："
+            f"{_format_value(before)} → {_format_value(after)}"
+        )
+    if direction in ("increase", "decrease"):
+        return f"{prefix}{action_cn}{label}"
+    return f"{prefix}维持{label}不变"
 
 
 def _extract_rule_refs(rec: Dict[str, Any]) -> List[str]:
@@ -551,6 +642,55 @@ def _extract_rule_refs(rec: Dict[str, Any]) -> List[str]:
     if isinstance(refs, list):
         return [str(r) for r in refs]
     return []
+
+
+# --- 调整方向 → 中文（建议文案用） ---
+_DIRECTION_CN = {
+    "increase": "提高",
+    "decrease": "降低",
+    "hold": "保持",
+    "check": "检查",
+}
+
+
+def _normalize_recommendations(
+    algorithm_recommendations: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """把算法推荐规范化为「面向用户」的形态（落库与展示共用同一份）
+
+    三件事：
+
+    1. ``param`` 译回业务字段名（算法名 → 业务名）
+    2. 丢弃**零变化项**（推荐值 == 当前值）：这些来自激活度 ~0 的规则，
+       是数值噪声（置信度 1e-32 量级），写回业务字段也是原值，
+       只会把"保持不变"当成建议推给工艺员
+    3. ``reason`` 重写为业务文案（参数名用中文标签）
+
+    必须在**落库前**调用：``Recommendation.recommendations`` 存的就是这份，
+    否则库里存的是 ``模糊推理 (sources=['numeric'])`` 这种内部状态。
+
+    Returns:
+        规范化后的推荐列表（元素就地修改）
+    """
+    normalized: List[Dict[str, Any]] = []
+    for rec in algorithm_recommendations:
+        before = rec.get("current_value")
+        after = rec.get("recommended_value")
+
+        # 零变化项：推荐值与当前值实质相同 → 丢弃
+        if before is not None and after is not None:
+            try:
+                if abs(float(after) - float(before)) < 1e-9:
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        param = _to_business_param_name(rec.get("param"))
+        rec["param"] = param
+        rec["param_label"] = _param_label(param)
+        rec["reason"] = _build_description(rec)
+        normalized.append(rec)
+    return normalized
 
 
 def _build_suggestion_payload(
@@ -569,10 +709,11 @@ def _build_suggestion_payload(
         return {"source_type": source_type, "groups": []}
 
     # 一致性过滤：与 _apply_recommendations_to_baseline 严格对齐
+    # （过滤与分类都按**业务字段名**，算法命名空间的前缀规则匹配不到）
     if baseline is not None:
         filtered_recs = [
             rec for rec in algorithm_recommendations
-            if rec.get("param") in baseline
+            if _to_business_param_name(rec.get("param")) in baseline
         ]
     else:
         filtered_recs = algorithm_recommendations
@@ -582,18 +723,24 @@ def _build_suggestion_payload(
 
     grouped: Dict[str, Dict[str, Any]] = {}
     for rec in filtered_recs:
-        param_name = rec.get("param", "")
+        param_name = _to_business_param_name(rec.get("param", ""))
         category, icon = _categorize_param(param_name)
 
         if category not in grouped:
             grouped[category] = {"category": category, "icon": icon, "items": []}
 
         grouped[category]["items"].append({
-            "description": _build_description(rec),
-            "direction": _direction_from_delta(
-                rec.get("current_value"),
-                rec.get("recommended_value"),
+            "param": param_name,
+            "description": rec.get("reason") or _build_description(rec),
+            "direction": (
+                rec.get("direction")
+                or _direction_from_delta(
+                    rec.get("current_value"),
+                    rec.get("recommended_value"),
+                )
             ),
+            "current_value": rec.get("current_value"),
+            "recommended_value": rec.get("recommended_value"),
             "rule_refs": _extract_rule_refs(rec),
         })
 
@@ -603,18 +750,7 @@ def _build_suggestion_payload(
     }
 
 
-# ============================================================================
-# 纯算法内核（Step 3+4）—— 对应 parameter_initialize._infer_kernel
-#
-# 设计（2026-10-15 二次调整）：从模块顶层函数改为类内 @staticmethod
-# - 与 parameter_initialize._infer_kernel 同构同同名（都在类内，都是私有）
-# - 两个入口共用（infer / infer_from_provided）
-# ============================================================================
-
-
-# ============================================================================
-# 落库 helper（DB 操作，纯函数 / 无 self 依赖）
-# ============================================================================
+# --- 落库 helper（DB 操作，纯函数 / 无 self 依赖） ---
 def _update_previous_tuning_record(
     parent_param: ProcessParameter,
     defect_feedbacks: List[Dict[str, Any]],
@@ -673,12 +809,26 @@ def _create_new_parameter(
     parent_param: ProcessParameter,
     parameters_dict: Dict[str, Any],
 ) -> ProcessParameter:
-    """Step 5.3 —— 创建新 ProcessParameter（param_source='system_inferred'）"""
+    """Step 5.3 —— 创建新 ProcessParameter（param_source='system_inferred'）
+
+    parameters_dict 来自 baseline（_to_full_dict 全量快照），含父记录的
+    id / created_at / param_source / seq_idx 等系统字段，直接展开会与
+    create() 的显式入参冲突（multiple values for keyword argument），
+    故按 _NON_SNAPSHOT_FIELDS 过滤后再落库。
+    """
+    writable = {
+        k: v for k, v in parameters_dict.items()
+        if k not in _NON_SNAPSHOT_FIELDS
+    }
+    # 租户归属继承父记录（同 condition 内必一致）
+    writable["company_id"] = parent_param.company_id
+    writable["organization_id"] = parent_param.organization_id
+
     return ProcessParameter.objects.create(
         process_condition=condition,
         parent_param=parent_param,
         param_source="system_inferred",
-        **parameters_dict,
+        **writable,
     )
 
 
@@ -711,21 +861,14 @@ def _create_new_recommendation(
     )
 
 
-# ============================================================================
-# infer 服务（主类）
-# ============================================================================
+# --- infer 服务（主类） ---
 class ParameterOptimizeService:
     """工艺优化 infer 服务 —— 调用链路编排
 
     设计约束：
     - 算法侧是接口契约：本服务只负责编排，不实现具体推理
     - 所有 Step 在一个原子事务内完成（避免半成品落库）
-
-    类的职责边界（2026-10-15 整改）：
-    - 仅保留 2 个公开入口 infer / infer_from_provided + __init__
-    - 其他 helper 全部为模块顶层函数（不依赖 self / 遵循 Python 之父 Guido 的
-      "static method 没什么用" 建议）
-    - 调用形式与 view 层一致：service.infer() / service.infer_from_provided()
+    - 公开入口：infer / infer_from_provided（调用形式与 view 层一致）
     """
 
     def __init__(self):
@@ -771,16 +914,12 @@ class ParameterOptimizeService:
         )
 
         # ---------- Step 2: 解析 baseline（用户入参优先，否则 ORM）----------
-        # 注意：_resolve_baseline 的形参 base_param_orm 与 ORM 字段 parent_param
-        # 指同一个实例，但语义不同：base = 推理上下文，parent = 落库父子链
         baseline = _resolve_baseline(
             user_parameter=parameter,
             base_param_orm=parent_param_orm,
         )
 
         # ---------- Step 3: 提取 3 个算法入参 dict（按 specs.py 白名单）----------
-        # service 层只传 specs 声明的字段，不传 ORM 元数据也不传其他业务字段。
-        # 跨表场景：machine_info 从 InjectionMoldingMachine + InjectionUnit 合并。
         machine_info = _extract_machine_info(condition_orm)
         polymer_info = _extract_polymer_info(condition_orm)
         mold_info = _extract_mold_info(condition_orm)
@@ -867,10 +1006,6 @@ class ParameterOptimizeService:
         - 三维上下文由调用方直传
         - 无 Step 1 反查 parent、无 Step 5 落库
         - 响应不含 recommendation_id / new_parameter.parameter_id / seq_idx
-
-        设计（2026-10-15 二次调整）：从顶层函数改回类内实例方法
-        - 保持与 view 层调用形式一致（service.infer() / service.infer_from_provided()）
-        - 与 parameter_initialize 的类内 @classmethod infer_from_provided 同构（都在类内）
         """
         feedback = feedback or {}
         # Step 0: feedback 防御性校验（与 infer() 同套约束镜像）
@@ -892,9 +1027,7 @@ class ParameterOptimizeService:
             "suggestion": suggestion_payload,         # 无 recommendation_id
         }
 
-    # ============================================================
-    # 纯算法内核（Step 3+4）—— 私有方法，三个入口共用
-    # ============================================================
+    # --- 纯算法内核（Step 3+4）—— 私有方法，两个入口共用 ---
     @staticmethod
     def _infer_kernel(
         *,
@@ -908,11 +1041,8 @@ class ParameterOptimizeService:
     ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
         """【Step 3+4 纯算法内核】5 维 dict → (new_parameter, suggestion, algorithm_recommendations)
 
-        私有方法（_ 前缀）：从模块顶层函数调整为类内 @staticmethod
-        - 两个公开入口（infer / infer_from_provided）共用本方法
-        - 不依赖 self/cls，无副作用
-
         对应 parameter_initialize._infer_kernel（同构同名设计）。
+        不依赖 self/cls，无副作用。
 
         Args:
             machine_info: 设备 dict（HMI 范围由算法自挑）
@@ -942,16 +1072,20 @@ class ParameterOptimizeService:
         )
 
         algorithm_result = _call_algorithms(algorithm_context)
-        algorithm_recommendations = algorithm_result.get("recommendations", []) or []
+        raw_recommendations = algorithm_result.get("recommendations", []) or []
         algorithm_sources = algorithm_result.get("algorithm_sources", {}) or {}
 
-        # fail-fast 守卫
-        if not algorithm_recommendations:
+        # fail-fast 守卫（基于算法原始输出：有没有给出推荐）
+        if not raw_recommendations:
             _logger.warning(
                 "[optimize] %s fail-fast: 无可用推荐 (algorithm_sources=%s)",
                 interface_tag, algorithm_sources,
             )
             raise BizException(ERROR_OPERATION_FAILED, fail_fast_message)
+
+        # 规范化：业务字段名 + 业务文案 + 过滤零变化项
+        # （落库与展示共用这一份，Recommendation.recommendations 存的就是它）
+        algorithm_recommendations = _normalize_recommendations(raw_recommendations)
 
         new_parameter_dict = _apply_recommendations_to_baseline(
             baseline=baseline,

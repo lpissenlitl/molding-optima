@@ -590,21 +590,16 @@ class AlgorithmsOptimizeView(BaseView):
     命名: optimize (优化) 而非 tuning (调机) -- 业内术语"工艺参数优化算法"。
 
     2026-10-12 决定: 本端点保持独立, 不合并入 tunings 段 (独立算法触发器价值更高)
-
-    支持版本: ?version=v1 (默认) / v2 / v3
     """
-
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessOptimizeFromConditionSchema))
     def post(self, request, cleaned_data):
-        version = request.GET.get("version", "v1")
         service = ParameterOptimizeService()
         return service.infer(
             condition_id=cleaned_data["condition_id"],
             parent_seq_idx=cleaned_data["parent_seq_idx"],
             parameter=cleaned_data.get("parameter"),
             feedback=cleaned_data.get("feedback"),
-            version=version,
         )
 
 

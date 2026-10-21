@@ -722,9 +722,9 @@ function generateRuleText() {
   //   - 错误例：`IF WELDLINE low THEN VPTTadd10`（条件拆为两个 token / 动作未分隔）
   //
   // 参考：
-  //   - backend/process/refs/rule_method_by_library.json L24: "IF SHORTSHOT_low AND MEL_low THEN MEL_add_2 "
-  //   - backend/process/engines/fuzzy/fuzzy_core/models/nets.py L52-112 _split_phase
-  //   - backend/process/engines/fuzzy/fuzzy_core/models/nets.py L793-823 ParticularRules._rule_process
+  //   - backend/_refs/module/process/data/rule_method_by_library.json L24: "IF SHORTSHOT_low AND MEL_low THEN MEL_add_2 "
+  //   - backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py L52-112 _split_phase
+  //   - backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py L793-823 ParticularRules._rule_process
   const condDesc = form.preconditions
     .filter(c => c.keyword && c.level)
     .map(c => `${c.keyword}_${c.level}`)

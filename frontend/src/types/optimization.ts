@@ -119,12 +119,18 @@ export type SuggestionDirection = 'increase' | 'decrease' | 'hold' | 'check'
 
 /** 单条建议项 */
 export interface SuggestionItem {
-  /** 建议文本：'降低注射一段压力 5 MPa' */
+  /** 建议文本：'降低 一段注射压力：70 → 60'（后端已拼好中文文案）*/
   description: string
   /** 调整方向（可选）：UI 用图标提示 */
   direction?: SuggestionDirection
   /** 关联规则 ID（可选）：用于引用追溯 */
   rule_refs?: string[]
+  /** 业务字段名（可选）：'inj_pres_1'（用于高亮 / 跳转参数表）*/
+  param?: string
+  /** 调整前的当前值（可选）*/
+  current_value?: number | null
+  /** 调整后的推荐值（可选）*/
+  recommended_value?: number | null
 }
 
 /** 同一类别的多个建议（如"工艺调整"包含多个参数调整）*/
