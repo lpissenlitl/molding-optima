@@ -12,6 +12,8 @@ FuzzyEngine 端到端 sanity check（不依赖 Django ORM，使用 mock 替换 R
   4) 优先级加权（priority=3 胜出）
   5) 档位→桶接线基准 B1~B7（5 档桶落位 / low-high 区分度 / priority 真断言 /
      3 档兼容 / 多段词不崩 / 缺元数据门控显式失效）
+  6) TSK 推理层缺陷基准 C1~C3（门控隶属度 0 ⇒ 规则失活 / 无效激活不产出结论 /
+     Mamdani 同源）
 
 ⚠️ 术语：本文件中的"层"指**结论形态**（结论能不能算出数值），
    与规则库层级（base / 产品库 / specificity）无关。
@@ -253,6 +255,12 @@ def _kw(lvl, min_val=0, max_val=200, step=10):
             'min_val': min_val, 'max_val': max_val, 'step': step}
 
 
+def _kw_of(name, lvl=5, min_val=0, max_val=200, step=10):
+    """指定字段名的论域定义（`_kw` 是 `inj_pres_1` 的特例）。"""
+    return {'keyword': name, 'lvl': lvl,
+            'min_val': min_val, 'max_val': max_val, 'step': step}
+
+
 def case_b1_bucket_wiring_high():
     """B1: 5 档字段的 'high' 必须连到**桶 3**（论域 75% 分位），不是静态表的桶 2。"""
     print('\n========== CASE B1: 5 档 high 的桶落位（接线验证） ==========')
@@ -414,6 +422,120 @@ def case_b7_missing_metadata_gate():
 
 
 # ---------------------------------------------------------------------------
+# 6. TSK 推理层缺陷基准（C1~C3）
+# ---------------------------------------------------------------------------
+#
+# 背景（2026-10-23，第 15 轮）：
+#   两个真实缺陷，都藏在 `tsk_inference` / `inference` 的第二层里：
+#
+#   B) 门控集合取错：
+#      `conditions = rule_matrix[i, rule_matrix[i] != 0]`
+#      —— 取的是【隶属度非零】的列，而不是【规则连接了哪些门控】的列。
+#      ⇒ 某个门控隶属度恰为 0 时，它被踢出乘积 ⇒
+#         「门控不满足」被当成了「门控不存在」⇒ **规则反而激活**。
+#
+#   D) 无效激活不剔除：
+#      TSK 主路径没有 `MIN_ACTIVATION_THRESHOLD` 过滤（Mamdani 有），
+#      而第四层（结论层）不看激活度地给每条规则出结论值
+#      ⇒ 激活度≈0 的规则以 delta≈0 的形式进入推荐列表
+#      （实测见过 conf=1.68e-282）。
+#
+# 语义拍板（用户 2026-10-23）：门控隶属度为 0 ⇒ **视为门控不满足**
+# ⇒ 该规则激活度为 0（严格语义，禁止静默降级）。
+#
+# ⚠️ 构造难度：高斯隶属度下 μ 的最小值约 1.27e-14（=exp(-32)），
+#    **永不为 0** ⇒ 光靠正常论域构造不出 B 的触发条件。
+#    因此 C1/C3 用 monkeypatch 把某个桶的隶属度强制为 0。
+
+
+def case_c1_zero_degree_gate_blocks_rule():
+    """C1: 门控隶属度为 0 ⇒ 规则激活度必须为 0（TSK 主路径）。"""
+    print('\n========== CASE C1: 门控隶属度 0 ⇒ 规则不激活 ==========')
+    from fuzzy_core.models.nets import NumTskRuleNet
+
+    rule_array = [{
+        'rule_description': 'IF inj_pres_1_high AND inj_pres_2_low THEN inj_pres_1_add_5',
+    }]
+    kw = [_kw_of('inj_pres_1', 5), _kw_of('inj_pres_2', 5)]
+    net = NumTskRuleNet(rule_array, kw, [1.0])
+
+    # 让 inj_pres_1 的 high 桶（level 3）隶属度恒为 0
+    feat = net.pre_dict['inj_pres_1']['memberships']
+    origin = feat.get_value_by_level
+
+    def _zero_at_high(x, level):
+        return 0.0 if level == 3 else origin(x, level)
+
+    feat.get_value_by_level = _zero_at_high
+
+    results, _ = net.predict({'inj_pres_1': 150, 'inj_pres_2': 50}, top_k=5)
+    acts = [r[1] for r in results]
+    print(f'  结果条数 = {len(results)}，激活度 = {acts}')
+    assert all(abs(a) < 1e-9 for a in acts), (
+        f'门控隶属度为 0 时规则激活度必须为 0，实际 {acts}'
+        f'（旧实现把 0 的门控踢出乘积 ⇒ 规则反而激活）'
+    )
+    print('[OK] 隶属度 0 的门控让规则整体失活（不再被"踢出乘积"）')
+    return True
+
+
+def case_c2_low_activation_no_conclusion():
+    """C2: 权重过低的规则不产出结论（不进推荐列表）。"""
+    print('\n========== CASE C2: 无效激活不产出结论 ==========')
+    from fuzzy_core.models.nets import NumTskRuleNet
+
+    rule_array = [
+        {'rule_description': 'IF inj_pres_1_high THEN inj_pres_1_add_5'},
+        {'rule_description': 'IF inj_pres_1_low THEN inj_pres_2_add_5'},
+    ]
+    kw = [_kw_of('inj_pres_1', 5), _kw_of('inj_pres_2', 5)]
+    net = NumTskRuleNet(rule_array, kw, [1.0, 1.0])
+
+    # x=150：high 桶（mean=150）μ=1.0；low 桶（mean=50）μ=exp(-8)≈3.35e-4
+    results, _ = net.predict({'inj_pres_1': 150}, top_k=5)
+    print(f'  结果条数 = {len(results)}')
+    for r in results:
+        print(f'    activation={r[1]:.6f}  {r[0]}  -> {r[2]}')
+
+    assert len(results) == 1, (
+        f'低激活度规则（low 桶在 x=150 时 μ=exp(-8)≈3.35e-4）不应产出结论，'
+        f'实际输出 {len(results)} 条'
+    )
+    assert 'inj_pres_1' in results[0][2], f'应保留 high 规则，实际 {results[0][2]}'
+    print('[OK] 低激活度规则不再产出结论 ⇒ 推荐列表不再混入 delta≈0 的噪音')
+    return True
+
+
+def case_c3_mamdani_zero_degree_gate():
+    """C3: Mamdani 路径同样不能"踢出"隶属度 0 的门控。"""
+    print('\n========== CASE C3: Mamdani 门控隶属度 0 ⇒ 规则不激活 ==========')
+    from fuzzy_core.models.nets import FuzzyRuleNet
+
+    rule_array = [{
+        'rule_description': 'IF inj_pres_1_high AND inj_pres_2_low THEN inj_pres_1_add_low',
+    }]
+    kw = [_kw_of('inj_pres_1', 5), _kw_of('inj_pres_2', 5)]
+    net = FuzzyRuleNet(rule_array, kw)
+
+    feat = net.pre_dict['inj_pres_1']['memberships']
+    origin = feat.get_value_by_level
+
+    def _zero_at_high(x, level):
+        return 0.0 if level == 3 else origin(x, level)
+
+    feat.get_value_by_level = _zero_at_high
+
+    results = net.inference({'inj_pres_1': 150, 'inj_pres_2': 50})
+    acts = [r[2][0] for r in results]
+    print(f'  结果 = {[(r[0], round(float(r[1]), 6), r[2][0]) for r in results]}')
+    assert all(abs(a) < 1e-9 for a in acts), (
+        f'Mamdani 门控隶属度为 0 时激活度必须为 0，实际 {acts}'
+    )
+    print('[OK] Mamdani 路径同样：隶属度 0 的门控让规则失活')
+    return True
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -430,6 +552,9 @@ def main():
         case_b5_three_level_compat,
         case_b6_multi_segment_word,
         case_b7_missing_metadata_gate,
+        case_c1_zero_degree_gate_blocks_rule,
+        case_c2_low_activation_no_conclusion,
+        case_c3_mamdani_zero_degree_gate,
     ]
     failed = 0
     for fn in cases:
