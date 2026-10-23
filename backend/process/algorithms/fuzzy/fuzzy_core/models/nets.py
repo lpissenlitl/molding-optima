@@ -355,9 +355,15 @@ class FuzzyRuleNet:
         rule_matrix = self.connected_matrix * membership_degrees
         rule_activations = np.zeros(shape=(rule_matrix.shape[0],))
         for i in range(self.rule_nums):
-            conditions = rule_matrix[i, rule_matrix[i] != 0]
-            if conditions.size != 0:
-                rule_activations[i] = np.min(conditions)
+            # ★ 用【连接关系】取门控列，而不是用【隶属度非零】：
+            #   后者会把隶属度恰为 0 的门控踢出 min ⇒
+            #   「门控不满足」被当成了「门控不存在」⇒ 规则反而激活。
+            #   语义（2026-10-23 拍板）：隶属度 0 ⇒ 视为门控不满足 ⇒ 激活度 0。
+            gate_cols = np.flatnonzero(self.connected_matrix[i])
+            if gate_cols.size == 0:
+                continue
+            conditions = rule_matrix[i, gate_cols]
+            rule_activations[i] = np.min(conditions)
 
         # 输出聚合与反模糊化
         points = MAMDANI_SAMPLE_POINTS
@@ -750,9 +756,15 @@ class NumTskRuleNet:
         rule_matrix = self.connected_matrix * membership_degrees
         rule_activations = np.zeros(shape=(rule_matrix.shape[0],))
         for i in range(self.rule_nums):
-            conditions = rule_matrix[i, rule_matrix[i] != 0]
-            if conditions.size != 0:
-                rule_activations[i] = np.prod(conditions)  # 各项激活度相乘（TSK 风格）
+            # ★ 用【连接关系】取门控列，而不是用【隶属度非零】：
+            #   后者会把隶属度恰为 0 的门控踢出乘积 ⇒
+            #   「门控不满足」被当成了「门控不存在」⇒ **规则反而激活**。
+            #   语义（2026-10-23 拍板）：隶属度 0 ⇒ 视为门控不满足 ⇒ 激活度 0。
+            gate_cols = np.flatnonzero(self.connected_matrix[i])
+            if gate_cols.size == 0:
+                continue
+            conditions = rule_matrix[i, gate_cols]
+            rule_activations[i] = np.prod(conditions)  # 各项激活度相乘（TSK 风格）
 
         # 第三层（归一化 + priority 加权）
         activations_sum = np.sum(rule_activations)
@@ -760,6 +772,14 @@ class NumTskRuleNet:
         for i in range(0, rule_activations.size):
             new_activations[i] = rule_activations[i] / max(activations_sum, EPSILON)
         activations_with_priority = new_activations * np.asarray(priority_array)
+
+        # ★ 无效激活过滤（与 Mamdani 的 MIN_ACTIVATION_THRESHOLD 语义对齐）：
+        #   权重过低的规则不参与结论层 —— 否则它会以 delta≈0 的形式混进
+        #   推荐列表（实测见过 confidence=1.68e-282 的项）。
+        #   ⚠️ 阈值作用在【归一化×priority 之后】的权重上，**不能卡原始激活度**：
+        #      原始激活度里含缺陷门控的 EPSILON=1e-7 因子，卡原始值会全军覆没。
+        activations_with_priority[
+            activations_with_priority < MIN_ACTIVATION_THRESHOLD] = 0.0
 
         # 第四层（结论层）
         cur_params = np.ones(shape=(self.connected_matrix.shape[0],))
@@ -774,14 +794,19 @@ class NumTskRuleNet:
 
         sol_matrix = self.solution_matrix.T * cur_params
 
-        # 输出组装
+        # 输出组装（只保留有效激活的规则）
+        #
+        # ⚠️ 三个列表必须**同步**构建：过滤掉的规则同时从
+        #    rule_list / activations_out / calculate_list 中消失，
+        #    否则 zip 会把规则与激活度错位配对。
         rule_list = []
-        for i in range(0, self.rule_nums):
-            rule_list.append(self.rule_dict[i].r_rule)
-
+        activations_out = []
         calculate_list = []
         sol_len = np.size(sol_matrix, 0)
         for i in range(0, self.rule_nums):
+            if activations_with_priority[i] <= 0:
+                # 无效激活 ⇒ 不产出结论：否则它会以 delta≈0 的形式混进推荐列表
+                continue
             cal_dict = {}
             darray = self.solution_matrix[i, :]
             sol_darray = sol_matrix[:, i]
@@ -790,9 +815,11 @@ class NumTskRuleNet:
                     for k, v in self.sol_dict.items():
                         if j == v['index']:
                             cal_dict[k] = sol_darray[j]
+            rule_list.append(self.rule_dict[i].r_rule)
+            activations_out.append(float(activations_with_priority[i]))
             calculate_list.append(cal_dict)
 
-        res = list(zip(rule_list, activations_with_priority, calculate_list))
+        res = list(zip(rule_list, activations_out, calculate_list))
         res = sorted(res, key=lambda x: -float(x[1]))
 
         return res, self.extra_dict

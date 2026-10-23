@@ -59,6 +59,11 @@ def case_numeric_layer():
         {'rule_description': 'IF SHORTSHOT_high THEN inj_pres_2_add_5'},
     ]
     keyword_array = [
+        # ⚠️ SHORTSHOT 必须有元数据：否则前件被跳过 ⇒ 连接矩阵全 0 ⇒ 激活度 0
+        #   ⇒ 本轮 D 修复后会被【无效激活过滤】剔除，规则连输出都没有。
+        #   生产路径 `_build_field_context` 会给缺陷字段也建（推测）论域，
+        #   所以这里补齐才贴近现网。
+        {'keyword': 'SHORTSHOT', 'lvl': 3, 'min_val': -1, 'max_val': 0, 'step': 10},
         {'keyword': 'inj_pres_1', 'lvl': 3, 'min_val': 0, 'max_val': 200, 'step': 10},
         {'keyword': 'inj_pres_2', 'lvl': 3, 'min_val': 0, 'max_val': 200, 'step': 5},
     ]
@@ -415,8 +420,14 @@ def case_b7_missing_metadata_gate():
     assert buckets == [], f'应不连任何桶，实际 {buckets}'
 
     results, _ = net.predict({'SHORTSHOT': -0.7, 'inj_pres_1': 150}, top_k=1)
-    print(f'  激活度 = {results[0][1]:.6f}')
-    assert abs(results[0][1]) < 1e-6, f'缺门控的规则激活度应为 0，实际 {results[0][1]}'
+    acts = [r[1] for r in results]
+    print(f'  结果条数 = {len(results)}，激活度 = {acts}')
+    # 缺元数据 ⇒ 前件不连任何桶 ⇒ 激活度 0。
+    # 本轮 D 修复后，激活度 0 的规则会被【无效激活过滤】剔除，
+    # 所以表现是「不输出」而不是「输出但激活度为 0」—— 两者等价。
+    assert not results or all(abs(a) < 1e-6 for a in acts), (
+        f'缺门控的规则激活度应为 0，实际 {acts}'
+    )
     print('[OK] 缺元数据的门控 ⇒ 规则激活度为 0（不是无条件命中）')
     return True
 
