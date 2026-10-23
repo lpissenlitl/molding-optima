@@ -2,7 +2,7 @@
 
 > **日期**：2026-10-23
 > **来源**：用户第 16~18 轮对 `backend/process/algorithms/fuzzy/fuzzy_algorithm.py`（686 行）结构的质疑
-> **状态**：**E1 + E2 + E3 + E4-a 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；中间态与聚合层见 §2.7；命名契约归位见 §2.8；验收见 §5
+> **状态**：**E1 + E2 + E3 + E4-a + E4-b 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；中间态与聚合层见 §2.7；命名契约归位见 §2.8；段号口径修正见 §2.9；验收见 §5
 > **重构原则**：**每轮工作完成后统一跑一次现成验证**，不为每步新写测试脚本（用户第 18 轮明确）
 > **靶子文件**：`backend/process/algorithms/fuzzy/fuzzy_algorithm.py`
 > **起点 commit**：`06d4a12`（工作区干净）
@@ -16,8 +16,8 @@
 | **触发问题** | 用户三条原话：①「我完全不知道这个类想干什么」②「某一部分有问题，代码就崩了」③「各种命名完全莫名其妙」 |
 | **用户诉求** | **流程清晰** > **局部失败不扩散** > **命名可理解** |
 | **验收标准** | R1~R4（§1.2）+ 故障隔离三层边界（§1.3） |
-| **本轮产出** | **§3 命名对照表**（E1-b）＋ **§2.7 中间态与聚合层**（E3）＋ **§2.8 命名契约归位**（E4-a） |
-| **轮次划分** | E1 命名契约 → E2 故障边界+去 DB 依赖 → E3 中间态类型化+拆聚合 → E4 抽字段上下文+瘦身+改名 |
+| **本轮产出** | **§3 命名对照表**（E1-b）＋ **§2.7 中间态与聚合层**（E3）＋ **§2.8 命名契约归位**（E4-a）＋ **§2.9 段号口径修正**（E4-b） |
+| **轮次划分** | E1 命名契约 → E2 故障边界+去 DB 依赖 → E3 中间态类型化+拆聚合 → E4-a 命名契约归位 → E4-b 段号口径修正 → E4-c 抽字段上下文+瘦身+改名 |
 | **入口改名** | `fuzzy_algorithm.py` → **`engine.py`**（候选已提出，E4 执行时最终确认；类名 `FuzzyEngine` 不动） |
 | **不做** | 不动 `llm` / `empirical` / `expert` 三个算法包；不动算法语义（激活度公式、聚合公式、阈值） |
 | **不做** | 不新写测试框架/测试文件；只复用现成 `sanity_check.py` / `fuzzy_core/tests` / `backend/tests` / 黄金快照脚本 |
@@ -214,6 +214,51 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 
 **规模**：`fuzzy_algorithm.py` 697 → **582 行**（-115）。
 
+### 2.9 E4-b 落地后的段号口径修正（2026-10-23）
+
+**问题（用户指出）**：早期算法里料筒温度是「统一 + 或统一 −」，
+所以规则库只出现 `BT`（334 次）而没有段号 ⇒ 用户判断这种表达**不合理**，
+要求把 `BT` 并入分段前缀表，让 `brl_temp_1..9` 与 `BT1..BT9` 段号对齐。
+
+**实测依据（跑出来的，不是推理）**
+
+| 项 | 实测事实 |
+|---|---|
+| `RuleKeyword` | `BT`=料筒温度 **0~50℃**；`BT1`=一段…`BT9`=九段 **150~350℃**；**无 BT0** |
+| 规则正文（1646 条） | 前件含 `BT` 的 **169 条**；其中**结论含 BT 的 169 条、结论不是 BT 的 0 条**；`BT1`~`BT9` 仅 3 条 |
+| 业务侧字段 | `brl_temp_1..9`（9 段，**无 brl_temp_0**）—— `condition.py` L192-196、`parameter_initialize.py` L398-399/L775 |
+| 旧翻译结果 | 族映射使 `brl_temp_1 → BT`（无号）、`brl_temp_2..9 → BT2..BT9` ⇒ **BT1 段号空缺** |
+| 内核实测 | `BT` 值 250（0~50 区间外）⇒ `BT_low` / `BT_high` **均不命中** ⇒ 那 169 条规则**恒不激活**（死规则） |
+| 内核实测 | `BT1` 值 250（150~350）⇒ `BT1_low` / `BT1_high` **正常命中**（强度 1.0） |
+
+⇒ **两个后果同源**：段号空缺 ⇒ `BT1` 永远拿不到值；
+`BT` 拿到 230~250℃ 的料筒温度却按 0~50℃ 判档位 ⇒ 规则恒不命中。段号对齐后一并消失。
+
+**处置**
+
+| 改动 | 内容 |
+|---|---|
+| `naming.PREFIX_FIELD_ALIAS` | 新增 `"brl_temp": "BT"`（**11 条**） |
+| `naming.FIELD_INDEX_OFFSET` | 新增 `"brl_temp": 0`（1-based 同构，不平移） |
+| `naming.FULL_FIELD_ALIAS` | 删除 `"brl_temp"`（13 → **12 条**） |
+| `naming.FAMILY_FIELD_ALIAS` | **整表删除** —— 族映射这个概念不再存在 |
+| `naming.to_business_name()` | 删族分支；`BT1` → `brl_temp_1`；`BT`（无号）→ **None**（退役） |
+| `parameter_optimize._normalize_field_name_by_spec()` | 删 `family_spec` 参数与两处族分支（三类映射 → **两类**） |
+| `FuzzyEngine.FAMILY_FIELD_ALIAS` | **兼容别名一并删除**（唯一引用方已同步；5 个 dev 诊断脚本同步改） |
+| `empirical/hints.py` | 7 处历史写法 `"BT"` → `"BT1"`（语义等价：原意就是「第一段」，写回目标仍是 `brl_temp_1`） |
+
+**对外契约零变化**：`FIELD_NAME_ALIAS` 仍是 **23 条**（前缀 11 + 完整 12），
+`FIELD_INDEX_OFFSET` 11 条 ⇒ 编排层键查表翻译口径不变。
+
+**验收**
+- 黄金快照：49 样本，`summary`（`count_changed` / `set_changed` / `order_changed` / `delta_changed`）
+  与 `only_before` / `only_after` / `changed_delta` **新旧完全一致** ⇒ 推荐集合与顺序零变化；
+  逐条 diff 735 处 = **196** 参数名（`BT`→`BT1`）+ **98** 文案（`reason` 内嵌 param_code）+ **441** 处 1e-7 浮点尾数
+- **浮点尾数归因**：同代码重跑一次快照 diff = **0**（快照确定性已验证）⇒ 尾数差来自
+  「参与加权平均的候选规则链」变化（169 条 BT 规则 → 3 条 BT1 规则，激活度均为 0）
+  ⇒ 累加序列不同 ⇒ 尾数不同，**语义无影响**
+- `sanity_check` 全绿 / pytest 17 + 5 passed / 离线验证 7 项 PASS
+
 ### 2.3 引用点全景（改名成本评估，2026-10-23 实测）
 
 | 引用点 | 形式 | 性质 |
@@ -255,8 +300,9 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
    （由 `parameter_optimize._normalize_field_name_by_spec` 翻译完成）。
    ⇒ 算法内部一律使用算法名，**禁止**在算法层出现业务名。
 2. `to_business_name()` 是**唯一的反向出口**，只允许编排层调用。
-3. 业务名 ↔ 算法名的映射表**只有一份**（`FIELD_NAME_ALIAS` / `FIELD_INDEX_OFFSET` / `FAMILY_FIELD_ALIAS`），
+3. 业务名 ↔ 算法名的映射表**只有一份**（`FIELD_NAME_ALIAS` / `FIELD_INDEX_OFFSET`），
    双向共用，禁止出现第二份硬编码映射。
+   （E4-b 起不再有「整段族」映射表 —— 段号口径统一为 1-based 对齐，见 §2.9）
 
 > ⚠️ 现状风险点：`specs.py` L14 已明确写「工艺参数走的是**另一套**命名空间」，但这条规则**只写在注释里**，
 > 代码里没有任何机制保证混用会被发现。**E4-a 抽 `naming.py` 时要把这条规则变成可执行的约束**
@@ -267,9 +313,9 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | 概念（中文） | 当前代码标识 | 目标标识 | 所在层 | 说明 |
 |---|---|---|---|---|
 | 模糊推理引擎 | `FuzzyEngine` | **不变** | 编排层 | 包级导出唯一符号 |
-| 业务→算法字段名映射 | `FIELD_NAME_ALIAS` | ✅ → `naming.py` | 契约层 | **23 条**（⚠️ 原写 33 条，实测为 23 条 = 前缀 10 + 完整 13；E4-a 已改） |
-| 段号偏移（1-based→0-based） | `FIELD_INDEX_OFFSET` | ✅ → `naming.py` | 契约层 | 10 条（E4-a 已改） |
-| 整段族映射 | `FAMILY_FIELD_ALIAS` | ✅ → `naming.py` | 契约层 | 1 条（`brl_temp`→`BT`，E4-a 已改） |
+| 业务→算法字段名映射 | `FIELD_NAME_ALIAS` | ✅ → `naming.py` | 契约层 | **23 条**（⚠️ 原写 33 条，实测为 23 条 = 前缀 11 + 完整 12；E4-a/E4-b 已改） |
+| 段号偏移（1-based→0-based） | `FIELD_INDEX_OFFSET` | ✅ → `naming.py` | 契约层 | 11 条（E4-a/E4-b 已改；`brl_temp` 偏移 **0**，料筒温度为 1-based 同构） |
+| 整段族映射 | ~~`FAMILY_FIELD_ALIAS`~~ | ⛔ **已删除** | — | E4-b 整表删除（族映射概念消失，段号统一 1-based 对齐，见 §2.9） |
 | 算法→业务字段名 | `to_business_name()` | ✅ → `naming.py` | 契约层 | 唯一反向出口（E4-a 已改；`FuzzyEngine` 保留兼容入口） |
 | 规则查询上下文 | `RuleQueryContext` | 不变 | 服务层 | 6 字段 |
 | 已解析规则 | `ResolvedRule` | 不变 | 服务层 | 5 字段 |
@@ -308,6 +354,7 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | **N13** | **文档引用路径不完整**：代码里写 `fuzzy-engine-reference.md`，实际在 `_refs/system/ai/` 下 | `fuzzy_algorithm.py` L6/L199、`rule_query_service.py` L6、`adapters.py` L26 | 补全目录前缀（文件存在，非失效链接） | **E4**（待） |
 | **N14** | **`ParticularRules` import 了从未使用**（AST 审计：生产侧零引用） | `fuzzy_algorithm.py` L25 | 删除 import | **E1** ✅ 已修 |
 | **N15** | **`'level'` 一词两义**：前件里的**档位词**（`'low'`）vs 结论里的**数值**（`2` / `'30%'`）—— `NumTskRule._rule_process` 把结论值存进了 `'level'` key | `nets.py` L505 vs L486 | 结论值改存 `'value'`（内核改动，需同步 `nets.py` 结论层与 `solution_matrix` 构造） | **E4**（待，属内核） |
+| **N16** | **料筒温度段号错位**：族映射使 `brl_temp_1 → BT`（无号）、`brl_temp_2..9 → BT2..BT9` ⇒ **BT1 段号空缺**；`BT` 又按 0~50℃ 判档位而实值 230~250℃ ⇒ 169 条规则恒不激活 | `naming.FAMILY_FIELD_ALIAS` / `empirical/hints.py` | 族表删除 + `brl_temp` 并入前缀表（偏移 0）+ hints 的 `"BT"`→`"BT1"` | **E4-b** ✅ 已修 |
 
 ### 3.4 待定项（需在对应轮次前拍板）
 
@@ -317,6 +364,7 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | **P2** | `load_rules()` 是否删除 | 删 / 保留 | **保留**（public API，外部可能有未知调用方；改为明确抛 `NotImplementedError` 而非 `pass`） | E4 前 |
 | **P3** | `llm/llm_algorithm.py`、`empirical/empirical_algorithm.py` 同类冗余 | 一并改 / 只改 fuzzy | **只改 fuzzy**，另两个记入 §6 遗留 | 已定（本次不动） |
 | **P4** | `to_business_name()` 的归属 | 留 `FuzzyEngine` 类方法 / 移到 `naming.py` | 移到 `naming.py`，`FuzzyEngine` 保留**兼容类属性别名**（`parameter_optimize.py` L245/L534 零改动） | ✅ **已拍板并执行**（E4-a，见 §2.8） |
+| **P5** | **「料筒温度统一 +/−」这个业务能力怎么表达**（用户第 19 轮提出：早期算法只有 `BT`，不合理） | ① 规则库改成 `BT1..BT9` 分段（规则量 ×9）② 保留族级 `BT` + 引入「整体料筒温度」输入 + 写回按**梯度联动**（旧项目先例：`BT1=NT+5`、`BT2=BT1-10`…）③ 不支持（族级规则退役） | ②（族语义最贴合业务，169 条现有规则不用重写） | **待产品/工艺拍板**（需先定：整体温度口径 = 9 段均值？最低段？梯度链覆盖到第几段？旧项目只到 BT5，业务侧有 9 段） |
 
 ### 3.5 两个易被误读的语义（写进代码 docstring）
 
@@ -335,7 +383,8 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | **E2** | 故障边界 + 去 DB 依赖 | ① 新建 `ports.py`（`RuleRepository` 协议 + `RuleQueryContext`/`ResolvedRule` 搬迁）② `RuleQueryService` 改为从 ports 导入 + 新增 `get_keywords_by_names` ③ `FuzzyEngine(repository=...)` 依赖注入（默认实现延迟导入）④ `recommend()` 拆为「兜底壳 + `_recommend()` 主流程」⑤ 规则查询异常单独捕获（error 级）⑥ `_precheck_numeric_rules()` 条目级预检 + `self._diagnostics` | **正常路径零变化**；异常路径**有意修复**（见 §2.5） | 同上 + 离线验证脚本 7 项 PASS |
 | **E3** ✅ | 中间态类型化 + 拆聚合 | ① `RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass ② 抽 `aggregation.py`（`aggregate()` + `to_recommendations()`）③ 落地 N1/N2/N4/N7（**N3 排除**，见 §2.7） | **无** | 同上 + CASE 3 改测真函数 |
 | **E4-a** ✅ | 命名契约归位 | ① 抽 `naming.py`（P4：3 张表 + `to_business_name()` + import 时一致性自检）② `FuzzyEngine` 保留兼容别名 + 兼容入口 ⇒ 外部零改动 ③ `fuzzy/__init__.py` 导出 `naming` | **无** | 同上 + 命名契约等价性对拍（三张表逐条含顺序 + 262 个输入行为对拍） |
-| **E4-b** | 抽字段上下文 + 瘦身 + 改名 | ① 抽 `field_context.py` ② 入口改名 `engine.py`（P1）③ 删 `load_rules` 或改抛（P2）④ 修 N11 注释 | **无** | 同上 + 全量 import 点复查 |
+| **E4-b** ✅ | 段号口径修正 | ① `brl_temp` 并入 `PREFIX_FIELD_ALIAS`（偏移 0，1-based 同构）② `FULL_FIELD_ALIAS` 去重 ③ **删 `FAMILY_FIELD_ALIAS` 整表** ④ `to_business_name()` 删族分支、`BT`（无号）退役 ⑤ 编排层 `_normalize_field_name_by_spec` 删 `family_spec` ⑥ `empirical/hints.py` 7 处 `"BT"`→`"BT1"` | **推荐输出零变化**（`summary` / `only_before` / `only_after` / `changed_delta` 全同）；仅参数名与文案 `BT`→`BT1` + 1e-7 浮点尾数 | 同上 + 黄金快照逐条 diff 归因（735 = 196 + 98 + 441 尾数） |
+| **E4-c** | 抽字段上下文 + 瘦身 + 改名 | ① 抽 `field_context.py` ② 入口改名 `engine.py`（P1）③ 删 `load_rules` 或改抛（P2）④ 修 N11 注释 | **无** | 同上 + 全量 import 点复查 |
 
 **每轮的通用验收（不新写脚本，只跑现成）**：
 
@@ -362,7 +411,7 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | E2 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E1.json`） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；离线验证 7 项 PASS（V1 注入 FakeRepo 离线跑通 / V2 脏规则未拖垮整层 + 对照组证明必要性 / V3 DB 异常降级不冒泡） |
 | E3 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E2.json`） | ✅ 全绿（CASE 3 已改为**测真函数**，并补上文本建议用例） | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；`fuzzy_algorithm.py` 776 → 697 行；离线验证 7 项 PASS 仍绿；存档 `_dev_refs/_golden_E3.json` |
 | E4-a | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E3.json`；**全 JSON 逐条相等** —— 比前几轮的 3 字段口径更强） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 行为零变化；命名契约等价性对拍 ALL PASS（三张表逐条含顺序 + `to_business_name` 262 输入对拍全一致）；离线验证 7 项 PASS 仍绿；`fuzzy_algorithm.py` 697 → 582 行；存档 `_dev_refs/_golden_E4.json` |
-| E4-b | | | | | |
+| E4-b | 2026-10-23 | **49 样本：推荐集合/条数/顺序/变化量全同**（`summary` 与 `only_before`/`only_after`/`changed_delta` 新旧一致）；逐条 diff 735 = 196 参数名 + 98 文案 + **441 处 1e-7 浮点尾数**（同代码重跑 diff=0 ⇒ 快照确定性已验证；尾数差来自候选规则链变化，激活度均为 0，语义无影响） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 推荐输出零变化；段号对齐后 `BT1` 拿到值（内核实测可命中），169 条 BT 规则由「恒不激活」变为「无输入退役」；离线验证 7 项 PASS 仍绿；存档 `_dev_refs/_golden_E4b.json` |
 
 ---
 
@@ -379,6 +428,7 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | L7 | 文档引用路径不完整（`fuzzy-engine-reference.md` 未写目录） | N13 | 待定（E4 随改名一并修） |
 | L8 | ~~`import process.algorithms.fuzzy.fuzzy_algorithm` 仍需 Django setup（父包 `process/algorithms/__init__.py` 会 import 全部引擎触发注册）⇒ 目前是「调用可离线」而非「导入可离线」~~ | §2.6 | ✅ **已关闭**（E3 实测：E2 去 ORM 依赖后，导入与调用均可离线） |
 | L9 | 等级两种叫法（`lvl` / `f_level`）未统一为 `level_count` | N3 / §2.7 | 待定（`'lvl'` 是内核 `nets.py` 的输入契约 key，改名必动内核；与「内核不动」边界冲突） |
+| L10 | **169 条族级 `BT` 规则失去输入** —— `BT` 退役后前件拿不到值 ⇒ 规则库「统一调温」能力目前空缺（`BT1`~`BT9` 分段规则仅 3 条） | §2.9 / P5 | 待定（需产品/工艺拍板「统一 +/−」的表达方式，见 P5） |
 
 ---
 
@@ -391,3 +441,4 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | 2026-10-23 | E2 | **故障边界 + 去 DB 依赖**（详见 §2.5 / §2.6）。新增 `ports.py`（`RuleRepository` 协议 + 数据类搬迁，零 ORM 依赖）；`rule_query_service.py` 改为从 ports 导入并新增 `get_keywords_by_names`；`fuzzy_algorithm.py` 支持 `FuzzyEngine(repository=...)` 注入（默认实现延迟导入）、`recommend()` 拆为兜底壳 + `_recommend()` 主流程、规则查询异常单独捕获（error 级）、新增 `_precheck_numeric_rules()` 条目级预检与 `self._diagnostics`。修正 N8 判断错误（`extra` 是弹窗文本通道）；新增 N15（`'level'` 一词两义）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增 `_dev_refs/_verify_e2_offline.py`（可复用的离线回归工具）与 `_dev_refs/_golden_E2.json` |
 | 2026-10-23 | E3 | **中间态类型化 + 拆聚合**（详见 §2.7）。新增 `aggregation.py`（224 行）：`RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass + `aggregate()` + `to_recommendations()`。`fuzzy_algorithm.py` 776 → 697 行：中间态裸 dict → dataclass（`'param'`→`param_name`、`'source'`→`layer` / `meta_source`），删除 `_merge_layer_results`（95 行，混聚合+契约两事），`_recommend()` 第 5 步改为调 `aggregate()` + `to_recommendations()`。落地 N1/N2/N4/N7；**N3 排除**（`'lvl'` 是内核输入契约 key，见 §6 L9）。修正 advisory 路径硬编码的 `'rule': 'advisory'` → `rule_str=None`。`sanity_check.py` CASE 3 从**复刻品**改为**直接测真函数**（复刻品已漂移：漏了「文本建议分离」规则），并补上文本建议用例与 `to_recommendations()` 公式/对外字符串断言；`backend/tests/test_fuzzy_field_report.py` 随 `'source'`→`'meta_source'` 同步。实测纠正 §2.6：导入已可离线（原写「仍需 Django setup」是 E2 时的推测，未实测）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增存档 `_dev_refs/_golden_E3.json` |
 | 2026-10-23 | E4-a | **命名契约归位**（详见 §2.8）。新建 `process/algorithms/fuzzy/naming.py`（230 行）：3 张表（`FIELD_NAME_ALIAS` 23 条 / `FIELD_INDEX_OFFSET` 10 条 / `FAMILY_FIELD_ALIAS` 1 条）+ `to_business_name()` + import 时表间一致性自检（`_validate_tables()`）。`fuzzy_algorithm.py` 697 → 582 行：`FIELD_NAME_ALIAS` 拆为「前缀表 10 条 + 完整表 13 条」再合并（**对外结构与顺序不变**），`to_business_name()` 第 3 段由「遍历总表 + 排除法」改为「只查完整表」，消除「新增前缀映射忘同步偏移表 ⇒ 段号错位」的隐患。`FuzzyEngine` 保留兼容别名 + 兼容入口 ⇒ `parameter_optimize.py` L245/L534 **零改动**；`fuzzy/__init__.py` 导出 `naming`。实测纠正 §3.2：表的条数是 **23 条**（原写 33 条）。验收：黄金快照 49 样本 diffs=0（vs `_golden_E3.json`，全 JSON 逐条相等）+ sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS + 命名契约等价性对拍 ALL PASS（三张表逐条含顺序一致、`to_business_name` 262 输入对拍全一致）。新增存档 `_dev_refs/_golden_E4.json` |
+| 2026-10-23 | E4-b | **段号口径修正**（详见 §2.9）。`brl_temp` 由 `FULL_FIELD_ALIAS` 移入 `PREFIX_FIELD_ALIAS`（偏移 0，1-based 同构）⇒ `brl_temp_1..9` ↔ `BT1..BT9` 段号对齐（**修复 BT1 段号空缺**）；`FAMILY_FIELD_ALIAS` **整表删除**，`to_business_name()` 删族分支、`BT`（无号）退役返回 None；编排层 `_normalize_field_name_by_spec` 删 `family_spec` 参数与两处族分支（三类映射 → 两类）；`FuzzyEngine.FAMILY_FIELD_ALIAS` 兼容别名一并删除（5 个 dev 诊断脚本同步改）；`empirical/hints.py` 7 处历史写法 `"BT"`→`"BT1"`（语义等价，写回目标仍是 `brl_temp_1`）。新增 N16（段号错位）、P5（「统一 +/−」怎么表达，待拍板）、L10（169 条族级规则失去输入）。实测证据：内核实测 `BT` 值 250（0~50 区间）⇒ `BT_low`/`BT_high` **均不命中**（169 条规则恒不激活）；`BT1` 值 250（150~350）⇒ **正常命中强度 1.0**。验收：黄金快照 `summary`/`only_before`/`only_after`/`changed_delta` 新旧全同（推荐输出零变化）+ sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增存档 `_dev_refs/_golden_E4b.json` |

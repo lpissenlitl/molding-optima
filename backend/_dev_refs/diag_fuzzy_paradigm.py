@@ -221,7 +221,6 @@ def main():
             business,
             FuzzyEngine.FIELD_NAME_ALIAS,
             FuzzyEngine.FIELD_INDEX_OFFSET,
-            FuzzyEngine.FAMILY_FIELD_ALIAS,
         )
         if algo:
             algo_snapshots.append(algo)

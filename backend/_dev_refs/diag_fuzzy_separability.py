@@ -90,7 +90,6 @@ def main():
                 raw,
                 FuzzyEngine.FIELD_NAME_ALIAS,
                 FuzzyEngine.FIELD_INDEX_OFFSET,
-                FuzzyEngine.FAMILY_FIELD_ALIAS,
             ))
 
     hr("2. 参数取值分布（样本退化检查）")

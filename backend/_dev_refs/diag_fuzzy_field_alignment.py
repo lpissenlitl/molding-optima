@@ -121,7 +121,6 @@ def main():
             raw,
             FuzzyEngine.FIELD_NAME_ALIAS,
             FuzzyEngine.FIELD_INDEX_OFFSET,
-            FuzzyEngine.FAMILY_FIELD_ALIAS,
         ))
 
     focus = ["BT", "BT1", "BT2", "CT", "NT", "MEL", "PT0", "PT1", "IL0", "IL2",

@@ -247,7 +247,6 @@ def main():
         business,
         FuzzyEngine.FIELD_NAME_ALIAS,
         FuzzyEngine.FIELD_INDEX_OFFSET,
-        FuzzyEngine.FAMILY_FIELD_ALIAS,
     )
     print(f"process_parameter: 业务字段 {len(business)} 个 → 算法命名 {len(algo)} 个")
     print(f"  样例: {dict(list(algo.items())[:8])}")

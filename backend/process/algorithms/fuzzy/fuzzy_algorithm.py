@@ -63,7 +63,7 @@ class FuzzyEngine(AlgorithmBase):
     # 编排层（process/services/parameter_optimize.py）直接读
     # FuzzyEngine.FIELD_NAME_ALIAS 等 —— 这是历史上的对外契约。
     #
-    # 现在命名契约是**静态数据**（4 张表 + 反向映射），与引擎的运行时行为
+    # 现在命名契约是**静态数据**（3 张表 + 反向映射），与引擎的运行时行为
     # （拉规则 / 推理 / 聚合）无关，已抽到 naming.py（含 import 时一致性自检）。
     # 引擎类只留同名别名 ⇒ 外部调用方零改动。
     #
@@ -71,7 +71,6 @@ class FuzzyEngine(AlgorithmBase):
     # ============================================================
     FIELD_NAME_ALIAS = naming.FIELD_NAME_ALIAS
     FIELD_INDEX_OFFSET = naming.FIELD_INDEX_OFFSET
-    FAMILY_FIELD_ALIAS = naming.FAMILY_FIELD_ALIAS
 
     @staticmethod
     def to_business_name(algo_name: str) -> Optional[str]:

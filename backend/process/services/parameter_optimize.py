@@ -180,49 +180,34 @@ def _normalize_field_name_by_spec(
     params: Dict[str, Any],
     field_spec: Dict[str, str],
     index_offset: Optional[Dict[str, int]] = None,
-    family_spec: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """按算法侧声明的字段命名约束做字段名翻译（业务 → 算法）
 
     Port-Adapter 模式：算法侧声明字段命名约定（FIELD_NAME_ALIAS），
     数据准备层按约束翻译（不感知业务语义）。
 
-    三类映射：
+    两类映射：
 
     1. 完整字段名：``noz_temp`` → ``NT``
     2. 分段前缀 + 序号偏移：``inj_spd_1`` → ``IV0``
-       （新序号 = 原序号 + offset；规则库段号以 0-based 为主）
-    3. 整段族：``brl_temp_1`` → ``BT``、``brl_temp_2`` → ``BT2``
-       （规则库用单一 BT 表示整体料筒温度，业务侧是 brl_temp_1..9）
+       （新序号 = 原序号 + offset；规则库段号以 0-based 为主，
+        料筒温度为 1-based 同构，偏移 0：``brl_temp_1`` → ``BT1``）
     """
     if not field_spec:
         return dict(params)
 
     index_offset = index_offset or {}
-    family_spec = family_spec or {}
 
     normalized: Dict[str, Any] = {}
     for key, value in params.items():
-        # 1) 整段族（无序号）：brl_temp → BT
-        if key in family_spec:
-            normalized[family_spec[key]] = value
-            continue
-
         prefix, sep, suffix = key.rpartition('_')
 
-        # 2) 整段族（带序号）：brl_temp_1 → BT / brl_temp_2 → BT2
-        if sep and suffix.isdigit() and prefix in family_spec:
-            family_name = family_spec[prefix]
-            new_key = family_name if int(suffix) == 1 else f"{family_name}{suffix}"
-            normalized[new_key] = value
-            continue
-
-        # 3) 完整字段名：noz_temp → NT
+        # 1) 完整字段名：noz_temp → NT
         if key in field_spec:
             normalized[field_spec[key]] = value
             continue
 
-        # 4) 分段前缀 + 序号偏移：inj_spd_1 → IV0
+        # 2) 分段前缀 + 序号偏移：inj_spd_1 → IV0
         if sep and suffix.isdigit() and prefix in field_spec:
             offset = index_offset.get(prefix, 0)
             normalized[f"{field_spec[prefix]}{int(suffix) + offset}"] = value
@@ -235,7 +220,7 @@ def _normalize_field_name_by_spec(
 def _to_business_param_name(param_name: str) -> str:
     """算法字段名 → 业务字段名（无法翻译时原样返回）
 
-    算法侧返回的 ``param`` 是算法命名空间（``IV0`` / ``BT`` / ...），
+    算法侧返回的 ``param`` 是算法命名空间（``IV0`` / ``BT1`` / ...），
     业务侧字段名是 ``inj_spd_1`` / ``brl_temp_1`` / ...。
     两者不在同一命名空间：不翻译就永远匹配不上 baseline，
     推荐值会被静默丢弃（表现为“算法有推荐，但参数没变”）。
@@ -533,7 +518,6 @@ def _compose_algorithm_context(
         parameter,
         FuzzyEngine.FIELD_NAME_ALIAS,
         FuzzyEngine.FIELD_INDEX_OFFSET,
-        FuzzyEngine.FAMILY_FIELD_ALIAS,
     )
     return {
         'machine_info': machine_info,
@@ -646,7 +630,7 @@ def _apply_recommendations_to_baseline(
 ) -> Dict[str, Any]:
     """Step 4a —— 用推荐值覆盖基线字段（仅覆盖基线中存在的字段）
 
-    注意：算法返回的 ``param`` 是算法命名空间（``IV0`` / ``BT``），
+    注意：算法返回的 ``param`` 是算法命名空间（``IV0`` / ``BT1``），
     必须先译回业务字段名（``inj_spd_1`` / ``brl_temp_1``）才能命中 baseline。
     """
     new_parameter = dict(baseline)

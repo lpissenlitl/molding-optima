@@ -25,7 +25,9 @@
 数据维护：
 - 由工艺工程师根据经验持续扩充
 - 新增缺陷时直接在这里加 key 即可（key 用英文缺陷码）
-- 段号基准：规则库以 0-based 为主（IV0 / PP0 / ...），这里与之保持一致
+- 段号基准：规则库以 0-based 为主（IV0 / PP0 / ...），这里与之保持一致；
+  料筒温度例外 —— BT1..BT9 是 1-based（BT1=料筒温度一段），
+  与业务 brl_temp_1..9 同构，命名契约里偏移为 0。
 """
 
 
@@ -38,19 +40,19 @@ EMPIRICAL_HINTS: dict = {
     # 飞边：压力过高溢料 → 降低注射压力 / 速度
     "FLASH": {"increase": [], "decrease": ["IP0", "IV0"]},
     # 熔接痕：料流未熔合 → 提高料筒温度 / 注射速度
-    "WELDLINE": {"increase": ["BT", "BT2", "BT3", "IV0"], "decrease": []},
+    "WELDLINE": {"increase": ["BT1", "BT2", "BT3", "IV0"], "decrease": []},
     # 困气：困气排气不良 → 提高 VP 切换位置 / 降低注射速度
     "AIRTRAP": {"increase": ["VPTL"], "decrease": ["IV0"]},
     # 气纹：气流纹 → 提高冷却时间 / 料筒温度，降低注射速度
-    "GASVEINS": {"increase": ["CT", "BT"], "decrease": ["IV0"]},
+    "GASVEINS": {"increase": ["CT", "BT1"], "decrease": ["IV0"]},
     # 烧焦：过热焦烧 → 降低注射速度 / 料筒温度
-    "BURN": {"increase": [], "decrease": ["IV0", "BT", "BT2"]},
+    "BURN": {"increase": [], "decrease": ["IV0", "BT1", "BT2"]},
     # 料花：料流花纹 → 提高料筒温度，降低注射速度
-    "MATERIALFLOWER": {"increase": ["BT", "BT2"], "decrease": ["IV0"]},
+    "MATERIALFLOWER": {"increase": ["BT1", "BT2"], "decrease": ["IV0"]},
     # 色差：色差 → 提高料筒温度
-    "SHADING": {"increase": ["BT", "BT2", "BT3"], "decrease": []},
+    "SHADING": {"increase": ["BT1", "BT2", "BT3"], "decrease": []},
     # 水波纹：熔接线波纹 → 提高料筒温度 / 冷却时间
-    "WATERRIPPLE": {"increase": ["BT", "CT"], "decrease": []},
+    "WATERRIPPLE": {"increase": ["BT1", "CT"], "decrease": []},
     # 脱模不良：脱模困难 → 延长冷却时间，降低保压压力
     "HARDDEMOLDING": {"increase": ["CT"], "decrease": ["PP0"]},
     # 顶白：顶白 → 降低保压压力 / 保压速度
@@ -64,5 +66,5 @@ EMPIRICAL_HINTS: dict = {
     # 浇口印：浇口痕明显 → 延长冷却时间，降低保压压力
     "GATEMARK": {"increase": ["CT"], "decrease": ["PP0"]},
     # 阴阳面：阴阳面 → 提高料筒温度 / 注射速度
-    "ABERRATION": {"increase": ["BT", "BT2", "IV0"], "decrease": []},
+    "ABERRATION": {"increase": ["BT1", "BT2", "IV0"], "decrease": []},
 }
