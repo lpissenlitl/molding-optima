@@ -65,23 +65,18 @@ ACTION_MAP = {
 #      两者互补——编号形式负责精确定位，语义词形式负责可读性。
 LEVEL_NUMBER_TO_BUCKET = {f'level{i}': i - 1 for i in range(1, 10)}
 
-# === 档位映射（已弃用：HS_ 前缀 + 全局静态表）===
-# 2026-10-22：
-# - `HS_` 前缀是老 HsMoldingService 的缩写，随 fuzzykit 迁入时保留下来，现已弃用。
-# - 本表已按语义拆分为三块：
-#     ACTION_MAP           动作（add/reduce/adjust）——与档位、级数无关
-#     LEVEL_NUMBER_TO_BUCKET 桶编号（level1..level9）——与级数解耦，永远正确
-#     下方字典字面量       档位词（low/mid/medium/high）——全局静态 3 档口径，
-#                          在 5/7/9 档字段上会错位一档
-# - 档位词那部分的正确做法是 `resolve_bucket(lvl, level_word)`
-#   （按字段自己的词表定位）。本表暂留仅为过渡期兼容
-#   （诊断脚本会 monkeypatch 本表做 A/B 对照），接线完成后整表删除。
-# @deprecated
-HS_MAPPING_DICT = {
-    'low': 0, 'mid': 1, 'medium': 1, 'high': 2,
-    **LEVEL_NUMBER_TO_BUCKET,
-    **ACTION_MAP,
-}
+# === 档位映射（已删除：HS_ 前缀 + 全局静态表）===
+# 2026-10-23：接线完成后整表删除，档位→桶统一走 `resolve_bucket(lvl, level_word)`。
+# 删除原因：这张表把三种语义混在一起 ——
+#   ACTION_MAP           动作（add/reduce/adjust），与档位、级数无关
+#   LEVEL_NUMBER_TO_BUCKET 桶编号（level1..level9），与级数解耦，永远正确
+#   字典字面量 low/mid/medium/high  全局静态 3 档口径，在 5/7/9 档字段上错位一档
+# 现网 310/311 个字段是 5 档 ⇒ 静态表让全部前件门控偏一档（'high' 被当成 5 档的
+# medium = 论域 50% 分位）。正确做法是按字段自己的词表定位（见下方
+# LEVEL_WORDS_BY_LVL + resolve_bucket）。
+#
+# 保留说明：档位词的**权威定义**是 LEVEL_WORDS_BY_LVL；编号轨（levelN）的
+# 权威定义是 LEVEL_NUMBER_TO_BUCKET。二者都不是“全局静态口径”。
 
 # === 档位词表（按字段的模糊等级数）===
 # 2026-10-22 E2：这是档位词的**唯一权威定义**。

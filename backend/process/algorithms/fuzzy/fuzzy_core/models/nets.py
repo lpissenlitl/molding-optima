@@ -34,10 +34,10 @@ from ..macros import (
     ACTION_MAP,
     ALL_LEVEL_WORDS,
     DEFECT_CONST,
-    HS_MAPPING_DICT,
     MIN_ACTIVATION_THRESHOLD,
     MAMDANI_SAMPLE_POINTS,
     EPSILON,
+    resolve_bucket,          # ★ 档位→桶映射（按字段自己的档位词表定位）
 )
 from ..parsing import (
     classify_name as _classify_name,   # noqa: F401  保留旧名，历史 import 不断裂
@@ -47,6 +47,27 @@ from ..parsing import (
 
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# 档位→桶解析
+# ============================================================================
+
+def _resolve_bucket_safe(lvl: int, word: str, where: str):
+    """按字段的档位数解析桶索引；解析不了就显式告警并返回 None。
+
+    档位→桶的映射**必须按字段自己的档位词表**定位：同一个 'high'
+    在 3 档字段是桶 2（论域上界），在 5 档字段是桶 3（论域 75% 分位）。
+    用全局静态 3 档表会让 5/7/9 档字段的门控整体错位一档。
+
+    「禁止静默降级」：词表对不上时不能悄悄取错桶，必须留下可查的日志。
+    返回 None 表示该前件建不了论域，调用方按"不作为门控"处理。
+    """
+    try:
+        return resolve_bucket(lvl, word)
+    except ValueError as e:
+        logger.warning('[%s] 档位词 %r 无法映射到 lvl=%d 的桶：%s', where, word, lvl, e)
+        return None
 
 
 # ============================================================================
@@ -280,7 +301,11 @@ class FuzzyRuleNet:
                     # 不可判级的前件（'worse' / 缺陷名）→ 不作为门控
                     continue
                 if name in self.pre_dict:
-                    p_col_idx = self.pre_dict[name]['index'] + HS_MAPPING_DICT[level]
+                    bucket = _resolve_bucket_safe(
+                        self.pre_dict[name]['lvl'], level, 'FuzzyRuleNet.pre')
+                    if bucket is None:
+                        continue
+                    p_col_idx = self.pre_dict[name]['index'] + bucket
                     self.connected_matrix[row_idx][p_col_idx] = 1
 
             for name, value in rule.r_solutions.items():
@@ -290,7 +315,12 @@ class FuzzyRuleNet:
                     # 数值结论（add_2）属于工厂级 TSK 层
                     continue
                 if name in self.sol_dict:
-                    s_col_idx = self.sol_dict[name]['index'] + HS_MAPPING_DICT[level]
+                    # ⚠️ 结论侧用【输出变量自己的档位数】sol_dict[name]['lvl']
+                    bucket = _resolve_bucket_safe(
+                        self.sol_dict[name]['lvl'], level, 'FuzzyRuleNet.sol')
+                    if bucket is None:
+                        continue
+                    s_col_idx = self.sol_dict[name]['index'] + bucket
                     self.solution_matrix[row_idx][s_col_idx] = 1 * value['action']
 
     def inference(self, x):
@@ -643,7 +673,13 @@ class NumTskRuleNet:
                     # 无 RuleKeyword 元数据 → 建不了论域 → 不作为门控
                     logger.debug('[NumTskRuleNet] pre_dict 中没有 %s，跳过该前件', name)
                     continue
-                p_col_idx = self.pre_dict[name]['index'] + HS_MAPPING_DICT[level]
+                # ★ 按【该字段自己的档位数】取桶：同一个 'high' 在 3 档字段是桶 2，
+                #   在 5 档字段是桶 3（论域 75% 分位）。用全局静态表会整体错位一档。
+                bucket = _resolve_bucket_safe(
+                    self.pre_dict[name]['lvl'], level, 'NumTskRuleNet.pre')
+                if bucket is None:
+                    continue
+                p_col_idx = self.pre_dict[name]['index'] + bucket
                 if row_idx < len(self.connected_matrix):
                     self.connected_matrix[row_idx][p_col_idx] = 1
                 else:
