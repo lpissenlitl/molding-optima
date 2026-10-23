@@ -22,6 +22,16 @@ import os
 import sys
 import logging
 
+# ⚠️ 输出编码：Windows 控制台是 GBK，而本文件用到 `⇒` 等非 GBK 字符。
+# 一旦 stdout 被**管道**重定向（CI、`| Select-Object`、重定向到文件），
+# Python 会改用 locale 编码（cp936）⇒ `print` 抛 UnicodeEncodeError ⇒
+# 整个 sanity check 假失败。强制降级到 replace 而不是抛错。
+try:
+    sys.stdout.reconfigure(encoding='gbk', errors='replace')
+    sys.stderr.reconfigure(encoding='gbk', errors='replace')
+except Exception:  # pragma: no cover - 非 GBK 环境（如 Linux）忽略
+    pass
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
