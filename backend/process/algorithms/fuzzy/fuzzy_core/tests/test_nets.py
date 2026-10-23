@@ -25,7 +25,7 @@ from fuzzy_core.models.nets import (  # noqa: E402
     ParticularRules,
 )
 from fuzzy_core.functional import gauss_mf, tri_mf, defuzz  # noqa: E402
-from fuzzy_core.macros import HS_MAPPING_DICT, DEFECT_CONST  # noqa: E402
+from fuzzy_core.macros import HS_MAPPING_DICT, ACTION_MAP, DEFECT_CONST  # noqa: E402
 
 
 FAIL = '\033[91m'
@@ -192,8 +192,8 @@ def test_macros():
     print('\n[TEST] macros 常量')
     ok = True
     ok &= _assert_eq(HS_MAPPING_DICT['low'], 0, "low=0")
-    ok &= _assert_eq(HS_MAPPING_DICT['add'], 1, "add=+1")
-    ok &= _assert_eq(HS_MAPPING_DICT['reduce'], -1, "reduce=-1")
+    ok &= _assert_eq(ACTION_MAP['add'], 1, "add=+1")
+    ok &= _assert_eq(ACTION_MAP['reduce'], -1, "reduce=-1")
     ok &= _assert_eq('SHORTSHOT' in DEFECT_CONST, True, "SHORTSHOT in DEFECT_CONST")
     return ok
 

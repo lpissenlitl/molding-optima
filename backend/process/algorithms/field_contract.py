@@ -2,11 +2,8 @@
 算法入参契约的通用机制（字段字典 ⊥ 校验机制 分离）
 
 为什么有这个文件：
-- 每个算法的入参契约【字段字典】必须各自定义——expert/specs.py 的 MACHINE_INFO_FIELDS、
-  fuzzy/specs.py 的 OPTIMIZE_MACHINE_INFO_FIELDS 等。字段选哪些、叫什么名、必填到
-  什么程度，都是算法自己的决定；跨算法继承字段字典会造成命名空间与语义双重混淆
-  （expert 用契约名 max_set_injection_velocity，fuzzy 用 ORM 名 max_set_injection_speed，
-  同一字段两套名，抄过来 audit 就会取不到值而误判「字段缺失」）。
+- 每个算法的入参契约【字段字典】必须各自定义。字段选哪些、叫什么名、必填到什么
+  程度，都是算法自己的决定，由各算法包内自行维护。
 - 但「按字段字典评估必填等级」这套【机制】是纯函数，与任何具体算法无关：
   输入 (info_dict, mapping, dim_name, is_hydraulic)，输出缺失字段清单。
   各抄一份就会出现两套实现各自演化，condition 的语义迟早分叉。

@@ -4,8 +4,8 @@
 - FromCondition：POST /api/processes/algorithms/optimize/
 - FromProvided：POST /api/processes/algorithms/optimize-from-provided/
 
-职责：Step 0 校验 feedback → Step 1 反查 parent → Step 2 构建基线
-      → Step 3 调算法 → Step 5 原子落库（仅 FromCondition）
+职责：Step 0 校验 feedback → Step 1 装配推理上下文（只读）
+      → Step 2 纯推理 → Step 3 原子落库（仅 FromCondition）
 
 设计要点：
 - infer 只处理算法优化（人工调整走 manual-adjust 接口）
@@ -13,6 +13,8 @@
 - 3 场景调用逻辑一致（基本调参/自动回撤/手动修改），仅 feedback 内容不同
 - is_adopted 自动维护：下一轮 ineffective 时改 False
 - FromCondition 落库，FromProvided 纯推理（无 DB 读写，与 initialize.infer_from_provided 同构）
+- **写库只在 Step 3**：用户手改的工艺参数写回父记录，也放在 Step 3 的事务里，
+  与新建轮次同生共死（详见 _sync_user_modified_parameter）
 
 代码组织：helper 全部为模块顶层函数（不依赖 self），类内只保留
 infer / infer_from_provided 两个公开入口 + __init__。
@@ -31,11 +33,15 @@ from process.models import (
 )
 from process.algorithms.base import AlgorithmRegistry
 from process.algorithms.base import Recommendation as AlgoRecommendation
-from process.algorithms.fuzzy import FuzzyEngine  # 用于字段命名约束（FIELD_NAME_ALIAS）
+from process.algorithms.fuzzy import (
+    FuzzyEngine,  # 用于字段命名约束（FIELD_NAME_ALIAS）
+    is_valid_defect_level_word,  # 缺陷程度（level）合法性校验
+)
 from process.algorithms.fuzzy.specs import (
     OPTIMIZE_MACHINE_INFO_FIELDS,
     OPTIMIZE_POLYMER_INFO_FIELDS,
     OPTIMIZE_MOLD_INFO_FIELDS,
+    VALID_DEFECT_LEVEL_WORDS_TEXT,  # 合法档位词（错误提示用）
 )  # 算法入参契约（字段字典）—— service 层按此白名单提取，不传全量 ORM 字段
 
 _logger = logging.getLogger(__name__)
@@ -154,6 +160,9 @@ _NON_SNAPSHOT_FIELDS = frozenset({
 # "无缺陷" sentinel keyword 名称
 _DEFECTFREE_KEYWORD_NAME = "DEFECTFREE"
 
+# 合法缺陷程度取值（错误提示用；词表由算法包 fuzzy.specs 提供，单一真相源）
+_VALID_LEVEL_WORDS_TEXT = VALID_DEFECT_LEVEL_WORDS_TEXT
+
 
 # --- ORM 序列化 + 字段命名翻译 helper ---
 def _to_full_dict(instance: Any) -> Dict[str, Any]:
@@ -257,8 +266,19 @@ def _param_label(business_name: str) -> str:
 def _validate_feedback(feedback: Dict[str, Any]) -> None:
     """Step 0 —— feedback 防御性校验（与前端 validateFeedback 是同一套约束镜像）
 
+    校验口径与**算法的消费口径对齐**（每一条都有算法侧的理由）：
+    - defect 非空、每项是对象            —— 结构，算法要遍历
+    - keyword_name 必填                  —— 查规则的唯一键，缺了必然查不到规则
+    - level 必填且是合法档位词            —— 决定命中哪一套调整方案（三档是三套方案，不能混用）；
+                                        非法值放行会导致该缺陷的规则被全过滤，
+                                        对外只会报「无可用规则」，用户看不出是自己填错了
+    - position 必填                     —— 缺陷位置（多段成型下用于定位到对应参数段），
+                                        算法侧作为 IF 条件变量使用
+
+    DEFECTFREE（无缺陷）是例外：前端不展示程度/位置输入框，这两项免校验。
+
     Raises:
-        BizException(ERROR_REQUIRED_FIELD): 字段缺失
+        BizException(ERROR_REQUIRED_FIELD): 字段缺失或取值不合法
     """
     defects = feedback.get("defect") or []
     if not isinstance(defects, list) or len(defects) == 0:
@@ -266,18 +286,77 @@ def _validate_feedback(feedback: Dict[str, Any]) -> None:
 
     for i, d in enumerate(defects, 1):
         if not isinstance(d, dict):
-            raise BizException(ERROR_REQUIRED_FIELD, f"第 {i} 项缺陷格式错误：应为对象")
+            raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷格式错误：应为对象")
         if d.get("keyword_name") is None:
-            raise BizException(ERROR_REQUIRED_FIELD, f"第 {i} 项缺陷未选择缺陷类型（keyword_name 必填）")
+            raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷未选择缺陷类型（keyword_name 必填）")
         is_defect_free = d.get("keyword_name") == _DEFECTFREE_KEYWORD_NAME
         if not is_defect_free:
-            if not d.get("level"):
-                raise BizException(ERROR_REQUIRED_FIELD, f"第 {i} 项缺陷未选择缺陷程度")
+            level = d.get("level")
+            if not level:
+                raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷未选择缺陷程度")
+            if not is_valid_defect_level_word(level):
+                raise BizException(
+                    ERROR_REQUIRED_FIELD,
+                    f"第 {i } 项缺陷的缺陷程度取值不合法：{level}"
+                    f"（合法取值：{_VALID_LEVEL_WORDS_TEXT}）",
+                )
             if not d.get("position"):
-                raise BizException(ERROR_REQUIRED_FIELD, f"第 {i} 项缺陷未填写缺陷位置")
+                raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷未填写缺陷位置")
 
 
-# --- Step 1：ORM 反查 ---
+# --- Step 1：装配推理上下文 ---
+class InferContext(TypedDict):
+    """Step 1 装配出的推理上下文
+
+    全部来自「读 DB + 用户入参覆盖」，**不含任何写操作**。
+    """
+
+    condition: ProcessCondition
+    parent_param: ProcessParameter
+    baseline: Dict[str, Any]
+    machine_info: Dict[str, Any]
+    polymer_info: Dict[str, Any]
+    mold_info: Dict[str, Any]
+    # 用户手改且与库中原值**确实不同**的字段（供落库阶段精确写回）
+    user_changed_fields: Dict[str, Any]
+
+
+def _assemble_context(
+    condition_id: int,
+    parent_seq_idx: int,
+    user_parameter: Optional[Dict[str, Any]],
+) -> InferContext:
+    """Step 1 —— 装配本轮推理上下文（只读 DB，不落库）
+
+    这一步只回答一个问题：**本轮推理的起点是什么？**
+    - condition / parent_param：从 DB 反查（调机树的当前节点）
+    - baseline：以 parent_param 为底，用用户手改的值覆盖
+    - machine/polymer/mold_info：按 specs.py 白名单从 condition 的关联对象提取
+
+    ⚠️ 不在这里落库：写回父记录属于「提交」，与新建轮次同属一次事务。
+    放在这里会造出「参数改了但新轮次没建成」的中间态，
+    而且写在事务外，推理失败时无法回滚。
+    """
+    condition_orm, parent_param_orm = _resolve_parent(
+        condition_id=condition_id,
+        parent_seq_idx=parent_seq_idx,
+    )
+    baseline, changed_fields = _resolve_baseline(
+        user_parameter=user_parameter,
+        base_param_orm=parent_param_orm,
+    )
+    return InferContext(
+        condition=condition_orm,
+        parent_param=parent_param_orm,
+        baseline=baseline,
+        machine_info=_extract_machine_info(condition_orm),
+        polymer_info=_extract_polymer_info(condition_orm),
+        mold_info=_extract_mold_info(condition_orm),
+        user_changed_fields=changed_fields,
+    )
+
+
+# --- Step 1 子步骤：ORM 反查 ---
 def _resolve_parent(
     condition_id: int,
     parent_seq_idx: int,
@@ -312,21 +391,31 @@ def _resolve_parent(
     return condition, parent_param
 
 
-# --- Step 2：解析 baseline ---
+# --- Step 1 子步骤：解析 baseline ---
 def _resolve_baseline(
     user_parameter: Optional[Dict[str, Any]],
     base_param_orm: ProcessParameter,
-) -> Dict[str, Any]:
-    """Step 2 —— 解析 baseline（与 condition+seq_idx 对应的基准 parameter 值）
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Step 1 —— 解析 baseline（与 condition+seq_idx 对应的基准 parameter 值）
 
     base_param_orm 与 ORM 字段 parent_param 指同一实例，但语义不同：
     base = 推理上下文，parent = 落库父子链。
 
     优先级：
-    1. user_parameter 非空 → 先把入参字段持久化到 base_param_orm
-       （保证 DB 与本轮推理起点一致），然后从 ORM 读取 baseline
+    1. user_parameter 非空 → 把入参字段覆盖到 base_param_orm（**仅内存，不落库**），
+       然后从 ORM 读取 baseline
     2. 否则 → 直接从 base_param_orm ORM 读取
+
+    ⚠️ 本函数**不写库**。写回父记录由落库阶段（Step 3）在事务内完成——
+    「父记录改写」与「新建轮次」必须同生共死。
+
+    Returns:
+        (baseline, changed_fields)
+        - baseline: 本轮推理起点（用户入参优先）
+        - changed_fields: 用户手改且与库中原值**确实不同**的字段。
+          值相同的字段不进这个集合，避免无谓的 UPDATE 与 updated_at 变化。
     """
+    changed_fields: Dict[str, Any] = {}
     if user_parameter is not None:
         allowed = {
             f.name for f in base_param_orm._meta.fields
@@ -337,9 +426,11 @@ def _resolve_baseline(
                 continue
             if key not in allowed:
                 continue
+            if getattr(base_param_orm, key) == value:
+                continue
             setattr(base_param_orm, key, value)
-        base_param_orm.save()
-    return _to_full_dict(base_param_orm) or {}
+            changed_fields[key] = value
+    return _to_full_dict(base_param_orm) or {}, changed_fields
 
 
 def _snapshot_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
@@ -751,6 +842,31 @@ def _build_suggestion_payload(
 
 
 # --- 落库 helper（DB 操作，纯函数 / 无 self 依赖） ---
+def _sync_user_modified_parameter(
+    parent_param: ProcessParameter,
+    changed_fields: Dict[str, Any],
+) -> None:
+    """Step 3 —— 把用户手改的参数写回父记录
+
+    业务不变式：**DB 里的记录必须等于用户实际在用的参数**。
+    用户在前端改了工艺参数、不点【保存试模结果】直接点【获取优化工艺】时，
+    只有这里能把改动落库（tuning-feedback 不写 ProcessParameter）。
+
+    为什么放在落库阶段而不是装配上下文时：
+    「父记录改写」与「新建轮次」是同一件事的两面，必须同生共死。
+    放在装配阶段会造出「参数改了但新轮次没建成」的中间态，
+    而且写在事务外，推理失败时无法回滚。
+
+    只写**真正变化**的字段：值相同的字段不进 UPDATE，
+    避免写放大与无谓的 updated_at 变化。
+    """
+    if not changed_fields:
+        return
+    for key, value in changed_fields.items():
+        setattr(parent_param, key, value)
+    parent_param.save(update_fields=[*changed_fields.keys(), "updated_at"])
+
+
 def _update_previous_tuning_record(
     parent_param: ProcessParameter,
     defect_feedbacks: List[Dict[str, Any]],
@@ -809,7 +925,7 @@ def _create_new_parameter(
     parent_param: ProcessParameter,
     parameters_dict: Dict[str, Any],
 ) -> ProcessParameter:
-    """Step 5.3 —— 创建新 ProcessParameter（param_source='system_inferred'）
+    """Step 3.4 —— 创建新 ProcessParameter（param_source='system_inferred'）
 
     parameters_dict 来自 baseline（_to_full_dict 全量快照），含父记录的
     id / created_at / param_source / seq_idx 等系统字段，直接展开会与
@@ -907,24 +1023,20 @@ class ParameterOptimizeService:
         # Step 0: feedback 防御性校验
         _validate_feedback(feedback)
 
-        # ---------- Step 1: 反查 ORM（condition + parent_param）----------
-        condition_orm, parent_param_orm = _resolve_parent(
+        # ---------- Step 1: 装配推理上下文（只读 DB，不落库）----------
+        ctx = _assemble_context(
             condition_id=condition_id,
             parent_seq_idx=parent_seq_idx,
-        )
-
-        # ---------- Step 2: 解析 baseline（用户入参优先，否则 ORM）----------
-        baseline = _resolve_baseline(
             user_parameter=parameter,
-            base_param_orm=parent_param_orm,
         )
+        condition_orm = ctx["condition"]
+        parent_param_orm = ctx["parent_param"]
+        baseline = ctx["baseline"]
+        machine_info = ctx["machine_info"]
+        polymer_info = ctx["polymer_info"]
+        mold_info = ctx["mold_info"]
 
-        # ---------- Step 3: 提取 3 个算法入参 dict（按 specs.py 白名单）----------
-        machine_info = _extract_machine_info(condition_orm)
-        polymer_info = _extract_polymer_info(condition_orm)
-        mold_info = _extract_mold_info(condition_orm)
-
-        # ---------- Step 4: 纯推理（与 DB 无关）----------
+        # ---------- Step 2: 纯推理（与 DB 无关）----------
         new_parameter_dict, suggestion_payload, algorithm_recommendations = self._infer_kernel(
             machine_info=machine_info,
             polymer_info=polymer_info,
@@ -934,46 +1046,52 @@ class ParameterOptimizeService:
             interface_tag=f"infer(condition_id={condition_id}, parent_seq_idx={parent_seq_idx})",
         )
 
-        # ---------- Step 5: 原子事务落库 ----------
-        # Step 5 入口一次性从 feedback 提取（贴近使用方，不跨步共享）
+        # ---------- Step 3: 原子事务落库 ----------
+        # Step 3 入口一次性从 feedback 提取（贴近使用方，不跨步共享）
         defect_feedbacks = feedback.get("defect", []) or []
         tuning_result = feedback.get("tuning_result")
         with db_transaction.atomic():
-            # 5.1 更新上一轮 TuningRecord（缺陷反馈 + 试模结果）
+            # 3.1 写回用户手改的参数（DB 与用户实际在用的参数保持一致）
+            _sync_user_modified_parameter(
+                parent_param=parent_param_orm,
+                changed_fields=ctx["user_changed_fields"],
+            )
+
+            # 3.2 更新上一轮 TuningRecord（缺陷反馈 + 试模结果）
             _update_previous_tuning_record(
                 parent_param=parent_param_orm,
                 defect_feedbacks=defect_feedbacks,
                 tuning_result=tuning_result,
             )
 
-            # 5.2 更新上一轮 Recommendation.is_adopted（训练标签）
+            # 3.3 更新上一轮 Recommendation.is_adopted（训练标签）
             _update_previous_recommendation_is_adopted(
                 parent_param=parent_param_orm,
                 tuning_result=tuning_result,
             )
 
-            # 5.3 创建新 ProcessParameter
+            # 3.4 创建新 ProcessParameter
             new_param = _create_new_parameter(
                 condition=condition_orm,
                 parent_param=parent_param_orm,
                 parameters_dict=new_parameter_dict,
             )
 
-            # 5.4 创建新 TuningRecord（pending 状态，等待下次反馈）
+            # 3.5 创建新 TuningRecord（pending 状态，等待下次反馈）
             _create_new_tuning_record(
                 new_param=new_param,
                 parent_param=parent_param_orm,
                 defect_feedbacks=defect_feedbacks,
             )
 
-            # 5.5 创建新 Recommendation
+            # 3.6 创建新 Recommendation
             recommendation = _create_new_recommendation(
                 new_param=new_param,
                 algorithm_recommendations=algorithm_recommendations,
                 source_type=suggestion_payload.get("source_type") or "fuzzy_rule",
             )
 
-        # ---------- Step 6: 组装响应 ----------
+        # ---------- Step 4: 组装响应 ----------
         return {
             "new_parameter": {
                 **new_parameter_dict,

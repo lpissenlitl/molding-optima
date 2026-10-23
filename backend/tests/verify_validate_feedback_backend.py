@@ -4,6 +4,8 @@
 - defect 缺失 / 空数组 / 非 list → ERROR_REQUIRED_FIELD
 - 缺 keyword_id → ERROR_REQUIRED_FIELD
 - 非 DEFECTFREE：缺 level / position → ERROR_REQUIRED_FIELD
+- 非 DEFECTFREE：level 取值非法（非档位词）→ ERROR_REQUIRED_FIELD
+- level 取值合法（含 5 档 very_* 与大小写变体）→ OK
 - DEFECTFREE 缺 level/position → OK
 - 多项混合校验
 """
@@ -100,6 +102,44 @@ expect_fail(
     "非 DEFECTFREE 完全无 position",
 )
 
+# ---------- level 取值合法性（非档位词必须拦） ----------
+# 非法值若放行，会走到规则档位过滤时被比不上 → 该缺陷的规则被全过滤 →
+# 对外只报「无可用规则」，用户看不出是自己填错了档位
+expect_fail(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "严重", "position": "DL1"}]},
+    "取值不合法",
+    "level 非档位词（中文）",
+)
+expect_fail(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "abc", "position": "DL1"}]},
+    "取值不合法",
+    "level 非档位词（乱码）",
+)
+expect_fail(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": 3, "position": "DL1"}]},
+    "取值不合法",
+    "level 非字符串",
+)
+
+# ---------- level 合法值必须放行 ----------
+# very_low / very_high 是前端 LEVEL_WORDS 5 档的合法选项，不能误伤
+expect_ok(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "very_low", "position": "DL1"}]},
+    "level=very_low（5 档）",
+)
+expect_ok(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "very_high", "position": "DL1"}]},
+    "level=very_high（5 档）",
+)
+expect_ok(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "medium", "position": "DL1"}]},
+    "level=medium",
+)
+expect_ok(
+    {"defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "HIGH", "position": "DL1"}]},
+    "level 大小写变体",
+)
+
 # ---------- 多项混合校验 ----------
 expect_fail(
     {
@@ -143,4 +183,4 @@ expect_ok(
 
 print()
 print("=" * 70)
-print("ALL PASSED (13 个用例)")
+print("ALL PASSED (23 个用例)")

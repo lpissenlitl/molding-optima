@@ -24,7 +24,7 @@
 
 from typing import Dict, Iterable, List, Set
 
-from .macros import ALL_LEVEL_WORDS, DEFECT_CONST
+from .macros import ALL_LEVEL_WORDS, DEFECT_CONST, LEVEL_WORD_ALIASES
 
 
 # 规则关键字（IF / AND / THEN）——不是词法单元，跳过
@@ -86,12 +86,15 @@ def split_phase(phase: str) -> Dict[str, str]:
             return {'name': name, 'action': action, 'value': value, 'kind': 'solution'}
 
     # ---- 情形 3: 前提词  `<name>_<level>` ----------------------------------
-    #   从右往左找到第一个已知 level 词，剩下的 prefix 全部是 name
-    for i in range(len(parts) - 1, 0, -1):
-        if parts[i] in ALL_LEVEL_WORDS:
-            name = '_'.join(parts[:i])
-            level = parts[i]
-            return {'name': name, 'level': level, 'kind': 'precondition'}
+    #   档位词可能是多段的（very_low / extremely_low / slightly_low ...），
+    #   必须按“最长后缀”匹配：'IV0_very_low' 应拆成 name='IV0' + level='very_low'，
+    #   而不是 name='IV0_very' + level='low'（那样档位会错一档）。
+    #   2026-10-22 E1 补齐：原实现只匹配单个 part，多段词一律被误拆。
+    for seg_count in range(min(3, len(parts) - 1), 0, -1):
+        suffix = '_'.join(parts[-seg_count:])
+        if suffix in ALL_LEVEL_WORDS:
+            name = '_'.join(parts[:-seg_count])
+            return {'name': name, 'level': suffix, 'kind': 'precondition'}
 
     # ---- 兜底：老 fuzzykit 风格（按空格 + 第一段下划线拆分）---------------
     #   注：兜底结果的 level 未必是合法等级词（如 'worse'），调用方必须
@@ -128,7 +131,7 @@ def normalize_level_word(word: str) -> str:
     会被当成两档。
     """
     w = str(word or '').lower()
-    return {'mid': 'medium'}.get(w, w)
+    return LEVEL_WORD_ALIASES.get(w, w)
 
 
 def is_position_name(name: str) -> bool:

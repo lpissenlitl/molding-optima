@@ -3,14 +3,23 @@
 
 本文件从 `old/mdprocess/utils/fuzzykit/fuzzy_core/models/nets.py` 迁移而来。
 
-核心类（生产主路径）：
-- FuzzyFeature         特征模糊化（高斯/三角）
-- FuzzyRule            单条全模糊规则解析（兜底层用）
-- FuzzyRuleNet         Mamdani 推理（兜底层）
-- NumTskRule           单条数值结论规则解析（工厂级用）
-- NumTskRuleNet        零阶 TSK 推理（工厂级生产主路径）
-- ParticularRules      弹窗/提示规则
-- TskRuleNet           一阶代数式 TSK（**不迁**，占位类）
+核心类（按【结论形态】分层，与 `fuzzy_algorithm.py` 的分流一致）：
+- FuzzyFeature         特征模糊化（生产只用高斯；'tri' 分支因硬编码 'gauss' 不可达）
+- FuzzyRule            Mamdani 规则解析（提示层用）
+- FuzzyRuleNet         Mamdani 推理（提示层；结论为模糊等级，经 centroid 反模糊化）
+- NumTskRule           数值结论规则解析（数值层用，生产主路径）
+- NumTskRuleNet        零阶 T-S 推理（数值层，生产主路径）
+- ParticularRules      检查/弹窗提示规则（纯文本建议）
+- TskRuleNet           一阶代数式 T-S（占位死类，明确不做）
+
+术语对齐（2026-10-22）：
+  本文件原注释使用「工厂级 / 兜底层」——那是旧 HsMoldingService 的业务分层，
+  迁入本项目后已失效。当前项目按【结论形态】分层（见 fuzzy_algorithm.py）：
+    数值层 (numeric)  = 结论能算出数值    → NumTskRuleNet
+    提示层 (advisory) = 结论是文本/模糊等级 → ParticularRules / FuzzyRuleNet
+  ⚠️ 2026-10-22 实测：规则库 1646 条中，模糊等级结论 0 条 ⇒ FuzzyRuleNet
+     代码路径已接线但**实际空跑**；99 条 adjust/popup 走 ParticularRules；
+     1547 条数值结论走 NumTskRuleNet。
 
 详细迁移对照与背景见 `backend/_dev_refs/fuzzy-engine-migration-design.md`。
 """
@@ -22,6 +31,7 @@ import numpy as np
 
 from ..functional import gauss_mf, tri_mf, defuzz
 from ..macros import (
+    ACTION_MAP,
     ALL_LEVEL_WORDS,
     DEFECT_CONST,
     HS_MAPPING_DICT,
@@ -119,7 +129,7 @@ class FuzzyFeature:
 
 
 # ============================================================================
-# FuzzyRule: 全模糊规则（兜底层 Mamdani 用）
+# FuzzyRule: Mamdani 规则（提示层用）
 # ============================================================================
 
 class FuzzyRule:
@@ -167,7 +177,7 @@ class FuzzyRule:
                     # 老 fuzzykit：value 在 sol_dict 中存为 'level' 字段
                     r_solutions[name] = {
                         'name': name,
-                        'action': HS_MAPPING_DICT.get(action, 0),
+                        'action': ACTION_MAP.get(action, 0),
                         'level': value,
                         's_type': 'process',
                     }
@@ -178,13 +188,16 @@ class FuzzyRule:
 
 
 # ============================================================================
-# FuzzyRuleNet: Mamdani 网络（兜底层）
+# FuzzyRuleNet: Mamdani 网络（提示层）
 # ============================================================================
 
 class FuzzyRuleNet:
-    """Mamdani 推理网络（兜底层）。
+    """Mamdani 推理网络（提示层）。
 
     处理'条件模糊 + 结论模糊级别'规则，结果经 centroid 反模糊化得到精确值。
+
+    ⚠️ 2026-10-22 实测：当前规则库中模糊等级结论 0 条 ⇒ 本引擎实际空跑，
+       代码路径已接线但无数据流入。
     """
 
     def __init__(self, rule_array: list, keyword_array: list):
@@ -394,7 +407,7 @@ class FuzzyRuleNet:
 
 
 # ============================================================================
-# NumTskRule: 数值结论规则（工厂级用）
+# NumTskRule: 数值结论规则（数值层用）
 # ============================================================================
 
 class NumTskRule:
@@ -452,7 +465,7 @@ class NumTskRule:
                     elif action in ('add', 'reduce', 'adjust'):
                         r_solutions[name] = {
                             'name': name,
-                            'action': HS_MAPPING_DICT.get(action, 0),
+                            'action': ACTION_MAP.get(action, 0),
                             'level': value,
                             's_type': 'process',
                         }
@@ -482,11 +495,11 @@ class NumTskRule:
 
 
 # ============================================================================
-# NumTskRuleNet: 零阶 TSK 网络（工厂级生产主路径）
+# NumTskRuleNet: 零阶 T-S 网络（数值层，生产主路径）
 # ============================================================================
 
 class NumTskRuleNet:
-    """数值结论 TSK 推理网络（生产主路径）。
+    """数值结论零阶 T-S 推理网络（数值层，生产主路径）。
 
     处理'条件模糊 + 结论数值/百分比'规则：
       1) 隶属度层

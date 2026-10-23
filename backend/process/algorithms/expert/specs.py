@@ -437,8 +437,7 @@ MOLD_INFO_SPEC: Dict[str, Dict[str, Any]] = {
 # algorithms/field_contract.py —— 那是与具体算法无关的纯函数，各算法只保留自己的字段字典。
 # 本文件 re-export 仅为兼容既有调用方（data_validator / initializer 都从 specs 取这些名字）；
 # 新代码请直接 import algorithms.field_contract，不要再经由某个算法包转发。
-# 算法包之间不互相 import：fuzzy 的契约见 algorithms/fuzzy/specs.py（字段名属 fuzzy
-# 自己的 ORM 命名空间，与这里的 expert 契约名不同，不可混用）。
+# 各算法包之间不互相 import，各自维护自己的字段字典与契约。
 
 # 单一数据源：自动从 mapping.condition 派生
 REQUIRED_MOLD_INFO_FIELDS: Tuple[str, ...] = derive_required_fields(MOLD_INFO_SPEC)

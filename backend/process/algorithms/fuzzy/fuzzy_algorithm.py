@@ -37,6 +37,9 @@ from process.algorithms.fuzzy.services.rule_query_service import (
 
 logger = logging.getLogger(__name__)
 
+# 元数据来源标记：'guessed' 表示这个论域是按实时值猜的，不是 RuleKeyword 权威元数据
+FIELD_SOURCE_GUESSED = 'guessed'
+
 
 class FuzzyEngine(AlgorithmBase):
     """模糊推理算法 - 基于模糊规则进行缺陷修正。
@@ -189,6 +192,8 @@ class FuzzyEngine(AlgorithmBase):
     # 工厂级网络和兜底层网络（每次 recommend 时构造；可考虑缓存）
     def __init__(self):
         self._rule_net = None  # 兼容旧接口，不使用
+        # 字段定性降级清单（每次 recommend 开头重置，见 recommend()）
+        self._field_reports = []
 
     def recommend(self, context: dict) -> List[Recommendation]:
         """根据缺陷反馈返回参数调整推荐。
@@ -225,6 +230,11 @@ class FuzzyEngine(AlgorithmBase):
         Returns:
             List[Recommendation]
         """
+        # 本引擎是模块级单例（见文件末尾 AlgorithmRegistry.register），
+        # 而 _field_reports 会在推理过程中被追加 ⇒ 不重置就会随请求数无界增长
+        # （内存泄漏），且上一轮的降级清单会被误读成本轮的结果。
+        self._field_reports = []
+
         defects = (context.get('feedback') or {}).get('defect', []) or []
         if not defects:
             return []
@@ -370,7 +380,7 @@ class FuzzyEngine(AlgorithmBase):
             except Exception as e:
                 logger.warning('[FuzzyEngine] 加载 RuleKeyword 失败: %s', e)
 
-        # 兜底：用 process_parameter 实时值补全 keyword 元数据
+        # 兜底：用当前工艺参数值补全 keyword 元数据
         known_keywords = {kw['keyword'] for kw in keyword_dicts}
         for name in param_names:
             if name in known_keywords:
@@ -388,8 +398,60 @@ class FuzzyEngine(AlgorithmBase):
                 'min_val': 0.0,
                 'max_val': current * 2,
                 'step': max(current * 0.1, 0.01),
+                # 标记这是【推测】出来的论域，不是 RuleKeyword 权威元数据
+                'source': FIELD_SOURCE_GUESSED,
             })
         return keyword_dicts
+
+    def _build_field_context(
+        self,
+        rules: List[ResolvedRule],
+        process_parameter: Dict[str, Any],
+        layer: str = 'numeric',
+    ):
+        """加载规则字段的论域元数据，并做一次字段体检。
+
+        字段分三类：
+
+        - ``authority``：有 RuleKeyword 权威元数据
+        - ``guessed``  ：无权威元数据，按当前工艺参数值推测了一个论域
+                        （lvl=3、论域[0, 当前值*2]）
+        - ``unknown``  ：既无权威元数据也无当前值 ⇒ 规则少了一个门控条件，激活度偏高
+
+        为什么要体检：字段缺元数据时，``nets.py`` 会【静默跳过】它（只有 debug 级
+        日志），于是规则少了一个门控条件却无人知晓。现在把它提升到 warning 级。
+
+        Args:
+            rules: 本层要推理的规则。
+            process_parameter: 当前工艺参数（字段名已归一化；不含设备/材料/模具信息）。
+            layer: 层名（numeric / advisory），仅用于日志与清单归类。
+
+        Returns:
+            ``(keyword_dicts, classification)`` —— 前者送引擎，后者是分类结果。
+        """
+        param_names = self._collect_keyword_names(rules)
+        keyword_dicts = self._load_keyword_dicts(param_names, process_parameter)
+
+        guessed = {kw['keyword'] for kw in keyword_dicts
+                   if kw.get('source') == FIELD_SOURCE_GUESSED}
+        known = {kw['keyword'] for kw in keyword_dicts}
+        classification = {
+            'authority': sorted(known - guessed),
+            'guessed': sorted(guessed),
+            'unknown': sorted(n for n in param_names if n not in known),
+        }
+
+        if classification['unknown']:
+            logger.warning(
+                '[FuzzyEngine][%s] %d 个字段无元数据（规则缺一个门控条件，激活度偏高）: %s',
+                layer, len(classification['unknown']), classification['unknown'])
+        if classification['guessed']:
+            logger.info(
+                '[FuzzyEngine][%s] %d 个字段使用推测论域（lvl=3、论域[0, 当前工艺参数值*2]）: %s',
+                layer, len(classification['guessed']), classification['guessed'])
+
+        self._field_reports.append({'layer': layer, 'classification': classification})
+        return keyword_dicts, classification
 
     def _infer_numeric_layer(
         self,
@@ -400,8 +462,8 @@ class FuzzyEngine(AlgorithmBase):
         if not numeric_rules:
             return []
 
-        param_names = self._collect_keyword_names(numeric_rules)
-        keyword_dicts = self._load_keyword_dicts(param_names, process_parameter)
+        keyword_dicts, _classification = self._build_field_context(
+            numeric_rules, process_parameter, 'numeric')
 
         if not keyword_dicts:
             logger.info('[FuzzyEngine] 数值层无可用 RuleKeyword，跳过')
@@ -481,8 +543,8 @@ class FuzzyEngine(AlgorithmBase):
         if not mamdani_rules:
             return out
 
-        param_names = self._collect_keyword_names(mamdani_rules)
-        keyword_dicts = self._load_keyword_dicts(param_names, process_parameter)
+        keyword_dicts, _classification = self._build_field_context(
+            mamdani_rules, process_parameter, 'advisory')
         if not keyword_dicts:
             return out
 

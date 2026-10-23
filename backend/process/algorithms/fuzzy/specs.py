@@ -1,9 +1,8 @@
 """
 算法入参契约——调优（fuzzy）需要哪些字段（接口格式 + 必填等级）
 
-本文件**独立定义**调优的字段字典，不 import expert 的任何契约：
-字段选哪些、叫什么名、必填到什么程度，是算法自己的决定。两个算法对同一批
-masterdata 字段的依赖强度并不相同，继承别人的字典等于替别人做决定。
+本文件**独立定义**调优的字段字典：字段选哪些、叫什么名、必填到什么程度，
+是算法自己的决定，由本算法包自行维护。
 
 命名空间（易错点，务必看清再抄字段名）：
 - 本契约的 target_key == ORM 字段名（max_set_injection_speed）。
@@ -15,10 +14,6 @@ masterdata 字段的依赖强度并不相同，继承别人的字典等于替别
   命名空间——由 `FuzzyEngine.FIELD_NAME_ALIAS` + `FIELD_INDEX_OFFSET` 翻译
   （业务 1-based → 算法 0-based，如 `inj_spd_1` → `IV0`），
   见 `parameter_optimize._normalize_field_name_by_spec`。
-- expert（initialize）用的是它自己的契约名（max_set_injection_velocity，
-  其 attr_name 才指向 ORM 的 max_set_injection_speed）。
-- 跨算法抄名字的后果：audit 按 target_key 取值，名字对不上就取不到，
-  会把「有数据」误判成「字段缺失」。
 
 为什么设备设定上限要标「必填」（2026-10-15 结论）：
 fuzzy 推理的第一步是按当前参数值判定它落在哪个模糊等级——FuzzyFeature 的论域
@@ -30,7 +25,7 @@ fuzzy 推理的第一步是按当前参数值判定它落在哪个模糊等级�
 
 校验机制复用 algorithms/field_contract.py（与具体算法无关的纯函数）：
 condition 的 5 个等级、「液压机必填」的驱动判定、condition_when 的条件求值，
-以及「必填集自动派生」都无需在此重写。字段字典的 entry 结构与 expert 保持一致
+以及「必填集自动派生」都无需在此重写。各算法字段字典的 entry 结构统一
 （source_model / source / attr_name / desc / type / condition），因此 service 层
 可以用同一套遍历代码按 (source_model, attr_name) 从 ORM 提取本维度的数据。
 
@@ -39,13 +34,15 @@ condition 的 5 个等级、「液压机必填」的驱动判定、condition_whe
 不 import 业务异常）。
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from ..field_contract import (
     audit_field_completeness,
     derive_required_fields,
     drive_system_to_power_method,
 )
+from .fuzzy_core.macros import ALL_LEVEL_WORDS
+from .fuzzy_core.parsing import is_level_word
 
 
 # ============================================================================
@@ -256,7 +253,7 @@ REQUIRED_OPTIMIZE_MOLD_FIELDS = derive_required_fields(OPTIMIZE_MOLD_INFO_FIELDS
 
 
 class OptimizeDataValidator:
-    """调优算法入参校验器（与 expert 的 DataValidator 同定位，各自实现互不依赖）
+    """调优算法入参校验器（纯本算法实现，不依赖其它算法包）
 
     位置：算法层入口。任何调用方（service / 第三方 / CLI）进 fuzzy 前都必须过这里，
     因此必填约束不依赖 pydantic schema，也不依赖某个具体 View。
@@ -300,6 +297,73 @@ class OptimizeDataValidator:
             )
 
 
+# ============================================================================
+# 缺陷程度（level）词表契约
+# ============================================================================
+#
+# 判定集合直接取 fuzzy_core.parsing.ALL_LEVEL_WORDS（= is_level_word 的依据），
+# 不另起一套——两处真相源必然分叉。
+#
+# 为什么不用 HS_MAPPING_DICT 的键集合当判据：
+# - HS_MAPPING_DICT 只登记到 low/mid/medium/high + level1..level9，缺 5/7 档；
+#   拿它当校验基准，会把前端 LEVEL_WORDS（3/5/7 档）里的合法选项
+#   （very_low / very_high / extremely_*）误判为非法，直接把用户挡在门外。
+# - 缺陷档位过滤（rule_query_service._match_defect_level）走的是
+#   normalize_level_word 字符串比较，**不查** HS_MAPPING_DICT，
+#   因此 very_low 在过滤语义上是完全正确的输入，接口层不该拦。
+#
+# ⚠️ HS_MAPPING_DICT 缺 5/7 档是**规则库侧**的问题：规则前件若写成
+# `X_very_low`，判级时查表会 KeyError。那属于算法内核改造范围
+# （见 2026-10-20-fuzzy-inference-review-and-roadmap.md P0-1），
+# 不在接口校验里兜——接口层只负责「输入是不是合法档位词」，
+# 不负责「规则库有没有这一档」。
+_LEVEL_WORD_DISPLAY_ORDER = (
+    'extremely_low', 'very_low', 'low', 'mid', 'medium',
+    'high', 'very_high', 'extremely_high',
+)
+
+
+def _build_valid_level_words() -> Tuple[str, ...]:
+    """合法档位词（按语义顺序排列，供错误提示展示）"""
+    ordered = [w for w in _LEVEL_WORD_DISPLAY_ORDER if w in ALL_LEVEL_WORDS]
+    ordered += sorted(w for w in ALL_LEVEL_WORDS if w not in ordered)
+    return tuple(ordered)
+
+
+VALID_DEFECT_LEVEL_WORDS: Tuple[str, ...] = _build_valid_level_words()
+
+
+def _build_level_words_text(words: Tuple[str, ...]) -> str:
+    """档位词展示文本：把 level1..level9 这类连续编号词折叠为区间
+
+    不折叠的话提示会变成 17 个词的串，在界面上过长反而看不清重点。
+    """
+    numbered = [w for w in words if w.startswith('level') and w[5:].isdigit()]
+    others = [w for w in words if w not in numbered]
+    if numbered:
+        others.append(f"{numbered[0]}~{numbered[-1]}")
+    return " / ".join(others)
+
+
+VALID_DEFECT_LEVEL_WORDS_TEXT: str = _build_level_words_text(VALID_DEFECT_LEVEL_WORDS)
+
+
+def is_valid_defect_level_word(word: Any) -> bool:
+    """缺陷程度（level）是否为合法的模糊等级词。
+
+    用途：接口层校验反馈里的 ``level``。非法值（如 '严重' / 'abc'）若放行，
+    会走到规则档位过滤时被比不上 → 该缺陷的规则被全过滤 →
+    对外表现为「无可用规则」的 400，而不是「档位填错了」。
+
+    Args:
+        word: 反馈里的 level 原值（None / 非字符串也安全）
+
+    Returns:
+        True 表示是合法档位词
+    """
+    return is_level_word(word)
+
+
 # TODO（论域改造时一并处理，本次只钉契约）：
 # 1. 温度类字段升级为「条件必填」：需先让 field_contract 支持从外部注入触发上下文
 #    （如 context["involved_params"]），再按本次是否涉及温度参数决定等级。
@@ -322,4 +386,8 @@ __all__ = [
     "REQUIRED_OPTIMIZE_MOLD_FIELDS",
     # 校验
     "OptimizeDataValidator",
+    # 缺陷程度词表契约
+    "VALID_DEFECT_LEVEL_WORDS",
+    "VALID_DEFECT_LEVEL_WORDS_TEXT",
+    "is_valid_defect_level_word",
 ]

@@ -2,7 +2,7 @@
 verify_fail_fast_infer.py
 验证 parameter_optimize.infer 在算法无推荐时 fail-fast：
 - _call_algorithms 返回空 recommendations 时抛 BizException(ERROR_OPERATION_FAILED)
-- 不进入 Step 5 事务（不创建新 ProcessParameter / 不更新 TuningRecord）
+- 不进入 Step 3 事务（不创建新 ProcessParameter / 不更新 TuningRecord）
 
 策略：patch 模块顶层 _call_algorithms 返回空结果，
 然后调一次 infer，断言：
@@ -45,7 +45,8 @@ def run_case(case_name, feedback, algorithm_result):
     service = ParameterOptimizeService()
 
     # patch 模块顶层 helper（重构后 helper 已移出类）
-    # _resolve_parent / _resolve_baseline / _extract_* 需 mock 掉（无真实 condition）
+    # _resolve_parent / _resolve_baseline / _extract_* 需 mock 掉（无真实 condition）；
+    # 它们现在由 _assemble_context（Step 1）编排，mock 依然生效（模块级函数查找）
     with patch.object(
         _opt_mod,
         "_resolve_parent",
@@ -53,7 +54,8 @@ def run_case(case_name, feedback, algorithm_result):
     ), patch.object(
         _opt_mod,
         "_resolve_baseline",
-        return_value={"dummy": 1},
+        # 2026-10-22：返回 (baseline, changed_fields)——不再在解析阶段落库
+        return_value=({"dummy": 1}, {}),
     ), patch.object(
         _opt_mod,
         "_extract_machine_info",
