@@ -2,7 +2,7 @@
 
 > **日期**：2026-10-23
 > **来源**：用户第 16~18 轮对 `backend/process/algorithms/fuzzy/fuzzy_algorithm.py`（686 行）结构的质疑
-> **状态**：**E1 + E2 + E3 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；中间态与聚合层见 §2.7；验收见 §5
+> **状态**：**E1 + E2 + E3 + E4-a 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；中间态与聚合层见 §2.7；命名契约归位见 §2.8；验收见 §5
 > **重构原则**：**每轮工作完成后统一跑一次现成验证**，不为每步新写测试脚本（用户第 18 轮明确）
 > **靶子文件**：`backend/process/algorithms/fuzzy/fuzzy_algorithm.py`
 > **起点 commit**：`06d4a12`（工作区干净）
@@ -16,7 +16,7 @@
 | **触发问题** | 用户三条原话：①「我完全不知道这个类想干什么」②「某一部分有问题，代码就崩了」③「各种命名完全莫名其妙」 |
 | **用户诉求** | **流程清晰** > **局部失败不扩散** > **命名可理解** |
 | **验收标准** | R1~R4（§1.2）+ 故障隔离三层边界（§1.3） |
-| **本轮产出** | **§3 命名对照表**（E1-b）＋ **§2.7 中间态与聚合层**（E3） |
+| **本轮产出** | **§3 命名对照表**（E1-b）＋ **§2.7 中间态与聚合层**（E3）＋ **§2.8 命名契约归位**（E4-a） |
 | **轮次划分** | E1 命名契约 → E2 故障边界+去 DB 依赖 → E3 中间态类型化+拆聚合 → E4 抽字段上下文+瘦身+改名 |
 | **入口改名** | `fuzzy_algorithm.py` → **`engine.py`**（候选已提出，E4 执行时最终确认；类名 `FuzzyEngine` 不动） |
 | **不做** | 不动 `llm` / `empirical` / `expert` 三个算法包；不动算法语义（激活度公式、聚合公式、阈值） |
@@ -180,6 +180,40 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 并补上了文本建议用例（另外还补了 `to_recommendations()` 层的公式与对外字符串断言，
 旧复刻版只测到 merged dict，没测到 Recommendation）。
 
+### 2.8 E4-a 落地后的命名契约层（2026-10-23）
+
+**问题**：命名契约（3 张表 + 反向映射，137 行）是**静态数据**，却挂在 `FuzzyEngine` 类里
+—— 读者要在几十个行为方法之间找「这个字段到底叫什么」，
+且类名承诺的「引擎」职责被静态配置稀释。
+
+**处置**：新建 `process/algorithms/fuzzy/naming.py`（230 行，零 ORM / 零 Django 依赖）：
+
+| 迁出物 | 新位置 | 说明 |
+|---|---|---|
+| `FIELD_NAME_ALIAS`（23 条） | `naming.FIELD_NAME_ALIAS` | = 前缀表(10) + 完整表(13) 合并，**顺序与历史一致** |
+| `FIELD_INDEX_OFFSET`（10 条） | `naming.FIELD_INDEX_OFFSET` | 分段参数序号偏移 |
+| `FAMILY_FIELD_ALIAS`（1 条） | `naming.FAMILY_FIELD_ALIAS` | 整段族映射 |
+| `to_business_name()` | `naming.to_business_name()` | 模块级函数（原 classmethod） |
+
+**同时做的一处逻辑收敛（行为不变）**
+原 `to_business_name()` 第 3 段是「遍历 `FIELD_NAME_ALIAS`，再用排除法跳过前缀类 key」。
+排除法依赖「前缀映射必然同时登记在 `FIELD_INDEX_OFFSET`」这个**口头约定** ——
+以后有人加了一条前缀映射却忘了同步偏移表，那条映射就会被当成完整字段名处理，段号整体错位。
+现改为**只查完整字段名表**（`FULL_FIELD_ALIAS`），并把「前缀映射」显式独立成表
+⇒ 前缀表与偏移表的 key 集合必须一一对应，由 **import 时自检**兜底
+（`_validate_tables()` 不一致直接抛 `RuntimeError`，不留到运行期才发现）。
+
+**对外零改动**：`FuzzyEngine` 保留兼容别名与兼容入口 ⇒
+`parameter_optimize.py` L245（`FuzzyEngine.to_business_name(...)`）
+与 L534-536（读 3 张类属性）**一行不改**。
+
+**等价性验证**（搬移类改动的唯一验收标准 = 行为不变）：
+- 三张表**逐条比对（含顺序）**与 HEAD 版完全一致
+- `to_business_name()` **262 个输入**（全部算法名 + 变体 + 边界）新旧对拍，结果全一致
+- `FuzzyEngine.FIELD_NAME_ALIAS is naming.FIELD_NAME_ALIAS` ⇒ 编排层读到的就是同一份
+
+**规模**：`fuzzy_algorithm.py` 697 → **582 行**（-115）。
+
 ### 2.3 引用点全景（改名成本评估，2026-10-23 实测）
 
 | 引用点 | 形式 | 性质 |
@@ -225,17 +259,18 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
    双向共用，禁止出现第二份硬编码映射。
 
 > ⚠️ 现状风险点：`specs.py` L14 已明确写「工艺参数走的是**另一套**命名空间」，但这条规则**只写在注释里**，
-> 代码里没有任何机制保证混用会被发现。E3 抽 `naming.py` 时要把这条规则变成可执行的约束。
+> 代码里没有任何机制保证混用会被发现。**E4-a 抽 `naming.py` 时要把这条规则变成可执行的约束**
+> （已落地：表间一致性 import 时自检，见 §2.8）。
 
 ### 3.2 术语总表
 
 | 概念（中文） | 当前代码标识 | 目标标识 | 所在层 | 说明 |
 |---|---|---|---|---|
 | 模糊推理引擎 | `FuzzyEngine` | **不变** | 编排层 | 包级导出唯一符号 |
-| 业务→算法字段名映射 | `FIELD_NAME_ALIAS` | → `naming.py` | 契约层 | 33 条 |
-| 段号偏移（1-based→0-based） | `FIELD_INDEX_OFFSET` | → `naming.py` | 契约层 | 10 条 |
-| 整段族映射 | `FAMILY_FIELD_ALIAS` | → `naming.py` | 契约层 | 1 条（`brl_temp`→`BT`） |
-| 算法→业务字段名 | `to_business_name()` | → `naming.py` | 契约层 | 唯一反向出口 |
+| 业务→算法字段名映射 | `FIELD_NAME_ALIAS` | ✅ → `naming.py` | 契约层 | **23 条**（⚠️ 原写 33 条，实测为 23 条 = 前缀 10 + 完整 13；E4-a 已改） |
+| 段号偏移（1-based→0-based） | `FIELD_INDEX_OFFSET` | ✅ → `naming.py` | 契约层 | 10 条（E4-a 已改） |
+| 整段族映射 | `FAMILY_FIELD_ALIAS` | ✅ → `naming.py` | 契约层 | 1 条（`brl_temp`→`BT`，E4-a 已改） |
+| 算法→业务字段名 | `to_business_name()` | ✅ → `naming.py` | 契约层 | 唯一反向出口（E4-a 已改；`FuzzyEngine` 保留兼容入口） |
 | 规则查询上下文 | `RuleQueryContext` | 不变 | 服务层 | 6 字段 |
 | 已解析规则 | `ResolvedRule` | 不变 | 服务层 | 5 字段 |
 | 结论形态 | `conclusion_kind` = `'numeric'`/`'advisory'` | 不变 | 服务层 | ⚠️ 非规则库层级 |
@@ -281,7 +316,7 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | **P1** | **入口文件名** | `engine.py`（推荐）/ `fuzzy_engine.py` / 不改 | `engine.py` | E4 前 |
 | **P2** | `load_rules()` 是否删除 | 删 / 保留 | **保留**（public API，外部可能有未知调用方；改为明确抛 `NotImplementedError` 而非 `pass`） | E4 前 |
 | **P3** | `llm/llm_algorithm.py`、`empirical/empirical_algorithm.py` 同类冗余 | 一并改 / 只改 fuzzy | **只改 fuzzy**，另两个记入 §6 遗留 | 已定（本次不动） |
-| **P4** | `to_business_name()` 的归属 | 留 `FuzzyEngine` 类方法 / 移到 `naming.py` | 移到 `naming.py`，`FuzzyEngine` 保留**兼容类属性别名**（`parameter_optimize.py` L245/L534 零改动） | E4 前 |
+| **P4** | `to_business_name()` 的归属 | 留 `FuzzyEngine` 类方法 / 移到 `naming.py` | 移到 `naming.py`，`FuzzyEngine` 保留**兼容类属性别名**（`parameter_optimize.py` L245/L534 零改动） | ✅ **已拍板并执行**（E4-a，见 §2.8） |
 
 ### 3.5 两个易被误读的语义（写进代码 docstring）
 
@@ -299,7 +334,8 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | **E1** | 命名契约 | ① 本文档 §3 ② N5/N6/N9/N10 的零风险修正 ③ 死代码清理（`RuleMethodAdapter` import、`self._rule_net`） | **无** | 黄金快照 diff + `sanity_check` + pytest |
 | **E2** | 故障边界 + 去 DB 依赖 | ① 新建 `ports.py`（`RuleRepository` 协议 + `RuleQueryContext`/`ResolvedRule` 搬迁）② `RuleQueryService` 改为从 ports 导入 + 新增 `get_keywords_by_names` ③ `FuzzyEngine(repository=...)` 依赖注入（默认实现延迟导入）④ `recommend()` 拆为「兜底壳 + `_recommend()` 主流程」⑤ 规则查询异常单独捕获（error 级）⑥ `_precheck_numeric_rules()` 条目级预检 + `self._diagnostics` | **正常路径零变化**；异常路径**有意修复**（见 §2.5） | 同上 + 离线验证脚本 7 项 PASS |
 | **E3** ✅ | 中间态类型化 + 拆聚合 | ① `RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass ② 抽 `aggregation.py`（`aggregate()` + `to_recommendations()`）③ 落地 N1/N2/N4/N7（**N3 排除**，见 §2.7） | **无** | 同上 + CASE 3 改测真函数 |
-| **E4** | 抽字段上下文 + 瘦身 + 改名 | ① 抽 `field_context.py` ② 命名契约 → `naming.py`（P4 兼容别名）③ 入口改名 `engine.py`（P1）④ 删 `load_rules` 或改抛（P2）⑤ 修 N11 注释 | **无** | 同上 + 全量 import 点复查 |
+| **E4-a** ✅ | 命名契约归位 | ① 抽 `naming.py`（P4：3 张表 + `to_business_name()` + import 时一致性自检）② `FuzzyEngine` 保留兼容别名 + 兼容入口 ⇒ 外部零改动 ③ `fuzzy/__init__.py` 导出 `naming` | **无** | 同上 + 命名契约等价性对拍（三张表逐条含顺序 + 262 个输入行为对拍） |
+| **E4-b** | 抽字段上下文 + 瘦身 + 改名 | ① 抽 `field_context.py` ② 入口改名 `engine.py`（P1）③ 删 `load_rules` 或改抛（P2）④ 修 N11 注释 | **无** | 同上 + 全量 import 点复查 |
 
 **每轮的通用验收（不新写脚本，只跑现成）**：
 
@@ -325,7 +361,8 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | E1 | 2026-10-23 | **49 样本 diffs = 0**（vs `_before_after_db.json` 基线，逐条比 `after_count` / `after_params` / `after_head`） | ✅ 全绿（B1~B7 + C1~C3） | ✅ 17 + 5 passed | **通过** —— 行为零变化，命名契约已落地；存档 `_dev_refs/_golden_E1.json` |
 | E2 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E1.json`） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；离线验证 7 项 PASS（V1 注入 FakeRepo 离线跑通 / V2 脏规则未拖垮整层 + 对照组证明必要性 / V3 DB 异常降级不冒泡） |
 | E3 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E2.json`） | ✅ 全绿（CASE 3 已改为**测真函数**，并补上文本建议用例） | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；`fuzzy_algorithm.py` 776 → 697 行；离线验证 7 项 PASS 仍绿；存档 `_dev_refs/_golden_E3.json` |
-| E4 | | | | | |
+| E4-a | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E3.json`；**全 JSON 逐条相等** —— 比前几轮的 3 字段口径更强） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 行为零变化；命名契约等价性对拍 ALL PASS（三张表逐条含顺序 + `to_business_name` 262 输入对拍全一致）；离线验证 7 项 PASS 仍绿；`fuzzy_algorithm.py` 697 → 582 行；存档 `_dev_refs/_golden_E4.json` |
+| E4-b | | | | | |
 
 ---
 
@@ -353,3 +390,4 @@ RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（�
 | 2026-10-23 | E1 | 代码侧零风险修正：`rule_query_service.py` 8 处 docstring（「三级」→「四级」N6、规则库层级→组织维度 N5、过期术语「工厂级/兜底层」→`NumTskRuleNet`/`FuzzyRuleNet`）；`fuzzy_algorithm.py` 删死 import（`RuleMethodAdapter` N9 / `ParticularRules` N14）+ 删死属性 `self._rule_net`（N10）。验收：sanity 全绿 + pytest 17/5 + 黄金快照 49 样本 diffs=0。新增存档 `_dev_refs/_golden_E1.json` |
 | 2026-10-23 | E2 | **故障边界 + 去 DB 依赖**（详见 §2.5 / §2.6）。新增 `ports.py`（`RuleRepository` 协议 + 数据类搬迁，零 ORM 依赖）；`rule_query_service.py` 改为从 ports 导入并新增 `get_keywords_by_names`；`fuzzy_algorithm.py` 支持 `FuzzyEngine(repository=...)` 注入（默认实现延迟导入）、`recommend()` 拆为兜底壳 + `_recommend()` 主流程、规则查询异常单独捕获（error 级）、新增 `_precheck_numeric_rules()` 条目级预检与 `self._diagnostics`。修正 N8 判断错误（`extra` 是弹窗文本通道）；新增 N15（`'level'` 一词两义）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增 `_dev_refs/_verify_e2_offline.py`（可复用的离线回归工具）与 `_dev_refs/_golden_E2.json` |
 | 2026-10-23 | E3 | **中间态类型化 + 拆聚合**（详见 §2.7）。新增 `aggregation.py`（224 行）：`RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass + `aggregate()` + `to_recommendations()`。`fuzzy_algorithm.py` 776 → 697 行：中间态裸 dict → dataclass（`'param'`→`param_name`、`'source'`→`layer` / `meta_source`），删除 `_merge_layer_results`（95 行，混聚合+契约两事），`_recommend()` 第 5 步改为调 `aggregate()` + `to_recommendations()`。落地 N1/N2/N4/N7；**N3 排除**（`'lvl'` 是内核输入契约 key，见 §6 L9）。修正 advisory 路径硬编码的 `'rule': 'advisory'` → `rule_str=None`。`sanity_check.py` CASE 3 从**复刻品**改为**直接测真函数**（复刻品已漂移：漏了「文本建议分离」规则），并补上文本建议用例与 `to_recommendations()` 公式/对外字符串断言；`backend/tests/test_fuzzy_field_report.py` 随 `'source'`→`'meta_source'` 同步。实测纠正 §2.6：导入已可离线（原写「仍需 Django setup」是 E2 时的推测，未实测）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增存档 `_dev_refs/_golden_E3.json` |
+| 2026-10-23 | E4-a | **命名契约归位**（详见 §2.8）。新建 `process/algorithms/fuzzy/naming.py`（230 行）：3 张表（`FIELD_NAME_ALIAS` 23 条 / `FIELD_INDEX_OFFSET` 10 条 / `FAMILY_FIELD_ALIAS` 1 条）+ `to_business_name()` + import 时表间一致性自检（`_validate_tables()`）。`fuzzy_algorithm.py` 697 → 582 行：`FIELD_NAME_ALIAS` 拆为「前缀表 10 条 + 完整表 13 条」再合并（**对外结构与顺序不变**），`to_business_name()` 第 3 段由「遍历总表 + 排除法」改为「只查完整表」，消除「新增前缀映射忘同步偏移表 ⇒ 段号错位」的隐患。`FuzzyEngine` 保留兼容别名 + 兼容入口 ⇒ `parameter_optimize.py` L245/L534 **零改动**；`fuzzy/__init__.py` 导出 `naming`。实测纠正 §3.2：表的条数是 **23 条**（原写 33 条）。验收：黄金快照 49 样本 diffs=0（vs `_golden_E3.json`，全 JSON 逐条相等）+ sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS + 命名契约等价性对拍 ALL PASS（三张表逐条含顺序一致、`to_business_name` 262 输入对拍全一致）。新增存档 `_dev_refs/_golden_E4.json` |

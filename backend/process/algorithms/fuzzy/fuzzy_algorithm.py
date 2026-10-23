@@ -18,6 +18,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, Recommendation, AlgorithmRegistry
+from process.algorithms.fuzzy import naming
 from process.algorithms.fuzzy.aggregation import (
     RuleAdjustment,
     aggregate,
@@ -56,141 +57,26 @@ class FuzzyEngine(AlgorithmBase):
     algorithm_subtype = "fuzzy"
 
     # ============================================================
-    # 字段命名约束声明（Port-Adapter 模式的“端口”部分）
+    # 命名契约（已迁至 naming.py）—— 此处保留兼容别名
     #
-    # 设计（见 algorithm-context-design.md §6.10）：
-    # - fuzzy rule 用的字段名（来自 RuleKeyword.keyword_name）是稳定的“业务专家约定”
-    # - 本声明让算法侧声明“我需要什么字段名”这种接口契约
-    # - 上层（数据准备层 _normalize_field_name_by_spec）按此映射翻译业务命名
-    # - 算法内部不需要懂业务命名（保持纯函数）
+    # 背景：Port-Adapter 模式下，算法侧通过类属性声明“我需要什么字段名”，
+    # 编排层（process/services/parameter_optimize.py）直接读
+    # FuzzyEngine.FIELD_NAME_ALIAS 等 —— 这是历史上的对外契约。
     #
-    # 约定：每个 key 是业务 prefix 或完整字段名，value 是算法侧使用的字段名。
-    # - 前缀映射：value 是算法 prefix，拼上原序号（如 IL1、BT3）
-    # - 完整字段名映射：value 是算法完整名（如 NT、CT、MEL、DDBM）
+    # 现在命名契约是**静态数据**（4 张表 + 反向映射），与引擎的运行时行为
+    # （拉规则 / 推理 / 聚合）无关，已抽到 naming.py（含 import 时一致性自检）。
+    # 引擎类只留同名别名 ⇒ 外部调用方零改动。
     #
-    # 设计原则（2026-09-30 确认）：
-    # - 以算法侧 RuleKeyword 为准则：表中每个 mapping 都对应实际存在的算法 keyword
-    # - 理论上 ProcessParameter 中每个工艺字段都能在此找到映射（70/71 已覆盖）
-    # - 未映射场景只发生在业务控制字段（如 _stg / _mode）或算法未启用的边界 case（如 met_lim_t）
+    # 新代码请直接用：from process.algorithms.fuzzy import naming
     # ============================================================
-    FIELD_NAME_ALIAS: Dict[str, str] = {
-        # ---- 注射阶段（inj_*_N → IL/IV/IP_N，前缀映射）----
-        "inj_pos":  "IL",   # 注射位置 1-6 → IL1-IL6
-        "inj_spd":  "IV",   # 注射速度 1-6 → IV1-IV6
-        "inj_pres": "IP",   # 注射压力 1-6 → IP1-IP6
-        # ---- 保压阶段（hold_*_N → PP/PV/PT_N，前缀映射）----
-        # 注意：保压只有压力/速度/时间三组（无位置字段：算法 ML 实际是熔胶位置）
-        "hold_pres": "PP",   # 保压压力 1-5 → PP1-PP5
-        "hold_spd":  "PV",   # 保压速度 1-5 → PV1-PV5
-        "hold_t":    "PT",   # 保压时间 1-5 → PT1-PT5
-        # ---- 熔胶阶段（met_*_N → ML/MP/MBP/MSR_N，前缀映射）----
-        "met_pos":      "ML",   # 熔胶位置 1-4 → ML1-ML4（算法侧 ML 实际是熔胶位置）
-        "met_pres":     "MP",   # 熔胶压力 1-4 → MP1-MP4
-        "met_back_pres":"MBP",  # 背压 1-4 → MBP1-MBP4
-        "met_rot_spd":  "MSR",  # 螺杆转速 1-4 → MSR1-MSR4
-        # ---- 温度（完整字段名映射 或 前缀映射）----
-        "noz_temp":  "NT",   # 喷嘴温度 → NT
-        "cool_t":    "CT",   # 冷却时间 → CT
-        "brl_temp":  "BT",   # 料筒温度 1-9 → BT1-BT9
-        # ---- 熔胶动作（完整字段名映射）----
-        "pre_met_decomp_dist":    "DDBM", # 熔胶前松退距离 → DDBM
-        "pst_met_decomp_dist":    "DDAM", # 熔胶后松退距离 → DDAM
-        "met_end_pos":            "MEL",  # 计量终点位置 → MEL
-        # ---- 注射耗时（完整字段名映射）----
-        "inj_t":     "IT",       # 注射时间 → IT
-        "inj_dly_t": "ID",       # 注射延迟 → ID
-        # ---- VP 切换（完整字段名映射）----
-        "vps_mode": "VPTM",      # VP 切换模式 → VPTM
-        "vps_pos":  "VPTL",      # VP 切换位置 → VPTL
-        "vps_pres": "VPTP",      # VP 切换压力 → VPTP
-        "vps_spd":  "VPTV",      # VP 切换速度 → VPTV
-        "vps_t":    "VPTT",      # VP 切换时间 → VPTT
-    }
+    FIELD_NAME_ALIAS = naming.FIELD_NAME_ALIAS
+    FIELD_INDEX_OFFSET = naming.FIELD_INDEX_OFFSET
+    FAMILY_FIELD_ALIAS = naming.FAMILY_FIELD_ALIAS
 
-    # 分段参数的序号偏移（业务 1-based → 规则库 0-based）
-    #
-    # 事实依据：规则库段号以 0-based 为主（IV0 719 次 / IV1 38 次 / IV2 15 次），
-    # 与 RuleKeyword 的 IV0~IV5 / PP0~PP4 完全吻合；而业务字段是 1-based
-    # （inj_spd_1..6）。翻译层统一对齐规则库，故分段参数偏移 -1。
-    #
-    # 不在表里的前缀偏移为 0（整段参数，不带序号）。
-    FIELD_INDEX_OFFSET: Dict[str, int] = {
-        "inj_pos": -1,      # 注射位置 1-6 → IL0-IL5
-        "inj_spd": -1,      # 注射速度 1-6 → IV0-IV5
-        "inj_pres": -1,     # 注射压力 1-6 → IP0-IP5
-        "hold_pres": -1,    # 保压压力 1-5 → PP0-PP4
-        "hold_spd": -1,     # 保压速度 1-5 → PV0-PV4
-        "hold_t": -1,       # 保压时间 1-5 → PT0-PT4
-        "met_pos": -1,      # 熔胶位置 1-4 → ML0-ML3
-        "met_pres": -1,     # 熔胶压力 1-4 → MP0-MP3
-        "met_back_pres": -1,  # 背压 1-4 → MBP0-MBP3
-        "met_rot_spd": -1,  # 螺杆转速 1-4 → MSR0-MSR3
-    }
-
-    # 整段族参数：业务侧 N 个独立段，规则库侧只认一个名字
-    #
-    # 规则库用单一 `BT` 表示整体料筒温度（334 次），业务侧是 brl_temp_1..9。
-    # 翻译规则：段 1 → 家族名（BT），段 N → 家族名 + N（BT2..BT9）。
-    # 规则库实际只引用 BT（BT1 是历史 1-based 写法，少量），其余段无害。
-    FAMILY_FIELD_ALIAS: Dict[str, str] = {
-        "brl_temp": "BT",
-    }
-
-    # ------------------------------------------------------------------
-    # 反向映射：算法字段名 → 业务字段名
-    # ------------------------------------------------------------------
-    @classmethod
-    def to_business_name(cls, algo_name: str) -> Optional[str]:
-        """算法字段名 → 业务字段名（FIELD_NAME_ALIAS 的反向映射）。
-
-        与「业务 → 算法」的翻译共用同一份声明（FIELD_NAME_ALIAS /
-        FIELD_INDEX_OFFSET / FAMILY_FIELD_ALIAS），保证两向一致：
-
-        - 整段族（brl_temp_1..9 → BT / BT2..BT9）：``BT`` → ``brl_temp_1``，
-          ``BT3`` → ``brl_temp_3``
-        - 分段参数（业务 1-based → 规则库 0-based）：``IV0`` → ``inj_spd_1``
-        - 完整字段名：``NT`` → ``noz_temp``、``MEL`` → ``met_end_pos``
-
-        编排层（parameter_optimize）用它把算法推荐写回业务字段：
-        算法名与业务字段名不在同一个命名空间，直接覆盖 baseline 必然落空。
-
-        Returns:
-            业务字段名；无对应业务字段时返回 None
-            （如 ``IPOS`` / ``CUSION`` 这类规则库专用参数，ProcessParameter
-            里没有对应列），调用方应原样保留。
-        """
-        name = (algo_name or '').strip()
-        if not name:
-            return None
-
-        # 1) 整段族参数（BT → brl_temp_1；BT3 → brl_temp_3）
-        for business_prefix, family_name in cls.FAMILY_FIELD_ALIAS.items():
-            if name == family_name:
-                return f'{business_prefix}_1'
-            if not name.startswith(family_name):
-                continue
-            suffix = name[len(family_name):]
-            if suffix.isdigit():
-                return f'{business_prefix}_{suffix}'
-
-        # 2) 分段参数（IV0 → inj_spd_1）
-        for business_prefix, offset in cls.FIELD_INDEX_OFFSET.items():
-            algo_prefix = cls.FIELD_NAME_ALIAS.get(business_prefix)
-            if not algo_prefix or not name.startswith(algo_prefix):
-                continue
-            suffix = name[len(algo_prefix):]
-            if not suffix.isdigit():
-                continue
-            return f'{business_prefix}_{int(suffix) - offset}'
-
-        # 3) 完整字段名（NT → noz_temp）
-        for business_key, algo_full in cls.FIELD_NAME_ALIAS.items():
-            if business_key in cls.FIELD_INDEX_OFFSET or business_key in cls.FAMILY_FIELD_ALIAS:
-                continue
-            if algo_full == name:
-                return business_key
-
-        return None
+    @staticmethod
+    def to_business_name(algo_name: str) -> Optional[str]:
+        """算法字段名 → 业务字段名（兼容入口，实现见 naming.to_business_name）。"""
+        return naming.to_business_name(algo_name)
 
     def __init__(self, repository: Optional[RuleRepository] = None):
         """构造引擎。

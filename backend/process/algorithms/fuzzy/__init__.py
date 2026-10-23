@@ -9,6 +9,7 @@ algorithm_type='optimization'，由 condition service 通过 AlgorithmRegistry �
   契约定在算法层，所有调用方（service / 第三方 / CLI）自动受约束
 """
 
+from . import naming
 from .fuzzy_algorithm import FuzzyEngine
 from .specs import (
     OPTIMIZE_MACHINE_INFO_FIELDS,
@@ -25,6 +26,7 @@ from .specs import (
 
 __all__ = [
     "FuzzyEngine",
+    "naming",
     "OPTIMIZE_MACHINE_INFO_FIELDS",
     "OPTIMIZE_POLYMER_INFO_FIELDS",
     "OPTIMIZE_MOLD_INFO_FIELDS",
