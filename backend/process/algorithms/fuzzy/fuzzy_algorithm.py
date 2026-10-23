@@ -18,11 +18,10 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from process.algorithms.base import AlgorithmBase, Recommendation, AlgorithmRegistry
-from process.algorithms.fuzzy.adapters import RuleKeywordAdapter, RuleMethodAdapter
+from process.algorithms.fuzzy.adapters import RuleKeywordAdapter
 from process.algorithms.fuzzy.fuzzy_core.models.nets import (
     FuzzyRuleNet,
     NumTskRuleNet,
-    ParticularRules,
 )
 from process.algorithms.fuzzy.fuzzy_core.parsing import (
     collect_param_names,
@@ -189,9 +188,7 @@ class FuzzyEngine(AlgorithmBase):
 
         return None
 
-    # 工厂级网络和兜底层网络（每次 recommend 时构造；可考虑缓存）
     def __init__(self):
-        self._rule_net = None  # 兼容旧接口，不使用
         # 字段定性降级清单（每次 recommend 开头重置，见 recommend()）
         self._field_reports = []
 

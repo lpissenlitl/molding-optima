@@ -5,9 +5,9 @@ RuleQueryService - 模糊推理规则路由层
 
 设计原则（见 fuzzy-engine-reference.md §6）：
 - RuleLibrary 顶层隔离（library_code）
-- library 库内三级特异性匹配：polymer_abbreviation × product_category
+- library 库内四级特异级匹配：polymer_abbreviation × product_category
 - parent_library 支持跨层复用
-- 双层分流：按**结论形态**分流（数值结论 → 工厂级 TSK；检查/弹窗结论 → 兜底层）
+- 双层分流：按**结论形态**分流（数值结论 → NumTskRuleNet；检查/弹窗结论 → FuzzyRuleNet）
 
 注意：本模块只负责 DB 查询与路由，不执行任何模糊推理。
 """
@@ -77,7 +77,7 @@ class ResolvedRule:
     conclusion_kind : str
         'numeric'（数值结论：``X_add_3.8`` / ``X_reduce_30%``）
         / 'advisory'（提示类结论：``X_adjust_请检查锁模力是否不合理。``）
-        —— 按**结论形态**判定（能不能算出数值），不是规则库层级。
+        —— 按**结论形态**判定（能不能算出数值），不是规则库的组织维度。
         历史上这个字段叫 ``rule_level``，但与「档位（level）」语义冲突，
         已改名为 ``conclusion_kind``；也不再读已删除的 `RuleMethod.rule_level`。
     priority : float
@@ -169,7 +169,7 @@ class RuleQueryService:
 
     @classmethod
     def get_rules(cls, context: RuleQueryContext) -> List[ResolvedRule]:
-        """按三级特异性匹配拉出 RuleMethod。
+        """按四级特异级匹配拉出 RuleMethod。
 
         规则串直接取 `RuleMethod.rule_description`（规则库的唯一权威来源，
         格式：`IF SHORTSHOT_low AND IV0_low THEN IV0_add_2`）。
@@ -184,7 +184,7 @@ class RuleQueryService:
             logger.warning('[RuleQueryService] 未找到任何可用规则库: %s', context)
             return []
 
-        # 三级特异性匹配
+        # 四级特异级匹配
         # L1 精确：polymer 匹配 + product 匹配
         # L2 部分-polymer：polymer 匹配 + product=None
         # L3 部分-product：polymer=None + product 匹配
@@ -255,8 +255,8 @@ class RuleQueryService:
     def classify_conclusion_kind(rule_str: str) -> str:
         """按**结论形态**判定规则所属推理层。
     
-        ⚠️ 这里的「层」指**结论能不能算出数值**，与规则库层级
-        （base / 产品库 / specificity）**完全无关**。
+        ⚠️ 这里的「层」指**结论能不能算出数值**，与规则库的**组织维度**
+        （base 库 / 产品库 / 特异级）**完全无关**。
     
         - 'numeric'：数值结论（`X_add_2` / `X_reduce_3` / `X_reduce_30%`）
           → 数值层零阶 TSK 推理（NumTskRuleNet）
@@ -286,7 +286,7 @@ class RuleQueryService:
         """按结论形态分流，返回 ``{'numeric': [...], 'advisory': [...]}``。
     
         分流依据是规则的**结论形态**（见 `classify_conclusion_kind`），
-        不是已删除的 `RuleMethod.rule_level` 字段，也不是规则库层级。
+        不是已删除的 `RuleMethod.rule_level` 字段，也不是规则库的组织维度。
         """
         result: Dict[str, List[ResolvedRule]] = {'numeric': [], 'advisory': []}
         for r in rules:
