@@ -14,80 +14,17 @@ RuleQueryService - 模糊推理规则路由层
 
 import logging
 from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
 
+from process.algorithms.fuzzy.adapters import RuleKeywordAdapter
 from process.algorithms.fuzzy.fuzzy_core.parsing import (
     normalize_level_word,
     parse_rule,
 )
+from process.algorithms.fuzzy.ports import RuleQueryContext, ResolvedRule
 from process.models.rules import RuleLibrary, RuleMethod
 
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# 数据类
-# ============================================================================
-
-@dataclass
-class RuleQueryContext:
-    """规则查询上下文。
-
-    Attributes
-    ----------
-    defect_name : str
-        缺陷名称（英文 keyword_name，如 'SHORTSHOT'），与
-        `RuleMethod.defect_code` 对齐。
-    defect_level : Optional[str]
-        缺陷严重程度（low / medium / high）。
-        规则库里每个缺陷都有三档规则，档位写在规则串的**第一个前件**里
-        （`IF SHORTSHOT_low AND ...`）—— 1646 条规则实测全部如此。
-        None 表示不按档位过滤。
-    defect_position : Optional[str]
-        缺陷位置（`DL` + 缺陷名 + 段号，如 'DLOVERSIZE1'）。
-        本期不参与规则筛选，仅作为上下文透传。
-    polymer_abbreviation : Optional[str]
-        当前聚合物的缩写（如 'PE'）。None 表示不指定
-    product_category : Optional[str]
-        当前产品的类别名（精确路径，如 '酒瓶'）。None 表示不指定
-    rule_library_code : Optional[str]
-        用户指定的规则库编码。None 表示按上下文自动解析
-    """
-    defect_name: str
-    defect_level: Optional[str] = None
-    defect_position: Optional[str] = None
-    polymer_abbreviation: Optional[str] = None
-    product_category: Optional[str] = None
-    rule_library_code: Optional[str] = None
-
-
-@dataclass
-class ResolvedRule:
-    """路由后的一条规则 + 元数据。
-
-    Attributes
-    ----------
-    method : RuleMethod
-        ORM 实例
-    rule_str : str
-        fuzzykit 风格规则字符串（直接取 `RuleMethod.rule_description`）
-    specificity : int
-        1=精确（polymer+product 都指定）, 2=部分polymer, 3=部分product, 4=默认
-    conclusion_kind : str
-        'numeric'（数值结论：``X_add_3.8`` / ``X_reduce_30%``）
-        / 'advisory'（提示类结论：``X_adjust_请检查锁模力是否不合理。``）
-        —— 按**结论形态**判定（能不能算出数值），不是规则库的组织维度。
-        历史上这个字段叫 ``rule_level``，但与「档位（level）」语义冲突，
-        已改名为 ``conclusion_kind``；也不再读已删除的 `RuleMethod.rule_level`。
-    priority : float
-        priority 字段（默认 1.0）
-    """
-    method: RuleMethod
-    rule_str: str
-    specificity: int
-    conclusion_kind: str
-    priority: float
 
 
 # ============================================================================
@@ -304,6 +241,20 @@ class RuleQueryService:
     def to_rule_array(cls, rules: List[ResolvedRule]) -> List[Dict[str, Any]]:
         """由 ResolvedRule 列表生成 fuzzykit 期望的 rule_array 结构。"""
         return [{'rule_description': r.rule_str} for r in rules]
+
+    @staticmethod
+    def get_keywords_by_names(names) -> List[Dict[str, Any]]:
+        """按参数名批量取论域元数据（`RuleKeyword`）。
+
+        这是编排层访问字段元数据的**唯一入口**——编排层通过 `RuleRepository`
+        端口调用它，不需要知道 `RuleKeyword` 这个 ORM 模型的存在。
+
+        返回结构：``{'keyword', 'lvl', 'min_val', 'max_val', 'step'}``
+        （可能附带可选的 ``'source'`` 标记元数据来源）。
+        """
+        if not names:
+            return []
+        return RuleKeywordAdapter.get_keywords_by_names(sorted(names))
 
 
 # ============================================================================

@@ -2,7 +2,7 @@
 
 > **日期**：2026-10-23
 > **来源**：用户第 16~18 轮对 `backend/process/algorithms/fuzzy/fuzzy_algorithm.py`（686 行）结构的质疑
-> **状态**：**E1（命名契约）已完成** —— 命名对照表见 §3；代码侧零风险修正见 §3.3（标「E1 ✅」）；验收见 §5
+> **状态**：**E1 + E2 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；验收见 §5
 > **重构原则**：**每轮工作完成后统一跑一次现成验证**，不为每步新写测试脚本（用户第 18 轮明确）
 > **靶子文件**：`backend/process/algorithms/fuzzy/fuzzy_algorithm.py`
 > **起点 commit**：`06d4a12`（工作区干净）
@@ -100,6 +100,30 @@ fuzzy_algorithm.py（686 行）
 
 **结论**：故障半径**不是设计出来的，是由「哪一行恰好有 `try`」决定的**。
 
+### 2.5 E2 落地后的故障边界（2026-10-23）
+
+| 边界 | 位置 | E2 后的策略 | 状态 |
+|---|---|---|---|
+| **第 0 层**（编排层） | `recommend()` | 任何未预期异常 → `logger.exception` + 返回 `[]`，**异常止步于算法层** | ✅ E2 |
+| **第 0 层**（规则查询） | `_recommend()` 的 `repo.get_rules()` | DB 异常 → `logger.exception`（**error 级，要人看**）+ 返回 `[]`；与「无适用规则」的 **info 级**明确区分 | ✅ E2 |
+| **第 1 层**（层间） | `_infer_numeric_layer` / `_infer_advisory_layer` | 一层失败 → 该层归零，另一层继续 | ✅ 原有 |
+| **第 2 层**（条目级） | `_precheck_numeric_rules()` | 不可推理的规则（混合结论等）**逐条跳过** + 记入 `self._diagnostics`，其余规则照常推理 | ✅ E2 |
+| 字段元数据失败 | `_load_keyword_dicts` | `except Exception` → 降级为推测论域 | ✅ 原有（最好的一处） |
+| 矩阵越界 | `nets.py` L692/L717 | 仅 `logger.error` 后继续 ⇒ **结果错** | ❌ 未修（属内核清理） |
+
+### 2.6 E2 的实际收益边界（如实记录，不夸大）
+
+**做到的**：
+- `FuzzyEngine` 的**全部数据访问收敛到一个可替换的端口**（`RuleRepository`）⇒ 可注入 `FakeRepository` **完全离线调用**，不连数据库（见 `_dev_refs/_verify_e2_offline.py`）
+- 规则库查询失败（DB 挂）不再向上冒泡，**整条 optimize 链不会因模糊算法而 500**
+- 一条脏规则不再拖垮整个数值层
+
+**没做到的（边界要说清）**：
+- ⚠️ `import process.algorithms.fuzzy.fuzzy_algorithm` **仍然需要 Django setup**——
+  因为父包 `process/algorithms/__init__.py` 会 import 全部引擎以触发 `AlgorithmRegistry.register`。
+  本次**未改注册机制**（改它会影响 llm / empirical / expert 三个包，超出范围）。
+  ⇒ 所以准确的说法是「**调用**可离线」，不是「**导入**可离线」。见 §6 L8。
+
 **降级方向也不一致**：同样「规则库出问题」这个事实 —— 字段元数据挂了 → **降级继续**；数值推理挂了 → **归零**；规则查询挂了 → **崩**。三个后果毫无关联。
 
 **已核实排除**：`parse_rule` / `split_phase`（`parsing.py` L34-102、L179-203）是纯字符串处理，**不抛异常** ⇒ 畸形规则串不会崩。崩源只在 DB 层与推理层。
@@ -189,13 +213,14 @@ fuzzy_algorithm.py（686 行）
 | **N5** | **`layer` 三义**：结论形态（推理）/ 结论形态（`_build_field_context` 参数）/ 规则库层级（`RuleQueryService` docstring） | `rule_query_service.py` L172 / L258 / L289 | 规则库层级一律改称「**特异级**」；结论形态保留 `layer` | **E1** ✅ 已修 |
 | **N6** | **文档与实现矛盾**：docstring 与注释写「三级特异性匹配」，实现是 L1~L4 **四级** | `rule_query_service.py` L172 / L187 | 改为「四级」 | **E1** ✅ 已修 |
 | **N7** | **`'rule'` 字段在 advisory 路径被硬编码为 `'advisory'`**（不是规则标识） | L565 | 改为 `rule_str`（真实串）或 `None` | **E3**（待） |
-| **N8** | **`extra` 接了从未使用** —— 实为「诊断信息」的现成通道 | L477 / L554 | 用于承接**条目级跳过的规则明细** | **E2**（待） |
+| **N8** | **`extra` 接了从未使用** —— ⚠️ **原判断有误**：它不是「诊断通道」，而是**弹窗文本通道**（`nets.py` L721/L825 收集 `r_extra` 并回传），不能往里塞诊断信息 | L477 / L554 | 诊断信息另起通道：`self._diagnostics`（编排层自建） | **E2** ✅ 已修 |
 | **N9** | **`RuleMethodAdapter` import 了从未使用**，名字却像主适配器（实际在用的是 `RuleKeywordAdapter`） | L21 | 删除 import | **E1** ✅ 已修 |
 | **N10** | **`self._rule_net` 从未使用**，注释却描述「工厂级网络和兜底层网络」 | L192-194 | 删除属性；注释改写为「无状态」 | **E1** ✅ 已修 |
 | **N11** | **注释引用了不存在的文件名** `fuzzy_engine.py`（实际是 `fuzzy_algorithm.py`） | `sanity_check.py` L134 | 随 E4 改名一并修正 | **E4**（待） |
 | **N12** | **`load_rules()` 兼容占位**（`pass`），长得像正经 API | L678-681 | **待定**（见 §3.4） | **E4**（待） |
 | **N13** | **文档引用路径不完整**：代码里写 `fuzzy-engine-reference.md`，实际在 `_refs/system/ai/` 下 | `fuzzy_algorithm.py` L6/L199、`rule_query_service.py` L6、`adapters.py` L26 | 补全目录前缀（文件存在，非失效链接） | **E4**（待） |
 | **N14** | **`ParticularRules` import 了从未使用**（AST 审计：生产侧零引用） | `fuzzy_algorithm.py` L25 | 删除 import | **E1** ✅ 已修 |
+| **N15** | **`'level'` 一词两义**：前件里的**档位词**（`'low'`）vs 结论里的**数值**（`2` / `'30%'`）—— `NumTskRule._rule_process` 把结论值存进了 `'level'` key | `nets.py` L505 vs L486 | 结论值改存 `'value'`（内核改动，需同步 `nets.py` 结论层与 `solution_matrix` 构造） | **E4**（待，属内核） |
 
 ### 3.4 待定项（需在对应轮次前拍板）
 
@@ -220,7 +245,7 @@ fuzzy_algorithm.py（686 行）
 | 轮次 | 名称 | 内容 | 行为变化 | 验收方式（轮末跑一次） |
 |---|---|---|---|---|
 | **E1** | 命名契约 | ① 本文档 §3 ② N5/N6/N9/N10 的零风险修正 ③ 死代码清理（`RuleMethodAdapter` import、`self._rule_net`） | **无** | 黄金快照 diff + `sanity_check` + pytest |
-| **E2** | 故障边界 + 去 DB 依赖 | ① `RuleRepository` 协议 + `FuzzyEngine(repository=...)` ② 编排层最外层兜底（区分 info/error）③ 第 2 层条目级跳过（走 `extra` 通道，N8） | **无**（正常路径） | 同上 + 手动验「注入脏规则后其余规则照常出结果」 |
+| **E2** | 故障边界 + 去 DB 依赖 | ① 新建 `ports.py`（`RuleRepository` 协议 + `RuleQueryContext`/`ResolvedRule` 搬迁）② `RuleQueryService` 改为从 ports 导入 + 新增 `get_keywords_by_names` ③ `FuzzyEngine(repository=...)` 依赖注入（默认实现延迟导入）④ `recommend()` 拆为「兜底壳 + `_recommend()` 主流程」⑤ 规则查询异常单独捕获（error 级）⑥ `_precheck_numeric_rules()` 条目级预检 + `self._diagnostics` | **正常路径零变化**；异常路径**有意修复**（见 §2.5） | 同上 + 离线验证脚本 7 项 PASS |
 | **E3** | 中间态类型化 + 拆聚合 | ① `RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass ② 抽 `aggregation.py`（`aggregate()` + `to_recommendations()`）③ 落地 N1/N2/N3/N4/N7 | **无** | 同上 |
 | **E4** | 抽字段上下文 + 瘦身 + 改名 | ① 抽 `field_context.py` ② 命名契约 → `naming.py`（P4 兼容别名）③ 入口改名 `engine.py`（P1）④ 删 `load_rules` 或改抛（P2）⑤ 修 N11 注释 | **无** | 同上 + 全量 import 点复查 |
 
@@ -246,7 +271,7 @@ fuzzy_algorithm.py（686 行）
 | 轮次 | 日期 | 黄金快照 diff | sanity | pytest | 验收结论 |
 |---|---|---|---|---|---|
 | E1 | 2026-10-23 | **49 样本 diffs = 0**（vs `_before_after_db.json` 基线，逐条比 `after_count` / `after_params` / `after_head`） | ✅ 全绿（B1~B7 + C1~C3） | ✅ 17 + 5 passed | **通过** —— 行为零变化，命名契约已落地；存档 `_dev_refs/_golden_E1.json` |
-| E2 | | | | | |
+| E2 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E1.json`） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；离线验证 7 项 PASS（V1 注入 FakeRepo 离线跑通 / V2 脏规则未拖垮整层 + 对照组证明必要性 / V3 DB 异常降级不冒泡） |
 | E3 | | | | | |
 | E4 | | | | | |
 
@@ -263,6 +288,7 @@ fuzzy_algorithm.py（686 行）
 | L5 | `functional.py` 两套实现同名覆盖（后半段覆盖前半段） | AST 审计 | 待定（属内核清理，不在入口范围） |
 | L6 | `nets.py` L692/L717 矩阵越界只记日志 | §2.2 | 待定（属内核清理） |
 | L7 | 文档引用路径不完整（`fuzzy-engine-reference.md` 未写目录） | N13 | 待定（E4 随改名一并修） |
+| L8 | `import process.algorithms.fuzzy.fuzzy_algorithm` 仍需 Django setup（父包 `process/algorithms/__init__.py` 会 import 全部引擎触发注册）⇒ 目前是「调用可离线」而非「导入可离线」 | §2.6 | 待定（改注册机制会影响 llm/empirical/expert，超出本次范围） |
 
 ---
 
@@ -272,3 +298,4 @@ fuzzy_algorithm.py（686 行）
 |---|---|---|
 | 2026-10-23 | E1-b | 新建本文档；产出 §3 命名对照表（术语总表 22 项 + 冲突台账 N1~N14 + 待定项 P1~P4）；完成引用点全景调研（§2.3） |
 | 2026-10-23 | E1 | 代码侧零风险修正：`rule_query_service.py` 8 处 docstring（「三级」→「四级」N6、规则库层级→组织维度 N5、过期术语「工厂级/兜底层」→`NumTskRuleNet`/`FuzzyRuleNet`）；`fuzzy_algorithm.py` 删死 import（`RuleMethodAdapter` N9 / `ParticularRules` N14）+ 删死属性 `self._rule_net`（N10）。验收：sanity 全绿 + pytest 17/5 + 黄金快照 49 样本 diffs=0。新增存档 `_dev_refs/_golden_E1.json` |
+| 2026-10-23 | E2 | **故障边界 + 去 DB 依赖**（详见 §2.5 / §2.6）。新增 `ports.py`（`RuleRepository` 协议 + 数据类搬迁，零 ORM 依赖）；`rule_query_service.py` 改为从 ports 导入并新增 `get_keywords_by_names`；`fuzzy_algorithm.py` 支持 `FuzzyEngine(repository=...)` 注入（默认实现延迟导入）、`recommend()` 拆为兜底壳 + `_recommend()` 主流程、规则查询异常单独捕获（error 级）、新增 `_precheck_numeric_rules()` 条目级预检与 `self._diagnostics`。修正 N8 判断错误（`extra` 是弹窗文本通道）；新增 N15（`'level'` 一词两义）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增 `_dev_refs/_verify_e2_offline.py`（可复用的离线回归工具）与 `_dev_refs/_golden_E2.json` |

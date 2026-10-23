@@ -15,10 +15,9 @@
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, Recommendation, AlgorithmRegistry
-from process.algorithms.fuzzy.adapters import RuleKeywordAdapter
 from process.algorithms.fuzzy.fuzzy_core.models.nets import (
     FuzzyRuleNet,
     NumTskRuleNet,
@@ -27,10 +26,10 @@ from process.algorithms.fuzzy.fuzzy_core.parsing import (
     collect_param_names,
     parse_rule,
 )
-from process.algorithms.fuzzy.services.rule_query_service import (
-    RuleQueryService,
-    RuleQueryContext,
+from process.algorithms.fuzzy.ports import (
     ResolvedRule,
+    RuleQueryContext,
+    RuleRepository,
 )
 
 
@@ -188,19 +187,35 @@ class FuzzyEngine(AlgorithmBase):
 
         return None
 
-    def __init__(self):
+    def __init__(self, repository: Optional[RuleRepository] = None):
+        """构造引擎。
+
+        Args:
+            repository: 规则仓库端口（`RuleRepository` 协议）。
+                传 None 时使用默认实现 `RuleQueryService`，
+                且**延迟到首次访问数据时才导入**——
+                这样 `import fuzzy_algorithm` 不会把 Django ORM 拖进来，
+                编排层可以在没有数据库环境时被 import 和调用。
+        """
+        self._repo = repository
         # 字段定性降级清单（每次 recommend 开头重置，见 recommend()）
         self._field_reports = []
+        # 规则级诊断清单（条目级跳过时记录；每次 recommend 开头重置）
+        self._diagnostics = []
+
+    def _get_repository(self) -> RuleRepository:
+        """取规则仓库端口（默认实现延迟导入）。"""
+        if self._repo is None:
+            from process.algorithms.fuzzy.services.rule_query_service import RuleQueryService
+            self._repo = RuleQueryService()
+        return self._repo
 
     def recommend(self, context: dict) -> List[Recommendation]:
         """根据缺陷反馈返回参数调整推荐。
 
-        核心流程（见 fuzzy-engine-reference.md §4.8）：
-          1) 拉规则（RuleQueryService + 三级特异性匹配）
-          2) 双层分流（按结论形态：numeric 数值结论 / advisory 提示类结论）
-          3) 构造 NumTskRuleNet + FuzzyRuleNet，并行推理
-          4) 合并：方案 B（同层聚合 + 跨层覆盖）
-          5) 返回 Recommendation 列表
+        本方法只做**兜底**；真正的流程在 `_recommend()`。
+        任何未预期异常都在这里被拦住，转换成"空推荐"，
+        而不是让异常冒到 condition service 去炸掉整条 optimize 链。
 
         Args:
             context: {
@@ -231,7 +246,26 @@ class FuzzyEngine(AlgorithmBase):
         # 而 _field_reports 会在推理过程中被追加 ⇒ 不重置就会随请求数无界增长
         # （内存泄漏），且上一轮的降级清单会被误读成本轮的结果。
         self._field_reports = []
+        self._diagnostics = []
 
+        try:
+            return self._recommend(context)
+        except Exception:
+            # 第 0 层故障边界（编排层兜底）：异常止步于此。
+            # 模糊算法失败不应该让整条 optimize 链 500。
+            logger.exception('[FuzzyEngine] 模糊推理异常，已降级为空推荐')
+            return []
+
+    def _recommend(self, context: dict) -> List[Recommendation]:
+        """主流程：5 步一条直线。
+
+        1) 认缺陷   —— 从 feedback 取缺陷名 / 严重程度 / 位置
+        2) 拉规则   —— 按缺陷 + 材料 + 产品选规则（DB 故障在此隔离）
+        3) 分两堆   —— 按结论形态分流：numeric（数值结论）/ advisory（提示类结论）
+        4) 并行推理 —— 数值层走 TSK，提示层走文本建议 / Mamdani（层间互不影响）
+        5) 合并     —— 同参数聚合 + 跨层覆盖（方案 B）
+        """
+        # 1) 认缺陷
         defects = (context.get('feedback') or {}).get('defect', []) or []
         if not defects:
             return []
@@ -243,10 +277,11 @@ class FuzzyEngine(AlgorithmBase):
             logger.warning('[FuzzyEngine] 反馈中未指定缺陷类型（keyword_name），跳过推荐')
             return []
 
-        # 1) 拉规则
+        # 2) 拉规则
         # context['polymer_info'] / context['mold_info'] 是子对象 dict
         # （字段名与 HTTP schema / service 接口对齐，避免命名割裂），这里只取算法关心的字段
         # （abbreviation / product_category），后续若算法需新字段直接从对应子对象取。
+        repo = self._get_repository()
         query_ctx = RuleQueryContext(
             defect_name=defect_name,
             defect_level=defect_ctx.get('level'),
@@ -255,13 +290,19 @@ class FuzzyEngine(AlgorithmBase):
             product_category=(context.get('mold_info') or {}).get('product_category'),
             rule_library_code=context.get('rule_library_code'),
         )
-        all_rules = RuleQueryService.get_rules(query_ctx)
+        try:
+            all_rules = repo.get_rules(query_ctx)
+        except Exception:
+            # 第 0 层故障边界的具体落点：规则库挂了（DB 异常）也只降级为空推荐，
+            # 且日志级别是 error（要人看），与「没有适用规则」的 info 明确区分。
+            logger.exception('[FuzzyEngine] 规则库查询失败，已降级为空推荐: %s', query_ctx)
+            return []
         if not all_rules:
             logger.info('[FuzzyEngine] 未找到适用规则: %s', query_ctx)
             return []
 
-        # 2) 双层分流（按结论形态：数值结论 / 提示类结论）
-        split = RuleQueryService.split_by_conclusion_kind(all_rules)
+        # 3) 分两堆（按结论形态：数值结论 / 提示类结论）
+        split = repo.split_by_conclusion_kind(all_rules)
         numeric_rules = split['numeric']
         advisory_rules = split['advisory']
 
@@ -274,19 +315,17 @@ class FuzzyEngine(AlgorithmBase):
         trend = context.get('iteration_trend', {}) or {}
         adjustment_factor = self._trend_to_factor(trend.get('trend', 'unknown'))
 
-        # 3) 双层并行推理
+        # 4) 并行推理（层间隔离：一层失败不影响另一层）
         numeric_results = self._infer_numeric_layer(numeric_rules, process_parameter)
         advisory_results = self._infer_advisory_layer(advisory_rules, process_parameter)
 
-        # 4) 合并（方案 B）：同层聚合 + 跨层覆盖
-        merged = self._merge_layer_results(
+        # 5) 合并（方案 B）：同层聚合 + 跨层覆盖
+        return self._merge_layer_results(
             numeric_results=numeric_results,
             advisory_results=advisory_results,
             adjustment_factor=adjustment_factor,
             current_params=process_parameter,
         )
-
-        return merged
 
     def is_available(self, context: dict) -> bool:
         """判断是否可用。"""
@@ -373,7 +412,7 @@ class FuzzyEngine(AlgorithmBase):
         keyword_dicts: List[Dict[str, Any]] = []
         if param_names:
             try:
-                keyword_dicts = RuleKeywordAdapter.get_keywords_by_names(sorted(param_names))
+                keyword_dicts = self._get_repository().get_keywords_by_names(sorted(param_names))
             except Exception as e:
                 logger.warning('[FuzzyEngine] 加载 RuleKeyword 失败: %s', e)
 
@@ -450,6 +489,47 @@ class FuzzyEngine(AlgorithmBase):
         self._field_reports.append({'layer': layer, 'classification': classification})
         return keyword_dicts, classification
 
+    @staticmethod
+    def _precheck_numeric_rules(
+        rules: List[ResolvedRule],
+    ) -> Tuple[List[ResolvedRule], List[Dict[str, Any]]]:
+        """预检：把「送进数值层推理会崩」的规则挡在推理之前。
+
+        崩溃点（`nets.py` 结论层）：``float(value['level'])``。
+        而 `classify_conclusion_kind` 只要求「**至少一个**结论是数字」，
+        所以形如 ``THEN IV0_add_2 AND IV0_add_low`` 的混合规则会被判为 numeric，
+        但 ``float('low')`` 会抛 ValueError ⇒ **整层归零**（一条脏规则拖垮全部）。
+
+        预检口径与 `classify_conclusion_kind` **完全一致**（同一套 isdigit 判定），
+        保证「被判为 numeric」⇒「一定可安全推理」。
+
+        Returns:
+            ``(safe_rules, skipped)`` —— 可安全推理的规则（保持原顺序）、
+            以及被跳过的规则明细（``{'rule', 'reason'}``）。
+        """
+        safe: List[ResolvedRule] = []
+        skipped: List[Dict[str, Any]] = []
+        for r in rules:
+            bad_value = None
+            for sol in parse_rule(r.rule_str)['solutions']:
+                action = sol.get('action')
+                if action not in ('add', 'reduce'):
+                    # adjust / popup 在 nets 走特殊分支（存 9999.9 或进 r_extra），
+                    # 不会做 float 转换 ⇒ 不需要预检。
+                    continue
+                value = str(sol.get('value', ''))
+                if not value.rstrip('%').lstrip('-').replace('.', '', 1).isdigit():
+                    bad_value = value
+                    break
+            if bad_value is None:
+                safe.append(r)
+            else:
+                skipped.append({
+                    'rule': r.rule_str,
+                    'reason': f'结论值 {bad_value!r} 不是数值，送进数值层会抛 ValueError',
+                })
+        return safe, skipped
+
     def _infer_numeric_layer(
         self,
         numeric_rules: List[ResolvedRule],
@@ -459,19 +539,32 @@ class FuzzyEngine(AlgorithmBase):
         if not numeric_rules:
             return []
 
+        # 第 2 层故障边界（条目级）：先把注定会崩的规则挑出去，
+        # 其余规则照常推理（现状是：一条脏规则 ⇒ 整个数值层归零）。
+        safe_rules, skipped = self._precheck_numeric_rules(numeric_rules)
+        if skipped:
+            self._diagnostics.append({'layer': 'numeric', 'skipped': skipped})
+            logger.warning(
+                '[FuzzyEngine] 数值层跳过 %d 条不可推理规则（其余规则照常推理）: %s',
+                len(skipped), [s['reason'] for s in skipped][:5])
+        if not safe_rules:
+            logger.info('[FuzzyEngine] 数值层无安全规则，跳过')
+            return []
+
         keyword_dicts, _classification = self._build_field_context(
-            numeric_rules, process_parameter, 'numeric')
+            safe_rules, process_parameter, 'numeric')
 
         if not keyword_dicts:
             logger.info('[FuzzyEngine] 数值层无可用 RuleKeyword，跳过')
             return []
 
-        rule_array = RuleQueryService.to_rule_array(numeric_rules)
-        priority_array = RuleQueryService.get_priority_array(numeric_rules)
+        repo = self._get_repository()
+        rule_array = repo.to_rule_array(safe_rules)
+        priority_array = repo.get_priority_array(safe_rules)
 
         try:
             net = NumTskRuleNet(rule_array, keyword_dicts, priority_array)
-            results, extra = net.predict(process_parameter, top_k=len(numeric_rules))
+            results, extra = net.predict(process_parameter, top_k=len(safe_rules))
         except Exception as e:
             logger.exception('[FuzzyEngine] NumTskRuleNet 推理失败: %s', e)
             return []
@@ -545,7 +638,7 @@ class FuzzyEngine(AlgorithmBase):
         if not keyword_dicts:
             return out
 
-        rule_array = RuleQueryService.to_rule_array(mamdani_rules)
+        rule_array = self._get_repository().to_rule_array(mamdani_rules)
         try:
             net = FuzzyRuleNet(rule_array, keyword_dicts)
             results = net.predict(process_parameter, top_k=len(mamdani_rules))
