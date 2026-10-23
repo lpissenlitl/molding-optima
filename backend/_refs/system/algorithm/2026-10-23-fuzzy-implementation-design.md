@@ -1631,4 +1631,100 @@ FuzzyFeature(k, [k_dict['min_val'], k_dict['max_val']], f_level=k_dict['lvl'])
 
 ⚠️ B 需先定一个语义：门控隶属度为 0 时，是“门控不满足（规则不应激活）”还是“该门控不在论域上（视为中性）”？两种语义处理方式不同。
 
+---
+
+### 2026-10-23 · 第 15 轮（执行第二刀 D+B → TSK 推理层修复）
+
+**用户拍板**：下一刀 = **D + B 一起做**；门控 μ=0 语义 = **视为门控不满足**（严格语义，禁止静默降级）。
+**本轮实际执行**：先补 C1~C3 证伪基准（红灯）→ 改 `nets.py`（绿灯）→ 量化影响面 → 更新三份文档。
+
+#### 15.1 落地内容
+
+| commit | 内容 |
+|---|---|
+| `3067df4` | `sanity_check.py` 补 **C1~C3**（**修前红灯**：激活度实测 1.0 / 输出 2 条 / 激活度 1.0） |
+| `e7a607a` | **第二刀 D+B 本体**：`nets.py` 四处改动 |
+
+#### 15.2 B —— 门控集合取错（修“门控不满足时规则反而激活”）
+
+**病灶**（Mamdani `inference` L358 与 TSK `tsk_inference` L748 两处同源）：
+
+```python
+conditions = rule_matrix[i, rule_matrix[i] != 0]   # ❌ 取【隶属度非零】的列
+```
+
+`rule_matrix = connected_matrix * membership_degrees` ⇒ 某个门控的隶属度**恰为 0** 时，
+该列被这一行表达式剔出 `conditions` ⇒ **该门控不参与乘积** ⇒
+「门控不满足」被当成了「门控不存在」⇒ **规则反而激活**。
+
+**修法**：改用**连接关系**取列 ——
+
+```python
+gate_cols = np.flatnonzero(self.connected_matrix[i])   # ✅ 取【连接到的列】
+conditions = rule_matrix[i, gate_cols]
+```
+
+⇒ 隶属度 0 ⇒ 乘积含 0 ⇒ 激活度 0（门控不满足）。
+
+#### 15.3 D —— TSK 主路径无激活度阈值
+
+**病灶**：`MIN_ACTIVATION_THRESHOLD`（=0.01001）在 TSK 路径**零引用**；第四层（结论层）不看激活度地给每条规则出结论值 ⇒ 激活度≈0 的规则以 delta≈0 混进推荐列表（实测过 `BT conf=1.68e-282`、`CUSION conf=0.0`）。
+
+**修法**（两处）：
+
+```python
+# 第三层后
+activations_with_priority = new_activations * np.asarray(priority_array)
+activations_with_priority[activations_with_priority < MIN_ACTIVATION_THRESHOLD] = 0.0
+
+# 输出组装：跳过零权重规则，且三个列表同步构建（否则 zip 错位）
+if activations_with_priority[i] <= 0:
+    continue
+```
+
+⚠️ **阈值作用位置不可改**：必须卡**归一化 × priority 之后**的权重。
+原始激活度里含缺陷门控的 `EPSILON=1e-7` 因子（缺陷字段不在 `process_parameter` 里），
+卡原始值会把**所有含缺陷门控的规则**全干死。
+
+#### 15.4 C 组基准（先红灯后绿灯）
+
+| # | case | 断言 | 修前（红） | 修后 |
+|---|---|---|---|---|
+| C1 | 门控 μ=0 ⇒ 规则失活（TSK） | 激活度必须 0 | ❌ **1.0** | ✅ 0.0 |
+| C2 | 无效激活不产出结论 | high μ=1.0 / low μ=exp(-8) ⇒ 只输出 1 条 | ❌ **2 条** | ✅ 1 条 |
+| C3 | Mamdani 同源 | 激活度必须 0 | ❌ **1.0** | ✅ 0.0 |
+
+**构造手法（重要）**：隶属度函数是 `gauss_mf` = `exp(-(x-mean)²/(2σ²))`，
+σ=(hi-lo)/(2(lvl-1)) ⇒ **μ 最小 ≈1.27e-14、永不为 0**；
+`tri_mf` 论域外能出 0，但 `keyword_array` 不支持指定 `membership_type`（硬编码 gauss）⇒
+**只能用 monkeypatch `FuzzyFeature.get_value_by_level` 精确置 0**。
+
+#### 15.5 实测影响（49 样本，真实引擎）
+
+| 指标 | D+B 前 | D+B 后 |
+|---|---|---|
+| 推荐总条数 | 539 | **294**（平均 **11.00 → 6.00**） |
+| 条数 / 集合 / 推荐值 变化的样本 | — | **49 / 49 / 49** |
+| 保留 | — | IV0(97)、IP0(49)、NT(49)、BT(49)、BT2(49)、MBP0(1) |
+| 剔除 | — | MSR0(49)、CT(49)、CUSION(49)、MBP0(48)（低置信噪音：0.0011 / 7.6e-08 / 0.0） |
+| 新增 | — | 无 |
+
+#### 15.6 本轮新发现的遗留问题
+
+| # | 问题 | 说明 |
+|---|---|---|
+| **T** | 阈值语义待标定 | 卡的是归一化权重，`0.01001` 的物理含义随**规则总数**变化 ⇒ 12 条规则场景与 1643 条规则场景含义不同 |
+| **R** | 推荐列表有重复项 | 同一参数在列表里出现 2 次（`IV0`/`BT`）⇒ 跨层结果未按参数去重合并（属 K/C 批次） |
+
+#### 15.7 产出物
+
+- **交付材料**：`backend/_refs/system/algorithm/2026-10-23-fuzzy-bucket-wiring-delivery.md`（已扩为「两刀交付说明」）
+- **清单**：新增 §13「第 15 轮执行记录」，§12 下一批建议相应更新
+- **对照脚本**：`_dev_refs/_diff_db_effect.py`（读两份存档 JSON 对比）+ `_before_after_db.json` / `_before_after_db_out.txt`
+
+#### 15.8 下一批建议
+
+顺序：**T（阈值标定）→ K（activation/delta/confidence 语义拆开）→ R（推荐列表去重）→ G（推测论域）→ J（functional.py 清理）**。
+
+
 
