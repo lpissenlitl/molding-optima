@@ -33,7 +33,7 @@ import numpy as np
 
 from process.models.rules import RuleKeyword, RuleMethod
 from process.algorithms.fuzzy.fuzzy_core.functional import gauss_mf
-from process.algorithms.fuzzy.fuzzy_core.macros import HS_MAPPING_DICT
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 from process.algorithms.fuzzy.fuzzy_core.parsing import (
     classify_name,
     is_level_word,
@@ -117,7 +117,7 @@ def reference_infer(rules, keywords, x, use_fixed_level=True, use_group_norm=Tru
                 continue
             kw = keywords[name]
             if use_fixed_level:
-                bucket = HS_MAPPING_DICT.get(lv)
+                bucket = LEGACY_HS_MAPPING_DICT.get(lv)
             else:
                 bucket = level_to_bucket(lv, int(kw.fuzzy_level or 3))
             if bucket is None or bucket >= len(feats[name][0]):

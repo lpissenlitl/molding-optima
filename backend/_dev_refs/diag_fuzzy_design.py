@@ -27,7 +27,8 @@ BACKEND = os.path.dirname(HERE)
 FUZZY_DIR = os.path.join(BACKEND, "process", "algorithms", "fuzzy")
 sys.path.insert(0, FUZZY_DIR)
 
-from fuzzy_core.macros import FUZZY_LEVELS, HS_MAPPING_DICT, ALL_LEVEL_WORDS
+from fuzzy_core.macros import FUZZY_LEVELS, ALL_LEVEL_WORDS
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 from fuzzy_core.models.nets import FuzzyFeature, NumTskRuleNet
 
 
@@ -156,8 +157,8 @@ def case_a4_level_mapping_l5():
 
     print(f"FUZZY_LEVELS[5] = {FUZZY_LEVELS[5]}")
     print(f"FUZZY_LEVELS[3] = {FUZZY_LEVELS[3]}")
-    print(f"HS_MAPPING_DICT 里的档位词 = "
-          f"{[k for k in HS_MAPPING_DICT if k not in ('add', 'reduce', 'adjust')]}")
+    print(f"LEGACY_HS_MAPPING_DICT 里的档位词 = "
+          f"{[k for k in LEGACY_HS_MAPPING_DICT if k not in ('add', 'reduce', 'adjust')]}")
     print()
 
     for lvl in (3, 5):
@@ -167,9 +168,9 @@ def case_a4_level_mapping_l5():
         print(f"--- fuzzy_level={lvl}（桶序 = {words}）---")
         print(f"    x=30 的隶属度 = {[round(float(m), 4) for m in mem]}")
         for word in ("low", "mid", "medium", "high"):
-            if word not in HS_MAPPING_DICT:
+            if word not in LEGACY_HS_MAPPING_DICT:
                 continue
-            bucket = HS_MAPPING_DICT[word]
+            bucket = LEGACY_HS_MAPPING_DICT[word]
             if bucket >= lvl:
                 print(f"    规则前件 IV0_{word:<7} → bucket {bucket}  ← 越界")
                 continue
@@ -188,7 +189,7 @@ def case_a5_very_low_keyerror():
     hr("A5  前件写 very_low / very_high 会发生什么")
 
     print(f"ALL_LEVEL_WORDS 含 very_low ?  {'very_low' in ALL_LEVEL_WORDS}")
-    print(f"HS_MAPPING_DICT 含 very_low ?  {'very_low' in HS_MAPPING_DICT}")
+    print(f"LEGACY_HS_MAPPING_DICT 含 very_low ?  {'very_low' in LEGACY_HS_MAPPING_DICT}")
     print()
 
     # 先看词法层怎么切
@@ -239,8 +240,8 @@ def case_a6_level_7_9():
         mem = [ff.get_value_by_level(30, i) for i in range(lvl)]
         print(f"    FuzzyFeature(f_level={lvl}) 建了 {lvl} 个桶，"
               f"x=30 隶属度={[round(float(m), 4) for m in mem]}")
-        print(f"    但规则词 low→bucket {HS_MAPPING_DICT['low']}、"
-              f"high→bucket {HS_MAPPING_DICT['high']}，"
+        print(f"    但规则词 low→bucket {LEGACY_HS_MAPPING_DICT['low']}、"
+              f"high→bucket {LEGACY_HS_MAPPING_DICT['high']}，"
               f"永远只落在最左 3 个桶")
         print(f"    → 档位 {lvl} 档与引擎的 3 档语义完全脱节")
         print()

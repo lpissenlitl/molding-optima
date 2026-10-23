@@ -114,10 +114,10 @@ def main():
               f" is_level_word={is_level_word(str(info.get('level', '')))}")
 
     # ---- 附：当前全局表对 levelN 的处理 ----
-    print("\n--- 附：现行 HS_MAPPING_DICT 对 levelN 的取值 ---")
-    from process.algorithms.fuzzy.fuzzy_core.macros import HS_MAPPING_DICT
+    print("\n--- 附：现行 LEGACY_HS_MAPPING_DICT 对 levelN 的取值 ---")
+    from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
     for w in ("level1", "level3", "level5", "level9"):
-        print(f"  {w} -> {HS_MAPPING_DICT.get(w)}")
+        print(f"  {w} -> {LEGACY_HS_MAPPING_DICT.get(w)}")
     print("  -> 5 档字段上 level3 会指向桶2（该字段的 medium 位），而非编号语义期望的桶2")
     print("    —— 巧合一致；但 level1 在 5 档上会指向桶0（very_low），编号语义期望的也是桶0。")
     print("    -> 编号形式在全局表下【恰好】与 per-field 语义一致（因为编号就是相对位置）。")

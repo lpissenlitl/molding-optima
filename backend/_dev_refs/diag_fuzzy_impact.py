@@ -32,12 +32,12 @@ import django
 
 django.setup()
 
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 from process.models.rules import RuleKeyword, RuleMethod
 from process.algorithms.fuzzy.fuzzy_core.macros import (
     ALL_LEVEL_WORDS,
     DEFECT_CONST,
     FUZZY_LEVELS,
-    HS_MAPPING_DICT,
 )
 from process.algorithms.fuzzy.fuzzy_core.parsing import (
     classify_name,
@@ -105,7 +105,7 @@ def main():
                 continue          # 缺陷：路由层已保证，网络层被丢弃
             if str(name) not in keywords:
                 continue          # 无 RuleKeyword → 建不了论域
-            if str(lv) not in HS_MAPPING_DICT:
+            if str(lv) not in LEGACY_HS_MAPPING_DICT:
                 continue
             gates += 1
         gate_count_dist[gates] += 1
@@ -132,7 +132,7 @@ def main():
 
     # ---------------------------------------------------------------- B2
     hr("B2  每条规则『真正能当门控』的前件个数")
-    print("  门控 = 前件是工艺参数 + level 是档位词 + 该参数有 RuleKeyword + level 在 HS_MAPPING_DICT")
+    print("  门控 = 前件是工艺参数 + level 是档位词 + 该参数有 RuleKeyword + level 在 LEGACY_HS_MAPPING_DICT")
     for k, v in sorted(gate_count_dist.items()):
         pct = v / max(total, 1) * 100
         bar = "#" * max(1, int(pct))
@@ -166,14 +166,14 @@ def main():
     # ---------------------------------------------------------------- B4
     hr("B4  前件 level 词分布")
     print(f"  ALL_LEVEL_WORDS = {sorted(ALL_LEVEL_WORDS)}")
-    print(f"  HS_MAPPING_DICT 里的档位词 = "
-          f"{[k for k in HS_MAPPING_DICT if k not in ('add', 'reduce', 'adjust')]}")
+    print(f"  LEGACY_HS_MAPPING_DICT 里的档位词 = "
+          f"{[k for k in LEGACY_HS_MAPPING_DICT if k not in ('add', 'reduce', 'adjust')]}")
     print()
     for lv, n in level_word_dist.most_common(20):
         in_all = "OK" if lv in ALL_LEVEL_WORDS else "非档位词"
-        in_map = "OK" if lv in HS_MAPPING_DICT else "!! 不在HS_MAPPING_DICT"
+        in_map = "OK" if lv in LEGACY_HS_MAPPING_DICT else "!! 不在LEGACY_HS_MAPPING_DICT"
         note = ""
-        if lv in ALL_LEVEL_WORDS and lv not in HS_MAPPING_DICT:
+        if lv in ALL_LEVEL_WORDS and lv not in LEGACY_HS_MAPPING_DICT:
             note = "  ← is_level_word 放行，但查表会 KeyError"
         print(f"    {str(lv):<16} {n:>6}  {in_all:<8} {in_map:<24}{note}")
 
@@ -186,13 +186,13 @@ def main():
 
     # ---------------------------------------------------------------- B5
     hr("B5  结论参数的 RuleKeyword.fuzzy_level 分布")
-    print("  引擎的档位→桶映射是**全局静态表** HS_MAPPING_DICT（只有 3 档语义：low/mid/high）")
+    print("  引擎的档位→桶映射是**全局静态表** LEGACY_HS_MAPPING_DICT（只有 3 档语义：low/mid/high）")
     print("  而桶数由每个参数自己的 fuzzy_level 决定 → 5/7/9 档必然错位")
     print()
     for lvl, n in sorted(conclusion_fuzzy_lvl.items()):
         words = FUZZY_LEVELS.get(lvl)
         if lvl == 3:
-            verdict = "OK（3 档语义与 HS_MAPPING_DICT 完全对齐）"
+            verdict = "OK（3 档语义与 LEGACY_HS_MAPPING_DICT 完全对齐）"
         elif lvl == 5:
             verdict = "!! 错位一档：low→very_low桶, mid→low桶, high→mid桶"
         else:

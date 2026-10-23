@@ -33,9 +33,9 @@ django.setup()
 
 import numpy as np  # noqa: E402
 
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 from process.algorithms.fuzzy.adapters import RuleKeywordAdapter  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.macros import (  # noqa: E402
-    HS_MAPPING_DICT,
     LEVEL_WORDS_BY_LVL,
     resolve_bucket,
 )
@@ -164,7 +164,7 @@ def trace_single_rule(rule, tag):
             bucket_e2 = resolve_bucket(meta['lvl'], lvl)
         except ValueError as e:
             bucket_e2 = f"ERR({e})"
-        bucket_now = HS_MAPPING_DICT.get(lvl)
+        bucket_now = LEGACY_HS_MAPPING_DICT.get(lvl)
         mark = "  ⚠️ 桶语义不一致" if bucket_e2 != bucket_now else ""
         kv("  前件·参数", f"{n}_{lvl} → 元数据有 ✓ lvl={meta['lvl']} "
                           f"论域=[{meta['min_val']},{meta['max_val']}] "
@@ -504,23 +504,23 @@ def verify_against_real_engine(x, merged):
 
 
 def bucket_semantics():
-    """量化 ❶：现行 HS_MAPPING_DICT vs resolve_bucket 的桶语义差异及其影响。"""
+    """量化 ❶：现行 LEGACY_HS_MAPPING_DICT vs resolve_bucket 的桶语义差异及其影响。"""
     rule_line("=")
     print("【档位语义对照】5 档字段上 low/medium/high 的桶与峰位")
     rule_line("=")
     words = LEVEL_WORDS_BY_LVL[5]
     print(f"      5 档词表 LEVEL_WORDS_BY_LVL[5] = {words}")
-    print(f"      现行 HS_MAPPING_DICT: low={HS_MAPPING_DICT['low']} "
-          f"medium={HS_MAPPING_DICT['medium']} high={HS_MAPPING_DICT['high']}")
+    print(f"      现行 LEGACY_HS_MAPPING_DICT: low={LEGACY_HS_MAPPING_DICT['low']} "
+          f"medium={LEGACY_HS_MAPPING_DICT['medium']} high={LEGACY_HS_MAPPING_DICT['high']}")
     print(f"      E2  resolve_bucket : "
           f"low={resolve_bucket(5, 'low')} "
           f"medium={resolve_bucket(5, 'medium')} "
           f"high={resolve_bucket(5, 'high')}")
     print()
     print("      峰位分布（论域归一化到 0~1）：")
-    for name, bucket in (('low', HS_MAPPING_DICT['low']),
-                         ('medium', HS_MAPPING_DICT['medium']),
-                         ('high', HS_MAPPING_DICT['high'])):
+    for name, bucket in (('low', LEGACY_HS_MAPPING_DICT['low']),
+                         ('medium', LEGACY_HS_MAPPING_DICT['medium']),
+                         ('high', LEGACY_HS_MAPPING_DICT['high'])):
         e2 = resolve_bucket(5, name)
         print(f"        {name:<7} 现行桶{bucket} → 峰位 {bucket / 4:.0%}"
               f"   |  E2桶{e2} → 峰位 {e2 / 4:.0%}")

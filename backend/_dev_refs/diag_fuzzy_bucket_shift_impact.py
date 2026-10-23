@@ -12,6 +12,9 @@
 「静态桶」和「正确桶」算 μ 再对比。样本取 `ProcessParameter` 实验数据
 （经 `_normalize_field_name_by_spec` 归一，与引擎取数路径一致）。
 
+⚠️ 本脚本是**接线前的历史影响面快照**。2026-10-23 已完成接线并整表删除
+`HS_MAPPING_DICT` ⇒ 脚本自带旧表快照 `LEGACY_HS_MAPPING_DICT` 复现旧口径做 A/B 对照。
+
 运行：cd backend; python _dev_refs/diag_fuzzy_bucket_shift_impact.py
 """
 
@@ -44,7 +47,6 @@ if _FUZZY_DIR not in sys.path:
 from fuzzy_core.models.nets import FuzzyFeature, NumTskRuleNet  # noqa: E402
 from fuzzy_core.macros import (  # noqa: E402
     EPSILON as EPSILON_CONST,
-    HS_MAPPING_DICT,
     LEVEL_WORDS_BY_LVL,
     MIN_ACTIVATION_THRESHOLD,
     resolve_bucket,
@@ -55,6 +57,10 @@ from process.algorithms.fuzzy.fuzzy_algorithm import FuzzyEngine  # noqa: E402
 from process.models import ProcessParameter  # noqa: E402
 from process.models.rules import RuleKeyword, RuleMethod  # noqa: E402
 from process.services.parameter_optimize import _normalize_field_name_by_spec  # noqa: E402
+
+# 旧版全局静态档位表快照（2026-10-23 已从 macros.py 整表删除）：
+# 见 `_dev_refs/_legacy_bucket_map.py` —— 本脚本做 A/B 对照需要**旧口径**。
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT  # noqa: E402
 
 
 RULE_RE = re.compile(r"^IF\s+(.+?)\s+THEN\s+(.+)$", re.S)
@@ -86,7 +92,7 @@ def parse_preconditions(rule_desc):
 def _rule_act(gates, ctx, feat, use_correct):
     """单条规则在给定上下文下的激活度（只算在 x 里有值的门控）。
 
-    use_correct=False ⇒ 用静态桶；True ⇒ 用 resolve_bucket 的正确桶。
+    use_correct=False ⇒ 用旧版静态桶；True ⇒ 用 resolve_bucket 的正确桶。
     """
     a = 1.0
     for name, level, lvl, sb, cb in gates:
@@ -192,7 +198,7 @@ def main():
             except ValueError:
                 unresolvable += 1
                 continue
-            gates.append((name, level, lvl, HS_MAPPING_DICT[level], correct))
+            gates.append((name, level, lvl, LEGACY_HS_MAPPING_DICT[level], correct))
         rule_gates[idx] = gates
 
     total_gates = sum(len(v) for v in rule_gates.values())
@@ -378,7 +384,7 @@ def main():
         ("B2", 50.0, "low"),
         ("B3", 50.0, "high"),
     ]:
-        sb = HS_MAPPING_DICT[word]
+        sb = LEGACY_HS_MAPPING_DICT[word]
         cb = resolve_bucket(5, word)
         mu_s = float(f5.get_value_by_level(x, sb))
         mu_c = float(f5.get_value_by_level(x, cb))
@@ -390,7 +396,7 @@ def main():
     print("  3 档向后兼容（lvl=3, [0,200]）：means=[0,100,200], sigma=25")
     f3 = FuzzyFeature("inj_pres_1", [0.0, 200.0], f_level=3, f_membership_type="gauss")
     for word in ("low", "medium", "high"):
-        sb = HS_MAPPING_DICT[word]
+        sb = LEGACY_HS_MAPPING_DICT[word]
         cb = resolve_bucket(3, word)
         print(f"    {word:<8} 静态桶={sb}  正确桶={cb}  ⇒ {'一致 ✓' if sb == cb else '不一致 ✗'}")
     print()

@@ -5,7 +5,7 @@
 背景（回应「这肯定是算法设计的问题」）：
   - 前端 `LEVEL_WORDS` 已经**按 keyword.fuzzy_level 动态取词表**（per-parameter）
   - 后端 `macros.FUZZY_LEVELS` 只有 3/5 档，且用 'mid'
-  - 引擎 `HS_MAPPING_DICT` 是**全局静态表**，只有 3 档语义
+  - 引擎 `LEGACY_HS_MAPPING_DICT` 是**全局静态表**，只有 3 档语义
   ⇒ 前端已经 per-parameter 了，引擎还停在全局表 —— 这不是设计选择，是内部不自洽
 
 本脚本用**最长后缀匹配**还原「真参数名 + 档位词」（这是 E1 的正确解法，
@@ -37,11 +37,11 @@ import django
 
 django.setup()
 
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 from process.models.rules import RuleKeyword, RuleMethod
 from process.algorithms.fuzzy.fuzzy_core.macros import (
     ALL_LEVEL_WORDS,
     FUZZY_LEVELS,
-    HS_MAPPING_DICT,
 )
 
 
@@ -253,8 +253,8 @@ def main():
     for lvl, ws in FUZZY_LEVELS.items():
         print(f"     {lvl}档: {ws}")
     print("     7/9档: **缺失**")
-    print("  【引擎】backend/.../fuzzy_core/macros.py HS_MAPPING_DICT")
-    print(f"     {HS_MAPPING_DICT}")
+    print("  【引擎】backend/.../fuzzy_core/macros.py LEGACY_HS_MAPPING_DICT")
+    print(f"     {LEGACY_HS_MAPPING_DICT}")
     print()
     print("  ⇒ 三处词表三套内容，且**只有前端是 per-parameter 的**。")
     print("  ⇒ 前端按 keyword.fuzzy_level 给用户选词（= 按参数语义），")

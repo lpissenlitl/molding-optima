@@ -30,7 +30,7 @@ sys.path.insert(0, FUZZY_DIR)
 import numpy as np
 
 from fuzzy_core.functional import gauss_mf
-from fuzzy_core.macros import HS_MAPPING_DICT
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 
 
 def hr(t):
@@ -114,7 +114,7 @@ def main():
     print("  取 x = 50（各参数论域的正中）")
     print()
 
-    hr("方案 1：全局表按 3 档语义（= 现状 HS_MAPPING_DICT）")
+    hr("方案 1：全局表按 3 档语义（= 现状 LEGACY_HS_MAPPING_DICT）")
     print(f"  {'参数':<6}{'规则词':<10}{'桶':>4}{'该桶语义':>12}{'激活度':>12}   判定")
     print("  " + "-" * 72)
     for lvl, name in ((3, "KA"), (5, "KB")):
@@ -122,7 +122,7 @@ def main():
             extra = "  ← x 在正中却判为『高』" if (word == "high" and lvl == 5) else ""
             _row(name, lvl, word, bucket_global(word, GLOBAL_3), extra)
 
-    hr("方案 2：把全局表改成 5 档语义（『修一下 HS_MAPPING_DICT 就完事』）")
+    hr("方案 2：把全局表改成 5 档语义（『修一下 LEGACY_HS_MAPPING_DICT 就完事』）")
     print(f"  {'参数':<6}{'规则词':<10}{'桶':>4}{'该桶语义':>12}{'激活度':>12}   判定")
     print("  " + "-" * 72)
     for lvl, name in ((3, "KA"), (5, "KB")):

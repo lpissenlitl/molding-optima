@@ -7,7 +7,7 @@
 
 本脚本统计：
   Q1 规则库里有多少条规则是「模糊等级结论」？（决定 Mamdani 是否空跑）
-  Q2 Mamdani 结论侧用 HS_MAPPING_DICT 定位桶 => P1 是否也影响它？
+  Q2 Mamdani 结论侧如何定位桶 => P1 是否也影响它？
   Q3 若有模糊等级结论，列出样例
 
 运行：../.venv/Scripts/python.exe _dev_refs/diag_fuzzy_mamdani_liveness.py
@@ -122,9 +122,9 @@ def main():
         print("    => P1（桶贴错标签）对 Mamdani 只是潜在风险，不是现实故障")
 
     print("\nQ2 Mamdani 的桶定位点：")
-    print("    nets.py L271  前件:  pre_dict[name]['index'] + HS_MAPPING_DICT[level]")
-    print("    nets.py L281  结论:  sol_dict[name]['index'] + HS_MAPPING_DICT[level]")
-    print("    => 与 NumTskRuleNet L634 同源，P1 对两者【同时成立】")
+    print("    nets.py 前件:  self.pre_dict[name]['index'] + resolve_bucket(pre_dict[name]['lvl'], level)")
+    print("    nets.py 结论:  self.sol_dict[name]['index'] + resolve_bucket(sol_dict[name]['lvl'], level)")
+    print("    => 与 NumTskRuleNet 同源，桶按【字段自己的档位数】定位")
 
     return 0
 

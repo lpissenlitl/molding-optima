@@ -11,9 +11,9 @@ import django  # noqa: E402
 
 django.setup()
 
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 from process.algorithms.fuzzy.fuzzy_core.macros import (  # noqa: E402
     ALL_LEVEL_WORDS,
-    HS_MAPPING_DICT,
 )
 from process.algorithms.fuzzy.fuzzy_core.models.nets import NumTskRuleNet  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.parsing import is_level_word  # noqa: E402
@@ -22,9 +22,9 @@ print("ALL_LEVEL_WORDS =", sorted(ALL_LEVEL_WORDS))
 print()
 for w in ('low', 'medium', 'high', 'very_low', 'very_high', 'extremely_low', 'level3'):
     in_words = is_level_word(w)
-    in_map = w in HS_MAPPING_DICT
+    in_map = w in LEGACY_HS_MAPPING_DICT
     flag = '' if in_map else '  <== 词表里有但映射表没有！'
-    print(f"  {w:<15} is_level_word={in_words!s:<5} HS_MAPPING_DICT 有={in_map!s:<5}{flag}")
+    print(f"  {w:<15} is_level_word={in_words!s:<5} LEGACY_HS_MAPPING_DICT 有={in_map!s:<5}{flag}")
 
 print("\n--- 用一条含 very_low 的规则建网 ---")
 rule_array = [{'rule_description': 'IF SHORTSHOT_low AND IV0_very_low THEN IV0_add_2'}]

@@ -33,6 +33,14 @@ from process.algorithms.fuzzy.fuzzy_core.parsing import (
     collect_param_names,
     classify_name,
 )
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
+
+
+# 5-bucket semantics: very_low, low, medium, high, very_high
+FIXED_5_BUCKET = {
+    "low": 1, "mid": 2, "medium": 2, "high": 3,
+    "very_low": 0, "very_high": 4,
+}
 
 
 def build_keywords(include_defects=False, include_positions=False):
@@ -112,24 +120,29 @@ def main():
     x = build_x(kws_params)
     print("input params:", len(x))
 
-    # ---- A: current mapping -------------------------------------------------
-    saved = dict(nets.HS_MAPPING_DICT)
-    nets.HS_MAPPING_DICT = {
-        "low": 0, "mid": 1, "medium": 1, "high": 2,
-        "add": 1, "reduce": -1, "adjust": -2,
-    }
+    # ---- A: legacy global 3-bucket mapping -----------------------------------
+    # 2026-10-23: `nets.HS_MAPPING_DICT` was deleted from macros.py and nets.py
+    # now resolves buckets via `resolve_bucket(lvl, word)`.
+    # => the A/B comparison now monkeypatches `nets.resolve_bucket`
+    #    (`_resolve_bucket_safe` resolves it as a module global at call time).
+    saved = nets.resolve_bucket
+
+    def _legacy_resolve(lvl, word, field_words=None):
+        return LEGACY_HS_MAPPING_DICT[str(word).strip().lower()]
+
+    nets.resolve_bucket = _legacy_resolve
     res_a = run(rules, kws_params, x)
-    show("A) CURRENT mapping  low->0 medium->1 high->2", res_a)
+    show("A) LEGACY mapping   low->0 medium->1 high->2", res_a)
 
     # ---- B: fixed mapping (5-bucket semantics) ------------------------------
-    nets.HS_MAPPING_DICT = {
-        "low": 1, "mid": 2, "medium": 2, "high": 3,
-        "add": 1, "reduce": -1, "adjust": -2,
-    }
+    def _fixed_resolve(lvl, word, field_words=None):
+        return FIXED_5_BUCKET[str(word).strip().lower()]
+
+    nets.resolve_bucket = _fixed_resolve
     res_b = run(rules, kws_params, x)
     show("B) FIXED mapping    low->1 medium->2 high->3", res_b)
 
-    nets.HS_MAPPING_DICT = saved
+    nets.resolve_bucket = saved
 
     act_a = {r[0]: r[1] for r in res_a}
     act_b = {r[0]: r[1] for r in res_b}

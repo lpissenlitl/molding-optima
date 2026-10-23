@@ -32,7 +32,8 @@ from process.algorithms.fuzzy.services.rule_query_service import (
     RuleQueryContext,
     RuleQueryService,
 )
-from process.algorithms.fuzzy.fuzzy_core.macros import HS_MAPPING_DICT, DEFECT_CONST
+from process.algorithms.fuzzy.fuzzy_core.macros import DEFECT_CONST
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 
 
 def hr(title):
@@ -93,7 +94,7 @@ print(f"\nparse 失败条数 = {parse_fail}")
 print(f"前件含 DL*（缺陷位置）的规则数 = {pos_pre_count}")
 print(f"\n前件 level 取值分布（top 20）:")
 for lv, n in pre_levels.most_common(20):
-    in_map = "OK(在HS_MAPPING_DICT)" if lv in HS_MAPPING_DICT else "MISS(->KeyError)"
+    in_map = "OK(在LEGACY_HS_MAPPING_DICT)" if lv in LEGACY_HS_MAPPING_DICT else "MISS(->KeyError)"
     print(f"   {str(lv):<16} {n:>6}   {in_map}")
 print(f"\n结论 action 分布 = {dict(conclusion_actions)}")
 print(f"\n前件 keyword top 15 = {dict(pre_keywords.most_common(15))}")

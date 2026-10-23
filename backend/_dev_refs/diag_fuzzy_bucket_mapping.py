@@ -1,10 +1,12 @@
-"""fuzzy 模块算法实现 vs 设计规格 对照审计（2026-10-23 第 12 轮）
+"""fuzzy 模块算法实现 vs 设计规格 对照审计（2026-10-23 第 12 轮；接线前快照）
 
 只读脚本：不写库、不改代码。目的：量化『档位→桶语义』的实现偏差影响面。
 
-核心怀疑点：`nets.py` 用静态 `HS_MAPPING_DICT[level]` 取桶索引，
-而该表是全局 3 档口径；`macros.resolve_bucket(lvl, word)` 才是按字段级数
-定位的正确实现，但两者未接线（macros.py 注释自陈『接线完成后整表删除』）。
+⚠️ 本脚本是**接线前的历史对照快照**。背景：`nets.py` 曾用静态 `HS_MAPPING_DICT[level]`
+取桶索引，而该表是全局 3 档口径；`macros.resolve_bucket(lvl, word)` 才是按字段级数
+定位的正确实现。2026-10-23 已完成接线（`nets.py` 三处改用 `resolve_bucket`）并
+**整表删除** `HS_MAPPING_DICT` ⇒ 本脚本自带旧表快照 `LEGACY_HS_MAPPING_DICT`
+复现旧口径做 A/B 对照，保证仍可复现历史结论。
 
 运行：cd backend; ../.venv/Scripts/python.exe _dev_refs/diag_fuzzy_bucket_mapping.py
 """
@@ -30,7 +32,6 @@ import django
 django.setup()
 
 from process.algorithms.fuzzy.fuzzy_core.macros import (
-    HS_MAPPING_DICT,
     LEVEL_WORDS_BY_LVL,
     resolve_bucket,
 )
@@ -39,6 +40,10 @@ from process.algorithms.fuzzy.fuzzy_core.parsing import (
     split_phase,
 )
 from process.models.rules import RuleKeyword, RuleMethod
+
+# 旧版全局静态档位表快照（2026-10-23 已从 macros.py 整表删除）：
+# 见 `_dev_refs/_legacy_bucket_map.py` —— 本脚本做 A/B 对照需要**旧口径**。
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 
 
 def hr(title):
@@ -64,8 +69,8 @@ def main():
         print(f"  lvl={lvl}: {c:>4} 个字段   词表={words}")
 
     hr("2. 前件档位词 → 桶索引：静态表 vs 按字段级数解析")
-    print("  『静态』= HS_MAPPING_DICT[word]（现网实际走的路）")
-    print("  『正确』= resolve_bucket(该字段的 lvl, word)")
+    print("  『静态』= 旧版静态表 LEGACY_HS_MAPPING_DICT[word]（接线前实际走的路）")
+    print("  『正确』= resolve_bucket(该字段的 lvl, word)（现已接线）")
     print()
     print(f"  {'字段':<10}{'lvl':>5}{'档位词':>12}{'静态桶':>8}{'正确桶':>8}"
           f"{'错位':>6}  说明")
@@ -86,13 +91,13 @@ def main():
             pre_pairs.append((name, level))
 
     pair_stat = collections.Counter(pre_pairs)
-    # nets.py 的实际守卫顺序：先 is_level_word() 放行，再查 HS_MAPPING_DICT
+    # nets.py 接线前的实际守卫顺序：先 is_level_word() 放行，再查静态表
     #   ⇒ 只有「是合法等级词、但静态表里没有」的词才会真的 KeyError
-    resolvable = [(n, w) for (n, w) in pair_stat if w in HS_MAPPING_DICT]
+    resolvable = [(n, w) for (n, w) in pair_stat if w in LEGACY_HS_MAPPING_DICT]
     guarded_out = [(n, w) for (n, w) in pair_stat
-                   if w not in HS_MAPPING_DICT and not is_level_word(w)]
+                   if w not in LEGACY_HS_MAPPING_DICT and not is_level_word(w)]
     real_crash = [(n, w) for (n, w) in pair_stat
-                  if w not in HS_MAPPING_DICT and is_level_word(w)]
+                  if w not in LEGACY_HS_MAPPING_DICT and is_level_word(w)]
 
     shown = 0
     mismatch_pairs = []
@@ -101,7 +106,7 @@ def main():
         if kw is None:
             continue
         lvl = int(kw.fuzzy_level or 3)
-        static_bucket = HS_MAPPING_DICT[word]
+        static_bucket = LEGACY_HS_MAPPING_DICT[word]
         try:
             correct_bucket = resolve_bucket(lvl, word)
         except ValueError as e:
@@ -134,7 +139,7 @@ def main():
         except ValueError:
             continue
         total_refs += pair_stat[(name, word)]
-        if HS_MAPPING_DICT[word] != correct_bucket:
+        if LEGACY_HS_MAPPING_DICT[word] != correct_bucket:
             bad_refs += pair_stat[(name, word)]
 
     print(f"  桶索引错位的 (参数,档位词) 组合: {len(mismatch_pairs)} 个")
@@ -146,10 +151,10 @@ def main():
     print(f"  错位档数分布: {dict(sorted(off.items()))}（正=静态表偏低）")
 
     hr("3. ★ 崩溃风险：静态表里没有的档位词")
-    print("  nets.py 的守卫顺序：先 is_level_word() 放行 → 再查 HS_MAPPING_DICT")
+    print("  nets.py 接线前的守卫顺序：先 is_level_word() 放行 → 再查静态表")
     print("  ⇒ 只有「合法等级词、但静态表里没有」的词才会真的 KeyError")
-    print(f"  HS_MAPPING_DICT 的词表键: "
-          f"{sorted(k for k in HS_MAPPING_DICT if not k.startswith('level'))}")
+    print(f"  旧静态表的词表键: "
+          f"{sorted(k for k in LEGACY_HS_MAPPING_DICT if not k.startswith('level'))}")
     print()
     if guarded_out:
         print(f"  ℹ️ 被 is_level_word() 拦下（不查表 ⇒ 不崩）："
@@ -179,8 +184,8 @@ def main():
           f"({bad_refs * 100 // max(total_refs, 1)}%)")
     print(f"  可能 KeyError 的引用  : {crash_refs}")
     print()
-    print("  ⇒ 静态 HS_MAPPING_DICT 是全局 3 档口径，字段级数 >3 时全部错位；")
-    print("    正确实现 resolve_bucket(lvl, word) 已存在但未接线。")
+    print("  ⇒ 旧版静态表是全局 3 档口径，字段级数 >3 时全部错位；")
+    print("    正确实现 resolve_bucket(lvl, word) 已于 2026-10-23 接线并删除旧表。")
 
     print()
     print("=" * 100)

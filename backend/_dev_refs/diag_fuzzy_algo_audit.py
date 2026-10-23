@@ -38,7 +38,7 @@ django.setup()
 from process.models.rules import RuleKeyword, RuleMethod
 from process.algorithms.fuzzy.fuzzy_core.parsing import parse_rule
 from process.algorithms.fuzzy.fuzzy_core.models.nets import NumTskRule, NumTskRuleNet
-from process.algorithms.fuzzy.fuzzy_core.macros import HS_MAPPING_DICT
+from _legacy_bucket_map import LEGACY_HS_MAPPING_DICT
 
 
 def hr(title):
