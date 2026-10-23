@@ -2,7 +2,7 @@
 
 覆盖 2026-10-22 引入的字段三态分类：
   - authority : 有 RuleKeyword 权威元数据
-  - guessed   : 无权威元数据，按实时值推测了一个论域（带 source='guessed' 标记）
+  - guessed   : 无权威元数据，按实时值推测了一个论域（带 meta_source='guessed' 标记）
   - unknown   : 既无权威元数据也无实时值 ⇒ 规则少了一个门控条件，激活度偏高
 
 不依赖规则库数据：mock 掉 _load_keyword_dicts，只测分类与报告逻辑。
@@ -31,13 +31,13 @@ RULES = [
 
 # 模拟 _load_keyword_dicts 的返回：
 #   MEL        -> 权威元数据
-#   HOLDEXIST  -> 推测论域（带 source 标记）
+#   HOLDEXIST  -> 推测论域（带 meta_source 标记）
 #   PP0        -> 没有（既不在清单里，也拿不到实时值）
 KEYWORD_DICTS = [
     {'keyword': 'MEL', 'lvl': 5, 'min_val': 0.0, 'max_val': 100.0, 'step': 1.0},
     {
         'keyword': 'HOLDEXIST', 'lvl': 3, 'min_val': 0.0, 'max_val': 2.0,
-        'step': 0.1, 'source': FIELD_SOURCE_GUESSED,
+        'step': 0.1, 'meta_source': FIELD_SOURCE_GUESSED,
     },
 ]
 
@@ -108,10 +108,10 @@ def test_keyword_dicts_unchanged():
 
     assert len(kws) == len(KEYWORD_DICTS), kws
     assert {k['keyword'] for k in kws} == {'MEL', 'HOLDEXIST'}
-    # 权威项不带 source，猜测项带 source
+    # 权威项不带 meta_source，猜测项带 meta_source
     by_name = {k['keyword']: k for k in kws}
-    assert 'source' not in by_name['MEL']
-    assert by_name['HOLDEXIST']['source'] == FIELD_SOURCE_GUESSED
+    assert 'meta_source' not in by_name['MEL']
+    assert by_name['HOLDEXIST']['meta_source'] == FIELD_SOURCE_GUESSED
     print("[PASS] 元数据清单原样透传")
 
 

@@ -18,6 +18,11 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, Recommendation, AlgorithmRegistry
+from process.algorithms.fuzzy.aggregation import (
+    RuleAdjustment,
+    aggregate,
+    to_recommendations,
+)
 from process.algorithms.fuzzy.fuzzy_core.models.nets import (
     FuzzyRuleNet,
     NumTskRuleNet,
@@ -320,9 +325,12 @@ class FuzzyEngine(AlgorithmBase):
         advisory_results = self._infer_advisory_layer(advisory_rules, process_parameter)
 
         # 5) 合并（方案 B）：同层聚合 + 跨层覆盖
-        return self._merge_layer_results(
-            numeric_results=numeric_results,
-            advisory_results=advisory_results,
+        #    聚合逻辑已抽到 aggregation.py（纯函数层），这里只负责“调一下”——
+        #    引擎本身不掺和聚合细节。
+        aggregated, advice_items = aggregate(numeric_results, advisory_results)
+        return to_recommendations(
+            aggregated=aggregated,
+            advice_items=advice_items,
             adjustment_factor=adjustment_factor,
             current_params=process_parameter,
         )
@@ -435,7 +443,8 @@ class FuzzyEngine(AlgorithmBase):
                 'max_val': current * 2,
                 'step': max(current * 0.1, 0.01),
                 # 标记这是【推测】出来的论域，不是 RuleKeyword 权威元数据
-                'source': FIELD_SOURCE_GUESSED,
+                # （key 用 meta_source，与中间态的 layer/source 区分，避免一词两义）
+                'meta_source': FIELD_SOURCE_GUESSED,
             })
         return keyword_dicts
 
@@ -469,7 +478,7 @@ class FuzzyEngine(AlgorithmBase):
         keyword_dicts = self._load_keyword_dicts(param_names, process_parameter)
 
         guessed = {kw['keyword'] for kw in keyword_dicts
-                   if kw.get('source') == FIELD_SOURCE_GUESSED}
+                   if kw.get('meta_source') == FIELD_SOURCE_GUESSED}
         known = {kw['keyword'] for kw in keyword_dicts}
         classification = {
             'authority': sorted(known - guessed),
@@ -534,7 +543,7 @@ class FuzzyEngine(AlgorithmBase):
         self,
         numeric_rules: List[ResolvedRule],
         process_parameter: Dict[str, float],
-    ) -> List[Dict[str, Any]]:
+    ) -> List[RuleAdjustment]:
         """数值层推理（NumTskRuleNet，数值/百分比结论）。"""
         if not numeric_rules:
             return []
@@ -569,24 +578,24 @@ class FuzzyEngine(AlgorithmBase):
             logger.exception('[FuzzyEngine] NumTskRuleNet 推理失败: %s', e)
             return []
 
-        # 提取 [{param: value}] 字典 → List[Dict]
-        out = []
+        # 提取 [{param: value}] 字典 → RuleAdjustment
+        out: List[RuleAdjustment] = []
         for rule_str, activation, adjustments in results:
             for param, value in adjustments.items():
-                out.append({
-                    'source': 'numeric',
-                    'param': param,
-                    'delta': float(value) * float(activation),
-                    'activation': float(activation),
-                    'rule': rule_str,
-                })
+                out.append(RuleAdjustment(
+                    param_name=param,
+                    delta=float(value) * float(activation),
+                    activation=float(activation),
+                    layer='numeric',
+                    rule_str=rule_str,
+                ))
         return out
 
     def _infer_advisory_layer(
         self,
         advisory_rules: List[ResolvedRule],
         process_parameter: Dict[str, float],
-    ) -> List[Dict[str, Any]]:
+    ) -> List[RuleAdjustment]:
         """提示层推理。
 
         提示层有两类规则，必须分开处理：
@@ -610,7 +619,7 @@ class FuzzyEngine(AlgorithmBase):
             else:
                 mamdani_rules.append(r)
 
-        out: List[Dict[str, Any]] = []
+        out: List[RuleAdjustment] = []
 
         # 1) 检查/弹窗类 → 文本建议
         for r in check_rules:
@@ -620,14 +629,14 @@ class FuzzyEngine(AlgorithmBase):
                 advice = sol.get('value')
                 if not advice:
                     continue
-                out.append({
-                    'source': 'advisory',
-                    'param': sol.get('name', ''),
-                    'delta': 0.0,
-                    'activation': 0.0,
-                    'rule': r.rule_str,
-                    'advice': advice,
-                })
+                out.append(RuleAdjustment(
+                    param_name=sol.get('name', ''),
+                    delta=0.0,
+                    activation=0.0,
+                    layer='advisory',
+                    rule_str=r.rule_str,
+                    advice=advice,
+                ))
 
         # 2) 模糊等级结论 → Mamdani
         if not mamdani_rules:
@@ -647,13 +656,15 @@ class FuzzyEngine(AlgorithmBase):
             return out
 
         for param_name, value, _ in results:
-            out.append({
-                'source': 'advisory',
-                'param': param_name,
-                'delta': float(value),
-                'activation': float(_[0]) if isinstance(_, tuple) else 1.0,
-                'rule': 'advisory',
-            })
+            out.append(RuleAdjustment(
+                param_name=param_name,
+                delta=float(value),
+                activation=float(_[0]) if isinstance(_, tuple) else 1.0,
+                layer='advisory',
+                # Mamdani 模糊等级结论没有单一来源规则串 ⇒ None
+                # （原来硬编码成 'advisory'，看着像规则标识，其实是假的）
+                rule_str=None,
+            ))
         return out
 
     @staticmethod
@@ -664,102 +675,12 @@ class FuzzyEngine(AlgorithmBase):
                 return True
         return False
 
-    @staticmethod
-    def _merge_layer_results(
-        numeric_results: List[Dict[str, Any]],
-        advisory_results: List[Dict[str, Any]],
-        adjustment_factor: float,
-        current_params: Dict[str, float],
-    ) -> List[Recommendation]:
-        """合并双层结果（方案 B：同层聚合 + 跨层覆盖）。
-
-        两层按**结论形态**划分，与规则库层级无关：
-
-        - 数值层（numeric）：能算出数值的结论，delta 参与聚合
-        - 提示层（advisory）：检查/弹窗类文本结论，不参与数值聚合
-
-        跨层规则：数值层胜出，提示层只作 `advisory_reference` 注释。
-
-        返回 Recommendation 列表。
-        """
-        merged: Dict[str, Dict[str, Any]] = {}
-        advice_items: List[Dict[str, Any]] = []
-
-        for rec in numeric_results:
-            p = rec['param']
-            if p not in merged:
-                merged[p] = {
-                    'param': p,
-                    'delta': rec['delta'],
-                    'activation_sum': rec['activation'],
-                    'rule_count': 1,
-                    'sources': ['numeric'],
-                    'advisory_reference': None,
-                }
-            else:
-                merged[p]['delta'] += rec['delta']
-                merged[p]['activation_sum'] += rec['activation']
-                merged[p]['rule_count'] += 1
-
-        for rec in advisory_results:
-            # 检查/弹窗类结论（`X_adjust_提示语`）是**文本建议**：
-            # delta 恒为 0，混进数值聚合会产生"保持不变"的假推荐，
-            # 必须单独输出（recommended_value=None）。
-            if rec.get('advice'):
-                advice_items.append(rec)
-                continue
-            p = rec['param']
-            if p not in merged:
-                merged[p] = {
-                    'param': p,
-                    'delta': rec['delta'],
-                    'activation_sum': rec['activation'],
-                    'rule_count': 1,
-                    'sources': ['advisory'],
-                    'advisory_reference': None,
-                }
-            else:
-                # 数值层已覆盖，仅作 advisory_reference 注释
-                merged[p]['advisory_reference'] = rec['delta']
-                merged[p]['sources'].append('advisory')
-
-        # 转换为 Recommendation
-        recommendations: List[Recommendation] = []
-        for p, info in merged.items():
-            raw_current = current_params.get(p)
-            current_value = float(raw_current) if raw_current is not None else 0.0
-            adjusted_delta = info['delta'] * adjustment_factor
-            recommended_value = current_value + adjusted_delta
-
-            recommendations.append(Recommendation(
-                param_name=p,
-                current_value=current_value,
-                recommended_value=recommended_value,
-                confidence=min(info['activation_sum'] / max(info['rule_count'], 1), 1.0),
-                reason=f"模糊推理 (sources={info['sources']})",
-                source='fuzzy.numeric' if 'numeric' in info['sources'] else 'fuzzy.advisory',
-                direction=(
-                    'increase' if adjusted_delta > 0
-                    else 'decrease' if adjusted_delta < 0
-                    else 'hold'
-                ),
-            ))
-
-        # 检查/弹窗类建议：文本建议，不给数值，方向为「检查」
-        for rec in advice_items:
-            param_name = rec.get('param') or ''
-            raw_current = current_params.get(param_name)
-            recommendations.append(Recommendation(
-                param_name=param_name,
-                current_value=float(raw_current) if raw_current is not None else 0.0,
-                recommended_value=None,
-                confidence=None,
-                reason=f"模糊推理建议：{rec.get('advice')}",
-                source='fuzzy.check',
-                direction='check',
-            ))
-
-        return recommendations
+    # -----------------------------------------------------------------------
+    # 聚合逻辑已抽到 aggregation.py（E3）：
+    #   - aggregate()          逐条调整量 → 参数级汇总
+    #   - to_recommendations() 参数级汇总 → Recommendation
+    # 本类只负责"调一下"，不掺和聚合细节。
+    # -----------------------------------------------------------------------
 
     # -----------------------------------------------------------------------
     # 兼容老接口（暂时不实现）

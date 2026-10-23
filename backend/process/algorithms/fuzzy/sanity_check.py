@@ -128,83 +128,88 @@ def _mock_resolved_rule(rule_id, rule_str, conclusion_kind, polymer=None, produc
 
 
 def case_double_layer_merge():
-    """直接调用 FuzzyEngine._merge_layer_results，验证方案 B 合并逻辑。"""
-    print('\n========== CASE 3: FuzzyEngine._merge_layer_results 合并逻辑 ==========')
+    """直接调用 aggregation.aggregate() + to_recommendations()，验证方案 B 合并逻辑。
 
-    # 用 importlib 直加载 fuzzy_engine.py 中的 FuzzyEngine 类（避免触发 Django 间接依赖）
-    # 由于 FuzzyEngine 的 import 链需要 adapters / rule_query_service，
-    # 我们重新组织：仅提取 _merge_layer_results 这一个静态方法的逻辑来验证
-    # 用一份简化版函数验证合并结果。
-    def merge_layer_results(numeric_results, advisory_results, adjustment_factor, current_params):
-        """复刻 FuzzyEngine._merge_layer_results，便于独立验证。"""
-        merged = {}
-        for rec in numeric_results:
-            p = rec['param']
-            if p not in merged:
-                merged[p] = {
-                    'param': p,
-                    'delta': rec['delta'],
-                    'activation_sum': rec['activation'],
-                    'rule_count': 1,
-                    'sources': ['numeric'],
-                    'advisory_reference': None,
-                }
-            else:
-                merged[p]['delta'] += rec['delta']
-                merged[p]['activation_sum'] += rec['activation']
-                merged[p]['rule_count'] += 1
-        for rec in advisory_results:
-            p = rec['param']
-            if p not in merged:
-                merged[p] = {
-                    'param': p,
-                    'delta': rec['delta'],
-                    'activation_sum': rec['activation'],
-                    'rule_count': 1,
-                    'sources': ['advisory'],
-                    'advisory_reference': None,
-                }
-            else:
-                merged[p]['advisory_reference'] = rec['delta']
-                merged[p]['sources'].append('advisory')
-        return merged
+    ⚠️ 2026-10-23（E3）：原先这里测的是 `FuzzyEngine._merge_layer_results` 的**复刻版**
+    —— 复制品与真实现已经漂移（复刻版漏了「文本建议分离」这条规则），
+    且真函数迁到 aggregation.py 后复刻品彻底失去意义。
+    现改为直接调用真函数（E2 去 DB 依赖后，无 Django 环境也能 import）。
+    """
+    print('\n========== CASE 3: aggregation 合并逻辑（真函数） ==========')
+    from process.algorithms.fuzzy.aggregation import (
+        RuleAdjustment,
+        aggregate,
+        to_recommendations,
+    )
 
-    # 场景：PE 酒瓶短射 → 同时有 2 条数值层规则 + 1 条提示层规则
+    # 场景：PE 酒瓶短射 → 2 条数值层规则 + 1 条提示层数值规则 + 1 条文本建议
     numeric_results = [
-        {'param': 'inj_pres_1', 'delta': 10.0, 'activation': 0.9, 'rule': 'r1'},
-        {'param': 'inj_pres_2', 'delta': 5.0,  'activation': 0.7, 'rule': 'r2'},
+        RuleAdjustment(param_name='inj_pres_1', delta=10.0, activation=0.9,
+                       layer='numeric', rule_str='r1'),
+        RuleAdjustment(param_name='inj_pres_2', delta=5.0, activation=0.7,
+                       layer='numeric', rule_str='r2'),
         # 同参数多条规则 → 同层聚合
-        {'param': 'inj_pres_1', 'delta': 5.0,  'activation': 0.6, 'rule': 'r3'},
+        RuleAdjustment(param_name='inj_pres_1', delta=5.0, activation=0.6,
+                       layer='numeric', rule_str='r3'),
     ]
     advisory_results = [
-        {'param': 'hold_time', 'delta': 1.5, 'activation': 0.5, 'rule': 'r4'},
+        RuleAdjustment(param_name='hold_time', delta=1.5, activation=0.5,
+                       layer='advisory', rule_str='r4'),
         # inj_pres_1 已被数值层覆盖 → 应作为 advisory_reference，不覆盖
-        {'param': 'inj_pres_1', 'delta': 999, 'activation': 0.4, 'rule': 'r5'},
+        RuleAdjustment(param_name='inj_pres_1', delta=999, activation=0.4,
+                       layer='advisory', rule_str='r5'),
+        # 文本建议（检查/弹窗类）→ 必须单独输出，不进数值聚合
+        RuleAdjustment(param_name='MEL', delta=0.0, activation=0.0,
+                       layer='advisory', rule_str='r6', advice='请检查计量终点位置'),
     ]
-    current_params = {'inj_pres_1': 50, 'inj_pres_2': 80, 'hold_time': 3}
+    current_params = {'inj_pres_1': 50, 'inj_pres_2': 80, 'hold_time': 3, 'MEL': 10}
     factor = 1.2
 
-    merged = merge_layer_results(numeric_results, advisory_results, factor, current_params)
+    aggregated, advice_items = aggregate(numeric_results, advisory_results)
+    by_name = {a.param_name: a for a in aggregated}
 
     # 1) inj_pres_1: 同层聚合 + 提示层只作 advisory_reference
-    inj1 = merged['inj_pres_1']
-    assert inj1['sources'] == ['numeric', 'advisory'], f'sources={inj1["sources"]}'
-    assert abs(inj1['delta'] - 15.0) < 1e-6, f'aggregated delta={inj1["delta"]}'
-    assert inj1['advisory_reference'] == 999, f'advisory_reference={inj1["advisory_reference"]}'
-    assert inj1['rule_count'] == 2
-    assert abs(inj1['activation_sum'] - 1.5) < 1e-6, f'activation_sum={inj1["activation_sum"]}'
+    inj1 = by_name['inj_pres_1']
+    assert inj1.sources == ['numeric', 'advisory'], f'sources={inj1.sources}'
+    assert abs(inj1.delta - 15.0) < 1e-6, f'aggregated delta={inj1.delta}'
+    assert inj1.advisory_reference == 999, f'advisory_reference={inj1.advisory_reference}'
+    assert inj1.rule_count == 2
+    assert abs(inj1.activation_sum - 1.5) < 1e-6, f'activation_sum={inj1.activation_sum}'
 
     # 2) inj_pres_2: 仅数值层
-    inj2 = merged['inj_pres_2']
-    assert inj2['sources'] == ['numeric'], f'sources={inj2["sources"]}'
+    inj2_sources = by_name['inj_pres_2'].sources
+    assert inj2_sources == ['numeric'], f'sources={inj2_sources}'
 
     # 3) hold_time: 仅提示层
-    hold = merged['hold_time']
-    assert hold['sources'] == ['advisory'], f'sources={hold["sources"]}'
+    hold_sources = by_name['hold_time'].sources
+    assert hold_sources == ['advisory'], f'sources={hold_sources}'
 
-    print('[OK] 合并覆盖 3 个参数：')
-    for k, v in merged.items():
-        print(f'   {k}: delta={v["delta"]:.2f}, sources={v["sources"]}, advisory_ref={v["advisory_reference"]}')
+    # 4) 文本建议被单独分离（不进数值聚合）—— 旧复刻版漏了这条
+    assert len(advice_items) == 1, f'advice_items={advice_items}'
+    assert advice_items[0].advice == '请检查计量终点位置'
+    assert 'MEL' not in by_name, '文本建议不应进入数值聚合'
+
+    # 5) 转 Recommendation：核对公式与对外字符串
+    recs = to_recommendations(aggregated, advice_items, factor, current_params)
+    rec_by_name = {r.param_name: r for r in recs}
+    # recommended = current + delta * factor；confidence = activation_sum / rule_count
+    inj1_rec = rec_by_name['inj_pres_1']
+    assert abs(inj1_rec.recommended_value - (50 + 15.0 * 1.2)) < 1e-6, inj1_rec.recommended_value
+    assert abs(inj1_rec.confidence - (1.5 / 2)) < 1e-6, inj1_rec.confidence
+    assert inj1_rec.direction == 'increase', inj1_rec.direction
+    assert inj1_rec.source == 'fuzzy.numeric', inj1_rec.source
+    assert inj1_rec.reason == "模糊推理 (sources=['numeric', 'advisory'])", inj1_rec.reason
+    # 文本建议：recommended_value=None / confidence=None / direction='check' / source='fuzzy.check'
+    mel_rec = rec_by_name['MEL']
+    assert mel_rec.recommended_value is None, mel_rec.recommended_value
+    assert mel_rec.confidence is None, mel_rec.confidence
+    assert mel_rec.direction == 'check', mel_rec.direction
+    assert mel_rec.source == 'fuzzy.check', mel_rec.source
+
+    print('[OK] 合并覆盖 3 个参数 + 1 条文本建议：')
+    for k, v in by_name.items():
+        print(f'   {k}: delta={v.delta:.2f}, sources={v.sources}, advisory_ref={v.advisory_reference}')
+    print(f'   文本建议: MEL -> {advice_items[0].advice}')
 
 
 # ---------------------------------------------------------------------------

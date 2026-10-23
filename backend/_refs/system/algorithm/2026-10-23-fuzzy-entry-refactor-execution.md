@@ -2,7 +2,7 @@
 
 > **日期**：2026-10-23
 > **来源**：用户第 16~18 轮对 `backend/process/algorithms/fuzzy/fuzzy_algorithm.py`（686 行）结构的质疑
-> **状态**：**E1 + E2 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；验收见 §5
+> **状态**：**E1 + E2 + E3 已完成** —— 命名对照表见 §3；故障边界落地见 §2.5；中间态与聚合层见 §2.7；验收见 §5
 > **重构原则**：**每轮工作完成后统一跑一次现成验证**，不为每步新写测试脚本（用户第 18 轮明确）
 > **靶子文件**：`backend/process/algorithms/fuzzy/fuzzy_algorithm.py`
 > **起点 commit**：`06d4a12`（工作区干净）
@@ -16,7 +16,7 @@
 | **触发问题** | 用户三条原话：①「我完全不知道这个类想干什么」②「某一部分有问题，代码就崩了」③「各种命名完全莫名其妙」 |
 | **用户诉求** | **流程清晰** > **局部失败不扩散** > **命名可理解** |
 | **验收标准** | R1~R4（§1.2）+ 故障隔离三层边界（§1.3） |
-| **本轮产出** | **§3 命名对照表**（E1-b 交付物） |
+| **本轮产出** | **§3 命名对照表**（E1-b）＋ **§2.7 中间态与聚合层**（E3） |
 | **轮次划分** | E1 命名契约 → E2 故障边界+去 DB 依赖 → E3 中间态类型化+拆聚合 → E4 抽字段上下文+瘦身+改名 |
 | **入口改名** | `fuzzy_algorithm.py` → **`engine.py`**（候选已提出，E4 执行时最终确认；类名 `FuzzyEngine` 不动） |
 | **不做** | 不动 `llm` / `empirical` / `expert` 三个算法包；不动算法语义（激活度公式、聚合公式、阈值） |
@@ -118,15 +118,67 @@ fuzzy_algorithm.py（686 行）
 - 规则库查询失败（DB 挂）不再向上冒泡，**整条 optimize 链不会因模糊算法而 500**
 - 一条脏规则不再拖垮整个数值层
 
-**没做到的（边界要说清）**：
-- ⚠️ `import process.algorithms.fuzzy.fuzzy_algorithm` **仍然需要 Django setup**——
-  因为父包 `process/algorithms/__init__.py` 会 import 全部引擎以触发 `AlgorithmRegistry.register`。
-  本次**未改注册机制**（改它会影响 llm / empirical / expert 三个包，超出范围）。
-  ⇒ 所以准确的说法是「**调用**可离线」，不是「**导入**可离线」。见 §6 L8。
+**E3 实测纠正（2026-10-23）**：上面那条限制**已经不存在了**——
+E2 把 `fuzzy_algorithm.py` 的 ORM 依赖去掉后，`process/algorithms/__init__.py` 的
+eager import（fuzzy / llm / empirical 三个引擎）**在无 Django 环境下全部成功**：
 
-**降级方向也不一致**：同样「规则库出问题」这个事实 —— 字段元数据挂了 → **降级继续**；数值推理挂了 → **归零**；规则查询挂了 → **崩**。三个后果毫无关联。
+```
+$ python -c "import process.algorithms.fuzzy.fuzzy_algorithm"   # 不设 DJANGO_SETTINGS_MODULE
+IMPORT OK -> <class 'process.algorithms.fuzzy.fuzzy_algorithm.FuzzyEngine'>
+```
+
+⇒ 现在是「**导入**与**调用**都可离线」。原 §6 L8 相应关闭。
+⚠️ 这条限制是 E2 当时**推测**的（未实测就写进了文档），E3 实测后纠正 ——
+记此一笔，避免后续再被当成事实引用。
+
+**降级方向仍不一致（E2 后）**：同样「规则库出问题」这个事实 —— 字段元数据挂了 → **降级继续**（推测论域）；数值推理挂了 → **归零**（该层无结果）；规则查询挂了 → **降级为空推荐**（整条 optimize 链不 500）。三个后果依然毫无关联，只是都不崩了。
 
 **已核实排除**：`parse_rule` / `split_phase`（`parsing.py` L34-102、L179-203）是纯字符串处理，**不抛异常** ⇒ 畸形规则串不会崩。崩源只在 DB 层与推理层。
+
+### 2.7 E3 落地后的中间态与聚合层（2026-10-23）
+
+**改前**：中间态是裸 dict，字段名一词多义；聚合逻辑（95 行）藏在
+`FuzzyEngine._merge_layer_results` 里，与「Recommendation 契约转换」混在一起：
+
+```python
+{'source': 'numeric', 'param': 'IV0', 'delta': 1.2, 'activation': 0.9, 'rule': '...'}
+```
+
+**改后**：
+
+```
+RuleAdjustment（逐条） ── aggregate() ──► AggregatedAdjustment（参数级） ── to_recommendations() ──► Recommendation[]
+```
+
+| 层 | 位置 | 职责 | 依赖 |
+|---|---|---|---|
+| 中间态类型 | `aggregation.py` | `RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass | 无 |
+| 聚合 | `aggregation.py` | `aggregate()`：同参数累加 + 跨层覆盖 + 分离文本建议 | 无 |
+| 契约转换 | `aggregation.py` | `to_recommendations()`：算 delta / confidence / direction | `base.Recommendation` |
+| 编排 | `fuzzy_algorithm.py` | 只负责“调一下” | `aggregation` |
+
+**收益**：
+- `fuzzy_algorithm.py` 776 → **697 行**（-79）
+- 中间态字段名彻底类型化：`'param'` → `param_name`、`'source'` → `layer` / `meta_source`
+- 公式从“隐含在代码里”变成“显式写在 docstring 里”（`recommended = current + delta * factor`）
+
+⚠️ **N3 被排除的理由（必须记下来）**：
+`'lvl'` 不只是“适配层的字典 key”，它同时是**内核 `nets.py` 的输入契约**：
+
+- `nets.py` L254 / L257 / L261：`item['lvl']`（从 keyword_array 读取）
+- `nets.py` L276：`f_level=k_dict['lvl']`
+- `FuzzyFeature.__init__(f_level=...)` + `self.f_level`（内核内部 6 处引用）
+
+改名为 `level_count` 必须同步改内核 ⇒ 与 E2 确立的「内核不动」边界冲突，
+且它对用户提的三个问题（流程清晰 / 失败隔离 / 命名可理解）没有直接贡献
+（`lvl` 只出现在一个 dict 的 key 位置，不影响流程可读性）⇒ **降级为遗留项 L9**。
+
+⚠️ **顺带发现：`sanity_check.py` CASE 3 测的是「复刻品」且已经漂移**
+原 CASE 3 内嵌了一份 `_merge_layer_results` 的复刻版，但复刻版**漏了
+「文本建议分离」这条规则**（真函数有 `if rec.get('advice')` 分支）⇒
+真实现改了测试也不会发现。E3 已改为**直接调用真函数**，
+并补上了文本建议用例（另外还补了 `to_recommendations()` 层的公式与对外字符串断言，
+旧复刻版只测到 merged dict，没测到 Recommendation）。
 
 ### 2.3 引用点全景（改名成本评估，2026-10-23 实测）
 
@@ -189,16 +241,16 @@ fuzzy_algorithm.py（686 行）
 | 结论形态 | `conclusion_kind` = `'numeric'`/`'advisory'` | 不变 | 服务层 | ⚠️ 非规则库层级 |
 | 规则特异级 | `specificity` = 1~4 | 不变 | 服务层 | ⚠️ docstring 写「三级」实为四级 |
 | 档位词 | `level` = `'low'`/`'very_low'` | 不变 | 内核 | 词，不是数字 |
-| 模糊等级数 | `lvl` / `f_level` | **统一 `level_count`** | 适配层/内核 | ⚠️ 现在两个名字 |
+| 模糊等级数 | `lvl` / `f_level` | 统一 `level_count` | 适配层/内核 | ⛔ E3 **不做**（`'lvl'` 是内核输入契约 key，见 §6 L9） |
 | 论域区间 | `min_val`+`max_val` / `f_interval` | 统一 `interval` | 适配层/内核 | ⚠️ 现在两种表达 |
 | 隶属度函数类型 | `f_membership_type` = `'gauss'`/`'tri'` | 不变 | 内核 | |
-| 参数名（算法侧） | `'param'` | **`param_name`** | 中间态 | ⚠️ 现在 3 个名字 |
+| 参数名（算法侧） | `'param'` | **`param_name`** | 中间态 | ✅ E3 已统一（`to_dict()` 的 `'param'` 是对外契约，不动） |
 | 调整量（中间态） | `'delta'` | `delta` | 中间态 | 最终态无此概念，见 N4 |
 | 原始激活度 | `'activation'` | `activation` | 中间态 | 单条规则的激活度 |
 | 激活度之和 | `'activation_sum'` | `activation_sum` | 中间态 | 同参数多规则累加 |
 | 置信度 | `confidence` | `confidence` | 输出态 | 语义 = **平均激活度**（见 §3.5） |
-| 元数据来源 | `'source'` | **`meta_source`** | 适配层 | ⚠️ 现在一词两义 |
-| 推理层归属 | `'source'` | **`layer`** | 中间态 | ⚠️ 现在一词两义 |
+| 元数据来源 | `'source'` | **`meta_source`** | 适配层 | ✅ E3 已改 |
+| 推理层归属 | `'source'` | **`layer`** | 中间态 | ✅ E3 已改 |
 | 字段体检分类 | `classification` = `authority`/`guessed`/`unknown` | 不变 | 编排层 | |
 | 推测论域标记 | `FIELD_SOURCE_GUESSED` = `'guessed'` | 不变 | 编排层 | |
 
@@ -206,13 +258,13 @@ fuzzy_algorithm.py（686 行）
 
 | # | 冲突描述 | 位置 | 处置 | 执行轮次 |
 |---|---|---|---|---|
-| **N1** | **`'source'` 一词两义**：元数据来源（`'guessed'`）vs 推理层（`'numeric'`）；两个 dict **会一起传进** `net.predict()` | `adapters` 产出 / `fuzzy_algorithm.py` L402 / L487 / L534 | 元数据侧 → `meta_source`；结果侧 → `layer` | **E3**（待） |
-| **N2** | **同一东西三个名字**：`rec['param']` / `Recommendation.param_name` / `to_dict()` 输出 key `'param'` | L599 / base.py dataclass | 中间态与 dataclass 统一 `param_name`；**`to_dict()` 保持 `'param'`**（对外契约，不动） | **E3**（待） |
-| **N3** | **等级两种叫法**：`lvl`（适配层 dict）/ `f_level`（`FuzzyFeature`）；且 `'level'` 又指档位词（`'low'`） | `keyword_dicts` / `nets.py` L110 | 统一 `level_count`；`level` 保留给档位词 | **E3**（待） |
-| **N4** | **`'delta'` 中间态有、最终态无**（被折进 `recommended_value`） | L489 / L642 | 中间态保留 `delta`；`to_recommendations()` 显式写明 `recommended = current + delta * factor` | **E3**（待） |
+| **N1** | **`'source'` 一词两义**：元数据来源（`'guessed'`）vs 推理层（`'numeric'`）；两个 dict **会一起传进** `net.predict()` | `adapters` 产出 / `fuzzy_algorithm.py` L402 / L487 / L534 | 元数据侧 → `meta_source`；结果侧 → `layer` | **E3** ✅ 已修 |
+| **N2** | **同一东西三个名字**：`rec['param']` / `Recommendation.param_name` / `to_dict()` 输出 key `'param'` | L599 / base.py dataclass | 中间态与 dataclass 统一 `param_name`；**`to_dict()` 保持 `'param'`**（对外契约，不动） | **E3** ✅ 已修 |
+| **N3** | **等级两种叫法**：`lvl`（适配层 dict）/ `f_level`（`FuzzyFeature`）；且 `'level'` 又指档位词（`'low'`） | `keyword_dicts` / `nets.py` L110 | 统一 `level_count`；`level` 保留给档位词 | ⛔ **不做**（`'lvl'` 是内核输入契约 key，改名必动内核，见 §6 L9） |
+| **N4** | **`'delta'` 中间态有、最终态无**（被折进 `recommended_value`） | L489 / L642 | 中间态保留 `delta`；`to_recommendations()` 显式写明 `recommended = current + delta * factor` | **E3** ✅ 已修 |
 | **N5** | **`layer` 三义**：结论形态（推理）/ 结论形态（`_build_field_context` 参数）/ 规则库层级（`RuleQueryService` docstring） | `rule_query_service.py` L172 / L258 / L289 | 规则库层级一律改称「**特异级**」；结论形态保留 `layer` | **E1** ✅ 已修 |
 | **N6** | **文档与实现矛盾**：docstring 与注释写「三级特异性匹配」，实现是 L1~L4 **四级** | `rule_query_service.py` L172 / L187 | 改为「四级」 | **E1** ✅ 已修 |
-| **N7** | **`'rule'` 字段在 advisory 路径被硬编码为 `'advisory'`**（不是规则标识） | L565 | 改为 `rule_str`（真实串）或 `None` | **E3**（待） |
+| **N7** | **`'rule'` 字段在 advisory 路径被硬编码为 `'advisory'`**（不是规则标识） | L565 | 改为 `rule_str`（真实串）或 `None` | **E3** ✅ 已修 |
 | **N8** | **`extra` 接了从未使用** —— ⚠️ **原判断有误**：它不是「诊断通道」，而是**弹窗文本通道**（`nets.py` L721/L825 收集 `r_extra` 并回传），不能往里塞诊断信息 | L477 / L554 | 诊断信息另起通道：`self._diagnostics`（编排层自建） | **E2** ✅ 已修 |
 | **N9** | **`RuleMethodAdapter` import 了从未使用**，名字却像主适配器（实际在用的是 `RuleKeywordAdapter`） | L21 | 删除 import | **E1** ✅ 已修 |
 | **N10** | **`self._rule_net` 从未使用**，注释却描述「工厂级网络和兜底层网络」 | L192-194 | 删除属性；注释改写为「无状态」 | **E1** ✅ 已修 |
@@ -246,7 +298,7 @@ fuzzy_algorithm.py（686 行）
 |---|---|---|---|---|
 | **E1** | 命名契约 | ① 本文档 §3 ② N5/N6/N9/N10 的零风险修正 ③ 死代码清理（`RuleMethodAdapter` import、`self._rule_net`） | **无** | 黄金快照 diff + `sanity_check` + pytest |
 | **E2** | 故障边界 + 去 DB 依赖 | ① 新建 `ports.py`（`RuleRepository` 协议 + `RuleQueryContext`/`ResolvedRule` 搬迁）② `RuleQueryService` 改为从 ports 导入 + 新增 `get_keywords_by_names` ③ `FuzzyEngine(repository=...)` 依赖注入（默认实现延迟导入）④ `recommend()` 拆为「兜底壳 + `_recommend()` 主流程」⑤ 规则查询异常单独捕获（error 级）⑥ `_precheck_numeric_rules()` 条目级预检 + `self._diagnostics` | **正常路径零变化**；异常路径**有意修复**（见 §2.5） | 同上 + 离线验证脚本 7 项 PASS |
-| **E3** | 中间态类型化 + 拆聚合 | ① `RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass ② 抽 `aggregation.py`（`aggregate()` + `to_recommendations()`）③ 落地 N1/N2/N3/N4/N7 | **无** | 同上 |
+| **E3** ✅ | 中间态类型化 + 拆聚合 | ① `RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass ② 抽 `aggregation.py`（`aggregate()` + `to_recommendations()`）③ 落地 N1/N2/N4/N7（**N3 排除**，见 §2.7） | **无** | 同上 + CASE 3 改测真函数 |
 | **E4** | 抽字段上下文 + 瘦身 + 改名 | ① 抽 `field_context.py` ② 命名契约 → `naming.py`（P4 兼容别名）③ 入口改名 `engine.py`（P1）④ 删 `load_rules` 或改抛（P2）⑤ 修 N11 注释 | **无** | 同上 + 全量 import 点复查 |
 
 **每轮的通用验收（不新写脚本，只跑现成）**：
@@ -272,7 +324,7 @@ fuzzy_algorithm.py（686 行）
 |---|---|---|---|---|---|
 | E1 | 2026-10-23 | **49 样本 diffs = 0**（vs `_before_after_db.json` 基线，逐条比 `after_count` / `after_params` / `after_head`） | ✅ 全绿（B1~B7 + C1~C3） | ✅ 17 + 5 passed | **通过** —— 行为零变化，命名契约已落地；存档 `_dev_refs/_golden_E1.json` |
 | E2 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E1.json`） | ✅ 全绿 | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；离线验证 7 项 PASS（V1 注入 FakeRepo 离线跑通 / V2 脏规则未拖垮整层 + 对照组证明必要性 / V3 DB 异常降级不冒泡） |
-| E3 | | | | | |
+| E3 | 2026-10-23 | **49 样本 diffs = 0**（vs `_golden_E2.json`） | ✅ 全绿（CASE 3 已改为**测真函数**，并补上文本建议用例） | ✅ 17 + 5 passed | **通过** —— 正常路径行为零变化；`fuzzy_algorithm.py` 776 → 697 行；离线验证 7 项 PASS 仍绿；存档 `_dev_refs/_golden_E3.json` |
 | E4 | | | | | |
 
 ---
@@ -288,7 +340,8 @@ fuzzy_algorithm.py（686 行）
 | L5 | `functional.py` 两套实现同名覆盖（后半段覆盖前半段） | AST 审计 | 待定（属内核清理，不在入口范围） |
 | L6 | `nets.py` L692/L717 矩阵越界只记日志 | §2.2 | 待定（属内核清理） |
 | L7 | 文档引用路径不完整（`fuzzy-engine-reference.md` 未写目录） | N13 | 待定（E4 随改名一并修） |
-| L8 | `import process.algorithms.fuzzy.fuzzy_algorithm` 仍需 Django setup（父包 `process/algorithms/__init__.py` 会 import 全部引擎触发注册）⇒ 目前是「调用可离线」而非「导入可离线」 | §2.6 | 待定（改注册机制会影响 llm/empirical/expert，超出本次范围） |
+| L8 | ~~`import process.algorithms.fuzzy.fuzzy_algorithm` 仍需 Django setup（父包 `process/algorithms/__init__.py` 会 import 全部引擎触发注册）⇒ 目前是「调用可离线」而非「导入可离线」~~ | §2.6 | ✅ **已关闭**（E3 实测：E2 去 ORM 依赖后，导入与调用均可离线） |
+| L9 | 等级两种叫法（`lvl` / `f_level`）未统一为 `level_count` | N3 / §2.7 | 待定（`'lvl'` 是内核 `nets.py` 的输入契约 key，改名必动内核；与「内核不动」边界冲突） |
 
 ---
 
@@ -299,3 +352,4 @@ fuzzy_algorithm.py（686 行）
 | 2026-10-23 | E1-b | 新建本文档；产出 §3 命名对照表（术语总表 22 项 + 冲突台账 N1~N14 + 待定项 P1~P4）；完成引用点全景调研（§2.3） |
 | 2026-10-23 | E1 | 代码侧零风险修正：`rule_query_service.py` 8 处 docstring（「三级」→「四级」N6、规则库层级→组织维度 N5、过期术语「工厂级/兜底层」→`NumTskRuleNet`/`FuzzyRuleNet`）；`fuzzy_algorithm.py` 删死 import（`RuleMethodAdapter` N9 / `ParticularRules` N14）+ 删死属性 `self._rule_net`（N10）。验收：sanity 全绿 + pytest 17/5 + 黄金快照 49 样本 diffs=0。新增存档 `_dev_refs/_golden_E1.json` |
 | 2026-10-23 | E2 | **故障边界 + 去 DB 依赖**（详见 §2.5 / §2.6）。新增 `ports.py`（`RuleRepository` 协议 + 数据类搬迁，零 ORM 依赖）；`rule_query_service.py` 改为从 ports 导入并新增 `get_keywords_by_names`；`fuzzy_algorithm.py` 支持 `FuzzyEngine(repository=...)` 注入（默认实现延迟导入）、`recommend()` 拆为兜底壳 + `_recommend()` 主流程、规则查询异常单独捕获（error 级）、新增 `_precheck_numeric_rules()` 条目级预检与 `self._diagnostics`。修正 N8 判断错误（`extra` 是弹窗文本通道）；新增 N15（`'level'` 一词两义）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增 `_dev_refs/_verify_e2_offline.py`（可复用的离线回归工具）与 `_dev_refs/_golden_E2.json` |
+| 2026-10-23 | E3 | **中间态类型化 + 拆聚合**（详见 §2.7）。新增 `aggregation.py`（224 行）：`RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass + `aggregate()` + `to_recommendations()`。`fuzzy_algorithm.py` 776 → 697 行：中间态裸 dict → dataclass（`'param'`→`param_name`、`'source'`→`layer` / `meta_source`），删除 `_merge_layer_results`（95 行，混聚合+契约两事），`_recommend()` 第 5 步改为调 `aggregate()` + `to_recommendations()`。落地 N1/N2/N4/N7；**N3 排除**（`'lvl'` 是内核输入契约 key，见 §6 L9）。修正 advisory 路径硬编码的 `'rule': 'advisory'` → `rule_str=None`。`sanity_check.py` CASE 3 从**复刻品**改为**直接测真函数**（复刻品已漂移：漏了「文本建议分离」规则），并补上文本建议用例与 `to_recommendations()` 公式/对外字符串断言；`backend/tests/test_fuzzy_field_report.py` 随 `'source'`→`'meta_source'` 同步。实测纠正 §2.6：导入已可离线（原写「仍需 Django setup」是 E2 时的推测，未实测）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增存档 `_dev_refs/_golden_E3.json` |
