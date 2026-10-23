@@ -1573,3 +1573,62 @@ FuzzyFeature(k, [k_dict['min_val'], k_dict['max_val']], f_level=k_dict['lvl'])
 
 **本轮新增待拍板项**：§10-X（是否按清单 §4 顺序执行；是否产出“接线前 vs 接线后”推荐 diff 给业务方）。
 
+---
+
+### 2026-10-23 · 第 14 轮（执行第一刀 A → 落地 + 真实引擎对照，修正推算结论）
+
+**用户拍板**：按清单 §4 顺序执行；「接线前 vs 接线后」做成可交付材料。
+**本轮实际执行**：第 1~6 步全部完成（含清单 §7 验收）。
+
+#### 14.1 落地内容
+
+| commit | 内容 |
+|---|---|
+| `92db574` | `sanity_check.py` 补 B1~B7 真断言（**接线前 B1/B2/B3/B6 红灯**，留作“改对了”的证明） |
+| `4f50bfd` | **第一刀 A 本体**：`nets.py` 三处取桶改用 `resolve_bucket(lvl, word)` + `_resolve_bucket_safe` 兜底；`macros.py` 整表删 `HS_MAPPING_DICT` |
+| `6b8c756` | 连带修复：14 个历史诊断脚本迁到只读旧表快照（`_legacy_bucket_map.py`） |
+
+#### 14.2 ⚠️ 推算结论与真实引擎不一致（本轮最重要修正）
+
+清单 §3.2 的影响面是**复刻公式推算**（`diag_fuzzy_bucket_shift_impact.py`），结论为「命中规则数 1018→715、top-10 换掉 6.4 条、top-1 变 92%」。
+
+本轮用**真实引擎跑两遍**（`diag_fuzzy_bucket_before_after.py`，monkeypatch `nets.resolve_bucket` 复现旧口径）实测 49 个真实样本：
+
+| 指标 | 实测 |
+|---|---|
+| 推荐条数变化 | **0 / 49** |
+| 推荐参数集合变化 | **0 / 49** |
+| 推荐排序变化 | **48 / 49（97%）** |
+| 推荐值 / 置信度变化 | **49 / 49（100%）** |
+
+⇒ **推算结论夸大了影响面**。根因（已定位到代码）：
+
+1. `nets.py` L800 `predict()` 的 `top_k` 由调用方给成 `len(numeric_rules)` ⇒ **不截断**，所有规则都进结果；
+2. `nets.py` L764-793 **第四层（结论层）不看激活度**地给每一条规则产出结论值；
+3. `fuzzy_algorithm.py` L610 `_merge_layer_results` 把同参数多规则 delta **累加**。
+
+⇒ 激活度（因而桶位置）只影响 **delta 的权重** 与 **排序**，不影响“哪些参数被推荐”。
+
+**推算口径的“命中规则数（activation > 阈值）”没有对应到任何下游行为** —— 因为 `MIN_ACTIVATION_THRESHOLD` 在 TSK 主路径**零引用**（清单 §6 项 D）。
+
+#### 14.3 本轮由此确认的真实缺陷（下一批的靶子）
+
+| # | 缺陷 | 证据 |
+|---|---|---|
+| **D** | TSK 主路径无激活度阈值 ⇒ `conf=1.7e-282` 的规则照样出推荐 | 本轮实测 `BT conf=1.68e-282`、`CUSION conf=0.0` 仍在推荐列表里 |
+| **B** | `tsk_inference` 的 `conditions = rule_matrix[i, rule_matrix[i] != 0]` 取的是“乘积后非零”而非“连接到的列” ⇒ 门控隶属度恰为 0 时被跳过 ⇒ **规则在门控不满足时反而激活** | 代码走查 |
+| **K** | `confidence = Σ(归一化值)/条数`，而归一化值之和恒为 1 ⇒ confidence 恒 ≈ 1/条数，量级混乱 | `fuzzy_algorithm.py` L648 |
+
+#### 14.4 产出物
+
+- **交付材料**：`backend/_refs/system/algorithm/2026-10-23-fuzzy-bucket-wiring-delivery.md`
+- **清单**：§7 验收结果已回填、§11 执行记录、§12 下一批建议
+- **对照脚本**：`backend/_dev_refs/diag_fuzzy_bucket_before_after.py`（只读）+ `_before_after.json` / `_before_after_out.txt`
+
+#### 14.5 下一批待拍板
+
+建议顺序：**D（TSK 激活度阈值）→ B（conditions 取连接列）→ K（activation/delta/confidence 语义拆开）→ J（functional.py 清理）**。
+
+⚠️ B 需先定一个语义：门控隶属度为 0 时，是“门控不满足（规则不应激活）”还是“该门控不在论域上（视为中性）”？两种语义处理方式不同。
+
+
