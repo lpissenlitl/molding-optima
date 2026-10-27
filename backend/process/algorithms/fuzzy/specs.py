@@ -11,14 +11,14 @@
   （`source_model` + `attr_name`）从 ORM 提取，不是直接
   `_to_full_dict(InjectionUnit)`（那是旧做法，会把 ORM 元数据也传给算法）。
 - ⚠️ 别把 process_parameter 也当成本契约的一部分：工艺参数走的是**另一套**
-  命名空间——由 `FuzzyEngine.FIELD_NAME_ALIAS` + `FIELD_INDEX_OFFSET` 翻译
+  命名空间——由算法侧命名契约 `field_names.to_algo_params` 翻译
   （业务 1-based → 算法 0-based，如 `inj_spd_1` → `IV0`），
-  见 `parameter_optimize._normalize_field_name_by_spec`。
+  见 `process/algorithms/fuzzy/field_names.py`。
 
-为什么设备设定上限要标「必填」（2026-10-15 结论）：
+为什么设备设定上限要标「必填」：
 fuzzy 推理的第一步是按当前参数值判定它落在哪个模糊等级——FuzzyFeature 的论域
 [min_val, max_val] 就是这个区间，再看规则前件是否命中。上界一旦缺失，算法退回
-「当前值×2」自造区间（fuzzy_algorithm.py 的 keyword 兜底分支），后果是：
+「当前值×2」自造区间（engine.py 的 keyword 兜底分支），后果是：
 - 同一套参数在 180MPa 与 350MPa 的两台机上被判成同一模糊等级 → 前件命中失真
 - 推荐值可能超出这台机 HMI 能设定的物理范围，操作工根本输不进去
 所以「不传设备上限」不是精度略降，而是结论不可信。
@@ -304,19 +304,10 @@ class OptimizeDataValidator:
 # 判定集合直接取 fuzzy_core.parsing.ALL_LEVEL_WORDS（= is_level_word 的依据），
 # 不另起一套——两处真相源必然分叉。
 #
-# 为什么不用 HS_MAPPING_DICT 的键集合当判据：
-# - HS_MAPPING_DICT 只登记到 low/mid/medium/high + level1..level9，缺 5/7 档；
-#   拿它当校验基准，会把前端 LEVEL_WORDS（3/5/7 档）里的合法选项
-#   （very_low / very_high / extremely_*）误判为非法，直接把用户挡在门外。
-# - 缺陷档位过滤（rule_query_service._match_defect_level）走的是
-#   normalize_level_word 字符串比较，**不查** HS_MAPPING_DICT，
-#   因此 very_low 在过滤语义上是完全正确的输入，接口层不该拦。
-#
-# ⚠️ HS_MAPPING_DICT 缺 5/7 档是**规则库侧**的问题：规则前件若写成
-# `X_very_low`，判级时查表会 KeyError。那属于算法内核改造范围
-# （见 2026-10-20-fuzzy-inference-review-and-roadmap.md P0-1），
-# 不在接口校验里兜——接口层只负责「输入是不是合法档位词」，
-# 不负责「规则库有没有这一档」。
+# ⚠️ 职责边界：接口层只负责「输入是不是合法档位词」，**不**负责
+#   「规则库有没有这一档」。缺陷档位过滤
+#   （library.rules.RuleService.match_defect_level）走 normalize_level_word
+#   字符串比较，very_low 在过滤语义上是完全正确的输入，接口层不该拦。
 _LEVEL_WORD_DISPLAY_ORDER = (
     'extremely_low', 'very_low', 'low', 'mid', 'medium',
     'high', 'very_high', 'extremely_high',
@@ -364,13 +355,12 @@ def is_valid_defect_level_word(word: Any) -> bool:
     return is_level_word(word)
 
 
-# TODO（论域改造时一并处理，本次只钉契约）：
+# TODO（论域改造时一并处理）：
 # 1. 温度类字段升级为「条件必填」：需先让 field_contract 支持从外部注入触发上下文
 #    （如 context["involved_params"]），再按本次是否涉及温度参数决定等级。
-# 2. fuzzy_algorithm.py 的 keyword 兜底分支（min_val=0, max_val=当前值×2）改为
+# 2. engine.py 的 keyword 兜底分支（min_val=0, max_val=当前值×2）改为
 #    读本维度的 max_set_* / max_*_temp，让论域真正等于设备与材料的物理边界。
-# 3. utils/translate.py 已有未被使用的 ranges_provider 钩子，是第 2 点的现成接缝。
-# 4. FromCondition 侧：_extract_machine_unit 目前只取 InjectionUnit，不含主表的
+# 3. FromCondition 侧：_extract_machine_unit 目前只取 InjectionUnit，不含主表的
 #    drive_system；接校验前需按 source_model 跨两张表合并（同 initialize 的
 #    _build_machine_info 做法）。
 

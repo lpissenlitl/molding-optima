@@ -18,8 +18,11 @@ import django  # noqa: E402
 
 django.setup()
 
-from process.algorithms.fuzzy.fuzzy_algorithm import FuzzyEngine  # noqa: E402
-from process.algorithms.fuzzy.ports import ResolvedRule  # noqa: E402
+from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
+from process.algorithms.fuzzy.fuzzy_core.profiles import (  # noqa: E402
+    KeywordProfile,
+    RuleProfile,
+)
 
 
 GOOD_RULE = 'IF SHORTSHOT_low AND IV0_low THEN IV0_add_2'
@@ -28,12 +31,16 @@ GOOD_RULE = 'IF SHORTSHOT_low AND IV0_low THEN IV0_add_2'
 DIRTY_RULE = 'IF SHORTSHOT_low AND IV0_low THEN IV0_add_2 AND IV0_add_low'
 
 KEYWORDS = [
-    {'keyword': 'IV0', 'lvl': 3, 'min_val': 0.0, 'max_val': 100.0, 'step': 1.0},
+    KeywordProfile(keyword='IV0', lvl=3, min_val=0.0, max_val=100.0, step=1.0),
 ]
 
 
 class FakeRepo:
-    """完全离线的规则仓库（不 import ORM，不连 DB）。"""
+    """完全离线的规则仓库（不 import ORM，不连 DB）。
+
+    ⚠️ 契约（`library/contracts.py`）：`get_rules` → `List[RuleProfile]`，
+    `get_keywords_by_names` → `List[KeywordProfile]`。
+    """
 
     def __init__(self, rules, boom=False):
         self._rules = rules
@@ -46,24 +53,26 @@ class FakeRepo:
             raise RuntimeError('模拟 DB 不可用')
         return self._rules
 
+    # —— 以下三个方法在「第 4 层 filter」下沉之后**不该再被引擎调用** ——
+    #    分流 / 数组化 / 优先级数组都已由 fuzzy_core.rules_filter 接管。
+    #    这里故意做成「一旦被调用就炸」，让回归立刻暴露，而不是静默走老路。
     def split_by_conclusion_kind(self, rules):
-        return {'numeric': list(rules), 'advisory': []}
+        raise AssertionError('引擎不应再自己分流（分流已下沉到第 4 层 filter）')
 
     def to_rule_array(self, rules):
-        return [{'rule_description': r.rule_str} for r in rules]
+        raise AssertionError('引擎不应再自己数组化规则（已下沉到第 4 层 filter）')
 
     def get_priority_array(self, rules):
-        return [r.priority for r in rules]
+        raise AssertionError('引擎不应再单独取优先级数组（优先级已随规则档案走）')
 
     def get_keywords_by_names(self, names):
         self.calls.append(('get_keywords_by_names', tuple(sorted(names))))
-        return [dict(k) for k in KEYWORDS if k['keyword'] in set(names)]
+        return [k for k in KEYWORDS if k.keyword in set(names)]
 
 
 def make_rule(rule_str):
-    return ResolvedRule(
-        method=None,
-        rule_str=rule_str,
+    return RuleProfile(
+        rule_description=rule_str,
         specificity=4,
         conclusion_kind='numeric',
         priority=1.0,
@@ -111,12 +120,16 @@ check('V2 脏规则被记入诊断清单',
       f'实际 diagnostics={engine2._diagnostics}')
 
 # 对照：若不做预检，脏规则会让整层归零
+# （新契约：net 吃【规则对象 + KeywordProfile】；这里手工把脏规则塞进去）
 from process.algorithms.fuzzy.fuzzy_core.models.nets import NumTskRuleNet  # noqa: E402
+from process.algorithms.fuzzy.fuzzy_core.models.rules import NumTskRule  # noqa: E402
+from process.algorithms.fuzzy.fuzzy_core.parsing import parse_rule  # noqa: E402
+
 try:
     NumTskRuleNet(
-        [{'rule_description': GOOD_RULE}, {'rule_description': DIRTY_RULE}],
-        KEYWORDS,
-        [1.0, 1.0],
+        [NumTskRule(make_rule(s), parse_rule(s))
+         for s in (GOOD_RULE, DIRTY_RULE)],
+        list(KEYWORDS),
     )
     check('V2 对照组：裸构造含脏规则的网络会抛异常', False, '竟然没抛')
 except Exception as e:

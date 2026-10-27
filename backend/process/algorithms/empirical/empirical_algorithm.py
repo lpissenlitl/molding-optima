@@ -25,7 +25,7 @@
 
 from typing import List, Optional
 
-from process.algorithms.base import AlgorithmBase, Recommendation, AlgorithmRegistry
+from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
 from process.algorithms.empirical.hints import EMPIRICAL_HINTS
 
 
@@ -37,7 +37,7 @@ class EmpiricalReasoning(AlgorithmBase):
         context.feedback.defect: 缺陷列表（取第一个的 keyword_name）
 
     输出：
-        Recommendation 列表（increase / decrease 方向）
+        AlgorithmRecommendation 列表（increase / decrease 方向）
     """
 
     algorithm_name = "经验推理"
@@ -51,7 +51,7 @@ class EmpiricalReasoning(AlgorithmBase):
         """
         self.hints = hints if hints is not None else EMPIRICAL_HINTS
 
-    def recommend(self, context: dict) -> List[Recommendation]:
+    def recommend(self, context: dict) -> List[AlgorithmRecommendation]:
         """
         根据缺陷返回硬编码的工艺调整方向
 
@@ -64,7 +64,7 @@ class EmpiricalReasoning(AlgorithmBase):
             }
 
         Returns:
-            Recommendation 列表
+            AlgorithmRecommendation 列表
         """
         defects = (context.get('feedback') or {}).get('defect') or []
         if not defects:
@@ -87,12 +87,12 @@ class EmpiricalReasoning(AlgorithmBase):
             return []
 
         process_parameter = context.get('process_parameter') or {}
-        recommendations: List[Recommendation] = []
+        recommendations: List[AlgorithmRecommendation] = []
 
         # increase 方向
         for param_code in hint.get('increase', []):
             current = process_parameter.get(param_code)
-            recommendations.append(Recommendation(
+            recommendations.append(AlgorithmRecommendation(
                 param_name=param_code,
                 current_value=float(current) if current is not None else 0.0,
                 recommended_value=None,  # 经验不给出具体数值
@@ -105,7 +105,7 @@ class EmpiricalReasoning(AlgorithmBase):
         # decrease 方向
         for param_code in hint.get('decrease', []):
             current = process_parameter.get(param_code)
-            recommendations.append(Recommendation(
+            recommendations.append(AlgorithmRecommendation(
                 param_name=param_code,
                 current_value=float(current) if current is not None else 0.0,
                 recommended_value=None,
@@ -135,10 +135,10 @@ class EmpiricalReasoning(AlgorithmBase):
             return False
         return defect_name in self.hints
 
-    def run(self, context: dict) -> List[Recommendation]:
+    def run(self, context: dict) -> List[AlgorithmRecommendation]:
         """统一入口：包装 recommend()。
 
-        algorithm_type='optimization'，返回 List[Recommendation]。
+        algorithm_type='optimization'，返回 List[AlgorithmRecommendation]。
         """
         return self.recommend(context)
 

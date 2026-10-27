@@ -29,7 +29,7 @@ from typing import List, Optional, Dict, Any
 
 
 @dataclass
-class Recommendation:
+class AlgorithmRecommendation:
     """
     推荐结果数据类（optimization 类型算法使用）
 
@@ -85,7 +85,7 @@ class AlgorithmBase(ABC):
     - 必须实现 run(context) -> Any（统一入口）
     - optimization 类型还应实现 recommend() 和 is_available()（被 chain 调度）
     - 返回类型由 algorithm_type 决定：
-        * 'optimization': List[Recommendation]
+        * 'optimization': List[AlgorithmRecommendation]
         * 'initialization': ProductionParams
         * 'mining': List[Rule]（占位返回 []）
     """
@@ -104,7 +104,7 @@ class AlgorithmBase(ABC):
 
         Returns:
             返回类型由 algorithm_type 决定：
-            - 'optimization': List[Recommendation]
+            - 'optimization': List[AlgorithmRecommendation]
             - 'initialization': ProductionParams
             - 'mining': List[Rule]（占位返回 []）
 

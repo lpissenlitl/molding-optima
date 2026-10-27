@@ -1126,7 +1126,7 @@ def _infer_direction(current_value, recommended_value) -> str:
 
 
 def _recommendations_to_adjustments(recommendations: list, context: dict) -> List[dict]:
-    """Recommendation 列表 → 旧版 adjustments 格式（保持 API 兼容）"""
+    """AlgorithmRecommendation 列表 → 旧版 adjustments 格式（保持 API 兼容）"""
     parameter_snapshot = context.get("process_parameter") or {}
     adjustments: List[dict] = []
     for rec in recommendations:
@@ -1146,7 +1146,7 @@ def _recommendations_to_adjustments(recommendations: list, context: dict) -> Lis
 def _adjustment_direction(rec, current_value) -> str:
     """推荐方向 → 旧版 adjustments 的值域（increase / decrease / adjust）
 
-    优先用 ``Recommendation.direction``：经验推理只给方向不给数值，
+    优先用 ``AlgorithmRecommendation.direction``：经验推理只给方向不给数值，
     从 current/recommended 推不出来，推出来的永远是 ``adjust``。
     """
     direction = getattr(rec, "direction", None)

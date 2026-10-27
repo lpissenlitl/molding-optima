@@ -22,11 +22,11 @@ AI 推理类算法库
 - 如需新增 algorithm_type：在 algorithms/base.AlgorithmBase.algorithm_type 标注
 """
 
-from .base import AlgorithmBase, AlgorithmRegistry, Recommendation
+from .base import AlgorithmBase, AlgorithmRegistry, AlgorithmRecommendation
 
 # 显式 import 子模块以触发 AlgorithmRegistry.register
 # optimization 类型（进入工艺参数优化 chain）
-from .fuzzy import fuzzy_algorithm  # noqa: F401
+from .fuzzy import engine  # noqa: F401
 from .llm import llm_algorithm  # noqa: F401
 from .empirical import empirical_algorithm  # noqa: F401
 
@@ -39,5 +39,5 @@ from .empirical import empirical_algorithm  # noqa: F401
 __all__ = [
     "AlgorithmBase",
     "AlgorithmRegistry",
-    "Recommendation",
+    "AlgorithmRecommendation",
 ]

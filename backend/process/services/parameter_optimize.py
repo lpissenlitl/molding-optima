@@ -9,7 +9,7 @@
 
 设计要点：
 - infer 只处理算法优化（人工调整走 manual-adjust 接口）
-- 算法侧是接口契约：输入 context，输出 List[Recommendation]，算法实现对本服务透明
+- 算法侧是接口契约：输入 context，输出 List[AlgorithmRecommendation]，算法实现对本服务透明
 - 3 场景调用逻辑一致（基本调参/自动回撤/手动修改），仅 feedback 内容不同
 - is_adopted 自动维护：下一轮 ineffective 时改 False
 - FromCondition 落库，FromProvided 纯推理（无 DB 读写，与 initialize.infer_from_provided 同构）
@@ -32,9 +32,9 @@ from process.models import (
     TuningRecord,
 )
 from process.algorithms.base import AlgorithmRegistry
-from process.algorithms.base import Recommendation as AlgoRecommendation
+from process.algorithms.base import AlgorithmRecommendation
 from process.algorithms.fuzzy import (
-    FuzzyEngine,  # 用于字段命名约束（FIELD_NAME_ALIAS）
+    field_names,  # 命名契约：业务字段名 ↔ 算法字段名（双向映射，契约层唯一真相源）
     is_valid_defect_level_word,  # 缺陷程度（level）合法性校验
 )
 from process.algorithms.fuzzy.specs import (
@@ -165,6 +165,12 @@ _VALID_LEVEL_WORDS_TEXT = VALID_DEFECT_LEVEL_WORDS_TEXT
 
 
 # --- ORM 序列化 + 字段命名翻译 helper ---
+#
+# 字段命名翻译（业务名 ↔ 算法名）**不在本层实现**：
+# 契约在算法侧（process/algorithms/fuzzy/field_names.py），本层只调用。
+# 历史上这里有一份平行的正向实现（_normalize_field_name_by_spec），
+# 重复实现 ⇒ 改了契约不改这里（或反之）就会出现两套口径。
+# 翻译规则见 field_names.to_algo_name / field_names.to_algo_params。
 def _to_full_dict(instance: Any) -> Dict[str, Any]:
     """ORM → 完整 dict（仅排除 ORM 关系字段）"""
     if instance is None:
@@ -174,47 +180,6 @@ def _to_full_dict(instance: Any) -> Dict[str, Any]:
         for f in instance._meta.fields
         if not f.is_relation
     }
-
-
-def _normalize_field_name_by_spec(
-    params: Dict[str, Any],
-    field_spec: Dict[str, str],
-    index_offset: Optional[Dict[str, int]] = None,
-) -> Dict[str, Any]:
-    """按算法侧声明的字段命名约束做字段名翻译（业务 → 算法）
-
-    Port-Adapter 模式：算法侧声明字段命名约定（FIELD_NAME_ALIAS），
-    数据准备层按约束翻译（不感知业务语义）。
-
-    两类映射：
-
-    1. 完整字段名：``noz_temp`` → ``NT``
-    2. 分段前缀 + 序号偏移：``inj_spd_1`` → ``IV0``
-       （新序号 = 原序号 + offset；规则库段号以 0-based 为主，
-        料筒温度为 1-based 同构，偏移 0：``brl_temp_1`` → ``BT1``）
-    """
-    if not field_spec:
-        return dict(params)
-
-    index_offset = index_offset or {}
-
-    normalized: Dict[str, Any] = {}
-    for key, value in params.items():
-        prefix, sep, suffix = key.rpartition('_')
-
-        # 1) 完整字段名：noz_temp → NT
-        if key in field_spec:
-            normalized[field_spec[key]] = value
-            continue
-
-        # 2) 分段前缀 + 序号偏移：inj_spd_1 → IV0
-        if sep and suffix.isdigit() and prefix in field_spec:
-            offset = index_offset.get(prefix, 0)
-            normalized[f"{field_spec[prefix]}{int(suffix) + offset}"] = value
-            continue
-
-        normalized[key] = value
-    return normalized
 
 
 def _to_business_param_name(param_name: str) -> str:
@@ -227,7 +192,7 @@ def _to_business_param_name(param_name: str) -> str:
     """
     if not param_name or not isinstance(param_name, str):
         return param_name
-    return FuzzyEngine.to_business_name(param_name) or param_name
+    return field_names.to_business_name(param_name) or param_name
 
 
 def _param_label(business_name: str) -> str:
@@ -477,7 +442,7 @@ def _call_algorithms(context: AlgorithmContext) -> Dict[str, Any]:
         _logger.info("[optimize] 无可用引擎")
         return _empty_algorithm_result()
 
-    all_recommendations: List[AlgoRecommendation] = []
+    all_recommendations: List[AlgorithmRecommendation] = []
     algorithm_sources: Dict[str, List[Dict[str, Any]]] = {}
     algorithm_names: Dict[str, List[Dict[str, Any]]] = {}
     for algorithm in engines:
@@ -511,14 +476,10 @@ def _compose_algorithm_context(
     """Step 2 核心 —— 装成 AlgorithmContext（Port-Adapter 模式）
 
     - 字段选择（业务多 → 算法少）
-    - 字段名翻译（业务命名 → 算法命名，按 FuzzyEngine.FIELD_NAME_ALIAS）
+    - 字段名翻译（业务命名 → 算法命名，规则见算法侧契约 field_names.to_algo_params）
     - 上下文组装
     """
-    algorithm_params = _normalize_field_name_by_spec(
-        parameter,
-        FuzzyEngine.FIELD_NAME_ALIAS,
-        FuzzyEngine.FIELD_INDEX_OFFSET,
-    )
+    algorithm_params = field_names.to_algo_params(parameter)
     return {
         'machine_info': machine_info,
         'polymer_info': polymer_info,
@@ -712,7 +673,7 @@ def _build_description(rec: Dict[str, Any]) -> str:
 
 
 def _extract_rule_refs(rec: Dict[str, Any]) -> List[str]:
-    """提取规则引用（当前算法侧 Recommendation 无规则引用字段，预留接口）"""
+    """提取规则引用（当前算法侧 AlgorithmRecommendation 无规则引用字段，预留接口）"""
     refs = rec.get("rule_refs") or []
     if isinstance(refs, list):
         return [str(r) for r in refs]

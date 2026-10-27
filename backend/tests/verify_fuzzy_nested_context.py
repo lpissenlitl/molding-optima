@@ -1,6 +1,6 @@
 """
 verify_fuzzy_nested_context.py
-验证 fuzzy_algorithm.recommend() 正确从嵌套对象 context['polymer'] / context['mold']
+验证 engine.recommend() 正确从嵌套对象 context['polymer'] / context['mold']
 取出 abbreviation / product_category 传给 RuleQueryContext。
 
 契约说明（2026-10-20 随 optimize 链路打通同步）：
@@ -9,7 +9,7 @@ verify_fuzzy_nested_context.py
   旧的 `defect_name`（中文或 snake_case）已不再被读取
 - process_parameter 是算法命名空间（IV0 / IP0 / ...，0-based）
 
-策略：spy RuleQueryService.get_rules（不 mock 返回值，只看传入的 RuleQueryContext 字段）。
+策略：spy ResourceRepository.get_rules（不 mock 返回值，只看传入的 RuleQueryContext 字段）。
 """
 import os
 import sys
@@ -22,12 +22,12 @@ django.setup()
 
 from unittest.mock import patch
 from process.algorithms.fuzzy import FuzzyEngine
-from process.algorithms.fuzzy.services.rule_query_service import RuleQueryContext
+from process.algorithms.fuzzy.library.contracts import RuleQueryContext
 
 
 def main():
     print("=" * 70)
-    print("fuzzy_algorithm.recommend: 验证嵌套 context['polymer/mold'] 取值")
+    print("engine.recommend: 验证嵌套 context['polymer/mold'] 取值")
     print("=" * 70)
 
     engine = FuzzyEngine()
@@ -48,7 +48,9 @@ def main():
         return []  # 返回空，让 fuzzy 自然结束
 
     with patch(
-        "process.algorithms.fuzzy.fuzzy_algorithm.RuleQueryService.get_rules",
+        # `ResourceRepository` 在 `engine` 里是**函数内延迟导入**，
+        # 模块级没有该属性 ⇒ patch 必须指向真实定义处（library.repository）。
+        "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
         recs = engine.recommend(context)
@@ -77,7 +79,9 @@ def main():
         "machine_info": {},
     }
     with patch(
-        "process.algorithms.fuzzy.fuzzy_algorithm.RuleQueryService.get_rules",
+        # `ResourceRepository` 在 `engine` 里是**函数内延迟导入**，
+        # 模块级没有该属性 ⇒ patch 必须指向真实定义处（library.repository）。
+        "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
         recs2 = engine.recommend(context_empty)
@@ -96,7 +100,9 @@ def main():
         "mold_info": None,
     }
     with patch(
-        "process.algorithms.fuzzy.fuzzy_algorithm.RuleQueryService.get_rules",
+        # `ResourceRepository` 在 `engine` 里是**函数内延迟导入**，
+        # 模块级没有该属性 ⇒ patch 必须指向真实定义处（library.repository）。
+        "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
         recs3 = engine.recommend(context_none)

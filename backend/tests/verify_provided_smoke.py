@@ -23,11 +23,11 @@ django.setup()
 from unittest.mock import patch
 from process.services import parameter_optimize as _opt_mod  # 模块顶层 helper（整改后从类内移出）
 from process.services.parameter_optimize import ParameterOptimizeService
-from process.algorithms.base import Recommendation
+from process.algorithms.base import AlgorithmRecommendation
 
 
 def _make_rec(param, current, recommended, source="fuzzy"):
-    return Recommendation(
+    return AlgorithmRecommendation(
         param_name=param,
         current_value=current,
         recommended_value=recommended,

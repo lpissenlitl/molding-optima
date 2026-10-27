@@ -8,12 +8,12 @@
 未来实现计划：
 - 基于 RAG 检索历史调参案例
 - 使用 LLM 推理生成参数调整推荐
-- recommend() 返回 Recommendation 列表与 fuzzy 同 schema
+- recommend() 返回 AlgorithmRecommendation 列表与 fuzzy 同 schema
 """
 
 from typing import List
 
-from process.algorithms.base import AlgorithmBase, Recommendation, AlgorithmRegistry
+from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
 
 
 class LLMEngine(AlgorithmBase):
@@ -33,7 +33,7 @@ class LLMEngine(AlgorithmBase):
         self.model_name = model_name
         # TODO: 后续初始化 LLM 客户端
 
-    def recommend(self, context: dict) -> List[Recommendation]:
+    def recommend(self, context: dict) -> List[AlgorithmRecommendation]:
         """
         根据上下文返回推荐
 
@@ -60,10 +60,10 @@ class LLMEngine(AlgorithmBase):
         # TODO: 后续检查配置
         return False
 
-    def run(self, context: dict) -> List[Recommendation]:
+    def run(self, context: dict) -> List[AlgorithmRecommendation]:
         """统一入口：包装 recommend()。
 
-        algorithm_type='optimization'，返回 List[Recommendation]。
+        algorithm_type='optimization'，返回 List[AlgorithmRecommendation]。
         """
         return self.recommend(context)
 
@@ -77,7 +77,7 @@ class LLMEngine(AlgorithmBase):
         # TODO: 后续实现
         return ""
 
-    def _parse_llm_response(self, response: str) -> List[Recommendation]:
+    def _parse_llm_response(self, response: str) -> List[AlgorithmRecommendation]:
         """解析 LLM 输出"""
         # TODO: 后续实现
         return []

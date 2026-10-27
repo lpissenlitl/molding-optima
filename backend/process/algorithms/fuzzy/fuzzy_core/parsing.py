@@ -1,28 +1,21 @@
 """规则词法解析（公开 API）
 
-从 `fuzzy_core/models/nets.py` 抽出的词法工具，供**算法层**与**规则层**共用：
+供**算法层**与**规则层**共用的词法工具：
 
 - `split_phase()`  把一个规则词法单元解析为结构化字段
 - `classify_name()`  判定名字是"缺陷"还是"工艺参数"
-- `collect_param_names()`  从规则串中收集"工艺参数名"
+- `is_param_name()`  判定名字是否是"工艺参数名"（唯一判定口径）
 
-为什么公开化（2026-10-20）：
-- 算法层（`fuzzy_algorithm.py`）需要按规则串反推"这条规则涉及哪些参数"，
-  以便按需拉取 RuleKeyword 元数据。它过去自己写了一套粗糙的字符串切分
-  （只收"首字母非大写"的词），而规则库里的参数名全是大写（IV0/MBP0/...），
-  结果恒定收集到 0 个参数 → 工厂级永远拿不到论域 → 整层被跳过。
-- 规则层（`rule_query_service.py`）需要按"结论形态"分流规则，同样要复用
-  同一套词法语义，避免两处对 `X_add_2` / `X_adjust_提示语` 的理解不一致。
-
-原位置（`models/nets.py`）保留 `_split_phase` / `_classify_name` 别名，
-避免历史 import 断裂。
+为什么要统一口径：算法层与规则层都要按规则串反推"这条规则涉及哪些参数"、
+按"结论形态"分流规则，两处各自解析会让 `X_add_2` / `X_adjust_提示语`
+的理解出现分叉。
 
 命名空间说明：
 - 规则库段号以 0-based 为主（IV0/MBP0/BT/...），与 RuleKeyword 的
   `IV0~IV5` / `PP0~PP4` 完全吻合，不要在这里做 0/1-based 转换。
 """
 
-from typing import Dict, Iterable, List, Set
+from typing import Dict, List
 
 from .macros import ALL_LEVEL_WORDS, DEFECT_CONST, LEVEL_WORD_ALIASES
 
@@ -89,16 +82,15 @@ def split_phase(phase: str) -> Dict[str, str]:
     #   档位词可能是多段的（very_low / extremely_low / slightly_low ...），
     #   必须按“最长后缀”匹配：'IV0_very_low' 应拆成 name='IV0' + level='very_low'，
     #   而不是 name='IV0_very' + level='low'（那样档位会错一档）。
-    #   2026-10-22 E1 补齐：原实现只匹配单个 part，多段词一律被误拆。
     for seg_count in range(min(3, len(parts) - 1), 0, -1):
         suffix = '_'.join(parts[-seg_count:])
         if suffix in ALL_LEVEL_WORDS:
             name = '_'.join(parts[:-seg_count])
             return {'name': name, 'level': suffix, 'kind': 'precondition'}
 
-    # ---- 兜底：老 fuzzykit 风格（按空格 + 第一段下划线拆分）---------------
+    # ---- 兜底：按空格 + 第一段下划线拆分 -----------------------------------
     #   注：兜底结果的 level 未必是合法等级词（如 'worse'），调用方必须
-    #   用 is_level_word() 复核后再查 HS_MAPPING_DICT。
+    #   用 is_level_word() 复核后再查档位映射。
     return {'name': parts[0], 'level': parts[1] if len(parts) > 1 else '', 'kind': 'precondition'}
 
 
@@ -126,8 +118,8 @@ def is_level_word(word: str) -> bool:
 def normalize_level_word(word: str) -> str:
     """等级词归一（'mid' → 'medium'，其余原样返回）。
 
-    老 fuzzykit 写 'mid'，前端 LEVEL_WORDS 与规则库 rule_description 写
-    'medium'，两者同义（都是第 2 档）。比较前必须先归一，否则同一个档位
+    兼容写法 'mid' 与前端 LEVEL_WORDS / 规则库 rule_description 写的
+    'medium' 同义（都是第 2 档）。比较前必须先归一，否则同一个档位
     会被当成两档。
     """
     w = str(word or '').lower()
@@ -139,41 +131,18 @@ def is_position_name(name: str) -> bool:
     return bool(name) and name.upper().startswith('DL')
 
 
-def collect_param_names(rule_strings: Iterable[str]) -> Set[str]:
-    """从规则串中收集"工艺参数名"（剔除缺陷名与缺陷位置名）。
+def is_param_name(name: str) -> bool:
+    """是否是「工艺参数名」（不是缺陷名、不是缺陷位置名）。
 
-    前件与结论的参数都要收：模糊推理需要两侧都有 RuleKeyword 元数据，
-    缺结论侧元数据会让该条规则的调整量整体丢失。
-
-    Args:
-        rule_strings: 规则字符串列表
-
-    Returns:
-        参数名集合
+    参数名集合的**唯一判定口径**：缺陷名（`DEFECT_CONST` 内）不参与论域，
+    缺陷位置名（`DL` 前缀）同理。
+    第 4 层 filter 按已拆解产物收参数名时也走本函数 ⇒ 口径永远一致。
     """
-    names: Set[str] = set()
-    for rule_str in rule_strings:
-        for word in (rule_str or '').split():
-            if word in RULE_KEYWORDS:
-                continue
-            name = split_phase(word).get('name')
-            if not name:
-                continue
-            if is_position_name(name):
-                continue
-            if classify_name(name) == 'defect':
-                continue
-            names.add(name)
-    return names
-
-
-def parse_rule_words(rule_str: str) -> List[Dict[str, str]]:
-    """把一条规则串拆成有序的词法单元列表（跳过 IF / AND / THEN）。"""
-    return [
-        split_phase(word)
-        for word in (rule_str or '').split()
-        if word not in RULE_KEYWORDS
-    ]
+    if not name:
+        return False
+    if is_position_name(name):
+        return False
+    return classify_name(name) != 'defect'
 
 
 def parse_rule(rule_str: str) -> Dict[str, List[Dict[str, str]]]:
@@ -181,7 +150,10 @@ def parse_rule(rule_str: str) -> Dict[str, List[Dict[str, str]]]:
 
     Returns:
         {'preconditions': [...], 'solutions': [...]}
-        每个元素是 `split_phase()` 的结果 dict。
+        每个元素是 `split_phase()` 的结果 dict，另附 ``'phase'`` = 原始词。
+
+    ⚠️ `phase`（原始词）不是冗余：弹窗结论的 `r_extra` 键、代数结论的等式串
+    都只能从原文取（`split_phase` 只给拆解后的字段，拆不回原文）。
     """
     preconditions: List[Dict[str, str]] = []
     solutions: List[Dict[str, str]] = []
@@ -196,6 +168,7 @@ def parse_rule(rule_str: str) -> Dict[str, List[Dict[str, str]]]:
         if word == 'AND':
             continue
         info = split_phase(word)
+        info['phase'] = word
         if is_pre:
             preconditions.append(info)
         else:
@@ -207,11 +180,10 @@ __all__ = [
     'ALL_LEVEL_WORDS',
     'RULE_KEYWORDS',
     'classify_name',
-    'collect_param_names',
     'is_level_word',
+    'is_param_name',
     'is_position_name',
     'normalize_level_word',
     'parse_rule',
-    'parse_rule_words',
     'split_phase',
 ]

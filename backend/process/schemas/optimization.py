@@ -165,7 +165,7 @@ class OptimizeMachineInfoSchema(BaseSchema):
     max_set_* 全部是必填——缺上界不是精度下降，而是判级错误。
 
     命名空间：本 schema 的字段名 == ORM 字段名（InjectionUnit / InjectionMoldingMachine）。
-    fuzzy 的端口命名空间就是业务/ORM 名（FuzzyEngine.FIELD_NAME_ALIAS 为空 dict）。
+    fuzzy 侧的命名空间就是业务/ORM 名（FuzzyEngine.FIELD_NAME_ALIAS 为空 dict）。
     """
 
     # --- 驱动形式（InjectionMoldingMachine 主表）：「液压机必填」等级的评估前提 ---

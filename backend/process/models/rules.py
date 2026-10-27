@@ -240,7 +240,7 @@ class RuleMethod(BusinessBaseModel):
         indexes = [
             # 列表查询高频路径：按缺陷名 + 启用状态过滤，按优先级降序
             models.Index(fields=['defect_label', 'is_active', 'is_deleted']),
-            # 库内规则排序（rule_query_service.fuzzy_engine 查询路径）
+            # 库内规则排序（library.rules 查询路径）
             models.Index(fields=['rule_library', 'priority']),
             # 通用过滤
             models.Index(fields=['is_active', 'is_deleted']),

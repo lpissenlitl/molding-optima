@@ -5,7 +5,11 @@
   - guessed   : 无权威元数据，按实时值推测了一个论域（带 meta_source='guessed' 标记）
   - unknown   : 既无权威元数据也无实时值 ⇒ 规则少了一个门控条件，激活度偏高
 
-不依赖规则库数据：mock 掉 _load_keyword_dicts，只测分类与报告逻辑。
+不依赖规则库数据：mock 掉 _load_keyword_profiles，只测分类与报告逻辑。
+
+⚠️ 2026-10-26：参数名不再由编排层从规则串里抠，而是由**第 4 层 filter**
+   （`fuzzy_core.rules_filter.build_rule_objects`）收好后交给 `_build_field_context`；
+   元数据清单也从裸 dict 换成了内核契约对象 `KeywordProfile`。
 
 运行：
   cd backend
@@ -18,9 +22,16 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 django.setup()
 
-from process.algorithms.fuzzy.fuzzy_algorithm import (  # noqa: E402
+from process.algorithms.fuzzy.engine import (  # noqa: E402
     FIELD_SOURCE_GUESSED,
     FuzzyEngine,
+)
+from process.algorithms.fuzzy.fuzzy_core.profiles import (  # noqa: E402
+    KeywordProfile,
+    RuleProfile,
+)
+from process.algorithms.fuzzy.fuzzy_core.rules_filter import (  # noqa: E402
+    build_rule_objects,
 )
 
 
@@ -29,24 +40,23 @@ RULES = [
     'IF FLASH_high AND HOLDEXIST_high AND PP0_high THEN PP0_reduce_10',
 ]
 
-# 模拟 _load_keyword_dicts 的返回：
+# 模拟 _load_keyword_profiles 的返回：
 #   MEL        -> 权威元数据
 #   HOLDEXIST  -> 推测论域（带 meta_source 标记）
 #   PP0        -> 没有（既不在清单里，也拿不到实时值）
-KEYWORD_DICTS = [
-    {'keyword': 'MEL', 'lvl': 5, 'min_val': 0.0, 'max_val': 100.0, 'step': 1.0},
-    {
-        'keyword': 'HOLDEXIST', 'lvl': 3, 'min_val': 0.0, 'max_val': 2.0,
-        'step': 0.1, 'meta_source': FIELD_SOURCE_GUESSED,
-    },
+KEYWORD_PROFILES = [
+    KeywordProfile(keyword='MEL', lvl=5, min_val=0.0, max_val=100.0, step=1.0),
+    KeywordProfile(
+        keyword='HOLDEXIST', lvl=3, min_val=0.0, max_val=2.0,
+        step=0.1, meta_source=FIELD_SOURCE_GUESSED,
+    ),
 ]
 
 
-class _FakeRule:
-    """最小 ResolvedRule 替身（只需 rule_str）。"""
-
-    def __init__(self, s):
-        self.rule_str = s
+def _param_names():
+    """本层用到的参数名（由第 4 层 filter 收，编排层不再自己抠）。"""
+    profiles = [RuleProfile(rule_description=r) for r in RULES]
+    return build_rule_objects(profiles).numeric_param_names
 
 
 def _build_engine():
@@ -55,17 +65,16 @@ def _build_engine():
     def _fake_load(param_names, process_parameter):
         # 真实实现只返回查到的字段
         names = set(param_names)
-        return [dict(kw) for kw in KEYWORD_DICTS if kw['keyword'] in names]
+        return [kp for kp in KEYWORD_PROFILES if kp.keyword in names]
 
-    engine._load_keyword_dicts = _fake_load
+    engine._load_keyword_profiles = _fake_load
     return engine
 
 
 def test_field_classification():
     """字段三态分类正确。"""
     engine = _build_engine()
-    rules = [_FakeRule(r) for r in RULES]
-    _kws, classification = engine._build_field_context(rules, {}, 'numeric')
+    _kws, classification = engine._build_field_context(_param_names(), {}, 'numeric')
 
     assert classification['authority'] == ['MEL'], classification
     assert classification['guessed'] == ['HOLDEXIST'], classification
@@ -74,10 +83,9 @@ def test_field_classification():
 
 
 def test_defect_names_not_in_report():
-    """缺陷名在 collect_param_names 阶段已被剔除，不应出现在 unknown 里。"""
+    """缺陷名在参数名收集阶段已被剔除，不应出现在 unknown 里。"""
     engine = _build_engine()
-    rules = [_FakeRule(r) for r in RULES]
-    _kws, classification = engine._build_field_context(rules, {}, 'numeric')
+    _kws, classification = engine._build_field_context(_param_names(), {}, 'numeric')
 
     all_names = (classification['authority'] + classification['guessed']
                  + classification['unknown'])
@@ -89,9 +97,8 @@ def test_defect_names_not_in_report():
 def test_report_accumulated():
     """每次调用都会往 _field_reports 里追加一份分类结果。"""
     engine = _build_engine()
-    rules = [_FakeRule(r) for r in RULES]
-    engine._build_field_context(rules, {}, 'numeric')
-    engine._build_field_context(rules, {}, 'advisory')
+    engine._build_field_context(_param_names(), {}, 'numeric')
+    engine._build_field_context(_param_names(), {}, 'advisory')
 
     assert len(engine._field_reports) == 2, engine._field_reports
     assert engine._field_reports[0]['layer'] == 'numeric'
@@ -103,22 +110,21 @@ def test_report_accumulated():
 def test_keyword_dicts_unchanged():
     """送引擎的元数据清单原样透传（不做任何增删改）。"""
     engine = _build_engine()
-    rules = [_FakeRule(r) for r in RULES]
-    kws, _cls = engine._build_field_context(rules, {}, 'numeric')
+    kws, _cls = engine._build_field_context(_param_names(), {}, 'numeric')
 
-    assert len(kws) == len(KEYWORD_DICTS), kws
-    assert {k['keyword'] for k in kws} == {'MEL', 'HOLDEXIST'}
+    assert len(kws) == len(KEYWORD_PROFILES), kws
+    assert {k.keyword for k in kws} == {'MEL', 'HOLDEXIST'}
     # 权威项不带 meta_source，猜测项带 meta_source
-    by_name = {k['keyword']: k for k in kws}
-    assert 'meta_source' not in by_name['MEL']
-    assert by_name['HOLDEXIST']['meta_source'] == FIELD_SOURCE_GUESSED
+    by_name = {k.keyword: k for k in kws}
+    assert by_name['MEL'].meta_source == ''
+    assert by_name['HOLDEXIST'].meta_source == FIELD_SOURCE_GUESSED
     print("[PASS] 元数据清单原样透传")
 
 
 def test_empty_input():
     """没有规则时不报错，分类结果为空。"""
     engine = _build_engine()
-    kws, classification = engine._build_field_context([], {}, 'numeric')
+    kws, classification = engine._build_field_context(set(), {}, 'numeric')
     assert kws == []
     assert classification['authority'] == []
     assert classification['guessed'] == []
