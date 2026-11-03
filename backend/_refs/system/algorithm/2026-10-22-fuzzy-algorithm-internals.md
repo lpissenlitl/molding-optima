@@ -6,6 +6,10 @@
 > [2026-10-22-fuzzy-feature-full-chain-guide.md](2026-10-22-fuzzy-feature-full-chain-guide.md)，
 > 本文不重复。
 > 状态：**只做整理与定位，不含改动方案**。
+>
+> ⚠️ **文档性质（2026-10-27 补充）**：本文是 2026-10-22 的**整理与提案稿**，**不是现状说明书**。
+> §8「重写边界建议」是当轮提案，**多数未采纳** —— 已就地补注「实际执行结果」列（2026-10-27 核对）。
+> **当前现状以代码为准**；文档分层索引见 `backend/_refs/README.md`「模糊引擎文档怎么读」。
 
 ---
 
@@ -38,6 +42,14 @@ class FuzzyEngine(AlgorithmBase):
 
 **依赖方向**：算法包 → Django models（`RuleKeyword` / `RuleMethod` / `RuleLibrary`）。
 即：**算法包不是纯函数库**，它直接查 DB、也依赖 Django settings。
+
+> 📌 **现状校正（2026-10-27）**：上述结论**仍成立，但依赖已分层收敛**：
+> - `fuzzy_core/`（内核）—— **零 ORM、零 Django 依赖** ⇒ 可脱离 DB 单测（pytest 已落地）
+> - `library/`（来源适配层）—— DB 访问唯一落点（`repository.py` / `rules.py` / `keywords.py`）
+> - `engine.py`（编排）—— 只调库、不碰 ORM
+>
+> 另：本文 §1 写的 `RuleLibrary` 等 ORM 名字现已下沉到 `library/` 层，
+> 内核不再感知 ORM 模型。
 
 ---
 
@@ -157,11 +169,16 @@ for k in x:
 
 ### 第二层：规则层（`nets.py:700`）
 
+> ⚠️ **2026-10-28 更新（批 M）**：本节代码块是 **2026-10-22 的历史快照**。
+> 当前版已改为 **`np.min(conditions)`**（弱连接，规格 §5.2）⇒ 下方“连乘”描述**已过时**。
+> 详见 `2026-10-23-fuzzy-implementation-design.md` §5.2 与
+> `2026-10-27-fuzzy-post-refactor-review.md` §22。
+
 ```python
 rule_matrix = self.connected_matrix * membership_degrees
 conditions = rule_matrix[i, rule_matrix[i] != 0]
 if conditions.size != 0:
-    rule_activations[i] = np.prod(conditions)          # TSK 连乘
+    rule_activations[i] = np.prod(conditions)          # TSK 连乘（已改为 np.min）
 ```
 
 - **连乘** ⇒ 所有条件都要满足（μ=0.1 × μ=0.9 = 0.09）
@@ -197,7 +214,7 @@ sol_matrix = self.solution_matrix.T * cur_params
 
 | # | 位置 | 问题 | 实证 |
 |---|---|---|---|
-| **P1** | `nets.py:633` `HS_MAPPING_DICT[level]` | 档位→桶用**全局静态表**（3 档语义）。5 档参数上 `low`→`+0`→指向 very_low 桶，**错位一档** | `IV0=30` 时 `IV0_low` 取到 μ=0.1353（应为 1.0）⇒ 调整量被摊薄到 13.5% |
+| **P1** | `nets.py:633` `HS_MAPPING_DICT[level]` | 档位→桶用**全局静态表**（3 档语义）。5 档参数上 `low`→`+0`→指向 very_low 桶，**错位一档**<br>⚠️ **已修（2026-10-23，E2）** —— 改为按字段自身词表定位 | `IV0=30` 时 `IV0_low` 取到 μ=0.1353（应为 1.0）⇒ 调整量被摊薄到 13.5% |
 | **P2** | `nets.py:709` 归一化分母 | 分母是**全部参数全部规则**的激活度和，跨参数稀释 | 参数 A 有 10 条规则、B 有 1 条时，A 被摊薄 10 倍 |
 | **P3** | `fuzzy_algorithm.py:548` `merged[p]['delta'] +=` | 同参数多条规则**直接相加**，不是加权平均 | 与 P2 叠加后，同参数多条规则的总调整量 ≈ 规则调整量 × (A 的份额) |
 | **P4** | `fuzzy_algorithm.py:427` `delta = value × activation` | 摊薄落点：满激活（μ=1）的规则也会被 P2 摊薄 | — |
@@ -215,6 +232,9 @@ sol_matrix = self.solution_matrix.T * cur_params
 | **L5** | `fuzzy_algorithm.py:730` `rule_refs` | 永远返回空数组 ⇒ 建议不显示依据规则 | 100% 触发（可用性缺陷，非计算错误） |
 
 ### 6.3 死代码与结构性混乱
+
+> ⚠️ **本表是 2026-10-22 的快照**，「位置」列写的是当时的文件路径。
+> 2026-10-27 核对：`ParticularRules`（原 `nets.py:769`）与 `RuleMethodAdapter` 旧 JSON 路径（原 `adapters.py:58`）**已于当日删除**。
 
 | 项 | 位置 | 说明 |
 |---|---|---|
@@ -257,23 +277,31 @@ sol_matrix = self.solution_matrix.T * cur_params
 
 ## 8. 重写边界建议
 
-| 处置 | 内容 |
-|---|---|
-| **删** | Mamdani 全层（`FuzzyRuleNet` / `centroid` / `defuzz` / `tri_mf` / `trap_mf` / `bell_mf` / `singleton_mf`）、`TskRuleNet`、`ParticularRules`、`translate.py`、`RuleMethodAdapter` 旧 JSON 路径、死常量 |
-| **重写** | `nets.py` 的推理部分（门控 + 四层 + 结论层）、`functional.py` 瘦身为纯隶属度函数库 |
-| **重写** | `parsing.py` 的档位词拆分（最长后缀匹配） |
-| **重构** | `macros.py`（词表唯一权威源，per-parameter） |
-| **修** | `fuzzy_algorithm.py` 的聚合（加权平均 vs 相加）、`rule_refs` 回填 |
-| **保留** | `fuzzy_algorithm.py` 的 `recommend` 骨架、字段命名契约、`RuleQueryService`、`adapters.py`、`specs.py` |
-| **新增** | 真正的单元测试（pytest，无需 DB）—— 因为算法包当前**不可测** |
+> ⚠️ **本节是 2026-10-22 的「提案」，不是执行结果**（2026-10-27 核对后补注）。
+> 左两列是当时的原始建议，**多数未采纳**；右列是**截至 2026-10-27 的实际执行结果**。
+> 引用本节时请以右列为准 —— 详见 `backend/_refs/README.md`「模糊引擎文档怎么读」。
+
+| 处置 | 内容 | 实际执行结果（2026-10-27 核对） |
+|---|---|---|
+| **删** | Mamdani 全层（`FuzzyRuleNet` / `centroid` / `defuzz` / `tri_mf` / `trap_mf` / `bell_mf` / `singleton_mf`）、`TskRuleNet`、`ParticularRules`、`translate.py`、`RuleMethodAdapter` 旧 JSON 路径、死常量 | ⚠️ **部分已删（2026-10-27）** —— 已删：`TskRuleNet`、`translate.py`、`ParticularRules`（生产零调用 + 自带 `GLOSS_VARIATION` 截断缺陷）、`RuleMethodAdapter`（连同空壳包 `library/files/` 一并删除）。**仍保留**：`FuzzyRuleNet` 在 `fuzzy_core/models/nets.py:92`（路径已接线，但规则库模糊等级结论 0 条 ⇒ **实际空跑**）；`centroid`/`defuzz` 在 `fuzzy_core/defuzz.py`；隶属度函数族在 `fuzzy_core/memberships.py`（`tri_mf`/`trap_mf` 已退役并改名为 `triangular_mf`/`trapezoidal_mf`） |
+| **重写** | `nets.py` 的推理部分（门控 + 四层 + 结论层）、`functional.py` 瘦身为纯隶属度函数库 | ✅ **部分执行**：`nets.py` 改为双 net（`FuzzyRuleNet` 提示层 + `NumTskRuleNet` 数值层），四层分工与门控落地；`functional.py` 已拆为 `memberships.py`（隶属度）+ `defuzz.py`（反模糊化）（E24） |
+| **重写** | `parsing.py` 的档位词拆分（最长后缀匹配） | ✅ **已执行**：档位词拆分集中在 `fuzzy_core/parsing.py`（`split_phase` 等），规则层与第 4 层共用同一词法底座 |
+| **重构** | `macros.py`（词表唯一权威源，per-parameter） | ✅ **已执行**：词表唯一权威源 `fuzzy_core/macros.py` |
+| **修** | `fuzzy_algorithm.py` 的聚合（加权平均 vs 相加）、`rule_refs` 回填 | ⬜ **未采纳**：聚合改写未做（走了「先收窄设计」路线）；`rule_refs` 概念随文件删除消失（全仓零命中）；`fuzzy_algorithm.py` 已改名为 `engine.py`（E22） |
+| **保留** | `fuzzy_algorithm.py` 的 `recommend` 骨架、字段命名契约、`RuleQueryService`、`adapters.py`、`specs.py` | ⚠️ **部分保留**：骨架由 `recommendations.py` 接手（E23，原 `aggregation`）；字段命名契约保留在 `field_names.py`；`RuleQueryService` 在 `library/rules.py:24`；`specs.py` 保留；**`adapters.py` 已删** —— 其 `RuleKeywordAdapter` 迁入 `library/keywords.py:43` |
+| **新增** | 真正的单元测试（pytest，无需 DB）—— 因为算法包当前**不可测** | ✅ **已执行**：`fuzzy_core/tests/` 下 `test_nets.py` / `test_inference_gates.py` / `test_macros.py`（pytest，无需 DB） |
 
 ---
 
 ## 9. 本轮实证脚本
 
-| 脚本 | 产出 |
+> ⚠️ **这两个脚本已于 2026-10-27 随 `_dev_refs/` 一次性脚本清理一并删除**，不再存在。
+> 本节保留仅为记录当时的实证来源；结论已被后续轮次（E22~E26）覆盖，**不要再照着跑**。
+
+| 脚本（**已删除**） | 产出 |
 |---|---|
 | `_dev_refs/diag_fuzzy_algo_audit.py` | A1~A6：混合结论、同参数多桶前件、同名前件覆盖、兜底论域、第四层动态实证 |
 | `_dev_refs/diag_fuzzy_pct_audit.py` | B1~B4：百分比结论形态分布、多结论规则计数 |
 
-运行方式：`cd backend; ../.venv/Scripts/python.exe _dev_refs/<脚本>.py`
+当时的运行方式：`cd backend; ../.venv/Scripts/python.exe _dev_refs/<脚本>.py`
+（现已失效）

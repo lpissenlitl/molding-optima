@@ -16,12 +16,14 @@
     <div class="selection-area">
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :md="6">
-          <el-form-item label="选择模具" prop="mold_id">
+          <!-- prop 必须用 "mold_info.id"：顶层 mold_id 是提交态平铺字段（buildPayload 从
+               mold_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
+          <el-form-item label="选择模具" prop="mold_info.id">
             <el-autocomplete
               v-model="moldQuery"
               :fetch-suggestions="fetchMoldSuggestions"
               :debounce="300"
-              placeholder="输入或选择模具"
+              placeholder="输入并选择模具"
               clearable
               size="small"
               :disabled="disabled"
@@ -32,6 +34,10 @@
                 <AppIcon icon="mdi:cube-outline" />
               </template>
             </el-autocomplete>
+            <!-- 自定义错误文案：区分"完全没选"与"只敲了字没从下拉里选" -->
+            <template #error>
+              <div class="el-form-item__error" role="alert">{{ moldErrorText }}</div>
+            </template>
           </el-form-item>
         </el-col>
 
@@ -313,6 +319,15 @@ watch(
   () => condition.mold_info?.mold_no,
   (val) => { moldQuery.value = val ?? '' },
 )
+
+// autocomplete 允许自由输入：敲了字但没从下拉里选中时，condition.mold_info 仍为空
+// ⇒ 校验目标 mold_info.id 缺失。此处标记该状态，用于区分错误文案
+const moldUnmatched = computed(() => !!moldQuery.value && !condition.mold_info?.id)
+
+// 错误文案：只敲了字 ≠ 已选择，必须让用户看出差别
+const moldErrorText = computed(() =>
+  moldUnmatched.value ? '请从下拉列表中选择模具' : '请选择模具',
+)
 watch(
   () => condition.shot_index,
   (val) => { shotIndexStr.value = val != null ? String(val + 1) : '' },
@@ -346,25 +361,32 @@ async function fetchMoldSuggestions(queryString: string, cb: (results: any[]) =>
   }
 }
 
+// 模具详情请求序号：只允许最后一次发起的请求写回，
+// 避免"快速连选两个模具"时旧响应后到、把 mold_info 覆盖成上一个模具
+let moldDetailSeq = 0
+
 async function onMoldSelect(item: any) {
   const mold = item?.item ?? null
   if (!mold) return
-  // id 写入 condition.mold_info.id（嵌套结构，校验 prop="mold_info.id"）
+  const seq = ++moldDetailSeq
   // 切换模具后,射次统一重置为第 1 射(避免前一个模具的射次选择残留)
+  // 放在 await 之前：shot_index 的必填校验与 moldQuery 变化在同一轮触发
   condition.shot_index = 0
   shotIndexStr.value = '1'
+  // 同步前置写入列表项（已含 id）：
+  // el-form-item 的 change 校验在 moldQuery 变化的同一轮微任务里执行，
+  // 若等详情接口返回后才写 mold_info，校验读到的仍是 null ⇒ 必填红字永久残留
+  condition.mold_info = mold
   // 列表 API(to_dict() 不带 include_rvs=True)不返回反向关联
   // 必须调详情 API 获取完整的 gating_systems / cavities / gates
   try {
     const detail: any = await moldMethod.getDetail(mold.id)
+    if (seq !== moldDetailSeq) return
     if (detail?.status === 0 && detail.data) {
       condition.mold_info = detail.data
-    } else {
-      // 详情失败,退回到列表项(基本信息可显示,浇注系统不会显示)
-      condition.mold_info = mold
     }
   } catch {
-    condition.mold_info = mold
+    // 详情失败:保留列表项(基本信息可显示,浇注系统不会显示)
   }
 }
 

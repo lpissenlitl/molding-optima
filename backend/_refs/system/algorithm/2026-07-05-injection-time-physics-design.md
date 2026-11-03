@@ -607,7 +607,7 @@ def _get_thickness_bucket(
 # 【重构】注射时间 = clamp(inj_len / inj_velo, [min_t, max_t])
 # 推导链：几何下限（inj_len/inj_velo）+ 材料/壁厚桶窗口钳制（family_time_window）
 # 数据源：3 级兜底（精确值 / family×bucket 查表 / 默认窗口）
-# 物理详见 _dev_refs/2026-07-05-injection-time-physics-design.md
+# 物理详见 _refs/system/algorithm/2026-07-05-injection-time-physics-design.md
 
 max_thickness = self.mold_info.get('max_thickness', 0)
 bucket, bucket_level = self._get_thickness_bucket(max_thickness, c_inj)
@@ -886,10 +886,10 @@ family_window[family][bucket]: (min_t, max_t) ∈ ([0.3, 0.6], [1.0, 3.0]) × {[
 | [initializer.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py) | 注射时间算法主体（待重构行 624-628 + 新增两个查表函数）|
 | [rule_matcher.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/rule_matcher.py) | `_BUILTIN_DEFAULTS` 同步新增 4 字段（`family_time_window` 等）|
 | [init_rules.json](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/expert_rules/init_rules.json) | `DEFAULT.injection` 下追加 4 个字段 + 保留旧字段 |
-| [2026-07-05-injection-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-velocity-physics-design.md) | 注射速度算法设计文档（上游强依赖）|
-| [2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-pressure-physics-design.md) | 注射压力算法设计文档（兄弟算法）|
-| [2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-injection-stroke-physics-design.md) | 行程分配算法设计文档（inj_len 来源）|
-| [2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md) | 算法改造路线图（算法 #5）|
+| [2026-07-05-injection-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-velocity-physics-design.md) | 注射速度算法设计文档（上游强依赖）|
+| [2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md) | 注射压力算法设计文档（兄弟算法）|
+| [2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-injection-stroke-physics-design.md) | 行程分配算法设计文档（inj_len 来源）|
+| [2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md) | 算法改造路线图（算法 #5）|
 
 ---
 
@@ -1167,7 +1167,7 @@ total_cycle = inj_time + hold_time + cool_time + else_time ≤ inject_cycle_requ
 
 ### 15.4 路线图同步更新
 
-路线图（[2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md)）需同步更新：
+路线图（[2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md)）需同步更新：
 
 | 位置 | 当前状态 | 新状态 |
 |------|---------|--------|

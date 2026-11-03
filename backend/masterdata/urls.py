@@ -26,4 +26,6 @@ urlpatterns = [
     path("auxiliary-equipments/<int:auxiliary_equipment_id>/", views.AuxiliaryEquipmentDetailView.as_view()),
     path("auxiliary-equipments/", views.AuxiliaryEquipmentListView.as_view()),
     path("auxiliary-equipments/actions/batch-delete/", views.AuxiliaryEquipmentListView.as_view()),
+    # --- 远程搜索建议（autocomplete 候选值）---
+    path("selection-options/", views.SelectionOptionsView.as_view()),
 ]

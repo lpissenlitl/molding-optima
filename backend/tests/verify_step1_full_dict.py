@@ -12,6 +12,11 @@ import os
 import sys
 from unittest.mock import MagicMock
 
+# ★ backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
+#   直接 `python tests/verify_step1_full_dict.py` 时，sys.path[0] 是脚本所在目录
+#   （= backend/tests）⇒ 拿不到 `_moldx` 等顶层包。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 
 import django

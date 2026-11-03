@@ -473,7 +473,7 @@ T[7] = 230 - 7^1.2 × 8 ≈ 130.3℃（靠料口段，触下限钳制 max(-10+30
 | `process/engines/expert/expert_rules/init_rules.json` | DEFAULT.temperature 同步升级 | +25 / -8 |
 | `process/engines/expert/initializer.py` | 新增 4 个辅助函数 + 重写 L2344-2362 | +250 / -19 |
 | `process/engines/expert/tests/test_temperature_smoke.py` | 新建 14 场景 smoke test | +393 |
-| `_dev_refs/2026-07-04-algorithm-refactor-roadmap.md` | 主清单 + 章节 + 日志 | +15 |
+| `_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md` | 主清单 + 章节 + 日志 | +15 |
 
 ### §10.2 initializer.py 改造
 

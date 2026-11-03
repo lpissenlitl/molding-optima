@@ -260,6 +260,14 @@ export const processRecordParameterList = (conditionId: number) =>
 export const processRecordParameterTree = (conditionId: number) =>
   request({ url: `/api/processes/records/${conditionId}/parameter-tree/`, method: 'get' })
 
+/**
+ * 获取某 condition 下的调机历史（时间线）
+ * - 一个 parameter = 一轮调机，响应 {condition, count, history[]}
+ * - 后端按 created_at 倒序（最新的一轮在数组头部）
+ */
+export const processRecordHistory = (conditionId: number) =>
+  request({ url: `/api/processes/records/${conditionId}/history/`, method: 'get' })
+
 
 // ---- algorithms 段（业务专属 API）----
 
@@ -348,11 +356,29 @@ export const dashboardStatistics = () =>
 
 // ---- 报表导出 ----
 
-export const processExport = (processConditionIds: number[], includeSnapshots = false) =>
+/** 工艺参数导出模板 */
+export type ProcessExportTemplate = 'compact' | 'default' | 'detail'
+
+/**
+ * 工艺参数导出（Excel）
+ *
+ * @param processConditionIds 工艺条件 ID 列表
+ * @param template compact=精简总览 / default=标准工艺卡 / detail=追溯明细（含工艺上下文）
+ * @param includeSnapshots 是否附带“工艺条件快照”列
+ */
+export const processExport = (
+  processConditionIds: number[],
+  template: ProcessExportTemplate = 'default',
+  includeSnapshots = false,
+) =>
   request({
     url: '/api/process/export/',
     method: 'post',
-    data: { process_condition_ids: processConditionIds, include_snapshots: includeSnapshots },
+    data: {
+      process_condition_ids: processConditionIds,
+      template,
+      include_snapshots: includeSnapshots,
+    },
   })
 
 export const processReport = (processConditionId: number, format = 'pdf') =>
@@ -382,15 +408,6 @@ export function exportListData(params: object) {
   return request({
     url: '/api/reports/export-list/',
     method: 'post',
-    data: params,
-  })
-}
-
-export function importMethod(params: object) {
-  return request({
-    url: '/api/report/import/',
-    method: 'post',
-    headers: { 'Content-Type': 'multipart/form-data' },
     data: params,
   })
 }

@@ -16,7 +16,7 @@
     - 复用 BaseTable / ProcessSearchForm：避免重复开发搜索 + 列表 + 列偏好持久化
     - 调机轮次列（parameters_count）：后端 annotation 注入（2026-09-23 加）
     - 行操作：
-      - 查看调机历史（dialog，调用 /api/processes/conditions/<id>/parameters/history/）
+      - 查看调机历史（dialog，调用 /api/processes/records/<id>/history/）
       - 启动新调机（跳转 OptimizationCreate，但 OptimizationCreate 是空白表单场景，
         见 v1 暂不预填 condition，用户需手动填条件生成新调机）
 -->
@@ -142,7 +142,7 @@
           <el-timeline-item
             v-for="(item, idx) in history_items"
             :key="item.id ?? idx"
-            :type="idx === history_items.length - 1 ? 'primary' : 'success'"
+            :type="idx === 0 ? 'primary' : 'success'"
             :timestamp="formatDate(item.created_at)"
             placement="top"
           >
@@ -150,11 +150,16 @@
               <div class="history-item__header">
                 <span class="history-item__seq">
                   <AppIcon icon="mdi:counter" style="margin-right: 4px;" />
-                  seq_idx = {{ item.sequence_index ?? item.seq_idx ?? '-' }}
+                  seq_idx = {{ item.seq_idx ?? '-' }}
                 </span>
-                <el-tag size="small" type="info">
-                  parameter_id = {{ item.id ?? '-' }}
-                </el-tag>
+                <div class="history-item__tags">
+                  <el-tag size="small" :type="idx === 0 ? 'primary' : 'info'">
+                    {{ sourceLabel(item.param_source) }}
+                  </el-tag>
+                  <el-tag size="small" type="info">
+                    parameter_id = {{ item.id ?? '-' }}
+                  </el-tag>
+                </div>
               </div>
               <div class="history-item__body">
                 <el-descriptions :column="2" size="small" border>
@@ -185,7 +190,8 @@
  * 优化记录列表数据流：
  * - 列表查询走 processRecordList (URL = /api/processes/records/?view_type=optimization, 拿 parameters_count annotation)
  * - 列表字段顺序/列显隐/密度/pageSize 通过 view-name="optimization_list" 持久化
- * - 调机历史：调用 /api/processes/conditions/<id>/parameters/history/ (后端 get_condition_history)
+ * - 调机历史：调用 /api/processes/records/<id>/history/ (后端 condition.get_condition_history)
+ *   响应 {condition, count, history[]}，history 按 created_at 倒序（头部 = 最新一轮）
  *
  * 后端响应结构（condition.get_condition_list view_type=parameter）：
  *   {
@@ -204,7 +210,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import ProcessSearchForm from '@/views/process/library/components/ProcessSearchForm.vue'
-import { processRecordMethod } from '@/api'
+import { processRecordMethod, processRecordHistory } from '@/api'
 
 // ============================================================================
 // 类型
@@ -217,9 +223,9 @@ interface ListData {
 
 interface HistoryItem {
   id?: number
-  sequence_index?: number
   seq_idx?: number
   created_at?: string
+  param_source?: string
   inj_pres_1?: number | null
   hold_t_1?: number | null
   cool_t?: number | null
@@ -289,12 +295,30 @@ const ORIGIN_MAP: Record<string, string> = {
   process_transplant: '工艺移植',
 }
 
+// 参数来源（与后端 ProcessParameter.PARAMETER_SOURCE_CHOICES 对齐）
+const PARAM_SOURCE_MAP: Record<string, string> = {
+  unknown: '未标记',
+  manual: '手工录入',
+  import: '外部导入',
+  algorithm_init: '算法初始化',
+  system_inferred: '系统推理',
+  manual_adjusted: '人工调整',
+  equipment_sync: '设备同步',
+  template_copy: '模板复制',
+  ai_recommended: 'AI 推荐',
+}
+
 function statusLabel(s: string) {
   return STATUS_MAP[s] ?? s
 }
 
 function originLabel(o: string) {
   return ORIGIN_MAP[o] ?? o
+}
+
+function sourceLabel(s?: string | null) {
+  if (!s) return '未标记'
+  return PARAM_SOURCE_MAP[s] ?? s
 }
 
 // ============================================================================
@@ -357,11 +381,12 @@ async function openHistory(row: any) {
   history_items.value = []
   history_loading.value = true
   try {
-    // TODO: 后端调机历史接口暂未实现, 先给空数据并提示
-    // 原实现调用 processParameterHistory(row.id), 对应 /api/processes/records/<id>/history/
-    // 后端 urls.py + view 暂未挂出此端点 (2026-10-13), 功能待补
-    ElMessage.warning('调机历史功能开发中')
-    history_items.value = []
+    const res: any = await processRecordHistory(row.id)
+    if (res?.status === 0) {
+      history_items.value = res.data?.history ?? []
+    } else {
+      ElMessage.error(res?.msg || '调机历史加载失败')
+    }
   } catch {
     // 拦截器已统一 toast
   } finally {
@@ -461,6 +486,12 @@ onMounted(() => {
   &__seq {
     font-weight: 600;
     color: var(--el-text-color-primary);
+  }
+
+  &__tags {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 }
 </style>

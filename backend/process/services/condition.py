@@ -496,11 +496,22 @@ def _create_process_condition(company_id: int, organization_id: int, **kwargs):
     return ProcessCondition.create_with_check(**kwargs)
 
 
-def _get_process_condition_by_id(condition_id: int) -> ProcessCondition:
-    """获取 ProcessCondition ORM 对象（私有）"""
+def _get_process_condition_by_id(condition_id: int, company_id: int = None) -> ProcessCondition:
+    """获取 ProcessCondition ORM 对象（私有）
+
+    Args:
+        condition_id: 工艺条件 ID
+        company_id: 租户 ID。不为 None 时按 company_id 严格过滤，
+            口径与列表端点 (get_condition_list) 一致 —— 列表里看不到的记录，
+            详情也不允许按 id 直接访问（否则可跨租户按 id 枚举）。
+            为 None 时不过滤（内部调用 / 无租户上下文的场景）。
+    """
     condition_id = validate_pk(condition_id, "工艺条件ID")
+    filters = {"id": condition_id}
+    if company_id is not None:
+        filters["company_id"] = company_id
     condition = ProcessCondition.objects.filter(
-        id=condition_id
+        **filters
     ).prefetch_related(
         "process_parameters", "mold__gating_systems", "injection_machine__injection_units",
     ).select_related(
@@ -568,10 +579,12 @@ def create_condition(company_id: int, organization_id: int, **kwargs):
 
 
 @transaction.atomic
-def update_condition(condition_id: int, **kwargs):
+def update_condition(condition_id: int, company_id: int = None, **kwargs):
     """更新工艺条件 (仅 condition, B 方案拆分后)
 
     Args:
+        condition_id: 工艺条件 ID
+        company_id: 租户 ID（不为 None 时按租户过滤，防跨租户改写）
         kwargs:
             - condition: dict 要更新的 condition 字段
 
@@ -590,7 +603,7 @@ def update_condition(condition_id: int, **kwargs):
     注: parameter 更新走独立端点 (PUT /parameters/<parameter_id>/),
         详见 services/parameter.py 的 update_parameter。
     """
-    condition = _get_process_condition_by_id(condition_id)
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
 
     condition_data = kwargs.get("condition") or {}
 
@@ -603,7 +616,7 @@ def update_condition(condition_id: int, **kwargs):
         if safe_data:
             condition.update_info(**safe_data)
 
-    return get_condition(condition_id, view_type="parameter")
+    return get_condition(condition_id, view_type="parameter", company_id=company_id)
 
 
 @transaction.atomic
@@ -611,6 +624,7 @@ def update_record(
     condition_id: int,
     condition_data: dict = None,
     parameter_data: dict = None,
+    company_id: int = None,
 ) -> dict:
     """业务级更新工艺记录 (condition [+ 最新 parameter], 业务身份锁)
 
@@ -641,13 +655,13 @@ def update_record(
     # 1. condition 部分（走 update_condition 的业务身份锁逻辑）
     if condition_data:
         # update_condition 会拦截 CONDITION_LOCKED_FIELDS 中的字段, 抛 BizException
-        update_condition(condition_id, condition=condition_data)
+        update_condition(condition_id, company_id=company_id, condition=condition_data)
 
     # 2. parameter 部分（找 latest, 调 parameter_service.update_parameter）
     if parameter_data and "setting_process" in parameter_data:
         # 局部 import 避免循环引用
         from process.services.parameter import update_parameter
-        condition = _get_process_condition_by_id(condition_id)
+        condition = _get_process_condition_by_id(condition_id, company_id=company_id)
         latest = (
             condition.process_parameters
             .filter(is_deleted=False)
@@ -658,28 +672,35 @@ def update_record(
             raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
         update_parameter(latest.id, parameter_data)
 
-    return get_condition_frontend(condition_id)
+    return get_condition_frontend(condition_id, company_id=company_id)
 
 
 @transaction.atomic
-def delete_condition(condition_id: int):
+def delete_condition(condition_id: int, company_id: int = None):
     """软删工艺条件（级联软删 parameter）"""
-    condition = _get_process_condition_by_id(condition_id)
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     condition.soft_delete()
 
 
 @transaction.atomic
-def batch_delete_condition(ids: list):
-    """批量软删工艺条件"""
+def batch_delete_condition(ids: list, company_id: int = None):
+    """批量软删工艺条件
+
+    company_id 不为 None 时只软删属于该租户的记录（其他租户的 id 静默跳过）。
+    """
     ids = validate_id_list(ids, "工艺条件ID列表")
-    return ProcessCondition.batch_soft_delete(ids)
+    qs = ProcessCondition.objects.filter(id__in=ids)
+    if company_id is not None:
+        qs = qs.filter(company_id=company_id)
+    scoped_ids = list(qs.values_list("id", flat=True))
+    return ProcessCondition.batch_soft_delete(scoped_ids)
 
 
 # ============================================================================
 # 详情 / 列表查询
 # ============================================================================
 
-def get_condition(condition_id: int, view_type: str = "parameter") -> dict:
+def get_condition(condition_id: int, view_type: str = "parameter", company_id: int = None) -> dict:
     """获取工艺条件详情
 
     Args:
@@ -688,8 +709,9 @@ def get_condition(condition_id: int, view_type: str = "parameter") -> dict:
             - 'parameter'    返回 condition + 关联 parameter（取最新）
             - 'optimization' 返回 condition + parameters_count
             - 'all'          返回 condition + 所有 parameters 详情
+        company_id: 租户 ID（不为 None 时按租户过滤，防跨租户读取）
     """
-    condition = _get_process_condition_by_id(condition_id)
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
 
     if view_type == "optimization":
         return {
@@ -719,12 +741,14 @@ def get_condition(condition_id: int, view_type: str = "parameter") -> dict:
     return ret_dict
 
 
-def get_condition_frontend(condition_id: int) -> dict:
+def get_condition_frontend(condition_id: int, company_id: int = None) -> dict:
     """获取工艺条件详情（前端嵌套结构格式）
+
+    company_id 不为 None 时按租户过滤（防跨租户读取）。
 
     用于"移植（Transplant）"页和"参数表单（ProcessParameterForm）"加载前端结构。
     """
-    condition = _get_process_condition_by_id(condition_id)
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     parameter = condition.process_parameters.first()
     if not parameter:
         raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
@@ -754,7 +778,7 @@ def get_condition_frontend(condition_id: int) -> dict:
     }
 
 
-def get_condition_with_parameter_list(condition_id: int) -> dict:
+def get_condition_with_parameter_list(condition_id: int, company_id: int = None) -> dict:
     """获取工艺条件 + 该条件下全部 parameter (平铺) - 2026-10-12 新增
 
     业务 (records/<id>/parameter-list/ 端点支撑):
@@ -767,7 +791,7 @@ def get_condition_with_parameter_list(condition_id: int) -> dict:
     - conditions/<id>/parameters/  -> 仅 parameter 列表 (数据级, 含分页/过滤)
     - records/<id>/parameter-list/ -> condition + 全部 parameter (业务级一体化)
     """
-    condition = _get_process_condition_by_id(condition_id)
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     parameters = ProcessParameter.objects.filter(
         process_condition_id=condition_id,
         is_deleted=False,
@@ -779,7 +803,7 @@ def get_condition_with_parameter_list(condition_id: int) -> dict:
     }
 
 
-def get_condition_with_parameter_tree(condition_id: int) -> dict:
+def get_condition_with_parameter_tree(condition_id: int, company_id: int = None) -> dict:
     """获取工艺条件 + 该条件下全部 parameter (树形) - 2026-10-12 新增
 
     业务 (records/<id>/parameter-tree/ 端点支撑):
@@ -790,7 +814,7 @@ def get_condition_with_parameter_tree(condition_id: int) -> dict:
     - conditions/<id>/parameter-tree/  -> 仅 parameter 树 (数据级)
     - records/<id>/parameter-tree/     -> condition + parameter 树 (业务级一体化)
     """
-    condition = _get_process_condition_by_id(condition_id)
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     # 局部引用避免循环导入风险 (condition.py 与 parameter.py 互依)
     from process.services.parameter import get_parameter_tree
     tree = get_parameter_tree(condition_id)
@@ -967,19 +991,31 @@ def get_condition_with_history(condition_id: int) -> dict:
     }
 
 
-def get_condition_history(condition_id: int) -> List[dict]:
-    """获取某工艺的调机历史（按 created_at 倒序）"""
-    condition = ProcessCondition.objects.filter(
-        id=condition_id, is_deleted=False,
-    ).first()
-    if not condition:
-        raise BizException(ERROR_DATA_NOT_FOUND, f"工艺条件不存在: id={condition_id}")
+def get_condition_history(condition_id: int, company_id: int = None) -> dict:
+    """获取某工艺的调机历史（时间线，按 created_at 倒序）
+
+    业务: 调机记录页的弹窗数据源 —— 一个 condition 下的全部调机轮次
+    (每个 parameter = 一轮调机), 按发生时间从新到旧排列。
+
+    Args:
+        condition_id: 工艺条件 ID
+        company_id: 租户 ID（不为 None 时按租户过滤，防跨租户读取）
+
+    Returns:
+        {condition: {...}, count: n, history: [parameter.to_dict(), ...]}
+    """
+    condition = _get_process_condition_by_id(condition_id, company_id=company_id)
 
     history = ProcessParameter.objects.filter(
         process_condition_id=condition_id,
         is_deleted=False,
-    ).order_by("-created_at")
-    return [h.to_dict() for h in history]
+    ).order_by("-created_at", "-id")
+    items = [h.to_dict() for h in history]
+    return {
+        "condition": condition.to_dict(),
+        "count": len(items),
+        "history": items,
+    }
 
 
 @transaction.atomic

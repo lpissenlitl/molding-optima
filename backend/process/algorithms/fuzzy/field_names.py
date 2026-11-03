@@ -345,5 +345,47 @@ def _validate_tables() -> None:
         )
 
 
+def _validate_prefix_uniqueness() -> None:
+    """校验**反向**翻译的前缀不会互相抢名。
+
+    ⚠️ **为什么只有反向有风险**：
+      - 正向 `to_algo_name` 用 `rpartition('_')` **精确切分**后查表 ⇒ 无前缀包含问题；
+      - 反向 `to_business_name` 用「以该前缀开头 + 后缀是数字」的**前缀匹配**，
+        且**分段表先于完整表** ⇒ 前缀 A 若 是 前缀 B 的真前缀，B 的名字会被 A 抢走。
+
+    ⚠️ **后果是静默错译**（不报错）：被抢走的名字会被译成另一个参数
+    ⇒ 推荐值写回 baseline 时写到错的字段上 ⇒ 现场表现是「改了没效果」。
+
+    现状：算法前缀两两互不为前缀（``MP`` 与 ``MBP`` 前缀长度不同，不冲突），
+    且完整字段名都不是「分段前缀 + 数字」形态 ⇒ 本校验当前**通过**。
+    它防的是**将来新增前缀**时的静默错译。
+    """
+    algo_prefixes = sorted(set(PREFIX_FIELD_ALIAS.values()))
+
+    # 1) 分段前缀之间互不为前缀
+    for i, short in enumerate(algo_prefixes):
+        for long in algo_prefixes[i + 1:]:
+            if long.startswith(short) or short.startswith(long):
+                raise RuntimeError(
+                    '[field_names] 算法前缀互不为前缀的约束被破坏：'
+                    f'{short!r} 与 {long!r} 存在前缀包含关系 ⇒ '
+                    '反向翻译会把其中一个的名字抢走（静默错译）。'
+                )
+
+    # 2) 完整字段名不得形如「分段前缀 + 数字」（否则被分段表先命中）
+    for business_key, algo_full in FULL_FIELD_ALIAS.items():
+        for prefix in algo_prefixes:
+            if not algo_full.startswith(prefix):
+                continue
+            if not algo_full[len(prefix):].isdigit():
+                continue      # 后缀非数字 ⇒ 分段表会 continue，落到完整表 ⇒ 安全
+            raise RuntimeError(
+                '[field_names] 完整字段名与分段前缀冲突：'
+                f'{business_key} → {algo_full!r} 以分段前缀 {prefix!r} 开头'
+                '且后缀是数字 ⇒ 反向翻译会把它误译成分段参数（静默错译）。'
+            )
+
+
 _validate_tables()
+_validate_prefix_uniqueness()
 _validate_round_trip()

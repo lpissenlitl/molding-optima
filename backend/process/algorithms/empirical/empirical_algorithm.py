@@ -23,10 +23,42 @@
 | empirical   | 经验查表 | 工程师硬编码 | 低       | 高       |
 """
 
+import json
+import logging
 from typing import List, Optional
 
 from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
+from process.algorithms.defect_selection import (
+    DefectSelection,
+    FirstOnlyDefectStrategy,
+    select_defect,
+)
 from process.algorithms.empirical.hints import EMPIRICAL_HINTS
+
+logger = logging.getLogger(__name__)
+
+#: 本引擎的缺陷选取策略 = **只看列表第一个**（历史行为，保持不变）。
+#:
+#: 与 fuzzy 的「取第一个有效项」**刻意不同** —— 两个引擎历史语义本就不同，
+#: 强行统一会让经验推理在「首项无效、次项有效」时凭空多出推荐。
+#: 两者都从同一个真相源取（`process/algorithms/defect_selection.py`），
+#: 差别只在**策略**，不在实现。
+_FIRST_ONLY = FirstOnlyDefectStrategy()
+
+
+def _log_selection(selection: DefectSelection) -> None:
+    """缺陷选取留痕（结构化日志）。
+
+    本引擎没有 per-request 诊断容器（那是 fuzzy 的机制，见
+    `process/algorithms/fuzzy/diagnostics.py`），故用标准日志出口。
+
+    ⚠️ **只在有项被跳过时才打** —— 正常路径（首项有效）不产生任何日志噪音；
+    有跳过才说明「为什么放弃了后面的缺陷」，那才是需要被看见的情况。
+    """
+    if not selection.skipped:
+        return
+    logger.info('[EmpiricalReasoning] 缺陷选取 %s',
+                json.dumps(selection.to_trace(), ensure_ascii=False, default=str))
 
 
 class EmpiricalReasoning(AlgorithmBase):
@@ -70,15 +102,16 @@ class EmpiricalReasoning(AlgorithmBase):
         if not defects:
             return []
 
-        # 取第一个缺陷的英文缺陷码（与 FuzzyEngine 处理一致）：
+        # 缺陷选取 —— **唯一真相源**（`process/algorithms/defect_selection.py`），
+        # 本引擎用「只看第一个」策略（与历史行为逐字一致）。
         # 反馈传的是 keyword_name（SHORTSHOT / SHRINKAGE / ...），
         # 与 RuleMethod.defect_code、RuleKeyword.keyword_name 对齐。
         # 历史实现读的是中文 defect_name / defect_name_zh，
         # 与 hints 表的英文 key 永远对不上 → 经验引擎恒返回空。
-        first = defects[0]
-        if not isinstance(first, dict):
-            return []
-        defect_name = first.get('keyword_name')
+        selection = select_defect(context, strategy=_FIRST_ONLY)
+        _log_selection(selection)
+
+        defect_name = selection.keyword_name
         if not defect_name:
             return []
 
@@ -126,11 +159,10 @@ class EmpiricalReasoning(AlgorithmBase):
         defects = (context.get('feedback') or {}).get('defect') or []
         if not defects:
             return False
-        first = defects[0]
-        if not isinstance(first, dict):
-            return False
         # 缺陷码取 keyword_name（英文码，与 hints 表 key 对齐）
-        defect_name = first.get('keyword_name')
+        # ⚠️ 不留痕：`is_available` 会被 chain 调度频繁调用，每次都打日志是噪音。
+        #    留痕只发生在 `recommend()`（真正做决策的地方）。
+        defect_name = select_defect(context, strategy=_FIRST_ONLY).keyword_name
         if not defect_name:
             return False
         return defect_name in self.hints

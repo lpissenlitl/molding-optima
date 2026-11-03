@@ -805,27 +805,12 @@
     {
       "rule_code": "MOLD_TEMP_DEFAULTS",
       "rule_name": "模温默认值",
-      "description": "材料推荐模温默认值",
+      "description": "模温兜底默认值（2026-10-29：各材料绝对值改由材料推荐值 recommend_mold_temperature 承担；本规则只保留全局兜底，并作为「规则可覆盖模温」的口子）",
       "priority": 100,
       "is_active": true,
       "conditions": [],
       "coefficients": {
         "mold_temp": {
-          "PP": 40,
-          "PC": 80,
-          "ABS": 50,
-          "PC+ABS": 70,
-          "PC/ABS": 70,
-          "PS": 40,
-          "PE": 40,
-          "LDPE": 40,
-          "HDPE": 40,
-          "LLDPE": 40,
-          "PVC": 40,
-          "PA6": 60,
-          "PA66": 70,
-          "PA": 60,
-          "PET": 90,
           "default": 50
         }
       }

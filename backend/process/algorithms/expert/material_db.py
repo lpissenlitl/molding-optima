@@ -21,6 +21,12 @@
 - 全名未匹配 → 拆 '+' 取第一个主材料兑底（PP+PA66 → 取 PP）
 - 主料也查不到 → 返回空（让上游 audit 拦）
 
+族归并（2026-10-29）：
+- 全名与主料都没命中 → 按**材料大类**归并（HDPE / LDPE / LLDPE → PE）
+- 大类口径复用算法层的 `helpers.parse_material_family`
+  ⇒ 与算法层「同一份族解析」不再分裂（此前算法层认得 PE 族、兑底层认不得）
+- 仍查不到 → 返回空（让上游 audit 拦）
+
 字段名约定：
 - 用 POLYMER_INFO_FIELDS 的"外层字段名"（即 algorithm 入参 dict 的 key）
 - 例：recommend_melt_temperature（不是 recommended_melt_temp）
@@ -28,6 +34,8 @@
 """
 
 from typing import Any, Dict
+
+from .helpers import parse_material_family
 
 
 # 材料族默认物理参数（业务可补充新材料）
@@ -87,7 +95,8 @@ class MaterialDatabase:
         混合材料处理（PP+PA66 / PA66+GF30 等）：
             1. 优先全名匹配（如 PA66+GF30、PA66+PA6 等已预填）
             2. 全名未匹配 → 拆分 '+' 取第一个主材料兜底（如 PP+PA66 → PP）
-            3. 主材料查不到 → 返回空 dict（让上游报缺失）
+            3. 主材料查不到 → 按**材料大类**归并（HDPE / LDPE / LLDPE → PE）
+            4. 大类也查不到 → 返回空 dict（让上游报缺失）
         """
         if not abbreviation:
             return {}
@@ -103,7 +112,14 @@ class MaterialDatabase:
             if main and main in cls.DEFAULTS:
                 return cls.DEFAULTS[main]
 
-        # 3. 全查不到 → 返回空（让上游报缺失）
+        # 3. 材料大类归并（与算法层 parse_material_family 同一口径）
+        #    HDPE / LDPE / LLDPE → PE：这三类常用牌号此前在此层查不到
+        #    ⇒ 生产上必然 400（算法层认得 PE 族、兑底层认不得，口径分裂）
+        family = parse_material_family(abbr_upper)
+        if family and family in cls.DEFAULTS:
+            return cls.DEFAULTS[family]
+
+        # 4. 全查不到 → 返回空（让上游报缺失）
         return {}
 
     @classmethod

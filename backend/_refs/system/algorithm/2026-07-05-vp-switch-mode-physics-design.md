@@ -244,8 +244,8 @@ logger.debug(
 
 ### 6.3 文档
 
-- `backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md` - 同步 #9 状态、3.9 章节
-- `backend/_dev_refs/2026-07-05-vp-switch-mode-physics-design.md` - 本文档（v3.0）
+- `backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md` - 同步 #9 状态、3.9 章节
+- `backend/_refs/system/algorithm/2026-07-05-vp-switch-mode-physics-design.md` - 本文档（v3.0）
 
 ### 6.4 关联算法
 

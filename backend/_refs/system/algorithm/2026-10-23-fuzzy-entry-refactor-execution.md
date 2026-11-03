@@ -114,7 +114,7 @@ fuzzy_algorithm.py（686 行）
 ### 2.6 E2 的实际收益边界（如实记录，不夸大）
 
 **做到的**：
-- `FuzzyEngine` 的**全部数据访问收敛到一个可替换的端口**（`RuleRepository`）⇒ 可注入 `FakeRepository` **完全离线调用**，不连数据库（见 `_dev_refs/_verify_e2_offline.py`）
+- `FuzzyEngine` 的**全部数据访问收敛到一个可替换的端口**（`RuleRepository`）⇒ 可注入 `FakeRepository` **完全离线调用**，不连数据库（见 `tests/_verify_e2_offline.py`）
 - 规则库查询失败（DB 挂）不再向上冒泡，**整条 optimize 链不会因模糊算法而 500**
 - 一条脏规则不再拖垮整个数值层
 
@@ -480,7 +480,7 @@ def to_rule_array(cls, rules: List[FuzzyRuleSpec]) -> List[Dict[str, Any]]:
 | 编排层 | `fuzzy_algorithm.py` | 7 处类型标注 + 6 处 `r.rule_str` → `r.rule_description` |
 | 自检 | `sanity_check.py` | 遗留 mock（**零调用**）标注为「字段已不一致」，namedtuple 改名 `MockRule` |
 | 测试 | `tests/test_fuzzy_field_report.py` | `_FakeRule.rule_str` → `rule_description` |
-| 验证 | `_dev_refs/_verify_e2_offline.py` | import / 构造 / `FakeRepo.to_rule_array` |
+| 验证 | `tests/_verify_e2_offline.py` | import / 构造 / `FakeRepo.to_rule_array` |
 | 诊断 | 5 个 `diag_fuzzy_*.py` | 字段名同步（`level_word_crash` / `fix_simulation` / `pipeline` / `rule_journey` / `field_registry_regression`） |
 
 ⚠️ **未动**：`RuleAdjustment.rule_str`（`aggregation.py`）是**另一个类型**的字段（属推理层产出，
@@ -1124,7 +1124,7 @@ fuzzy/library/
 | 脚本 | 作用 |
 |---|---|
 | `_dev_refs/_verify_kw_parity.py` | 关键字路径**新旧对拍**（真实 DB）：旧实现（内联复刻）逐元素、逐键、含**键序**、含**类型**与新实现对拍 + 契约校验 + ORM 泄漏检查 + 空入参/不存在名字边界 |
-| `_dev_refs/_verify_zero_dep.py` | 零依赖不变量（E10 口径） |
+| `tests/_verify_zero_dep.py` | 零依赖不变量（E10 口径） |
 | `_dev_refs/_audit_unused_imports.py` | AST 未使用 import 审计（支持 `noqa` 口径：**只有 `F401` / 裸 `noqa` 才豁免，`E402` 不豁免**） |
 
 **验收**：见 §5 E12 行。
@@ -1326,7 +1326,7 @@ E13 切的是**「查询 / 管理」**轴，与「来源」轴**正交** ⇒ 不
 | `ports.py` | `RuleRepository` 默认实现说明改为「数据库来源的门面 …… `library.policy.RulePolicy` 的**来源无关**判断」 |
 | `input_specs.py` | L311 注释指向 `library.policy.RulePolicy.match_defect_level` |
 | `_dev_refs/_chk_library_layout.py` | 新增 `policy.py` 期望项 + `_imports_orm()` + 第三个 role `source_neutral`（137 → **约 175** 行） |
-| `_dev_refs/_verify_zero_dep.py` | `_BANNED` 增 `process.algorithms.fuzzy.library.policy`（来源无关层也**不许**被编排层直接依赖） |
+| `tests/_verify_zero_dep.py` | `_BANNED` 增 `process.algorithms.fuzzy.library.policy`（来源无关层也**不许**被编排层直接依赖） |
 | `diag_fuzzy_design.py` / `diag_fuzzy_rule_journey.py` | 2 处输出串改指 `RulePolicy` |
 
 **引用面调研（决定 blast radius）**
@@ -1406,7 +1406,7 @@ E10 的判据是**位置规则**（「端口文件必须放在调用方目录」
 | `fuzzy_algorithm.py` | 4 处加工调用改调内核（`split_by_conclusion_kind` / `to_rule_array` / `to_priority_array`）+ import 改指 `library.ports` |
 | `fuzzy/__init__.py` | 分层图（**端口层从包根消失**，编号 0/1/2/3） |
 | `library/__init__.py` | 结构表同步 |
-| `_dev_refs/_verify_zero_dep.py` | L41 改 `from process.algorithms.fuzzy.library import ports` |
+| `tests/_verify_zero_dep.py` | L41 改 `from process.algorithms.fuzzy.library import ports` |
 | 5 个 dev 脚本 + 1 个测试 | `RuleRoutingService.xxx` 加工调用改调内核 |
 
 **判据：端口只管「取资源」，不管「加工」**
@@ -1448,7 +1448,7 @@ E10 的判据是**位置规则**（「端口文件必须放在调用方目录」
 | `fuzzy_algorithm.py` | 延迟导入改指 `library.repository.ResourceRepository` |
 | `library/__init__.py` | **重写**（现 37 行）：五文件结构表 + 三条依赖方向 |
 | `_dev_refs/_chk_library_layout.py` | **重写**：新增 `contract` / `resource_set` 两个 role + `_imports_sibling_impl()`（契约层不得 import 同层实现）+ `policy.py` 消亡断言 |
-| `_dev_refs/_verify_zero_dep.py` | `_BANNED`：`library.policy` → **`library.repository`**；`_LEAKED_TOPLEVEL` 加 `repository` |
+| `tests/_verify_zero_dep.py` | `_BANNED`：`library.policy` → **`library.repository`**；`_LEAKED_TOPLEVEL` 加 `repository` |
 | `_dev_refs/_chk_enc.py` | 主线从「查旧名次数」改为「**扫已废弃类名残留**」（`RuleRoutingService` / `RulePolicy` / `library.policy`） |
 | `_dev_refs/_rename_to_routing.py` | **硬禁用**（`sys.exit(0)`）—— 重跑会把全仓改成谁都不认识的名字 |
 | 13 个 dev 脚本 / 测试 | `RuleRoutingService` → `ResourceRepository`；import 路径 `library.rules` → `library.repository` |
@@ -1506,7 +1506,7 @@ E10 的判据是**位置规则**（「端口文件必须放在调用方目录」
 | **import 路径** | `fuzzy_algorithm.py` / `library/repository.py` / `library/rules.py` / `tests/verify_fuzzy_nested_context.py` + **8 个 dev 脚本** | `library.ports` → `library.contracts`（共 13 处） |
 | **docstring 词汇** | `library/contracts.py`（8 处「端口」→「契约」）/ `library/repository.py`（4 处）/ `library/files/__init__.py` / `library/__init__.py`（3 处）/ `fuzzy_algorithm.py`（2 处）/ `fuzzy/__init__.py` / `process/schemas/optimization.py`（1 处） | 术语统一 |
 | **护栏** | `_dev_refs/_chk_library_layout.py` | `EXPECT` 的键名 `'ports.py'` → `'contracts.py'` + docstring 3 处 |
-| | `_dev_refs/_verify_zero_dep.py` | `_LEAKED_TOPLEVEL` 的 `'ports'` → `'contracts'`（2 处）+ import 形式 + docstring 措辞 |
+| | `tests/_verify_zero_dep.py` | `_LEAKED_TOPLEVEL` 的 `'ports'` → `'contracts'`（2 处）+ import 形式 + docstring 措辞 |
 | | `_dev_refs/_chk_enc.py` | 旧名扫描清单**新增 `library.ports`** ⇒ 改名后的旧路径成为受监控对象 |
 
 **⚠️ 施工中踩到的两个坑（如实记录）**
@@ -2123,7 +2123,7 @@ pytest 只在返回值非 None 时发警告，**返回 False 仍算 passed** ⇒
 
 | **E23** | 2026-10-26 | **改前/改后同脚本对跑，整棵 JSON 逐条 diff = 0**（`diag_fuzzy_bucket_before_after.py --json`，改前用备份还原的完整 backend 副本） | 不适用（sanity 已于 E19 并入 pytest） | ✅ **41 passed**（30 + 11） | **通过** —— 行为零变化（**纯文件改名 + 引用同步**）；**推荐结果层改名**（详见 §2.30）：`fuzzy/aggregation.py` → **`fuzzy/recommendations.py`**（用户指出「这层是推理完成后格式化输出结果」；候选 `output.py` / `formatter.py` / `presenter.py` 均未覆盖「归并」半边，`advice.py` 与模块内 `advice` 子概念撞名）；+ 测试文件 `tests/test_fuzzy_aggregation.py` → `tests/test_fuzzy_recommendations.py`；2 个重命名 + `aggregation` **9 处**引用同步（5 个文件，**BOM / 行尾 / 编码零变化**）+ 3 处手工润色；**公开符号零变化**（`aggregate()` / `to_recommendations()` / `RuleAdjustment` / `AggregatedAdjustment` 一个不动）；**⭐ 双重等价证明**：① 基线对照实验（改前副本 + 同脚本对跑）逐条 diff = **0**（两份均 221409 字节，且与 `_golden_E22.json` 的 details 逐条相等）；② **逐行 diff**（改后 vs 改前备份）⇒ `recommendations.py` **仅 docstring 首句 1 行不同**（224 → 224 行），全部 6 个受影响文件共 22 行差异且逐条可解释为改名/措辞 ⇒ **零逻辑改动**；pytest 41 passed + 真实 DB 端到端 exit=0（numeric 10 / advisory 0，契约层校验通过）+ 字段名对拍主口径 84 字段逐键差异 0 + 关键字对拍 PASS + 离线验证 8 PASS/0 FAIL + 零依赖保持（顶层名泄漏 NONE，含新增 `recommendations` 检查项）+ library/ 布局自检 PASS + compileall exit=0 + 残留扫描（代码级 0 处） |
 
-| **E24** | 2026-10-26 | **同脚本对拍，整棵 JSON 逐条 diff = 0**（`_dev_refs/_snapshot_core.py`；改前用备份还原的完整 backend 副本；覆盖面：gauss 面 2016 项 / params 96 项 / tri 面 63 项 / defuzz 面 12 项 / 推理 15 场景 / 激活度 45 组） | 不适用（sanity 已于 E19 并入 pytest） | ✅ **43 passed**（32 + 11） | **通过** —— 行为零变化（**唯一有意行为差异 = 「tri 可用 → 明确拒绝」2 项**）；**内核论域实例与隶属度类型层清理**（详见 §2.31）：① `functional.py` 删 L246-356 迁移粘贴重复段（356 → 245 行；`triangular_mf` / `trapezoidal_mf` 的 scalar / list 调用从 `TypeError` 修复为正常值，ndarray 路径完全不变）② `features.py` 删 4 个只写不读属性 + 死方法 `get_all_value()` + 从未被读取的 `f_name` / `f_type` 两个**参数**（91 → 90 行；`nets.py` 3 处构造同步）③ 删 `tri` 死分支 + `macros.MEMBERSHIP_TYPES` 收紧为元组 `('gauss',)` 并由 `features.py` 消费（声明与实现同源；`features.py` 90 → 82 行）④ 桶中心抽 `macros.bucket_centers()` 纯函数 + 补 3/5/7/9 档直接断言（`macros.py` 236 → 275 行；`features.py` 82 → 78 行；pytest 30 → **32**）；真实 DB 端到端 exit=0（numeric 10 / advisory 0）+ 字段名对拍主口径 84 字段逐键差异 0 + 离线验证 8 PASS/0 FAIL + 零依赖保持（顶层名泄漏 NONE）+ library/ 布局自检 PASS + compileall exit=0 |
+| **E24** | 2026-10-26 | **同脚本对拍，整棵 JSON 逐条 diff = 0**（`tests/fuzzy_kernel/_snapshot_core.py`；改前用备份还原的完整 backend 副本；覆盖面：gauss 面 2016 项 / params 96 项 / tri 面 63 项 / defuzz 面 12 项 / 推理 15 场景 / 激活度 45 组） | 不适用（sanity 已于 E19 并入 pytest） | ✅ **43 passed**（32 + 11） | **通过** —— 行为零变化（**唯一有意行为差异 = 「tri 可用 → 明确拒绝」2 项**）；**内核论域实例与隶属度类型层清理**（详见 §2.31）：① `functional.py` 删 L246-356 迁移粘贴重复段（356 → 245 行；`triangular_mf` / `trapezoidal_mf` 的 scalar / list 调用从 `TypeError` 修复为正常值，ndarray 路径完全不变）② `features.py` 删 4 个只写不读属性 + 死方法 `get_all_value()` + 从未被读取的 `f_name` / `f_type` 两个**参数**（91 → 90 行；`nets.py` 3 处构造同步）③ 删 `tri` 死分支 + `macros.MEMBERSHIP_TYPES` 收紧为元组 `('gauss',)` 并由 `features.py` 消费（声明与实现同源；`features.py` 90 → 82 行）④ 桶中心抽 `macros.bucket_centers()` 纯函数 + 补 3/5/7/9 档直接断言（`macros.py` 236 → 275 行；`features.py` 82 → 78 行；pytest 30 → **32**）；真实 DB 端到端 exit=0（numeric 10 / advisory 0）+ 字段名对拍主口径 84 字段逐键差异 0 + 离线验证 8 PASS/0 FAIL + 零依赖保持（顶层名泄漏 NONE）+ library/ 布局自检 PASS + compileall exit=0 |
 
 | **E25** | 2026-10-26 | **五档对拍，逐点零差异**（`_dev_refs/_e25_diffcheck.py`，内嵌改前 `functional.py` 原文为基线；① 严格档 21 组 ② 参数化重述档 17 组 ③ 有意行为变化档 5 项 ④ 手算参照系 12 个解析性质 + 9 形状值域 + 统一签名契约 ⑤ FuzzyFeature 端到端 4 种论域 × 2 档 × 51 点逐点对拍） | 不适用（sanity 已于 E19 并入 pytest） | ✅ **43 passed**（32 + 11） | **通过** —— 行为零变化（**唯一有意行为差异 = 5 项「老实现有缺陷 → 新实现正确」**）；**隶属度函数层重组**（详见 §2.32）：① `functional.py` → **`memberships.py`** + **`defuzz.py`**（解模糊移出）② **统一签名 `mf(x, center, width, shape=None)`** + **9 形状族**（高斯/双高斯/三角/梯形/广义钟形/代数钟形/S 型/Z 型/单点）+ **正名**（`bell_mf` → `algebraic_bell_mf`，exp 型另起 `bell_mf`）③ `MEMBERSHIP_TYPES` 改由 `MEMBERSHIP_SPECS` **派生**（声明与实现同源）+ `DEFAULT_MEMBERSHIP_TYPE` 替掉 `nets.py` 3 处硬编码 ④ `features.py` 改分派 + `membership_shape` 取自分派表（形状参数单一真源）+ 退化/倒挂论域 warning；**⭐ 数值零变化证明**：高斯 **p=2 逐位相等**（atol=0）+ `FuzzyFeature` 端到端 4 种论域（正序/负区间/**倒挂**/**退化**）逐点差异 0；**修掉 3 个真 bug**：老 `bell_mf` 缺 `|·|` 算出 **>1** 的隶属度 / 老 `singleton_mf` 对 list 输入结果全 0 / `assert` 当校验（`python -O` 下失效）⇒ 改 `ValueError`；pytest 43 passed（32 + 11）+ 对拍零差异 + 零依赖保持 + library/ 布局自检 PASS + compileall exit=0 |
 
@@ -2178,11 +2178,11 @@ pytest 只在返回值非 None 时发警告，**返回 False 仍算 passed** ⇒
 |---|---|---|
 | 2026-10-23 | E1-b | 新建本文档；产出 §3 命名对照表（术语总表 22 项 + 冲突台账 N1~N14 + 待定项 P1~P4）；完成引用点全景调研（§2.3） |
 | 2026-10-23 | E1 | 代码侧零风险修正：`rule_query_service.py` 8 处 docstring（「三级」→「四级」N6、规则库层级→组织维度 N5、过期术语「工厂级/兜底层」→`NumTskRuleNet`/`FuzzyRuleNet`）；`fuzzy_algorithm.py` 删死 import（`RuleMethodAdapter` N9 / `ParticularRules` N14）+ 删死属性 `self._rule_net`（N10）。验收：sanity 全绿 + pytest 17/5 + 黄金快照 49 样本 diffs=0。新增存档 `_dev_refs/_golden_E1.json` |
-| 2026-10-23 | E2 | **故障边界 + 去 DB 依赖**（详见 §2.5 / §2.6）。新增 `ports.py`（`RuleRepository` 协议 + 数据类搬迁，零 ORM 依赖）；`rule_query_service.py` 改为从 ports 导入并新增 `get_keywords_by_names`；`fuzzy_algorithm.py` 支持 `FuzzyEngine(repository=...)` 注入（默认实现延迟导入）、`recommend()` 拆为兜底壳 + `_recommend()` 主流程、规则查询异常单独捕获（error 级）、新增 `_precheck_numeric_rules()` 条目级预检与 `self._diagnostics`。修正 N8 判断错误（`extra` 是弹窗文本通道）；新增 N15（`'level'` 一词两义）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增 `_dev_refs/_verify_e2_offline.py`（可复用的离线回归工具）与 `_dev_refs/_golden_E2.json` |
+| 2026-10-23 | E2 | **故障边界 + 去 DB 依赖**（详见 §2.5 / §2.6）。新增 `ports.py`（`RuleRepository` 协议 + 数据类搬迁，零 ORM 依赖）；`rule_query_service.py` 改为从 ports 导入并新增 `get_keywords_by_names`；`fuzzy_algorithm.py` 支持 `FuzzyEngine(repository=...)` 注入（默认实现延迟导入）、`recommend()` 拆为兜底壳 + `_recommend()` 主流程、规则查询异常单独捕获（error 级）、新增 `_precheck_numeric_rules()` 条目级预检与 `self._diagnostics`。修正 N8 判断错误（`extra` 是弹窗文本通道）；新增 N15（`'level'` 一词两义）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增 `tests/_verify_e2_offline.py`（可复用的离线回归工具）与 `_dev_refs/_golden_E2.json` |
 | 2026-10-23 | E3 | **中间态类型化 + 拆聚合**（详见 §2.7）。新增 `aggregation.py`（224 行）：`RuleAdjustment` / `AggregatedAdjustment` 两个 dataclass + `aggregate()` + `to_recommendations()`。`fuzzy_algorithm.py` 776 → 697 行：中间态裸 dict → dataclass（`'param'`→`param_name`、`'source'`→`layer` / `meta_source`），删除 `_merge_layer_results`（95 行，混聚合+契约两事），`_recommend()` 第 5 步改为调 `aggregate()` + `to_recommendations()`。落地 N1/N2/N4/N7；**N3 排除**（`'lvl'` 是内核输入契约 key，见 §6 L9）。修正 advisory 路径硬编码的 `'rule': 'advisory'` → `rule_str=None`。`sanity_check.py` CASE 3 从**复刻品**改为**直接测真函数**（复刻品已漂移：漏了「文本建议分离」规则），并补上文本建议用例与 `to_recommendations()` 公式/对外字符串断言；`backend/tests/test_fuzzy_field_report.py` 随 `'source'`→`'meta_source'` 同步。实测纠正 §2.6：导入已可离线（原写「仍需 Django setup」是 E2 时的推测，未实测）。验收：黄金快照 49 样本 diffs=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增存档 `_dev_refs/_golden_E3.json` |
 | 2026-10-23 | E4-a | **命名契约归位**（详见 §2.8）。新建 `process/algorithms/fuzzy/naming.py`（230 行）：3 张表（`FIELD_NAME_ALIAS` 23 条 / `FIELD_INDEX_OFFSET` 10 条 / `FAMILY_FIELD_ALIAS` 1 条）+ `to_business_name()` + import 时表间一致性自检（`_validate_tables()`）。`fuzzy_algorithm.py` 697 → 582 行：`FIELD_NAME_ALIAS` 拆为「前缀表 10 条 + 完整表 13 条」再合并（**对外结构与顺序不变**），`to_business_name()` 第 3 段由「遍历总表 + 排除法」改为「只查完整表」，消除「新增前缀映射忘同步偏移表 ⇒ 段号错位」的隐患。`FuzzyEngine` 保留兼容别名 + 兼容入口 ⇒ `parameter_optimize.py` L245/L534 **零改动**；`fuzzy/__init__.py` 导出 `naming`。实测纠正 §3.2：表的条数是 **23 条**（原写 33 条）。验收：黄金快照 49 样本 diffs=0（vs `_golden_E3.json`，全 JSON 逐条相等）+ sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS + 命名契约等价性对拍 ALL PASS（三张表逐条含顺序一致、`to_business_name` 262 输入对拍全一致）。新增存档 `_dev_refs/_golden_E4.json` |
 | 2026-10-23 | E4-b | **段号口径修正**（详见 §2.9）。`brl_temp` 由 `FULL_FIELD_ALIAS` 移入 `PREFIX_FIELD_ALIAS`（偏移 0，1-based 同构）⇒ `brl_temp_1..9` ↔ `BT1..BT9` 段号对齐（**修复 BT1 段号空缺**）；`FAMILY_FIELD_ALIAS` **整表删除**，`to_business_name()` 删族分支、`BT`（无号）退役返回 None；编排层 `_normalize_field_name_by_spec` 删 `family_spec` 参数与两处族分支（三类映射 → 两类）；`FuzzyEngine.FAMILY_FIELD_ALIAS` 兼容别名一并删除（5 个 dev 诊断脚本同步改）；`empirical/hints.py` 7 处历史写法 `"BT"`→`"BT1"`（语义等价，写回目标仍是 `brl_temp_1`）。新增 N16（段号错位）、P5（「统一 +/−」怎么表达，待拍板）、L10（169 条族级规则失去输入）。实测证据：内核实测 `BT` 值 250（0~50 区间）⇒ `BT_low`/`BT_high` **均不命中**（169 条规则恒不激活）；`BT1` 值 250（150~350）⇒ **正常命中强度 1.0**。验收：黄金快照 `summary`/`only_before`/`only_after`/`changed_delta` 新旧全同（推荐输出零变化）+ sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS。新增存档 `_dev_refs/_golden_E4b.json` |
-| 2026-10-23 | E5 | **命名契约双向闭合**（详见 §2.10）。`naming.py` 新增 `to_algo_name()`（单名）+ `to_algo_params()`（批量，无对应算法字段的键原样保留）+ `_validate_round_trip()`（import 时自检：正向译出的算法名必须能反向译回）。编排层 `parameter_optimize._normalize_field_name_by_spec()` **删除**（重复实现）⇒ `_compose_algorithm_context` 改调 `naming.to_algo_params`；`_to_business_param_name` 改调 `naming.to_business_name`。`FuzzyEngine` 补 `to_algo_name()` / `to_algo_params()` 兼容入口（外部零改动）。5 个 dev 诊断脚本同步改调契约层。新增 `_dev_refs/_verify_naming_forward_parity.py`（旧实现冻结为独立参照系，逐条对拍）与 `_dev_refs/_compare_golden.py`（黄金快照整棵 JSON 逐条 diff）。验收：黄金快照 49 样本逐条 diff=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS + 往返闭合 0 不闭合 |
+| 2026-10-23 | E5 | **命名契约双向闭合**（详见 §2.10）。`naming.py` 新增 `to_algo_name()`（单名）+ `to_algo_params()`（批量，无对应算法字段的键原样保留）+ `_validate_round_trip()`（import 时自检：正向译出的算法名必须能反向译回）。编排层 `parameter_optimize._normalize_field_name_by_spec()` **删除**（重复实现）⇒ `_compose_algorithm_context` 改调 `naming.to_algo_params`；`_to_business_param_name` 改调 `naming.to_business_name`。`FuzzyEngine` 补 `to_algo_name()` / `to_algo_params()` 兼容入口（外部零改动）。5 个 dev 诊断脚本同步改调契约层。新增 `_dev_refs/_verify_naming_forward_parity.py`（旧实现冻结为独立参照系，逐条对拍）与 `tests/fuzzy_kernel/_compare_golden.py`（黄金快照整棵 JSON 逐条 diff）。验收：黄金快照 49 样本逐条 diff=0 + sanity 全绿 + pytest 17/5 + 离线验证 7 项 PASS + 往返闭合 0 不闭合 |
 | 2026-10-23 | E6 | **同名消歧**（详见 §2.11）。算法层 `base.Recommendation` **改名** `AlgorithmRecommendation` —— 消解与 ORM `models.Recommendation` 的同名冲突（编排层此前只能靠 `as AlgoRecommendation` 别名区分，而编排层正是高频改动区）。6 个实现方 import 同步（`fuzzy_algorithm` / `aggregation` / `empirical_algorithm` / `llm_algorithm` / `parameter_optimize` / `tests/verify_provided_smoke`），`parameter_optimize` 的 `AlgoRecommendation` 别名取消；代码内文字引用更正（`condition.py` ×2 / `sanity_check.py` ×1 / 3 个 dev 脚本 ×4）。**`to_dict()` 的 7 个对外 key 不动**。⚠️ 破坏性变更：`process.algorithms.Recommendation` 不再导出（旧名 → `AlgorithmRecommendation`）。验收：diff 逐行审计（零逻辑变更）+ sanity 全绿 + pytest 22 passed + 离线验证 7 项 PASS + provided_smoke 6/6 + 导出面验证 |
 | 2026-10-23 | E7 | **算法输入契约**（详见 §2.12）。新增 `fuzzy/rule_spec.py`：`FuzzyKeywordSpec` / `FuzzyRuleSpec` 两个 dataclass（算法输入契约）+ `to_keyword_array` / `to_rule_array` / `to_priority_array`（标准格式 → 内核输入数组）+ `validate_keyword_specs` / `validate_rule_specs`（数据来源产出的关口）。命名消歧：用户建议的 `FuzzyRule` 与内核 `fuzzy_core.models.nets.FuzzyRule`（规则串解析器）**同名不同物** ⇒ 统一加 `Spec` 后缀（`*Spec` = 数据契约，内核同名类 = 行为体）。**零外部依赖**（不 import Django / ORM，可 `python rule_spec.py` 独立自检）。本轮**不动现有链路** ⇒ 行为零变化。验收：sanity 全绿 + pytest 22 passed + 离线验证 7 项 PASS + provided_smoke 6/6 + 零依赖导入检查 |
 | 2026-10-23 | E7-b1 | **接线·第一步（加能力）**。① `FuzzyRuleSpec` 扩为 5 字段：新增 `conclusion_kind`（numeric/advisory）+ `specificity`（1~4）⇒ **完整覆盖** 旧 `ResolvedRule` 的全部有值字段（`rule_str`→`rule_description`、`method`→`source_ref`）；校验同步扩充（新增 `VALID_CONCLUSION_KINDS` / `VALID_SPECIFICITY`）。② `adapters.RuleKeywordAdapter` 新增 `to_keyword_specs()` —— 数据来源的**解析出口**（ORM 实例 / dict → `FuzzyKeywordSpec`），字段名与 `to_fuzzy_dict` 输出天然对齐，无需额外映射表。**未切换任何现有调用点** ⇒ 行为零变化。验收：契约层自检（非法规则规格一次拦全 3 项）+ `adapters` 自检 + sanity 全绿 + pytest 22 passed + 离线验证 8 PASS/0 FAIL + provided_smoke PASSED + 零依赖导入检查 |

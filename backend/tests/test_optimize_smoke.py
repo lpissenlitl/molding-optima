@@ -312,28 +312,31 @@ OK_MOLD = {"product_category": "空调"}
 OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, OK_MOLD)
 print("[5/5] OptimizeDataValidator accepts complete hydraulic input OK")
 
-# 5a. 缺注射压力上界 → 必拒（算法会退回「当前值×2」自造论域）
+# 5a. 缺机台上限 → **必拒**（2026-10-27 二次口径）：设备实际值是**判级论域上界的
+#     必需来源**（用户口径：「从设备读取参数主要是为了用实际值补全参数的论域」
+#     +「必须用设备值，设备值没有就报错」）⇒ 缺了论域上界无法确定 ⇒ 模糊等级判错
+#     ⇒ 直接拒，而不是「不拦请求、只不裁剪」。
+_missing_pressure = {k: v for k, v in FULL_MACHINE.items()
+                     if k != "max_set_injection_pressure"}
 try:
-    OptimizeDataValidator.validate(
-        {k: v for k, v in FULL_MACHINE.items() if k != "max_set_injection_pressure"},
-        OK_POLYMER, OK_MOLD,
-    )
-    assert False, "should reject missing max_set_injection_pressure"
+    OptimizeDataValidator.validate(_missing_pressure, OK_POLYMER, OK_MOLD)
+    raise AssertionError("缺 max_set_injection_pressure 应当被拒（必填）")
 except ValueError as exc:
     assert "max_set_injection_pressure" in str(exc), str(exc)
-    print("[5/5] OptimizeDataValidator rejects missing injection limit OK")
+print("[5/5] OptimizeDataValidator rejects missing injection limit (required) OK")
 
-# 5b. 液压机缺计量压力 → 拒
+# 5b. 液压机缺计量压力 → **必拒**（标「液压机必填」⇒ 液压机必须有计量压力）
+_missing_metering = {k: v for k, v in FULL_MACHINE.items()
+                     if k != "max_set_metering_pressure"}
 try:
-    OptimizeDataValidator.validate(
-        {k: v for k, v in FULL_MACHINE.items() if k != "max_set_metering_pressure"},
-        OK_POLYMER, OK_MOLD,
-    )
-    assert False, "should reject hydraulic missing metering pressure"
-except ValueError:
-    print("[5/5] OptimizeDataValidator rejects hydraulic missing metering limit OK")
+    OptimizeDataValidator.validate(_missing_metering, OK_POLYMER, OK_MOLD)
+    raise AssertionError("液压机缺 max_set_metering_pressure 应当被拒")
+except ValueError as exc:
+    assert "max_set_metering_pressure" in str(exc), str(exc)
+print("[5/5] OptimizeDataValidator rejects missing metering limit on hydraulic OK")
 
-# 5c. 同一份缺失在全电机下应放过（HMI 无该输入栏，属物理正常，不是数据缺失）
+# 5c. 全电机缺计量压力 → **不拒**（标「液压机必填」⇒ 全电机 HMI 物理上无此栏，
+#     缺失属正常，不能当数据缺失拦人）
 ELECTRIC = {
     **{k: v for k, v in FULL_MACHINE.items() if k != "max_set_metering_pressure"},
     "drive_system": "electric",

@@ -228,12 +228,17 @@ const {
 } = useConditionDerived(condition)
 
 const rules: FormRules = {
-  // *_id 是嵌套结构 *_info 内的字段，校验走 prop="*_info.id"
-  // 后端 DTO (ProcessConditionSchema) 接收顶层 *_id，buildPayload 从嵌套推导
+  // 键名必须与 el-form-item 的 prop 完全一致（Element Plus 用 getProp(rules, prop) 取规则）
+  // ⚠️ 三类外键的 prop 一律用嵌套路径 "*_info.id"，不要写成顶层 "*_id"：
+  //    顶层 mold_id / injection_machine_id / polymer_id 是【提交态平铺字段】
+  //    （buildPayload 从 *_info.id 推导），前端编辑期恒为空 ⇒ 用它做校验目标会永远失败。
+  //    同理 rules 的键也必须是扁平字符串 "mold_info.id"：
+  //    getProp 在 rules 上按直接键取、在 model 上按嵌套路径取，两者互补。
   'mold_info.id': [{ required: true, message: '请选择模具', trigger: 'change' }],
   shot_index: [{ required: true, message: '请选择工艺射次', trigger: 'change' }],
   'machine_info.id': [{ required: true, message: '请选择注塑机', trigger: 'change' }],
   injection_index: [{ required: true, message: '请选择射台', trigger: 'change' }],
+  'polymer_abbreviation': [{ required: true, message: '请选择塑料简称', trigger: 'change' }],
   'polymer_info.id': [{ required: true, message: '请选择塑料牌号', trigger: 'change' }],
 }
 

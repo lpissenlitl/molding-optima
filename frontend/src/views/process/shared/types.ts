@@ -3,7 +3,7 @@
  *
  * 设计原则：
  * - 所有 interface 使用 export，方便子组件 + composable 引用
- * - 字段语义与后端 schema 对齐（参考 _dev_refs 中的设计文档）
+ * - 字段语义与后端 schema 对齐（参考 backend/_refs 中的设计文档）
  * - 用 [key: string]: any 兼容后端可能扩展的字段
  */
 import type { InjectionKey } from 'vue'
@@ -159,13 +159,33 @@ export interface Condition {
   condition_no?: string | null
   status?: string | null
   origin_type?: string | null
+  /**
+   * 模具 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 mold_info.id 推导。
+   * 前端编辑期不写这个字段（恒为空），表单校验请用 prop="mold_info.id"。
+   */
   mold_id?: number | null
   shot_index?: number | null
   /** 制品索引(0 索引,多 cavity 时用于切换显示哪个制品) */
   product_index?: number | null
+  /**
+   * 注塑机 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 machine_info.id 推导。
+   * 前端编辑期不写这个字段（恒为空），表单校验请用 prop="machine_info.id"。
+   */
   injection_machine_id?: number | null
   injection_index?: number | null
+  /**
+   * 材料 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 polymer_info.id 推导。
+   * 前端编辑期不写这个字段（恒为空），表单校验请用 prop="polymer_info.id"。
+   */
   polymer_id?: number | null
+  /**
+   * 塑料简称 —— 【仅前端校验用】PolymerSection 输入框当前值的镜像。
+   * 用途：el-form-item 的校验目标必须落在 el-form 的 model 上，
+   * 而"简称输入框是否有值"只存在于 PolymerSection 的局部 ref ⇒ 镜像到此处才能被校验。
+   * 由 PolymerSection 的 watch(polymerAbbreviation) 单向写入；
+   * buildPayload 不挑此字段，不提交后端。
+   */
+  polymer_abbreviation?: string | null
   process_context?: Record<string, any>
   mold_info?: MoldInfo | null
   machine_info?: MachineInfo | null

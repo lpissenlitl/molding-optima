@@ -28,16 +28,16 @@ export const settingProcessForm = {
       { label: "速度", unit: "mm/s", sections: initArray<number | null>(6, null) },
       { label: "位置", unit: "mm", sections: initArray<number | null>(6, null) }
     ],
-    injection_time: null,
-    delay_time: null,
-    cooling_time: null
+    injection_time: null as number | null,
+    delay_time: null as number | null,
+    cooling_time: null as number | null
   },
   vp_switch: {
     mode: 0,
-    position: null,
-    time: null,
-    pressure: null,
-    velocity: null,
+    position: null as number | null,
+    time: null as number | null,
+    pressure: null as number | null,
+    velocity: null as number | null,
   },
   holding: {
     max_stage: 5,
@@ -60,11 +60,11 @@ export const settingProcessForm = {
     pre_decompress_mode: 0,
     post_decompress_mode: 1,
     decompress_table_data: [
-      { label: "储前", pressure: null, velocity: null, time: null, distance: null },
-      { label: "储后", pressure: null, velocity: null, time: null, distance: null }
+      { label: "储前", pressure: null as number | null, velocity: null as number | null, time: null as number | null, distance: null as number | null },
+      { label: "储后", pressure: null as number | null, velocity: null as number | null, time: null as number | null, distance: null as number | null }
     ],
-    delay_time: null,
-    ending_position: null
+    delay_time: null as number | null,
+    ending_position: null as number | null
   },
   barrel_temperature: {
     max_stage: 10,

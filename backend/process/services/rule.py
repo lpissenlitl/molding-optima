@@ -82,6 +82,31 @@ def _auto_extract_defect(rule_description: str, company_id: int):
 
 # ==================== RuleKeyword ====================
 
+# 允许写入的模糊档位（与 RuleKeyword.FUZZY_LEVELS 一致，
+# 也与前端 types/rule.ts::FuzzyLevel 同集合：3 | 5 | 7）。
+# ⚠️ Django 的 choices **不会在 save 时自动校验**（create_with_check 只过滤
+#    未知字段名），所以必须在 service 层显式拦，否则 API 客户端仍能写入
+#    非法档位（如 9），而内核会把该字段当无效论域直接跳过。
+_VALID_FUZZY_LEVELS = (3, 5, 7)
+
+
+def _validate_fuzzy_level(params):
+    """校验并归一化写入的模糊档位（合法时原样返回，非法时抛 400）。"""
+    if 'fuzzy_level' not in params or params['fuzzy_level'] is None:
+        return
+    value = params['fuzzy_level']
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        raise BizException(ERROR_ILLEGAL_ARGUMENT, f"模糊级别必须是整数: {value!r}")
+    if level not in _VALID_FUZZY_LEVELS:
+        raise BizException(
+            ERROR_ILLEGAL_ARGUMENT,
+            f"不支持的模糊级别: {level}（可选 {', '.join(str(i) for i in _VALID_FUZZY_LEVELS)}）",
+        )
+    params['fuzzy_level'] = level
+
+
 def get_rule_keyword(rule_keyword_id):
     """获取规则关键字详情"""
     rule = RuleKeyword.objects.filter(
@@ -95,6 +120,7 @@ def get_rule_keyword(rule_keyword_id):
 @transaction.atomic
 def add_rule_keyword(company_id, organization_id, **params):
     """新增规则关键字"""
+    _validate_fuzzy_level(params)
     params["company_id"] = company_id
     if organization_id:
         params["organization_id"] = organization_id
@@ -104,6 +130,7 @@ def add_rule_keyword(company_id, organization_id, **params):
 @transaction.atomic
 def update_rule_keyword(rule_keyword_id, **params):
     """更新规则关键字"""
+    _validate_fuzzy_level(params)
     rule = RuleKeyword.objects.filter(
         id=rule_keyword_id, is_deleted=False,
     ).first()

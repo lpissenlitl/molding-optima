@@ -12,14 +12,24 @@ Mamdani 的结论本身是模糊集，必须反模糊化才能拿到可执行的
   两者之间还隔着蕴含与聚合两步（在 `models/nets.py` 内联实现）。
 - **输入范式不同**：隶属度函数是 `(标量/数组, 中心, 宽…)` → 隶属度 ∈ [0,1]；
   反模糊化是 `(采样点序列, 隶属度序列)` → 实数。
-- **扩展节奏不同**：本模块是"去模糊化**方法**"族 —— `macros.DEFUZZ_METHODS`
-  已列出 `centroid / bisector / mom / som / lom` 5 种，当前只实现 `centroid`。
+- **扩展节奏不同**：本模块是"去模糊化**方法**"族 —— `centroid` / `bisector` /
+  `mom` / `som` / `lom` **均已实现**（2026-10-27 补齐），用哪个由工艺定；
+  ⚠️ **默认仍是 `centroid`**（`nets.py` 也显式传 `'centroid'`）⇒ 补实现不改变任何现有输出。
 """
 
 import numpy as np
 
 
-__all__ = ['centroid', 'defuzz']
+__all__ = ['centroid', 'bisector', 'mom', 'som', 'lom', 'defuzz',
+           'DEFUZZ_METHODS', 'UnsupportedDefuzzMode']
+
+
+class UnsupportedDefuzzMode(NotImplementedError, ValueError):
+    """不支持的反模糊化模式。
+
+    ⚠️ 同时继承 `NotImplementedError`（历史抛出类型，保持向后兼容）
+    与 `ValueError`（模式名非法本质是取值错误）⇒ 两种 ``except`` 都能兜住。
+    """
 
 
 # ============================================================================
@@ -70,7 +80,12 @@ def defuzz(x: np.ndarray, mfx: np.ndarray, mode: str = 'centroid') -> float:
     mfx : ndarray
         隶属度序列
     mode : str
-        反模糊化方法，目前仅支持 'centroid'（其它方法暂未实现）
+        反模糊化方法，可选：
+        - ``centroid`` 重心法（**默认**）
+        - ``bisector`` 二分中位（面积平分点）
+        - ``mom``     最大隶属度均值（mean of maxima）
+        - ``som``     最小最大元（smallest of maxima）
+        - ``lom``     最大最大元（largest of maxima）
 
     Returns
     -------
@@ -82,13 +97,93 @@ def defuzz(x: np.ndarray, mfx: np.ndarray, mode: str = 'centroid') -> float:
     if n != len(mfx):
         raise ValueError('x 与 mfx 长度不一致')
 
-    if mode == 'centroid':
-        if mfx.sum() == 0:
-            raise ValueError('Empty membership function')
-        return centroid(x, mfx)
-    else:
-        # 预留扩展：bisector / mom / som / lom
-        raise NotImplementedError(f'暂不支持 defuzz mode = {mode}')
+    method = DEFUZZ_METHODS.get(mode)
+    if method is None:
+        raise UnsupportedDefuzzMode(
+            '不支持的 defuzz mode = %r（可用：%s）'
+            % (mode, ' / '.join(sorted(DEFUZZ_METHODS))))
+    if mfx.sum() == 0:
+        raise ValueError('Empty membership function')
+    return method(x, mfx)
+
+
+# ============================================================================
+# 其它反模糊化方法（2026-10-27 补齐；默认仍走 centroid）
+# ============================================================================
+
+def _as_1d(x, mfx):
+    """输入规整为一维 float 数组（各方法统一入口）。"""
+    return np.asarray(x, dtype=float).ravel(), np.asarray(mfx, dtype=float).ravel()
+
+
+def _trapezoid_area(x: np.ndarray, mfx: np.ndarray) -> float:
+    """梯形积分 ∫μ(x)dx（逐段 0.5·(y1+y2)·Δx）。"""
+    total = 0.0
+    for i in range(1, len(x)):
+        total += (0.5 * (float(mfx[i - 1]) + float(mfx[i]))
+                  * (float(x[i]) - float(x[i - 1])))
+    return total
+
+
+def bisector(x: np.ndarray, mfx: np.ndarray) -> float:
+    """二分中位（bisector）反模糊化。
+
+    面积平分点：隶属度曲线下面积从左往右累加，到**一半**时对应的 x。
+    """
+    x, mfx = _as_1d(x, mfx)
+    total = _trapezoid_area(x, mfx)
+    if total <= 0:
+        raise ValueError('Empty membership function')
+    half = total / 2.0
+    acc = 0.0
+    for i in range(1, len(x)):
+        seg = (0.5 * (float(mfx[i - 1]) + float(mfx[i]))
+               * (float(x[i]) - float(x[i - 1])))
+        if acc + seg >= half:
+            frac = (half - acc) / seg if seg > 0 else 0.0
+            return float(x[i - 1]) + frac * (float(x[i]) - float(x[i - 1]))
+        acc += seg
+    return float(x[-1])
+
+
+def _maxima_indices(x: np.ndarray, mfx: np.ndarray):
+    """达到**最大**隶属度的采样点下标（并列时全取）。"""
+    mfx_max = float(np.max(mfx))
+    idx = np.flatnonzero(mfx == mfx_max)
+    if len(idx) == 0:  # 理论上不会发生（NaN 情况），兜底取 argmax
+        idx = np.array([int(np.nanargmax(mfx))])
+    return idx, mfx_max
+
+
+def mom(x: np.ndarray, mfx: np.ndarray) -> float:
+    """最大隶属度均值（mean of maxima）反模糊化。"""
+    x, mfx = _as_1d(x, mfx)
+    idx, _ = _maxima_indices(x, mfx)
+    return float(np.mean(x[idx]))
+
+
+def som(x: np.ndarray, mfx: np.ndarray) -> float:
+    """最小最大元（smallest of maxima）反模糊化。"""
+    x, mfx = _as_1d(x, mfx)
+    idx, _ = _maxima_indices(x, mfx)
+    return float(x[idx][0])
+
+
+def lom(x: np.ndarray, mfx: np.ndarray) -> float:
+    """最大最大元（largest of maxima）反模糊化。"""
+    x, mfx = _as_1d(x, mfx)
+    idx, _ = _maxima_indices(x, mfx)
+    return float(x[idx][-1])
+
+
+#: 可用反模糊化方法（`mode` 名 → 实现）
+DEFUZZ_METHODS = {
+    'centroid': centroid,
+    'bisector': bisector,
+    'mom': mom,
+    'som': som,
+    'lom': lom,
+}
 
 
 # ============================================================================

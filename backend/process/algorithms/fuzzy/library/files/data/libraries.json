@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "exported_at": "2026-10-29T17:05:31",
+  "source": "database",
+  "libraries": [
+    {
+      "library_id": 1,
+      "library_code": "expert_rules",
+      "library_name": "工艺初始化规则库",
+      "library_type": "expert",
+      "priority": 100,
+      "is_active": true,
+      "source_ref": "RuleLibrary:1"
+    },
+    {
+      "library_id": 14,
+      "library_code": "base",
+      "library_name": "基础模糊规则库",
+      "library_type": "fuzzy",
+      "priority": 100,
+      "is_active": true,
+      "source_ref": "RuleLibrary:14"
+    },
+    {
+      "library_id": 15,
+      "library_code": "R20230825161658",
+      "library_name": "补充规则库 - R20230825161658",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:15"
+    },
+    {
+      "library_id": 16,
+      "library_code": "R20230901163319",
+      "library_name": "补充规则库 - R20230901163319",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:16"
+    },
+    {
+      "library_id": 17,
+      "library_code": "R20231010100755",
+      "library_name": "补充规则库 - R20231010100755",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:17"
+    },
+    {
+      "library_id": 18,
+      "library_code": "R20231129160052",
+      "library_name": "补充规则库 - R20231129160052",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:18"
+    },
+    {
+      "library_id": 19,
+      "library_code": "R20240326160428",
+      "library_name": "补充规则库 - R20240326160428",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:19"
+    },
+    {
+      "library_id": 20,
+      "library_code": "R20240516093115",
+      "library_name": "补充规则库 - R20240516093115",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:20"
+    },
+    {
+      "library_id": 21,
+      "library_code": "R20240702164137",
+      "library_name": "补充规则库 - R20240702164137",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:21"
+    },
+    {
+      "library_id": 22,
+      "library_code": "R20240815104925",
+      "library_name": "补充规则库 - R20240815104925",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:22"
+    },
+    {
+      "library_id": 23,
+      "library_code": "R20240817094811",
+      "library_name": "补充规则库 - R20240817094811",
+      "library_type": "fuzzy",
+      "priority": 10,
+      "is_active": true,
+      "source_ref": "RuleLibrary:23"
+    }
+  ]
+}

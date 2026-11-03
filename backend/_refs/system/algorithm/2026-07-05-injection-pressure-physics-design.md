@@ -634,8 +634,8 @@ logger.debug(
 |------|------|
 | [initializer.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py) | 注射压力算法主体（待重构行 386-391）|
 | [init_rules.json](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/expert_rules/init_rules.json) | 规则源文件（待新增配置项）|
-| [2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-injection-stroke-physics-design.md) | 兄弟算法设计文档（length_ratio）|
-| [2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md) | 算法改造路线图（阶段 2 P0）|
+| [2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-injection-stroke-physics-design.md) | 兄弟算法设计文档（length_ratio）|
+| [2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md) | 算法改造路线图（阶段 2 P0）|
 
 ---
 

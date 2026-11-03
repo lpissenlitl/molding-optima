@@ -53,6 +53,7 @@ IF X1_状态 AND X2_状态 THEN Y_add_数值        ← 规则形式
 ```
 
 Mamdani（`FuzzyRuleNet`）与弹窗（`ParticularRules`）仅作兜底路径，规则库当前无 Mamdani 形式结论。
+> ⚠️ 2026-10-27：`ParticularRules` 已删除（生产零调用 + 自带缺陷），弹窗提示现由 `NumTskRule.r_extra` 承载。
 
 ---
 
@@ -427,8 +428,18 @@ filtered_recs = [rec for rec in algorithm_recommendations
 | D2 | 论域如何校准 | (a) 历史数据分位数；(b) 人工修正 9 个越界参数；(c) 推理时 clip 兜底 | P0-2 |
 | D3 | 组内聚合方式 | (a) TSK 加权平均；(b) 保留累加但用原始激活度；(c) 只取激活度最高的一条 | P0-3 |
 | D4 | 跨库副本如何处理 | (a) 业务内容去重保留最specific；(b) 保留全部 + priority 拉开权重；(c) 两者都做 | P0-4 |
+
 | D5 | 缺陷档位是否额外加权 | (a) 不加权（结论值已编码）；(b) 按档位乘数加权 | P1-1（**业务语义**） |
 | D6 | 物理模型与模糊规则的分工 | 是否引入"模糊给建议 → 物理复检"闭环 | §3.3 |
+
+> ✅ **D1 已决 = (b)**（2026-10-22，`2026-10-22-fuzzy-engine-paradigm-decision.md` E2），
+> 且**已实施**：`resolve_bucket` 改为按**字段自身词表**定位
+> （`LEVEL_WORDS_BY_LVL[lvl].index(word)`），全局 `HS_MAPPING_DICT` 已弃用。
+>
+> 📌 **口径补充（2026-10-28）**：落格**随字段档数变化是正常语义**，不是「漂移」——
+> 档位词是**绝对词义**（`low` 就是「偏低」这一档），落在哪一格由**向量切了几格**决定；
+> 5 档里 `low` 落桶 1 是**正确实现**。
+> 详见 `backend/_refs/system/algorithm/fuzzy-level-semantics-design.md` 决策 D1 / D3。
 
 ---
 

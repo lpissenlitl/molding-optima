@@ -34,7 +34,7 @@
 | FuzzyEngine 接入 service | ✅ | optimize_service / recommendation_service 都已注册 |
 | FuzzyEngine 多引擎合并 / trend 后处理 | ⏳ | 留 TODO |
 | 单元测试 | ⏳ | tests/ 仍空 |
-| _dev_refs 文档同步 | ⏳ | 本文档先汇总 |
+| _refs 文档同步 | ⏳ | 本文档先汇总 |
 
 ## 2. 4 维独立 dict 重构（核心）
 
@@ -349,7 +349,7 @@ class ProcessInitializationSchema(BaseSchema):
 ### 8.1 新增
 
 - `process/services/main_service.py`（425 行，整体复制 molding-expert）
-- `_dev_refs/2026-07-03-refactoring-summary.md`（本文档）
+- `_refs/module/process/2026-07-03-refactoring-summary.md`（本文档）
 
 ### 8.2 删除
 
@@ -376,10 +376,10 @@ class ProcessInitializationSchema(BaseSchema):
 
 ### 9.1 短期
 
-- [ ] `_dev_refs/process-models-design.md` 同步：condition_code → condition_no
-- [ ] `_dev_refs/process-ai-architecture-design.md` 同步：process_context 字段、4 维独立 dict
-- [ ] `_dev_refs/init-api-refactor-design.md` 同步：override_fields → process_context、status/origin_type 后端固定
-- [ ] `_dev_refs/infer-input-flattening-design.md` 同步：5 个独立 Schema → 4 个
+- [ ] `_refs/system/model/process-models-design.md` 同步：condition_code → condition_no
+- [ ] `_refs/system/ai/process-ai-architecture-design.md` 同步：process_context 字段、4 维独立 dict
+- [ ] `_refs/module/process/init-api-refactor-design.md` 同步：override_fields → process_context、status/origin_type 后端固定
+- [ ] `_refs/system/ai/infer-input-flattening-design.md` 同步：5 个独立 Schema → 4 个
 - [ ] 数据库迁移执行（makemigrations + migrate）
 - [ ] `ProcessCondition.process_context` 实际使用验证（端到端测试）
 

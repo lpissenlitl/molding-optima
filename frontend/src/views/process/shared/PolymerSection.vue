@@ -17,10 +17,7 @@
       <el-row :gutter="24">
         <!-- 简称 autocomplete -->
         <el-col :xs="24" :sm="12" :md="6">
-          <el-form-item
-            label="选择塑料"
-            :rules="[{ required: true, message: '请选择塑料简称', trigger: 'change' }]"
-          >
+          <el-form-item label="选择塑料" prop="polymer_abbreviation">
             <el-autocomplete
               v-model="polymerAbbreviation"
               :fetch-suggestions="fetchAbbreviationSuggestions"
@@ -46,7 +43,7 @@
               v-model="selectedGrade"
               :fetch-suggestions="fetchGradeSuggestions"
               :debounce="300"
-              placeholder="输入牌号检索"
+              placeholder="输入并选择牌号"
               clearable
               size="small"
               :disabled="disabled"
@@ -57,6 +54,10 @@
                 <AppIcon icon="mdi:tag-outline" />
               </template>
             </el-autocomplete>
+            <!-- 自定义错误文案：区分"完全没选"与"只敲了字没从下拉里选" -->
+            <template #error>
+              <div class="el-form-item__error" role="alert">{{ gradeErrorText }}</div>
+            </template>
           </el-form-item>
         </el-col>
       </el-row>
@@ -166,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, inject } from 'vue'
+import { ref, watch, inject, computed } from 'vue'
 import { polymerMethod } from '@/api'
 import DerivedField from './DerivedField.vue'
 import { ConditionKey } from './types.js'
@@ -192,9 +193,21 @@ const selectedGrade = ref<string>(condition.polymer_info?.grade ?? '')
 
 // 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零
 // （局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）
+//
+// ⚠️ internalPolymerClear：内部主动清空 polymer_info（如改简称导致牌号失效）时置位。
+// condition.polymer_info 由有值变 null 会让本 watch 触发，若照常回填就把用户刚选的
+// 新简称一起清掉了 ⇒ 这种清空要跳过回填（消费标志位后 return）。
+let internalPolymerClear = false
+
 watch(
   () => condition.polymer_info?.abbreviation,
-  (val) => { polymerAbbreviation.value = val ?? '' },
+  (val) => {
+    if (internalPolymerClear) {
+      internalPolymerClear = false
+      return
+    }
+    polymerAbbreviation.value = val ?? ''
+  },
 )
 watch(
   () => condition.polymer_info?.grade,
@@ -205,19 +218,37 @@ watch(
 // 覆盖两种清空路径:
 //   1. 点 X 按钮(@clear 触发 el-autocomplete 把 v-model 设为 '')
 //   2. 手动删空 input(@clear 不触发,只能靠 watch 兜底)
-watch(polymerAbbreviation, (val) => {
-  if (val === '') {
-    selectedGrade.value = ''
-    // 清空嵌套 polymer_info（包含 id），校验自动失败
-    condition.polymer_info = null
-  }
-})
+// 同时把输入框状态镜像到 condition.polymer_abbreviation：
+// el-form-item 的校验目标必须落在 el-form 的 model 上，
+// 局部 ref 无法直接作为校验目标 ⇒ 镜像后由 prop="polymer_abbreviation" 校验。
+// immediate 保证初始值(编辑模式已有 polymer_info)也能镜像。
+watch(
+  polymerAbbreviation,
+  (val) => {
+    condition.polymer_abbreviation = val || null
+    if (val === '') {
+      selectedGrade.value = ''
+      // 清空嵌套 polymer_info（包含 id），校验自动失败
+      condition.polymer_info = null
+    }
+  },
+  { immediate: true },
+)
 watch(selectedGrade, (val) => {
   if (val === '') {
     // 清空嵌套 polymer_info（包含 id），校验自动失败
     condition.polymer_info = null
   }
 })
+
+// autocomplete 允许自由输入：敲了字但没从下拉里选中时，condition.polymer_info 仍为空
+// ⇒ 校验目标 polymer_info.id 缺失。此处标记该状态，用于区分错误文案
+const gradeUnmatched = computed(() => !!selectedGrade.value && !condition.polymer_info?.id)
+
+// 错误文案：只敲了字 ≠ 已选择，必须让用户看出差别
+const gradeErrorText = computed(() =>
+  gradeUnmatched.value ? '请从下拉列表中选择牌号' : '请选择塑料牌号',
+)
 
 // 简称 autocomplete:输入简称关键词,按 abbreviation 模糊检索
 async function fetchAbbreviationSuggestions(queryString: string, cb: (results: any[]) => void) {
@@ -279,32 +310,41 @@ function onAbbreviationSelect(item: any) {
   if (condition.polymer_info && condition.polymer_info.abbreviation !== p.abbreviation) {
     selectedGrade.value = ''
     // 清空嵌套 polymer_info（包含 id），校验自动失败
+    // 置位跳过反向同步回填：否则 polymer_info 由有值变 null 会把刚选的新简称一起清掉
+    internalPolymerClear = true
     condition.polymer_info = null
   }
 }
+
+// 牌号详情请求序号：只允许最后一次发起的请求写回，
+// 避免“快速连选两个牌号”时旧响应后到、把 polymer_info 覆盖成上一个牌号
+let gradeDetailSeq = 0
 
 // 牌号选择 → 调详情 API + set condition
 // 若当前简称空,自动同步为该 polymer 的 abbreviation
 async function onGradeSelect(item: any) {
   const p = item?.item ?? null
   if (!p) return
+  const seq = ++gradeDetailSeq
   // id 写入 condition.polymer_info.id（嵌套结构，校验 prop="polymer_info.id"）
   // 同步简称:如果当前简称空或不一致,同步为该 polymer 的 abbreviation
   if (p.abbreviation && polymerAbbreviation.value !== p.abbreviation) {
     polymerAbbreviation.value = p.abbreviation
   }
+  // 同步前置写入列表项（已含 id）：
+  // el-form-item 的 change 校验在 selectedGrade 变化的同一轮微任务里执行，
+  // 若等详情接口返回后才写 polymer_info，校验读到的仍是 null ⇒ 必填红字永久残留
+  condition.polymer_info = p
   // 列表 API 不含 Moldflow 参数
   // 必须调详情 API 获取完整数据
   try {
     const detail: any = await polymerMethod.getDetail(p.id)
+    if (seq !== gradeDetailSeq) return
     if (detail?.status === 0 && detail.data) {
       condition.polymer_info = detail.data
-    } else {
-      // 详情失败,退回到列表项(基本信息可显示,推荐工艺字段可能不全)
-      condition.polymer_info = p
     }
   } catch {
-    condition.polymer_info = p
+    // 详情失败:保留列表项(基本信息可显示,推荐工艺字段可能不全)
   }
 }
 

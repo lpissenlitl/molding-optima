@@ -895,9 +895,9 @@ temp_velo_modifier:   [0.95, 1.05]
 |------|------|
 | [initializer.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/initializer.py) | 注射速度算法主体（待重构行 485-508 + 行 660-672 删除）|
 | [init_rules.json](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/expert_rules/init_rules.json) | 规则源文件（待新增 7 个字段）|
-| [2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-injection-stroke-physics-design.md) | 行程分配算法设计文档（length_ratio / cushion_len）|
-| [2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-pressure-physics-design.md) | 注射压力算法设计文档（兄弟算法，结构对齐）|
-| [2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md) | 算法改造路线图（阶段 2 P0）|
+| [2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-injection-stroke-physics-design.md) | 行程分配算法设计文档（length_ratio / cushion_len）|
+| [2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md) | 注射压力算法设计文档（兄弟算法，结构对齐）|
+| [2026-07-04-algorithm-refactor-roadmap.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md) | 算法改造路线图（阶段 2 P0）|
 
 ---
 

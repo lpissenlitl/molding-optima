@@ -30,7 +30,6 @@ from process.algorithms.fuzzy.fuzzy_core.models.nets import (  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.models.rules import (  # noqa: E402
     FuzzyRule,
     NumTskRule,
-    ParticularRules,
 )
 from process.algorithms.fuzzy.fuzzy_core.parsing import parse_rule  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.profiles import (  # noqa: E402
@@ -142,15 +141,6 @@ def test_numtsk_rule_parse():
     _assert_eq('alert_popup_sugg' in rule_popup.r_extra, True, 'popup r_extra')
 
 
-def test_particular_rules():
-    desc = 'IF SHORTSHOT_high THEN alert_popup_sugg'
-    pr = ParticularRules([RuleProfile(rule_description=desc)], [parse_rule(desc)])
-    _assert_eq(len(pr.adjust_rule_list), 1, 'parsed 1 rule')
-    parsed = pr.adjust_rule_list[0]
-    _assert_eq(parsed.get('rule_defect'), 'SHORTSHOT', 'extract defect')
-    _assert_eq(parsed.get('rule_output'), 'sugg', 'extract output')
-
-
 def test_numtsk_inference():
     rule_array = [
         {'rule_description': 'IF inj_pres_1_low THEN inj_pres_1_add_10'},
@@ -163,9 +153,13 @@ def test_numtsk_inference():
     results, extra = net.predict({'inj_pres_1': 30}, top_k=1)
     _assert_eq(len(results) == 1, True, 'result count == 1')
     if len(results) >= 1:
-        rule_str, activation, adjustments = results[0]
+        rule_str, activation, adjustments, raw_activation = results[0]
         _assert_eq('inj_pres_1' in adjustments, True, 'adjustments contains target')
         _assert_eq(float(activation) > 0, True, 'activation > 0')
+        # ⚠️ 第 4 项是**原始激活度**（前件隶属度之积，不含 priority/specificity）
+        #    ⇒ 置信度用它；它必须落在 (0, 1]。
+        _assert_eq(0 < float(raw_activation) <= 1.0, True,
+                   'raw_activation in (0, 1]')
     _assert_eq(extra, {}, 'no extra_dict for plain rule')
 
 
@@ -227,7 +221,6 @@ def main():
         ('FuzzyFeature', test_fuzzy_feature),
         ('FuzzyRule parsing', test_fuzzy_rule_parse),
         ('NumTskRule parsing', test_numtsk_rule_parse),
-        ('ParticularRules', test_particular_rules),
         ('NumTskRuleNet inference', test_numtsk_inference),
         ('NumTskRuleNet priority', test_numtsk_inference_priority),
         ('FuzzyRuleNet inference', test_fuzzy_rule_net),

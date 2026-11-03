@@ -149,7 +149,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         # 推导公式：t_cool = max_thickness² × family_cool_factor × ΔT_factor × crystallinity_kick
         # 物理依据：Fourier 热扩散 t ∝ h²/α × ln((T_melt-T_mold)/(T_eject-T_mold))
         # 物理正交：与 #8 保压时间正交（局部 vs 整体）
-        # 详见 _dev_refs/2026-07-05-cool-time-physics-design.md
+        # 详见 _refs/system/algorithm/2026-07-05-cool-time-physics-design.md
         'cool_time_min': 5.0,
         'else_time': 1.5,
         # 材料系数（11 family × 1 系数，行业共识 Tederic 2026 / Moldflow / 海天工艺手册）
@@ -423,12 +423,14 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'segment_N_lower_min_tg_plus': 30.0,  # 段 N 下限（Tg+30℃）
         'segment_N_upper_offset': -5.0,       # 段 N 上限（melt-5℃）
     },
-    'mold_temp': {
-        'PP': 40, 'PC': 80, 'ABS': 50, 'PC+ABS': 70, 'PC/ABS': 70,
-        'PS': 40, 'PE': 40, 'LDPE': 40, 'HDPE': 40, 'LLDPE': 40,
-        'PVC': 40, 'PA6': 60, 'PA66': 70, 'PA': 60, 'PET': 90,
-        'default': 50,
-    },
+    # ⚠️ 2026-10-29：**不再**内置 mold_temp 表
+    #   原因：模温机温度的基线已改为**材料推荐值**（`recommend_mold_temperature`，
+    #   见 material_db.MATERIAL_DEFAULTS），而本表与它**重复且残缺**
+    #   （缺 PMMA/POM/PBT/PEEK/PTFE 及全部增强材料 ⇒ 一律落 default 50，
+    #   高温材料模温机温度被系统性低估 —— PEEK 应 170℃ 却得 50℃）。
+    #   `mold_temp` 系数块现在**只由 expert_rules 规则库提供** ⇒ 语义 = 「规则覆盖」，
+    #   算法层优先级：**规则覆盖 > 材料推荐值 > 兜底**
+    #   （见 algorithm_engine._derive_mold_temp）。
 }
 
 

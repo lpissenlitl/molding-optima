@@ -426,7 +426,7 @@ def _get_runner_factor(self, runner_type: str, runner_weight: float, c_hold: Dic
 # 【重构】保压压力 = 注射压力 × 材料相对保压比例 × 壁厚修正 × 浇口修正 × 流道修正
 # 推导链：保压是注射的延续 → 材料黏度等级 × 几何修正（壁厚/浇口） × 流道状态 → 安全钳制
 # 数据源：3 级兑底（精确值 / 大类查表 / 默认值）
-# 物理详见 _dev_refs/2026-07-05-holding-pressure-physics-design.md
+# 物理详见 _refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md
 inj_pres_1st = proc.inj_pres_steps[0]  # 取第一段注射压力（已物理化）
 gate_type = prod.get('gate_type', '其他')
 max_thickness = prod.get('max_thickness', 0)
@@ -687,10 +687,10 @@ logger.debug(
 | `process/engines/expert/initializer.py` | 算法主体（待改造 `_derive_process` 中保压压力部分）|
 | `process/engines/expert/expert_rules/init_rules.json` | 规则配置（DEFAULT.holding 待追加 4 字段）|
 | `process/engines/expert/rule_matcher.py` | `_BUILTIN_DEFAULTS['holding']` 待同步 |
-| `_dev_refs/2026-07-04-algorithm-refactor-roadmap.md` | roadmap（算法 #6 待标注完成）|
-| `_dev_refs/2026-07-05-injection-pressure-physics-design.md` | 算法 #3 设计文档（inj_pres 来源）|
-| `_dev_refs/2026-07-05-injection-time-physics-design.md` | 算法 #5 设计文档（thickness_bucket 复用）|
-| `_dev_refs/2026-07-05-holding-pressure-physics-design.md` | 本文档（算法 #6）|
+| `_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md` | roadmap（算法 #6 待标注完成）|
+| `_refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md` | 算法 #3 设计文档（inj_pres 来源）|
+| `_refs/system/algorithm/2026-07-05-injection-time-physics-design.md` | 算法 #5 设计文档（thickness_bucket 复用）|
+| `_refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md` | 本文档（算法 #6）|
 
 ---
 

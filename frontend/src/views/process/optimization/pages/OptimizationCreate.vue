@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { RefreshLeft, Check } from '@element-plus/icons-vue'
 import { settingProcessForm } from '@/constants/process-const'
@@ -210,7 +210,7 @@ import RoundTimeline from '../components/RoundTimeline.vue'
 import DefectFeedback from '../components/DefectFeedback.vue'
 import ProcessActualFeedback from '../components/ProcessActualFeedback.vue'
 import PreviousSuggestion from '../components/PreviousSuggestion.vue'
-import { parameterToFlat, isEmptyFlatParameter } from '../components/parameterTransform'
+import { parameterToFlat, parameterFromFlat, hasFlatParameterContent, isEmptyFlatParameter } from '../components/parameterTransform'
 
 // sessionStorage 持久化（避免切页面后丢失未提交的工艺数据）
 
@@ -252,8 +252,8 @@ function persistDraft() {
   }
   setSessionStorage(STORAGE_KEY, {
     form: plain,
-    // 保存基线快照：刷新后能恢复变更高亮（避免 watch(activeRound) 重新覆盖）
-    originalParameter: originalParameter.value,
+    // 变更高亮的参照基准已改为「上一轮 round 的 parameter」派生（见 originalParameter），
+    // 由 rounds 决定 ⇒ 无需持久化（旧的「进入快照」语义已废弃）
     conditionExpanded: conditionExpanded.value,
     observationExpanded: observationExpanded.value,
   })
@@ -277,7 +277,6 @@ function flushPersist() {
 function restoreDraft(): boolean {
   const cached = getSessionStorage<{
     form: typeof form
-    originalParameter: any
     conditionExpanded: boolean
     observationExpanded: boolean
   }>(STORAGE_KEY)
@@ -293,17 +292,8 @@ function restoreDraft(): boolean {
   form.active_round_id = c.active_round_id ?? c.rounds[0]?.id ?? null
   conditionExpanded.value = cached.conditionExpanded ?? true
   observationExpanded.value = cached.observationExpanded ?? false
-  // 恢复原始基线（关键：放在 Object.assign 后、nextTick 前）
-  // - watch(activeRound) 会在 nextTick 异步触发
-  // - 在 nextTick 之前用 isRestoring=true 标记跳过本次更新
-  isRestoring = true
-  if (cached.originalParameter) {
-    originalParameter.value = cached.originalParameter
-  }
-  // nextTick 后释放标志：下次 watch(activeRound) 触发时（用户主动切 round）正常更新
-  void nextTick(() => {
-    isRestoring = false
-  })
+  // 变更高亮参照基准无需恢复：它由 rounds 派生（originalParameter 为 computed），
+  // Object.assign 恢复 rounds 后会自动重算
   return true
 }
 
@@ -348,30 +338,30 @@ const activeRound = computed(() =>
 )
 
 /**
- * 当前活动轮次的参数基线（用于 SettingProcess 的变更高亮对比）
- * - 语义：基线 = "进入该 round 那一刻的 parameter 快照"
- *   * 首轮首次进入 → parameter 是空 form → 从空到有值（infer）= 变更 → 高亮 ✓
- * - 刷新问题（2026-10-13 修复）：原 watch(activeRound) 每次 activeRound 引用
- *   变化（包括 restoreDraft 触发的变化）都会用当前 parameter 重新覆盖 originalParameter
- *   → 刷新后 originalParameter = 修改后的 parameter → 不高亮
- * - 修复：
- *   * persistDraft 同步保存 originalParameter
- *   * restoreDraft 同步恢复 originalParameter（用 isRestoring 标志跳过本次 watch 触发）
- *   * watch(activeRound) 只在切 round / infer 完成后由用户主动触发时更新
+ * 当前活动轮次的高亮参照基准（传给 SettingProcess 的 original-process）
+ *
+ * 语义（2026-10-28 调整）：**参照上一轮的工艺参数**
+ * - 第 N 轮（N ≥ 1）⇒ 参照第 N-1 轮的 parameter
+ *   理由：本轮参数 = 上一轮基线 + 本轮调整（后端 `_apply_recommendations_to_baseline`
+ *   同一语义），只有与上一轮比才能看出「这一轮调了什么」
+ * - 第 0 轮（初始工艺）⇒ 没有上一轮 ⇒ 不参照 ⇒ null ⇒ 不高亮
+ *   初始工艺是系统首次生成，不存在「变更」语义
+ *
+ * 为什么用 computed 派生，而不是 watch 维护 ref（旧实现）：
+ * - 旧实现语义是「进入该 round 那一刻的 parameter 快照」，在「新建轮次」路径下
+ *   必然等于显示值 —— getOptimizedProcess 先给 newRound 填 parameter 再切 active，
+ *   watch 触发时拿到的已经是新值 ⇒ 优化轮永远零差异 ⇒ 不高亮
+ * - 派生后：参照物完全由 rounds 决定 ⇒ 切轮次自动重算，不会与显示值错位
+ * - 派生后也无需 sessionStorage 持久化（旧语义已废弃）
  */
-const originalParameter = ref<any>(null)
-
-/** restoreDraft 进行中标志：让 watch(activeRound) 跳过本次由 restoreDraft 触发的更新 */
-let isRestoring = false
-
-watch(activeRound, (newRound) => {
-  if (isRestoring) return
-  if (newRound?.parameter) {
-    originalParameter.value = JSON.parse(JSON.stringify(newRound.parameter))
-  } else {
-    originalParameter.value = null
-  }
-}, { immediate: true })
+const originalParameter = computed(() => {
+  const idx = form.rounds.findIndex((r) => r.id === form.active_round_id)
+  if (idx <= 0) return null
+  const prev = form.rounds[idx - 1]
+  if (!prev?.parameter) return null
+  // 深拷贝：参照物必须是快照，不能与上一轮对象共享引用
+  return JSON.parse(JSON.stringify(prev.parameter))
+})
 
 /** 工艺条件是否已有数据：有数据默认折叠（用户重心已上优化），无数据默认展开（需填条件） */
 const hasConditionData = computed(() => {
@@ -556,9 +546,10 @@ async function resetForm() {
 
 // 后端推理响应 → 前端表单（原子应用）
 // 背景：
-//   后端 /initialization/from-masterdata/ 返回扁平工艺字段（inj_pres_steps 等），
+//   后端 initialize（result.process）与 optimize（new_parameter）**都返回 flat**
+//   （inj_pres_1..6 / hold_t_1..5 / brl_temp_1..9 / noz_temp ...），
 //   前端 settingProcessForm 是嵌套结构（injection / holding / metering / ...）。
-//   这里负责两层映射 + 一步原子应用。
+//   形态翻译统一由 parameterTransform.parameterFromFlat 负责（全站唯一实现）。
 //
 // 原子语义：
 //   后端 Condition + Parameter 落库在同一事务（要么都成功，要么都回滚）。
@@ -566,95 +557,6 @@ async function resetForm() {
 //   要么一个都不写入（抛错时由调用方的 catch 统一回滚）。
 //   设计上所有写入集中在一个函数，不允许在调用点散落赋值，避免出现「cond
 //   已更新但 param 未更新」的中间状态。
-
-/** 把后端 steps 数组补齐到 max 长度，缺的填 null（前端 UI 需要固定长度） */
-function padSteps(steps: Array<number | null | undefined> | null | undefined, max: number): Array<number | null> {
-  if (!Array.isArray(steps)) return new Array(max).fill(null)
-  // 后端步骤元素不会传 undefined，类型 cast 后 slice 即可
-  const padded: Array<number | null> = (steps as Array<number | null>).slice()
-  while (padded.length < max) padded.push(null)
-  return padded.slice(0, max)
-}
-
-/**
- * 把后端推理 result.process（扁平 ProcessParams.to_dict）映射到前端 settingProcessForm
- *
- * 后端字段参考：backend/process/engines/expert/param_types.py:ProcessParams
- * 前端结构参考：frontend/src/constants/process-const.ts:settingProcessForm
- */
-function mapInferResultToParameter(result: any): typeof settingProcessForm {
-  const p = result?.process ?? {}
-  void result?.mold_temp
-  // hot_runner 暂不映射（前端 SettingProcess 未提供阀口时间设置）
-  return {
-    injection: {
-      ...settingProcessForm.injection,
-      stage: p.inj_stg ?? 1,
-      table_data: [
-        { label: '压力', unit: 'MPa', sections: padSteps(p.inj_pres_steps, 6) },
-        { label: '速度', unit: 'mm/s', sections: padSteps(p.inj_spd_steps, 6) },
-        { label: '位置', unit: 'mm', sections: padSteps(p.inj_pos_steps, 6) },
-      ],
-      injection_time: p.inj_t ?? null,
-      delay_time: p.inj_dly_t ?? null,
-      cooling_time: p.cool_t ?? null,
-    },
-    vp_switch: {
-      ...settingProcessForm.vp_switch,
-      mode: p.vps_mode ?? 0,
-      position: p.vps_pos ?? null,
-      time: p.vps_t ?? null,
-      pressure: p.vps_pres ?? null,
-      velocity: p.vps_spd ?? null,
-    },
-    holding: {
-      ...settingProcessForm.holding,
-      stage: p.hold_stg ?? 1,
-      table_data: [
-        { label: '压力', unit: 'MPa', sections: padSteps(p.hold_pres_steps, 5) },
-        { label: '速度', unit: 'mm/s', sections: padSteps(p.hold_spd_steps, 5) },
-        { label: '时间', unit: 's', sections: padSteps(p.hold_time_steps, 5) },
-      ],
-    },
-    metering: {
-      ...settingProcessForm.metering,
-      stage: p.met_stg ?? 1,
-      table_data: [
-        { label: '压力', unit: 'MPa', sections: padSteps(p.met_pres_steps, 4) },
-        { label: '螺杆转速', unit: 'rpm', sections: padSteps(p.met_rot_spd_steps, 4) },
-        { label: '背压', unit: 'MPa', sections: padSteps(p.met_back_pres_steps, 4) },
-        { label: '位置', unit: 'mm', sections: padSteps(p.met_pos_steps, 4) },
-      ],
-      pre_decompress_mode: p.pre_met_decomp_mode ?? 0,
-      post_decompress_mode: p.pst_met_decomp_mode ?? 0,
-      decompress_table_data: [
-        {
-          label: '储前',
-          pressure: p.pre_met_decomp_pres ?? null,
-          velocity: p.pre_met_decomp_spd ?? null,
-          time: p.pre_met_decomp_t ?? null,
-          distance: p.pre_met_decomp_dist ?? null,
-        },
-        {
-          label: '储后',
-          pressure: p.pst_met_decomp_pres ?? null,
-          velocity: p.pst_met_decomp_spd ?? null,
-          time: p.pst_met_decomp_t ?? null,
-          distance: p.pst_met_decomp_dist ?? null,
-        },
-      ],
-      delay_time: p.met_lim_t ?? null,
-      ending_position: p.met_end_pos ?? null,
-    },
-    barrel_temperature: {
-      ...settingProcessForm.barrel_temperature,
-      stage: p.brl_temp_stg ?? 5,
-      table_data: [
-        { label: '温度', unit: '℃', sections: padSteps(p.brl_temp_steps, 10) },
-      ],
-    },
-  }
-}
 
 /**
  * 把后端推理响应原子地应用到前端表单
@@ -687,7 +589,8 @@ function applyInferResultToForm(result: any) {
     activeRound.value.seq_idx = data.seq_idx
   }
   if (data.process) {
-    activeRound.value.parameter = mapInferResultToParameter(data)
+    // 后端已是 flat（D1 契约统一），翻译成前端嵌套结构
+    activeRound.value.parameter = parameterFromFlat(data.process)
   }
 }
 
@@ -698,7 +601,7 @@ function applyInferResultToForm(result: any) {
  * - 模具 / 注塑机 / 材料 / shot_index / injection_index 5 项必填
  *   （由 ProcessCondition.checkFormDataValid 统一校验）
  * - 响应写入 form.condition.id（condition_id）和 activeRound.parameter_id（parameter_id）
- * - 响应写入 activeRound.parameter（工艺参数嵌套结构，详见 mapInferResultToParameter）
+ * - 响应写入 activeRound.parameter（工艺参数嵌套结构，由 parameterFromFlat 从 flat 翻译而来）
  *
  * 关联文档：
  * docs/process-get-initial-frontend-integration-2026-09-23.md
@@ -837,6 +740,13 @@ async function getOptimizedProcess() {
     if (inferData.new_parameter) {
       newRound.parameter_id = inferData.new_parameter.parameter_id ?? null
       newRound.seq_idx = inferData.new_parameter.seq_idx ?? null
+      // ⭐ 关键：flat → nested 后填入新轮次。
+      // 表格绑定的是 activeRound.parameter，若不填，它会停留在 makeRound 的空模板
+      // （settingProcessForm 全 null）→ 参数表静默空白。
+      newRound.parameter = parameterFromFlat(inferData.new_parameter)
+      if (!hasFlatParameterContent(inferData.new_parameter)) {
+        ElMessage.warning('优化响应未携带工艺参数字段，参数表可能为空，请检查服务端日志')
+      }
     }
     form.rounds.push(newRound)
     form.active_round_id = newRound.id

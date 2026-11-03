@@ -53,7 +53,15 @@ def main():
     mold_info = {"product_category": "空调"}
     machine_info = {
         "drive_system": "hydraulic",
+        # 设备设定上限 = 判级论域上界的**必需来源**（2026-10-27 二次口径：
+        # 「必须用设备值，设备值没有就报错」）⇒ 缺任何一项都会被契约校验拒（400）。
         "max_set_injection_pressure": 180.0,
+        "max_set_injection_speed": 300.0,
+        "max_set_holding_pressure": 120.0,
+        "max_set_holding_speed": 150.0,
+        "max_set_screw_rotation_speed": 200.0,
+        "max_set_metering_pressure": 100.0,
+        "max_set_metering_back_pressure": 15.0,
     }
     polymer_info = {"abbreviation": "PP"}
 

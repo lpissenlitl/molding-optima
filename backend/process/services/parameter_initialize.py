@@ -503,6 +503,9 @@ class ParameterInitializeService:
             result['seq_idx'] = parameter.seq_idx
             result['shot_index'] = shot_index
             result['injection_index'] = injection_index
+            # D1 契约统一：对外响应里的工艺参数一律 flat（与 optimize 的 new_parameter 同形）。
+            # 落库用的 nested 形态已被 _create_process_parameter 消费完毕，这里才替换。
+            result['process'] = process_params_to_flat(result['process'])
 
             logger.info(
                 "from_masterdata 完成: condition_id=%s, parameter_id=%s, shot_index=%s, injection_index=%s, rules=%s",
@@ -636,12 +639,15 @@ class ParameterInitializeService:
         适用场景：第三方集成（无 masterdata）、算法试算。
         service 既不查 DB，也不写 DB。
         """
-        return cls._infer_kernel(
+        result = cls._infer_kernel(
             mold_info=mold_info,
             machine_info=machine_info,
             polymer_info=polymer_info,
             process_set=process_set,
         )
+        # D1 契约统一：对外响应里的工艺参数一律 flat（与 optimize 的 new_parameter 同形）
+        result['process'] = process_params_to_flat(result['process'])
+        return result
 
     # --- 核心算法（Step 3）—— 私有方法，三个入口共用 ---
     @staticmethod
@@ -716,6 +722,70 @@ def _auto_condition_no(mold_id: int, shot_index: int) -> str:
     return f"C-{mold_id}-S{shot_index}-{ts:06d}"
 
 
+# --- 算法 nested 工艺参数 → flat 字段镜像（落库与 HTTP 响应共用）---
+#
+# 单一事实来源（D1 契约统一，2026-10-22 决策）：
+#   落库（ProcessParameter ORM）与对外 HTTP 响应都走本函数
+#   ⇒ 落库的值与前端看到的值必然一致，不会出现「两处各拍一次」的语义漂移。
+#
+# ⚠️ 温度段位语义说明：
+#   nested 的 brl_temp_steps[0] 是「料筒 1 段」，而前端 nested 结构约定
+#   sections[0]=喷嘴、sections[1..9]=料筒 1..9 —— nested 下二者无法对齐。
+#   flat 用 noz_temp + brl_temp_1..9 两个独立字段表达，歧义消失。
+#
+# 字段语义与 ProcessParameter ORM 一一对应（见 process/schemas/parameter.py）。
+_FLAT_SINGLE_VALUE_FIELDS = [
+    'inj_stg', 'inj_t', 'inj_dly_t',
+    'vps_mode', 'vps_pos', 'vps_t', 'vps_pres', 'vps_spd',
+    'hold_stg', 'cool_t',
+    'met_stg', 'met_lim_t', 'met_end_pos',
+    'pre_met_decomp_mode', 'pre_met_decomp_pres', 'pre_met_decomp_spd',
+    'pre_met_decomp_t', 'pre_met_decomp_dist',
+    'pst_met_decomp_mode', 'pst_met_decomp_pres', 'pst_met_decomp_spd',
+    'pst_met_decomp_t', 'pst_met_decomp_dist',
+    'brl_temp_stg', 'noz_temp',
+]
+
+# (nested 数组字段, flat 字段模板, 段数)
+_FLAT_STEPS_MAPPINGS = [
+    ('inj_spd_steps',   'inj_spd_{}', 6),
+    ('inj_pres_steps',  'inj_pres_{}', 6),
+    ('inj_pos_steps',   'inj_pos_{}', 6),
+    ('hold_pres_steps', 'hold_pres_{}', 5),
+    ('hold_spd_steps',  'hold_spd_{}', 5),
+    ('hold_time_steps', 'hold_t_{}', 5),
+    ('met_pres_steps',  'met_pres_{}', 4),
+    ('met_rot_spd_steps', 'met_rot_spd_{}', 4),
+    ('met_back_pres_steps', 'met_back_pres_{}', 4),
+    ('met_pos_steps',   'met_pos_{}', 4),
+    ('brl_temp_steps',  'brl_temp_{}', 9),
+]
+
+
+def process_params_to_flat(proc_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """算法 nested 工艺参数 → flat 字段镜像（与 ProcessParameter ORM 一一对应）
+
+    Args:
+        proc_dict: ProcessParams.to_dict() 形态（含 inj_spd_steps 等数组字段）
+
+    Returns:
+        flat 字段 dict（inj_spd_1..6 / hold_t_1..5 / brl_temp_1..9 / noz_temp ...）
+
+    输出约定：
+    - 单值字段：值为 None 时**不输出**该 key（与历史落库行为一致）
+    - 数组段字段：**恒输出**全部段位（缺位补 None），保证前端拿到完整段数
+    """
+    flat: Dict[str, Any] = {}
+    for f in _FLAT_SINGLE_VALUE_FIELDS:
+        if f in proc_dict and proc_dict[f] is not None:
+            flat[f] = proc_dict[f]
+    for src_attr, fmt, n_stages in _FLAT_STEPS_MAPPINGS:
+        steps = proc_dict.get(src_attr) or []
+        for i in range(n_stages):
+            flat[fmt.format(i + 1)] = steps[i] if i < len(steps) else None
+    return flat
+
+
 def _create_process_parameter(
     condition,
     params_result: Dict[str, Any],
@@ -742,43 +812,8 @@ def _create_process_parameter(
     flat = {
         'process_condition': condition,
         'param_source': _INIT_PARAM_SOURCE,
+        **process_params_to_flat(proc_dict),
     }
-
-    # 单值字段
-    single_value_fields = [
-        'inj_stg', 'inj_t', 'inj_dly_t',
-        'vps_mode', 'vps_pos', 'vps_t', 'vps_pres', 'vps_spd',
-        'hold_stg', 'cool_t',
-        'met_stg', 'met_lim_t', 'met_end_pos',
-        'pre_met_decomp_mode', 'pre_met_decomp_pres', 'pre_met_decomp_spd',
-        'pre_met_decomp_t', 'pre_met_decomp_dist',
-        'pst_met_decomp_mode', 'pst_met_decomp_pres', 'pst_met_decomp_spd',
-        'pst_met_decomp_t', 'pst_met_decomp_dist',
-        'brl_temp_stg', 'noz_temp',
-    ]
-    for f in single_value_fields:
-        if f in proc_dict and proc_dict[f] is not None:
-            flat[f] = proc_dict[f]
-
-    # 数组 → 扁平字段
-    steps_mappings = [
-        ('inj_spd_steps',   'inj_spd_{}', 6),
-        ('inj_pres_steps',  'inj_pres_{}', 6),
-        ('inj_pos_steps',   'inj_pos_{}', 6),
-        ('hold_pres_steps', 'hold_pres_{}', 5),
-        ('hold_spd_steps',  'hold_spd_{}', 5),
-        ('hold_time_steps', 'hold_t_{}', 5),
-        ('met_pres_steps',  'met_pres_{}', 4),
-        ('met_rot_spd_steps', 'met_rot_spd_{}', 4),
-        ('met_back_pres_steps', 'met_back_pres_{}', 4),
-        ('met_pos_steps',   'met_pos_{}', 4),
-        ('brl_temp_steps',  'brl_temp_{}', 9),
-    ]
-    for src_attr, fmt, n_stages in steps_mappings:
-        steps = proc_dict.get(src_attr) or []
-        for i in range(n_stages):
-            field = fmt.format(i + 1)
-            flat[field] = steps[i] if i < len(steps) else None
 
     new_param = ProcessParameter.objects.create(
         **flat, company_id=company_id, organization_id=organization_id

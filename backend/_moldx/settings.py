@@ -167,9 +167,3 @@ LOGGING = {
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
-
-# Env settings
-try:
-    from .env_settings import *
-except ImportError:
-    print("no env specified settings loaded, use default.")

@@ -16,12 +16,14 @@
     <div class="selection-area">
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :md="6">
-          <el-form-item label="选择注塑机" prop="injection_machine_id">
+          <!-- prop 必须用 "machine_info.id"：顶层 injection_machine_id 是提交态平铺字段
+               （buildPayload 从 machine_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
+          <el-form-item label="选择注塑机" prop="machine_info.id">
             <el-autocomplete
               v-model="machineQuery"
               :fetch-suggestions="fetchMachineSuggestions"
               :debounce="300"
-              placeholder="输入或选择注塑机"
+              placeholder="输入并选择注塑机"
               clearable
               size="small"
               :disabled="disabled"
@@ -32,6 +34,10 @@
                 <AppIcon icon="mdi:server-outline" />
               </template>
             </el-autocomplete>
+            <!-- 自定义错误文案：区分"完全没选"与"只敲了字没从下拉里选" -->
+            <template #error>
+              <div class="el-form-item__error" role="alert">{{ machineErrorText }}</div>
+            </template>
           </el-form-item>
         </el-col>
 
@@ -138,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, inject } from 'vue'
+import { ref, watch, inject, computed } from 'vue'
 import { machineMethod } from '@/api'
 import DerivedField from './DerivedField.vue'
 import { useConditionDerived } from './composables/useConditionDerived.js'
@@ -192,6 +198,15 @@ watch(
   () => condition.machine_info,
   (val) => { machineQuery.value = formatMachineLabel(val) },
 )
+
+// autocomplete 允许自由输入：敲了字但没从下拉里选中时，condition.machine_info 仍为空
+// ⇒ 校验目标 machine_info.id 缺失。此处标记该状态，用于区分错误文案
+const machineUnmatched = computed(() => !!machineQuery.value && !condition.machine_info?.id)
+
+// 错误文案：只敲了字 ≠ 已选择，必须让用户看出差别
+const machineErrorText = computed(() =>
+  machineUnmatched.value ? '请从下拉列表中选择注塑机' : '请选择注塑机',
+)
 watch(
   () => condition.injection_index,
   (val) => { injectionIndexStr.value = val != null ? String(val + 1) : '' },
@@ -227,26 +242,34 @@ async function fetchMachineSuggestions(queryString: string, cb: (results: any[])
   }
 }
 
+// 注塑机详情请求序号：只允许最后一次发起的请求写回，
+// 避免"快速连选两台机器"时旧响应后到、把 machine_info 覆盖成上一台
+let machineDetailSeq = 0
+
 async function onMachineSelect(item: any) {
   const m = item?.item ?? null
   if (!m) return
-  // id 写入 condition.machine_info.id（嵌套结构，校验 prop="machine_info.id"）
+  const seq = ++machineDetailSeq
+  // 切换注塑机后,射台序号统一重置为第 1 射台(避免前一台机器的射台选择残留)
+  // 前置到 await 之前：injection_index 的必填校验与 machineQuery 变化在同一轮触发，
+  // 放到详情返回之后会让"请选择射台"在用户已选机器后仍然报错
+  condition.injection_index = 0
+  injectionIndexStr.value = '1'
+  // 同步前置写入列表项（已含 id）：
+  // el-form-item 的 change 校验在 machineQuery 变化的同一轮微任务里执行，
+  // 若等详情接口返回后才写 machine_info，校验读到的仍是 null ⇒ 必填红字永久残留
+  condition.machine_info = m
   // 列表 API 不返回反向关联
   // 必须调详情 API 获取完整的 injection_units
   try {
     const detail: any = await machineMethod.getDetail(m.id)
+    if (seq !== machineDetailSeq) return
     if (detail?.status === 0 && detail.data) {
       condition.machine_info = detail.data
-    } else {
-      // 详情失败,退回到列表项(基本信息可显示,射台信息不会显示)
-      condition.machine_info = m
     }
   } catch {
-    condition.machine_info = m
+    // 详情失败:保留列表项(基本信息可显示,射台信息不会显示)
   }
-  // 切换注塑机后,射台序号统一重置为第 1 射台(避免前一台机器的射台选择残留)
-  condition.injection_index = 0
-  injectionIndexStr.value = '1'
 }
 
 function onMachineClear() {

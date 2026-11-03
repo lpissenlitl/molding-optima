@@ -42,6 +42,24 @@
             ({{ selected_rows.length }})
           </span>
         </el-button>
+        <el-dropdown
+          trigger="click"
+          :disabled="selected_rows.length === 0"
+          @command="exportProcess"
+        >
+          <el-button type="success" :disabled="selected_rows.length === 0">
+            <AppIcon icon="mdi:download" style="margin-right: 4px; font-size: 14px;" />
+            导出工艺
+            <AppIcon icon="mdi:chevron-down" style="margin-left: 4px; font-size: 14px;" />
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="compact">精简总览</el-dropdown-item>
+              <el-dropdown-item command="default">标准工艺卡</el-dropdown-item>
+              <el-dropdown-item command="detail">追溯明细（含工艺上下文）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </template>
 
       <!-- 工艺条件编号列：可点击跳编辑 -->
@@ -101,7 +119,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import ProcessSearchForm from '../components/ProcessSearchForm.vue'
-import { processRecordMethod } from '@/api'
+import { processRecordMethod, processExport, type ProcessExportTemplate } from '@/api'
+import { getReportDownloadUrl } from '@/utils/assert'
 
 // ============================================================================
 // 类型
@@ -255,6 +274,26 @@ async function deleteOne(row: any) {
       fetchList()
     } else {
       ElMessage.error(res?.msg || '删除失败')
+    }
+  } catch {
+    // 拦截器已统一 toast
+  }
+}
+
+async function exportProcess(template: ProcessExportTemplate) {
+  const ids = selected_rows.value
+    .map((r: any) => r.id)
+    .filter((id: any): id is number => typeof id === 'number')
+  if (ids.length === 0) {
+    return ElMessage.warning('请先选择要导出的工艺')
+  }
+  try {
+    const res: any = await processExport(ids, template)
+    if (res?.status === 0 && res.data?.url) {
+      window.location.href = getReportDownloadUrl(res.data.url)
+      ElMessage.success('导出成功')
+    } else {
+      ElMessage.error(res?.msg || '导出失败')
     }
   } catch {
     // 拦截器已统一 toast

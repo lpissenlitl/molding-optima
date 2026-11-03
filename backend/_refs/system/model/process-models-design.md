@@ -1199,10 +1199,10 @@ class ProcessConditionService:
 
 | 文档 | 说明 |
 |------|------|
-| `_dev_refs/init-api-refactor-design.md` | 工艺初始化接口重构设计 |
-| `_dev_refs/algorithm-context-design.md` | 算法上下文双重来源设计 |
-| `_dev_refs/process-ai-architecture-design.md` | 工艺智能系统架构设计 |
-| `_dev_refs/process-init-rule-design.md` | 工艺初始化规则设计 |
+| `_refs/module/process/init-api-refactor-design.md` | 工艺初始化接口重构设计 |
+| `_refs/system/algorithm/algorithm-context-design.md` | 算法上下文双重来源设计 |
+| `_refs/system/ai/process-ai-architecture-design.md` | 工艺智能系统架构设计 |
+| `_refs/system/ai/process-init-rule-design.md` | 工艺初始化规则设计 |
 
 ## 9. 落地状态（2026-07-02 更新）
 

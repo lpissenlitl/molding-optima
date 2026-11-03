@@ -23,6 +23,9 @@
 - type:           类型
 - condition:      必填等级（必填 / 液压机必填 / 条件必填 / 推荐 / 可选）
 - condition_when: 条件必填的触发条件字典
+- missing_desc:   （可选）自定义缺失描述，拼在维度名之后
+- value_validator:（可选）取值合法性校验器 (value, info_dict) -> Optional[str]
+- allow_zero:     （可选）True 时 0 / 0.0 视为「有值」（该字段的 0 是合法业务值）
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -120,14 +123,41 @@ def audit_field_completeness(
         - "液压机必填":      仅 is_hydraulic=True 时必填
         - "条件必填":        按 spec.condition_when 评估（所有 k==v 匹配时必填）
 
+    spec 的两个可选键（新增）：
+        - ``missing_desc``：自定义缺失描述。给了就用它**拼在 dim_name 之后**
+          （如 dim_name='第 1 项缺陷' + '未选择缺陷程度' ⇒ '第 1 项缺陷未选择缺陷程度'）；
+          不给则用默认的 ``{dim_name}.{字段名} ({desc})``。
+          适用场景：**列表项维度** —— 机制文案里的「字段名」对用户无意义。
+        - ``value_validator``：取值合法性校验器，签名
+          ``(value, info_dict) -> Optional[str]``，返回错误描述（None = 通过）。
+          **与必填性独立**：字段有值就必须是合法值（“可选”字段填了同样要合法）。
+          错误描述**不含** dim_name 前缀，由本函数统一拼上。
+
     注意判空用的是 `not info_dict.get(key)`，因此 0 / 0.0 / '' 一律视为缺失。
     对本机制管理的设备边界类字段（压力/速度上限）而言，0 本来就不是合法上界，
     这样判是安全的；若将来某字段允许 0 为合法值，需改用 is None 判断。
+
+    **逐字段例外**：spec 声明 ``allow_zero: True`` 的字段，0 / 0.0 视为「有值」
+    （只把 None / '' 判为缺失）。用于「算法层显式支持 0」的字段 ——
+    如 ``max_set_injection_velocity``：算法有除零保护
+    （``inj_len / equivalent_velo if equivalent_velo > 0 else min_t``），
+    0 是合法的业务输入（机器未标定注射速度），不能被契约拦死。
+    ⚠️ 只给**确实支持 0** 的字段加；其余设备上限字段的 0 仍是非法上界。
     """
     missing: List[str] = []
     for target_key, spec in mapping.items():
         cond = spec.get('condition', '可选')
+        value = info_dict.get(target_key)
 
+        # ---- 取值合法性（与必填性**独立**）--------------------------------
+        validator = spec.get('value_validator')
+        if validator is not None and value not in (None, ''):
+            err = validator(value, info_dict)
+            if err:
+                missing.append(f"{dim_name}{err}")
+                continue
+
+        # ---- 必填性 --------------------------------------------------------
         if cond in ('可选', '推荐'):
             continue
 
@@ -139,8 +169,18 @@ def audit_field_completeness(
         elif cond == '条件必填':
             is_required = eval_condition_when(spec.get('condition_when', {}), info_dict)
 
-        if is_required and not info_dict.get(target_key):
-            missing.append(f"{dim_name}.{target_key} ({spec.get('desc', '')})")
+        if is_required:
+            if spec.get('allow_zero'):
+                # 该字段的 0 是合法业务值 ⇒ 只把 None / '' 判为缺失
+                is_missing = value is None or value == ''
+            else:
+                is_missing = not value
+            if is_missing:
+                custom_desc = spec.get('missing_desc')
+                if custom_desc:
+                    missing.append(f"{dim_name}{custom_desc}")
+                else:
+                    missing.append(f"{dim_name}.{target_key} ({spec.get('desc', '')})")
 
     return missing
 

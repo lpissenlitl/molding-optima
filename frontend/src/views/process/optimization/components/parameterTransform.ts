@@ -8,8 +8,12 @@
  *
  * 两个方向：
  * - parameterToFlat(nested)        —— 提交调优前用（嵌套 → flat）
- * - parameterFromFlat(flat)        —— 解析调优响应后用（flat → 嵌套，目前实现见
- *   OptimizationCreate.vue::mapInferResultToParameter，后续可迁移至此同模块）
+ * - parameterFromFlat(flat)        —— 解析调优响应后用（flat → 嵌套）
+ *
+ * 后端契约（D1 决策，2026-10-22）：
+ *   initialize（``result.process``）与 optimize（``new_parameter``）**都返回 flat**，
+ *   前端是唯一的形态翻译方。两个接口的响应字段名不同但形态一致，
+ *   因此本模块是全站唯一的 flat ↔ nested 翻译实现。
  *
  * 字段映射（与后端 backend/process/schemas/parameter.py 的 ProcessParameterSchema 一一对应）：
  * - injection           → inj_stg, inj_spd_1..6, inj_pres_1..6, inj_pos_1..6,
@@ -36,7 +40,10 @@
  * seq_idx）由后端 service 层维护，前端翻译不涉及。
  */
 
-import type { settingProcessForm } from '@/constants/process-const'
+// ⚠️ 必须是**值导入**而非 `import type`：parameterFromFlat 在运行时以
+//    settingProcessForm 作为模板底（label / unit / max_stage 等 UI 元数据）。
+//    `import type` 会被编译期擦除 ⇒ 运行时 ReferenceError。
+import { settingProcessForm } from '@/constants/process-const'
 
 /**
  * 调优入参的 flat 形态（与 ProcessParameterSchema 字段一一对应，全 Optional）
@@ -298,6 +305,140 @@ export function parameterToFlat(nested: SettingProcessForm | null | undefined): 
   }
 
   return flat
+}
+
+/**
+ * flat ProcessParameterFlat → 嵌套 settingProcessForm
+ *
+ * 用法：
+ *   const nested = parameterFromFlat(inferData.new_parameter)
+ *   newRound.parameter = nested
+ *
+ * 行为约定：
+ * - 以 settingProcessForm 为模板底（保留 label / unit / max_stage 等 UI 元数据）
+ * - 缺失字段 → null（**不补业务默认值**，避免伪造数据）
+ * - barrel_temperature 段位：sections[0]=喷嘴（noz_temp）、sections[1..9]=料筒 1..9
+ *   （brl_temp_1..9）—— 与 parameterToFlat 严格互逆
+ *   ⚠️ 后端 nested 的 brl_temp_steps[0] 是「料筒 1 段」，两边语义不同，
+ *      flat 用 noz_temp + brl_temp_1..9 两个独立字段消除了该歧义
+ * - 只读白名单字段，多余字段（如 parameter_id / seq_idx / process_condition_id）忽略
+ */
+export function parameterFromFlat(flat: ProcessParameterFlat | null | undefined): SettingProcessForm {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const f: any = flat || {}
+  const num = (v: any): number | null => (v === null || v === undefined ? null : v)
+
+  /** 取 prefix_1..prefix_max 段位，缺位补 null */
+  const sectionsOf = (prefix: string, max: number): Array<number | null> => {
+    const out: Array<number | null> = []
+    for (let i = 1; i <= max; i++) out.push(num(f[`${prefix}_${i}`]))
+    return out
+  }
+
+  return {
+    injection: {
+      ...settingProcessForm.injection,
+      stage: num(f.inj_stg) ?? settingProcessForm.injection.stage,
+      table_data: [
+        { label: '压力', unit: 'MPa', sections: sectionsOf('inj_pres', 6) },
+        { label: '速度', unit: 'mm/s', sections: sectionsOf('inj_spd', 6) },
+        { label: '位置', unit: 'mm', sections: sectionsOf('inj_pos', 6) },
+      ],
+      injection_time: num(f.inj_t),
+      delay_time: num(f.inj_dly_t),
+      cooling_time: num(f.cool_t),
+    },
+    vp_switch: {
+      ...settingProcessForm.vp_switch,
+      mode: num(f.vps_mode) ?? settingProcessForm.vp_switch.mode,
+      position: num(f.vps_pos),
+      time: num(f.vps_t),
+      pressure: num(f.vps_pres),
+      velocity: num(f.vps_spd),
+    },
+    holding: {
+      ...settingProcessForm.holding,
+      stage: num(f.hold_stg) ?? settingProcessForm.holding.stage,
+      table_data: [
+        { label: '压力', unit: 'MPa', sections: sectionsOf('hold_pres', 5) },
+        { label: '速度', unit: 'mm/s', sections: sectionsOf('hold_spd', 5) },
+        { label: '时间', unit: 's', sections: sectionsOf('hold_t', 5) },
+      ],
+    },
+    metering: {
+      ...settingProcessForm.metering,
+      stage: num(f.met_stg) ?? settingProcessForm.metering.stage,
+      table_data: [
+        { label: '压力', unit: 'MPa', sections: sectionsOf('met_pres', 4) },
+        { label: '螺杆转速', unit: 'rpm', sections: sectionsOf('met_rot_spd', 4) },
+        { label: '背压', unit: 'MPa', sections: sectionsOf('met_back_pres', 4) },
+        { label: '位置', unit: 'mm', sections: sectionsOf('met_pos', 4) },
+      ],
+      pre_decompress_mode: num(f.pre_met_decomp_mode) ?? settingProcessForm.metering.pre_decompress_mode,
+      post_decompress_mode: num(f.pst_met_decomp_mode) ?? settingProcessForm.metering.post_decompress_mode,
+      decompress_table_data: [
+        {
+          label: '储前',
+          pressure: num(f.pre_met_decomp_pres),
+          velocity: num(f.pre_met_decomp_spd),
+          time: num(f.pre_met_decomp_t),
+          distance: num(f.pre_met_decomp_dist),
+        },
+        {
+          label: '储后',
+          pressure: num(f.pst_met_decomp_pres),
+          velocity: num(f.pst_met_decomp_spd),
+          time: num(f.pst_met_decomp_t),
+          distance: num(f.pst_met_decomp_dist),
+        },
+      ],
+      delay_time: num(f.met_lim_t),
+      ending_position: num(f.met_end_pos),
+    },
+    barrel_temperature: {
+      ...settingProcessForm.barrel_temperature,
+      stage: num(f.brl_temp_stg) ?? settingProcessForm.barrel_temperature.stage,
+      table_data: [
+        {
+          label: '温度',
+          unit: '℃',
+          sections: [num(f.noz_temp), ...sectionsOf('brl_temp', 9)],
+        },
+      ],
+    },
+  }
+}
+
+/**
+ * 工艺字段白名单（后端 ProcessParameterSchema 的 83 个工艺字段）
+ *
+ * 另有 5 个元数据字段（process_condition_id / param_code / param_source /
+ * parent_seq_idx / seq_idx）不在此列——它们不参与工艺内容判定。
+ */
+const PROCESS_FLAT_FIELDS: string[] = [
+  'inj_stg', 'inj_t', 'inj_dly_t', 'cool_t',
+  ...['inj_spd', 'inj_pres', 'inj_pos'].flatMap(p => Array.from({ length: 6 }, (_, i) => `${p}_${i + 1}`)),
+  'vps_mode', 'vps_pos', 'vps_t', 'vps_pres', 'vps_spd',
+  'hold_stg',
+  ...['hold_pres', 'hold_spd', 'hold_t'].flatMap(p => Array.from({ length: 5 }, (_, i) => `${p}_${i + 1}`)),
+  'met_stg', 'met_lim_t', 'met_end_pos',
+  ...['met_pres', 'met_rot_spd', 'met_back_pres', 'met_pos'].flatMap(p => Array.from({ length: 4 }, (_, i) => `${p}_${i + 1}`)),
+  'pre_met_decomp_mode', 'pre_met_decomp_pres', 'pre_met_decomp_spd', 'pre_met_decomp_t', 'pre_met_decomp_dist',
+  'pst_met_decomp_mode', 'pst_met_decomp_pres', 'pst_met_decomp_spd', 'pst_met_decomp_t', 'pst_met_decomp_dist',
+  'brl_temp_stg', 'noz_temp',
+  ...Array.from({ length: 9 }, (_, i) => `brl_temp_${i + 1}`),
+]
+
+/**
+ * flat 里是否含实际工艺内容（排除 parameter_id / seq_idx 等元数据）
+ *
+ * 用途：响应有效性校验——结构完整但工艺内容全空时提前告警，
+ * 避免「接口 200、参数表却静默空白」这类问题难以定位。
+ */
+export function hasFlatParameterContent(flat: ProcessParameterFlat | null | undefined): boolean {
+  if (!flat) return false
+  const f = flat as Record<string, unknown>
+  return PROCESS_FLAT_FIELDS.some((k) => f[k] !== null && f[k] !== undefined)
 }
 
 /**

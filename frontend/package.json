@@ -7,9 +7,9 @@
   "author": "molding",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "npm run type-check && vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit",
+    "type-check": "vue-tsc --noEmit -p tsconfig.app.json",
     "lint": "eslint . --ext .ts,.vue",
     "lint:fix": "eslint . --ext .ts,.vue --fix",
     "format": "prettier --write \"src/**/*.{ts,vue,scss}\"",

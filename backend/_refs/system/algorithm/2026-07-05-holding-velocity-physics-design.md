@@ -281,7 +281,7 @@ hold_velo = min(
 # 【重构】保压速度 = 材料黏度等级 × 浇口尺寸修正 × 机器上限钳制
 # 推导链：剪切速率约束 γ̇ = v × (A_screw / A_gate) / h_gate → 防剪切降解上限
 # 数据源：3 级兜底（精确值 / family×bucket 查表 / 默认）
-# 物理详见 _dev_refs/2026-07-05-holding-velocity-physics-design.md
+# 物理详见 _refs/system/algorithm/2026-07-05-holding-velocity-physics-design.md
 family_velo_ratio, velo_level = self._get_family_hold_velo_ratio(family, c_hold)
 gate_factor_velo = self._get_gate_factor_for_hold_velo(bucket, c_hold)
 
@@ -648,10 +648,10 @@ proc.hold_spd_steps = [hold_velo]  →  后续 _apply_multi_holding 拆分多段
 | `process/engines/expert/expert_rules/init_rules.json` | 规则配置（DEFAULT.holding 新增 4 字段）|
 | `process/engines/expert/rule_matcher.py` | _BUILTIN_DEFAULTS 同步 |
 | `process/engines/expert/tests/test_hold_velo_smoke.py` | smoke test（待创建，7 断言）|
-| `_dev_refs/2026-07-05-holding-velocity-physics-design.md` | 本文档 |
-| `_dev_refs/2026-07-05-holding-pressure-physics-design.md` | #6 文档（runner_factor 来源）|
-| `_dev_refs/2026-07-05-holding-time-physics-design.md` | #8 文档（gate_thickness + 守恒校验）|
-| `_dev_refs/2026-07-04-algorithm-refactor-roadmap.md` | roadmap 同步 |
+| `_refs/system/algorithm/2026-07-05-holding-velocity-physics-design.md` | 本文档 |
+| `_refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md` | #6 文档（runner_factor 来源）|
+| `_refs/system/algorithm/2026-07-05-holding-time-physics-design.md` | #8 文档（gate_thickness + 守恒校验）|
+| `_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md` | roadmap 同步 |
 
 ---
 

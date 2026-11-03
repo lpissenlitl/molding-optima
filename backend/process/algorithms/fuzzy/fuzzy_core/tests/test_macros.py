@@ -94,9 +94,6 @@ def test_resolve_bucket_natural_words():
         5: {'very_low': 0, 'low': 1, 'medium': 2, 'high': 3, 'very_high': 4},
         7: {'extremely_low': 0, 'very_low': 1, 'low': 2, 'medium': 3,
             'high': 4, 'very_high': 5, 'extremely_high': 6},
-        9: {'extremely_low': 0, 'very_low': 1, 'low': 2, 'ultra_low': 3,
-            'medium': 4, 'ultra_high': 5, 'high': 6, 'very_high': 7,
-            'extremely_high': 8},
     }
     for lvl, mapping in expect.items():
         for word, bucket in mapping.items():
@@ -113,7 +110,7 @@ def test_resolve_bucket_level_number():
     _assert_eq(resolve_bucket(3, 'level1'), 0, 'lvl=3 level1 -> 桶0')
     _assert_eq(resolve_bucket(3, 'level3'), 2, 'lvl=3 level3 -> 桶2')
     _assert_eq(resolve_bucket(5, 'level5'), 4, 'lvl=5 level5 -> 桶4')
-    _assert_eq(resolve_bucket(9, 'level9'), 8, 'lvl=9 level9 -> 桶8')
+    _assert_eq(resolve_bucket(7, 'level7'), 6, 'lvl=7 level7 -> 桶6')
     # 越界必须报错，而不是静默夹取
     _assert_raises(lambda: resolve_bucket(3, 'level5'), 'lvl=3 level5 越界报错')
     _assert_raises(lambda: resolve_bucket(3, 'level0'), 'lvl=3 level0 越界报错')
@@ -162,15 +159,15 @@ def test_level_number_table_alignment():
     )
     # 超出编号表范围（level10）必须报错而不是被当成合法编号
     _assert_raises(
-        lambda: resolve_bucket(9, 'level10'), 'level10 超出编号表报错',
+        lambda: resolve_bucket(7, 'level10'), 'level10 超出编号表报错',
     )
 
 
 def test_bucket_centers_direct_values():
-    """桶中心纯函数的直接断言（3/5/7/9 档全列）。
+    """桶中心纯函数的直接断言（3/5/7 档全列）。
 
     此前桶中心只以「内联表达式」形式存在于 features.py，
-    没有任何直接断言；本表把 3/5/7/9 档的桶中心**写死**，
+    没有任何直接断言；本表把 3/5/7 档的桶中心**写死**，
     任何分位点口径变动都会立刻暴露。
     """
     iv = [0.0, 200.0]
@@ -178,7 +175,6 @@ def test_bucket_centers_direct_values():
         3: [0.0, 100.0, 200.0],
         5: [0.0, 50.0, 100.0, 150.0, 200.0],
         7: [0.0, 200.0 / 6, 200.0 / 3, 100.0, 400.0 / 3, 500.0 / 3, 200.0],
-        9: [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 175.0, 200.0],
     }
     for lvl, want in sorted(expected.items()):
         got = list(bucket_centers(iv, lvl))
@@ -191,7 +187,7 @@ def test_bucket_centers_align_with_word_table():
     """词表下标 == 桶中心下标：把「人工保持一致」变成可执行断言。
 
     词表（LEVEL_WORDS_BY_LVL）与桶中心（features.py 的分位点）必须同源，
-    否则 7/9 档会零覆盖。
+    否则 7 档会零覆盖。
     """
     iv = [0.0, 200.0]
     # 核心词占论域的百分比（与本文件 LEVEL_WORDS_BY_LVL 上方注释同口径）
@@ -199,7 +195,6 @@ def test_bucket_centers_align_with_word_table():
         3: {'low': 0.0, 'medium': 0.5, 'high': 1.0},
         5: {'low': 0.25, 'medium': 0.5, 'high': 0.75},
         7: {'low': 1.0 / 3, 'medium': 0.5, 'high': 2.0 / 3},
-        9: {'low': 0.25, 'medium': 0.5, 'high': 0.75},
     }
     for lvl, words in sorted(LEVEL_WORDS_BY_LVL.items()):
         centers = list(bucket_centers(iv, lvl))
@@ -220,7 +215,6 @@ def test_split_phase_multi_segment():
         ('IV0_low', 'IV0', 'low'),
         ('IV0_very_low', 'IV0', 'very_low'),
         ('IV0_extremely_high', 'IV0', 'extremely_high'),
-        ('IV0_ultra_low', 'IV0', 'ultra_low'),
         ('inj_pres_1_low', 'inj_pres_1', 'low'),
         ('SHORTSHOT_high', 'SHORTSHOT', 'high'),
     ]
@@ -255,7 +249,7 @@ def main():
         ('resolve_bucket —— 自然语言词', test_resolve_bucket_natural_words),
         ('resolve_bucket —— 编号形式 levelN', test_resolve_bucket_level_number),
         ('桶编号表与词表对齐', test_level_number_table_alignment),
-        ('桶中心 —— 直接断言（3/5/7/9 档）', test_bucket_centers_direct_values),
+        ('桶中心 —— 直接断言（3/5/7 档）', test_bucket_centers_direct_values),
         ('桶中心 —— 词表对齐', test_bucket_centers_align_with_word_table),
         ('split_phase —— 多段后缀', test_split_phase_multi_segment),
         ('回归 —— 现有规则词形解析不变', test_regression_existing_rule_forms),

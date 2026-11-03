@@ -311,7 +311,12 @@ function cleanupThree() {
   }
   if (pickMarker) {
     pickMarker.geometry.dispose()
-    pickMarker.material.dispose()
+    // three 的 Mesh.material 可能是单材质或材质数组，两者都需释放
+    if (Array.isArray(pickMarker.material)) {
+      pickMarker.material.forEach(m => m.dispose())
+    } else {
+      pickMarker.material.dispose()
+    }
     pickMarker = null
   }
   scene = null

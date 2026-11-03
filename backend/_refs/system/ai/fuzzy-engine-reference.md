@@ -20,7 +20,7 @@
 ⚠️ **两个易踩的坑**：
 
 1. **"层"指结论形态，不指规则库层级。** 同一个规则库里既有数值规则也有提示类规则；`base` / 产品库 / `specificity` 是另一套正交的维度（见 §6）。分流发生在**每条规则**上。
-2. **"level" 在本模块统一指「档位」**（low/medium/high，或 `HS_MAPPING_DICT` / `FUZZY_LEVELS` 里的分级）。所以旧名 `rule_level`（结论形态）与 `_match_defect_level` 里的局部变量 `rule_level`（缺陷档位）曾长期一名两义，现已分别改为 `conclusion_kind` 与 `defect_level`。
+2. **"level" 在本模块统一指「档位」**（low/medium/high，或 `LEVEL_WORDS_BY_LVL` / `FUZZY_LEVELS` 里的分级）。所以旧名 `rule_level`（结论形态）与 `_match_defect_level` 里的局部变量 `rule_level`（缺陷档位）曾长期一名两义，现已分别改为 `conclusion_kind` 与 `defect_level`。
 
 本次改造仅涉及命名与注释，**推理行为零变化**。同时参见
 `_refs/system/algorithm/2026-10-20-fuzzy-inference-review-and-roadmap.md`（模糊推理能力评估与改良路线）。
@@ -73,11 +73,14 @@
 
 ### 1.3 真实使用情况（基于代码证据）
 
+> ⚠️ **2026-10-27 核对**：本表「文件位置」列是旧结构（`nets.py` 旧行号），**已全部过期**；
+> 「生产路径使用 / 状态」列仍可参考。`ParticularRules` 已于 2026-10-27 删除。
+
 | 实现类 | 文件位置 | 生产路径使用 | 状态 |
 |--------|----------|------------|------|
 | `FuzzyRuleNet` (Mamdani) | `nets.py` L132-427 | ❌（仅 new_test.py demo）| 兼容历史 |
 | `NumTskRuleNet` (零阶 TSK) | `nets.py` L959-1281 | ✅ 主生产路径 | **生产主路径** |
-| `ParticularRules` (弹窗规则) | `nets.py` L817-866 | ✅ 配合 `adjust_array` | 提示类规则 |
+| `ParticularRules` (弹窗规则) | ~~`nets.py` L817-866~~ | ❌ 无（2026-10-27 已删除） | 弹窗提示现由 `NumTskRule.r_extra` 承载 |
 | `TskRuleNet` (一阶代数式) | `nets.py` L521-814 | ❌ 注释掉 | **死代码，不迁** |
 
 ---

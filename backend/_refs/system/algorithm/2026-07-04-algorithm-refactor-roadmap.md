@@ -67,7 +67,7 @@ ratio = 1 - L_cushion_need / total_len
 
 **数据源**：3 级兜底（精确值 / 大类典型值 / 默认值）
 
-**完成文档**：[2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-injection-stroke-physics-design.md) 章节 3-5
+**完成文档**：[2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-injection-stroke-physics-design.md) 章节 3-5
 
 ### 3.2 算法 #2：料垫长度 (cushion_len)
 
@@ -82,7 +82,7 @@ cushion_len = max(math.ceil(D / 4), cushion_min_abs)
 - 海天 8-12mm（推算 D=32-48mm）→ D/4 公式高度吻合
 - Fanuc 10-15mm（推算 D=40-60mm）→ D/4 公式高度吻合
 
-**完成文档**：[2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-injection-stroke-physics-design.md) 章节 3-5
+**完成文档**：[2026-07-04-injection-stroke-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-injection-stroke-physics-design.md) 章节 3-5
 
 ### 3.3 算法 #3：注射压力 (inj_pres)
 
@@ -105,7 +105,7 @@ inj_pres = min(
 
 **注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
 
-**完成文档**：[2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-pressure-physics-design.md)
+**完成文档**：[2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md)
 
 ### 3.4 算法 #4：注射速度 (inj_velo)
 
@@ -137,7 +137,7 @@ inj_velo = min(
 
 **注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
 
-**完成文档**：[2026-07-05-injection-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-velocity-physics-design.md)
+**完成文档**：[2026-07-05-injection-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-velocity-physics-design.md)
 
 ### 3.5 算法 #5：注射时间 (inj_time)
 
@@ -195,7 +195,7 @@ inj_time = clamp(inj_time_geo, min_t, max_t)  # = max(min_t, min(inj_time_geo, m
 
 **注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识窗口表 33 行 + family_fill_efficiency 11 family），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
 
-**完成文档**：[2026-07-05-injection-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-time-physics-design.md)
+**完成文档**：[2026-07-05-injection-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-time-physics-design.md)
 **v2 重构记录**：2026-07-06 重构为 family 填充效率驱动（方向 A），详见路线图 §7 更新日志
 **Smoke Test**：[test_inj_time_smoke.py](file:///f:/items/moldingx/molding-optima/backend/process/engines/expert/tests/test_inj_time_smoke.py)（30 个断言全过）
 
@@ -236,7 +236,7 @@ hold_pres = min(
 
 **注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
 
-**完成文档**：[2026-07-05-holding-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-holding-pressure-physics-design.md)
+**完成文档**：[2026-07-05-holding-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md)
 
 ---
 
@@ -257,7 +257,7 @@ hold_time_raw = (
 hold_time = max(hold_time_min, min(hold_time_raw, family_hold_time_max[family]))
 ```
 
-**关键创新：移除 10s 硬上限**（[设计文档第 6 章 重要决策记录](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-holding-time-physics-design.md)）：
+**关键创新：移除 10s 硬上限**（[设计文档第 6 章 重要决策记录](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-holding-time-physics-design.md)）：
 - 原算法 `hold_time_max = 10.0` 无法覆盖 PET 瓶盖长保压场景（实际 100~300s）
 - 改为 `family_hold_time_max[family]`：标准材料 30~60s、半结晶 120s、**PET 600s**（覆盖完整长保压范围）
 - 未识别 family → `default_hold_time_max = 300s` 兑底
@@ -286,7 +286,7 @@ hold_time = max(hold_time_min, min(hold_time_raw, family_hold_time_max[family]))
 
 **注意**：当前阶段是**半经验方法**（定性物理正确 + 定量行业共识数据），不是严格物理推导。详见文档第 13 章局限性诚实声明与第 14 章渐进式物理化演进路径。
 
-**完成文档**：[2026-07-05-holding-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-holding-time-physics-design.md)
+**完成文档**：[2026-07-05-holding-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-holding-time-physics-design.md)
 
 
 ### 3.8 算法 #7：保压速度 (hold_velo)
@@ -369,7 +369,7 @@ Level 3 - 默认位置切换（mode=0）                    → 'default'
 | 字符串"位置&时间" | `VP_switch_mode='位置&时间'` | mode=3（同上）|
 | 越界兜底 | `vps_mode=5` | 回退到字符串/默认位置 |
 
-**完成文档**：[2026-07-05-vp-switch-mode-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-vp-switch-mode-physics-design.md)
+**完成文档**：[2026-07-05-vp-switch-mode-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-vp-switch-mode-physics-design.md)
 
 ---
 
@@ -418,7 +418,7 @@ t_cool = max_thickness² × family_cool_factor × ΔT_factor × crystallinity_ki
 | PP 薄壁 1mm | 结晶型 + 220℃/40℃/80℃ | 1² × 0.9 × 0.95 × 1.15 = 0.98s → 钳 5s |
 | 未知 XXX | default family_factor=1.2 + 缺失 ejection | 2² × 1.2 × 1.0 × 1.10 = 5.28s |
 
-**完成文档**：[2026-07-05-cool-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-cool-time-physics-design.md)
+**完成文档**：[2026-07-05-cool-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-cool-time-physics-design.md)
 
 ---
 
@@ -477,7 +477,7 @@ meter_pres = clamp(meter_pres_raw, meter_pres_min=3.0, meter_pres_max=18.0)
 | PVC + max=8（钳下） | 0.5 × 1.00 × 液压/直通 | 8 × 0.55 × 0.5 × 1.00 = 2.2 → 3.0 | **3.0** |
 | PA66 + max=80（钳上） | 1.3 × 1.00 × 液压/直通 | 80 × 0.55 × 1.3 × 1.00 = 57.2 → 18.0 | **18.0** |
 
-**完成文档**：[2026-07-05-metering-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-metering-pressure-physics-design.md)
+**完成文档**：[2026-07-05-metering-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-metering-pressure-physics-design.md)
 
 **Smoke Test**：[test_meter_pres_smoke.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/tests/test_meter_pres_smoke.py)（22/22 通过）
 
@@ -540,7 +540,7 @@ meter_speed = ratio × max_screw_rotation_speed
 | PP + max=30（钳上）| 1.10 × 1.00 → 2.8014 → 钳到 0.75 | **22.5 rpm** |
 | ABS + L/D 缺失 | 1.00 × 1.00（兜底） | **76.39 rpm** |
 
-**完成文档**：[2026-07-05-metering-speed-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-metering-speed-physics-design.md)
+**完成文档**：[2026-07-05-metering-speed-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-metering-speed-physics-design.md)
 
 **Smoke Test**：[test_meter_speed_smoke.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/tests/test_meter_speed_smoke.py)（28/28 通过）
 
@@ -614,7 +614,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 | G2. 边界上限 | 100 × 1.50 × 1.15 = 172.5 → 钳到 30.0 | **30.0 MPa** | - | ✅ 钳上限 |
 | G6. 字段缺失 | recommend_back=None → 兑底 10.0 | **10.0 MPa** | - | ✅ 缺失兑底 |
 
-**完成文档**：[2026-07-05-metering-back-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-metering-back-pressure-physics-design.md)
+**完成文档**：[2026-07-05-metering-back-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-metering-back-pressure-physics-design.md)
 
 **Smoke Test**：[test_meter_back_pres_smoke.py](file:///Users/lpissenlit/workfiles/molding-optima/backend/process/engines/expert/tests/test_meter_back_pres_smoke.py)（34/34 通过）
 
@@ -624,39 +624,39 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.1 算法 #3：注射压力
 
-> **✅ 已完成（2026-07-05）**：详见 [3.3 节](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md#L97-L107) 与设计文档 [2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-pressure-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.3 节](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md#L97-L107) 与设计文档 [2026-07-05-injection-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md)。
 
 ### 4.2 算法 #4：注射速度
 
-> **✅ 已完成（2026-07-05）**：详见 [3.4 节](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-04-algorithm-refactor-roadmap.md#L129-L160) 与设计文档 [2026-07-05-injection-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-velocity-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.4 节](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md#L129-L160) 与设计文档 [2026-07-05-injection-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-velocity-physics-design.md)。
 
 ### 4.3 算法 #5：注射时间
 
-> **✅ 已完成（2026-07-05）**：详见 [3.5 节](#35-算法-5注射时间-inj_time) 与设计文档 [2026-07-05-injection-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-injection-time-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.5 节](#35-算法-5注射时间-inj_time) 与设计文档 [2026-07-05-injection-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-injection-time-physics-design.md)。
 
 ### 4.4 算法 #6：保压压力
 
-> **✅ 已完成（2026-07-05）**：详见 [3.6 节](#36-算法-6保压压力-hold_pres) 与设计文档 [2026-07-05-holding-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-holding-pressure-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.6 节](#36-算法-6保压压力-hold_pres) 与设计文档 [2026-07-05-holding-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md)。
 > 拆分设计原则：保压压力（流变学）与保压时间（热力学/结晶学）独立推导，互不耦合（详见设计文档第 12 章后续扩展）。
 
 ### 4.5 算法 #7：保压速度
 
-> **✅ 已完成（2026-07-05）**：详见 [3.8 节](#38-算法-7保压速度-hold_velo) 与设计文档 [2026-07-05-holding-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-holding-velocity-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.8 节](#38-算法-7保压速度-hold_velo) 与设计文档 [2026-07-05-holding-velocity-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-holding-velocity-physics-design.md)。
 > 拆分设计原则：保压压力（#6 流变学）/ 保压速度（#7 运动学）/ 保压时间（#8 热力学）三维正交，互不耦合。
 
 ### 4.6 算法 #10：冷却时间
 
-> **✅ 已完成（2026-07-05）**：详见 [3.10 节](#310-算法-10冷却时间-cool_t) 与设计文档 [2026-07-05-cool-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-cool-time-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.10 节](#310-算法-10冷却时间-cool_t) 与设计文档 [2026-07-05-cool-time-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-cool-time-physics-design.md)。
 > 拆分设计原则：保压时间（#8 浇口凝固局部）与冷却时间（#10 制品整体冷却）独立推导，互不耦合。
 
 ### 4.7 算法 #11：计量压力
 
-> **✅ 已完成（2026-07-05）**：详见 [3.11 节](#311-算法-11计量压力-meter_pres) 与设计文档 [2026-07-05-metering-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-metering-pressure-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.11 节](#311-算法-11计量压力-meter_pres) 与设计文档 [2026-07-05-metering-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-metering-pressure-physics-design.md)。
 > 拆分设计原则：计量压力（驱动装置·仅液压机）与计量背压（介质·所有机器）独立推导，互不耦合（详见设计文档第 1.2 节“计量压力 vs 计量背压”）。
 
 ### 4.8 算法 #12：螺杆转速
 
-> **✅ 已完成（2026-07-05）**：详见 [3.12 节](#312-算法-12螺杆转速-meter_speed) 与设计文档 [2026-07-05-metering-speed-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-metering-speed-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.12 节](#312-算法-12螺杆转速-meter_speed) 与设计文档 [2026-07-05-metering-speed-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-metering-speed-physics-design.md)。
 > 拆分设计原则：计量螺杆转速（通用·液压/全电机同一公式）与计量压力（液压专属）独立推导，对称演进。
 >
 > **物理依据**：螺杆表面线速度 v_surface = π × D × N / 60，反推转速比 ratio = N / max_screw_speed = 60 × v_surface / (π × D × max_screw_speed)。
@@ -665,7 +665,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.9 算法 #13：计量背压
 
-> **✅ 已完成（2026-07-05）**：详见 [3.13 节](#313-算法-13计量背压-meter_back_pres) 与设计文档 [2026-07-05-metering-back-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-metering-back-pressure-physics-design.md)。
+> **✅ 已完成（2026-07-05）**：详见 [3.13 节](#313-算法-13计量背压-meter_back_pres) 与设计文档 [2026-07-05-metering-back-pressure-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-metering-back-pressure-physics-design.md)。
 > 拆分设计原则：计量压力（驱动装置·液压机专属）与计量背压（介质·所有机器通用）独立推导，与 #12 螺杆转速（机械驱动·所有机器通用）形成对称演进。
 
 ### 4.10 算法 #14：计量位置
@@ -674,7 +674,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.11 算法 #15：储料前松退模式
 
-> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-suckback-decompression-physics-design.md) §3.1 §9。
+> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-suckback-decompression-physics-design.md) §3.1 §9。
 > **设计结论**：默认“否”（关闭），用户/制品输入优先，不启用时 = 净位移 0（不进入位置计算）。与 #14/^#18 数学上正交。
 >
 > **实施位置**：`process/engines/expert/initializer.py` → `proc.pre_met_decomp_mode`
@@ -682,7 +682,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.12 算法 #16：储料前松退参数（压力/距离/速度/时间）
 
-> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-suckback-decompression-physics-design.md) §3.2-3.6 §7.2。
+> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-suckback-decompression-physics-design.md) §3.2-3.6 §7.2。
 > **设计结论**：4 维推导（pressure + distance + velocity + time）。液压机/全电机分支（压力仅液压机需要）；family 4 档分档；与 #11 复用 family_factor + nozzle_factor。**仅 #15 启用时推导**。
 >
 > **实施位置**：`process/engines/expert/initializer.py` 4 个 `proc.pre_met_decomp_*` 字段
@@ -690,7 +690,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.13 算法 #17：储料后松退参数（压力/距离/速度/时间）
 
-> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-suckback-decompression-physics-design.md) §3.2-3.6 §7.1。
+> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-suckback-decompression-physics-design.md) §3.2-3.6 §7.1。
 > **设计结论**：5 维物理化推导（distance）：D = base_dist × family_dist_factor × nozzle_dist_factor × runner_factor × gate_factor。
 > - distance baseline：3.5mm（PP/ABS 基准）
 > - pressure base_ratio：0.25 × max_meter_pressure（vs #11 的 0.55）
@@ -703,7 +703,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.14 算法 #18：计量终止位置
 
-> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-suckback-decompression-physics-design.md) §3.7 §7.3。
+> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-suckback-decompression-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-suckback-decompression-physics-design.md) §3.7 §7.3。
 > **设计结论**：公式透明 `met_end_pos = meter_posi + pst_met_decomp_dist`，与 #14 同类。物理正确。与 #15/#16 前松退净位移 = 0 **正交**（前松退不进入位置计算，避免漏料风险）。
 >
 > **实施位置**：`process/engines/expert/initializer.py` → `proc.met_end_pos`（仅依赖后松退距离，与 #14 同类公式透明实现）
@@ -711,7 +711,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.15 算法 #19：喷嘴温度
 
-> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-temperature-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-temperature-physics-design.md) §3.1 §7.1。
+> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-temperature-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-temperature-physics-design.md) §3.1 §7.1。
 > **设计结论**：2 维物理化（nozzle_offset + family_offset）。公式 `noz_temp = melt_temp + noz_offset[nozzle_type] + family_offset[family]`。family_offset 覆盖：PA66 +5℃（防含水率突变）、PA6/PET/PBT +3℃、PVC -5℃（防 HCl 析出）、其他 0℃。钳制 [min_melt_temp-10, max_melt_temp+10]。
 >
 > **实施位置**：`process/engines/expert/initializer.py` L2344-2362 重写 → `proc.noz_temp`
@@ -719,7 +719,7 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 
 ### 4.16 算法 #20：料筒温度分布
 
-> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-temperature-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_dev_refs/2026-07-05-temperature-physics-design.md) §3.2 §7.1-§7.5。
+> **✅ 已完成（2026-07-05）**：详见设计文档 [2026-07-05-temperature-physics-design.md](file:///Users/lpissenlit/workfiles/molding-optima/backend/_refs/system/algorithm/2026-07-05-temperature-physics-design.md) §3.2 §7.1-§7.5。
 > **设计结论**：4 维物理化（family_decrement + stages + 幂函数 k=1.2 + 双层边界钳制）。公式 `T[i] = melt_temp - i^k × decrement`。
 > - **幂函数 k=1.2**（业内“前陡后缓”递减：靠喷嘴平缓、防降解；靠料口陡、防冷料阻塞）
 > - **family_decrement 修正**：PVC 5℃（极平缓防分解）、PC/PMMA/POM/PA/PET/PBT 8℃（平缓防降解）、PP/PE/ABS/PS 10℃（中位）
@@ -870,29 +870,29 @@ meter_back_pres = clamp(meter_back_pres_raw, 0.5, 30.0)
 | `process/engines/expert/initializer.py` | 算法主体（待改造）|
 | `process/engines/expert/expert_rules/init_rules.json` | 规则配置（待更新）|
 | `process/engines/expert/tests/test_hold_time_smoke.py` | #8 保压时间 smoke test（独立运行，17 个断言）|
-| `_dev_refs/2026-07-04-injection-stroke-physics-design.md` | #1 #2 设计文档 |
-| `_dev_refs/2026-07-05-injection-pressure-physics-design.md` | #3 注射压力设计文档 |
-| `_dev_refs/2026-07-05-injection-velocity-physics-design.md` | #4 注射速度设计文档 |
-| `_dev_refs/2026-07-05-injection-time-physics-design.md` | #5 注射时间设计文档 |
-| `_dev_refs/2026-07-05-holding-pressure-physics-design.md` | #6 保压压力设计文档 |
-| `_dev_refs/2026-07-05-holding-time-physics-design.md` | #8 保压时间设计文档（5 维公式 + 4 级 fallback + 移除 10s 硬上限）|
-| `_dev_refs/2026-07-05-holding-velocity-physics-design.md` | #7 保压速度设计文档（3 维公式：family × bucket × 机器上限，与 #6/#8 三维正交）|
+| `_refs/system/algorithm/2026-07-04-injection-stroke-physics-design.md` | #1 #2 设计文档 |
+| `_refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md` | #3 注射压力设计文档 |
+| `_refs/system/algorithm/2026-07-05-injection-velocity-physics-design.md` | #4 注射速度设计文档 |
+| `_refs/system/algorithm/2026-07-05-injection-time-physics-design.md` | #5 注射时间设计文档 |
+| `_refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md` | #6 保压压力设计文档 |
+| `_refs/system/algorithm/2026-07-05-holding-time-physics-design.md` | #8 保压时间设计文档（5 维公式 + 4 级 fallback + 移除 10s 硬上限）|
+| `_refs/system/algorithm/2026-07-05-holding-velocity-physics-design.md` | #7 保压速度设计文档（3 维公式：family × bucket × 机器上限，与 #6/#8 三维正交）|
 | `process/engines/expert/tests/test_hold_velo_smoke.py` | #7 保压速度 smoke test（独立运行，21 个断言）|
-| `_dev_refs/2026-07-05-vp-switch-mode-physics-design.md` | #9 VP 切换模式设计文档（v3.1：3 级兜底 + 4 种模式 + 行业标准推荐）|
+| `_refs/system/algorithm/2026-07-05-vp-switch-mode-physics-design.md` | #9 VP 切换模式设计文档（v3.1：3 级兜底 + 4 种模式 + 行业标准推荐）|
 | `process/engines/expert/tests/test_vp_switch_mode_smoke.py` | #9 VP 切换模式 smoke test（独立运行，36 个断言）|
-| `_dev_refs/2026-07-05-cool-time-physics-design.md` | #10 冷却时间设计文档（4 维公式：family × ΔT × cryst_kick × h²，11 个 family 系数，5 档温差分档）|
+| `_refs/system/algorithm/2026-07-05-cool-time-physics-design.md` | #10 冷却时间设计文档（4 维公式：family × ΔT × cryst_kick × h²，11 个 family 系数，5 档温差分档）|
 | `process/engines/expert/tests/test_cool_time_smoke.py` | #10 冷却时间 smoke test（独立运行，11 个断言：PET 厚壁、PC 厚壁、ABS 中壁、PP 薄壁、未材料 + 边界守门）|
-| `_dev_refs/2026-07-05-metering-pressure-physics-design.md` | #11 计量压力设计文档（3 维公式：动力源分支 + nozzle_factor + family 黏度，17 family × 0.5~1.3）|
+| `_refs/system/algorithm/2026-07-05-metering-pressure-physics-design.md` | #11 计量压力设计文档（3 维公式：动力源分支 + nozzle_factor + family 黏度，17 family × 0.5~1.3）|
 | `process/engines/expert/tests/test_meter_pres_smoke.py` | #11 计量压力 smoke test（独立运行，22 个断言：8 场景 + 全电机 + 钳制守门）|
-| `_dev_refs/2026-07-05-metering-speed-physics-design.md` | #12 螺杆转速设计文档（2 维公式：family 剪切敏感度 + L/D，不分支动力源）|
+| `_refs/system/algorithm/2026-07-05-metering-speed-physics-design.md` | #12 螺杆转速设计文档（2 维公式：family 剪切敏感度 + L/D，不分支动力源）|
 | `process/engines/expert/tests/test_meter_speed_smoke.py` | #12 螺杆转速 smoke test（独立运行，28 个断言：8 场景 + L/D 三桶 + 钳制守门）|
-| `_dev_refs/2026-07-05-metering-back-pressure-physics-design.md` | #13 计量背压设计文档（2 维公式：family 排气需求 17 family × 0.40~1.50 + 螺杆转速联动条件性启用，不分支动力源，对称 #12 演进）|
+| `_refs/system/algorithm/2026-07-05-metering-back-pressure-physics-design.md` | #13 计量背压设计文档（2 维公式：family 排气需求 17 family × 0.40~1.50 + 螺杆转速联动条件性启用，不分支动力源，对称 #12 演进）|
 | `process/engines/expert/tests/test_meter_back_pres_smoke.py` | #13 计量背压 smoke test（独立运行，34 个断言：8 场景 + 4 组边界守门 + level 字符串 + 字段缺失兜底）|
-| `_dev_refs/2026-07-05-suckback-decompression-physics-design.md` | **#15-#18 松退族**设计文档 v1.1（744 行：5 维物理化推导 pressure + distance + velocity + time；液压机 / 全电机分支；家族 4 档分档；runner_factor 与 gate_factor 热流道+针阀式场景全覆盖；switch 手柄 case 推导 10.47mm 对应业内实测 10mm；钳制 [1,5] MPa / [1,12] mm / [3,50] mm/s / [0.1, 5.0] s；前松退净位移 = 0 不进入位置计算）|
+| `_refs/system/algorithm/2026-07-05-suckback-decompression-physics-design.md` | **#15-#18 松退族**设计文档 v1.1（744 行：5 维物理化推导 pressure + distance + velocity + time；液压机 / 全电机分支；家族 4 档分档；runner_factor 与 gate_factor 热流道+针阀式场景全覆盖；switch 手柄 case 推导 10.47mm 对应业内实测 10mm；钳制 [1,5] MPa / [1,12] mm / [3,50] mm/s / [0.1, 5.0] s；前松退净位移 = 0 不进入位置计算）|
 | `process/engines/expert/tests/test_suckback_smoke.py` | **#15-#18 松退族**smoke test（独立运行，33 个断言：14 场景含 switch 手柄 ABS+锁闭+热流道+针阀式点浇口 → D=10.47mm）与边界守门）|
-| `_dev_refs/2026-07-05-temperature-physics-design.md` | **#19+#20 温度族**设计文档 v1.0（598 行：2 维 #19 喷嘴温度 + 4 维 #20 料筒温度分布；幂函数非线性 k=1.2；17 family × 2 维度差异化；双层物理边界钳制；6 典型场景验证含 PA66/PVC/PC）|
+| `_refs/system/algorithm/2026-07-05-temperature-physics-design.md` | **#19+#20 温度族**设计文档 v1.0（598 行：2 维 #19 喷嘴温度 + 4 维 #20 料筒温度分布；幂函数非线性 k=1.2；17 family × 2 维度差异化；双层物理边界钳制；6 典型场景验证含 PA66/PVC/PC）|
 | `process/engines/expert/tests/test_temperature_smoke.py` | **#19+#20 温度族**smoke test（独立运行，含 14 场景 A-N）|
-| `_dev_refs/2026-07-04-algorithm-refactor-roadmap.md` | 本文档（路线图）|
+| `_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md` | 本文档（路线图）|
 
 ---
 

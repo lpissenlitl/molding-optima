@@ -31,7 +31,7 @@ frontend/_refs/
 | `README_BaseSearchForm.md` | 基础搜索表单（BaseSearchForm）规范 |
 | `MoldSearchForm_Migration_Example.md` | MoldSearchForm 迁移示例 |
 
-## 📂 module/（14 篇）—— 模块设计
+## 📂 module/（15 篇）—— 模块设计
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
@@ -45,6 +45,7 @@ frontend/_refs/
 | process | `process/process-frontend-param-mapping-atomic-2026-09-23.md` | 工艺前端参数映射（原子化） |
 | process | `process/process-get-initial-frontend-integration-2026-09-23.md` | 工艺初始接口前端集成 |
 | process | `process/process-get-optimized-frontend-integration-2026-09-23.md` | 工艺优化接口前端集成 |
+| process | `process/process-highlight-baseline-semantics-2026-10-28.md` | 工艺参数变更高亮的参照基准语义调整（**参照上一轮**） |
 | session | `session/SESSION_2026-09-08.md` | Session 工作记录 |
 | session | `session/SESSION_2026-09-09.md` | Session 工作记录 |
 | session | `session/SESSION_2026-09-17.md` | Session 工作记录 |
@@ -69,6 +70,7 @@ Session 工作记录和交接文档放在**前端**这边（frontend/_refs/sessi
 - 2026-09-24：从 `docs/` 迁移 5 个前端相关文档（mold / process / session）
 - 2026-09-24：`refs/frontend/` → 移动到 `frontend/_refs/`（前后端拆分）
 - 2026-09-24：补迁 `frontend/src/components/_devRefs/` 的 2 个组件规范到 `system/`
+- 2026-10-28：新增 `module/process/process-highlight-baseline-semantics-2026-10-28.md`（智能调机页工艺参数变更高亮的参照基准改为「上一轮」；首轮不高亮；不区分算法/人工来源）；README 索引同步更新（module 14 → 15 篇）
 
 ## ⚠️ 维护说明
 

@@ -28,23 +28,24 @@ from process.algorithms.fuzzy.recommendations import (
 
 NUMERIC_RESULTS = [
     RuleAdjustment(param_name='inj_pres_1', delta=10.0, activation=0.9,
-                   layer='numeric', rule_str='r1'),
+                   raw_activation=0.95, layer='numeric', rule_str='r1'),
     RuleAdjustment(param_name='inj_pres_2', delta=5.0, activation=0.7,
-                   layer='numeric', rule_str='r2'),
+                   raw_activation=0.60, layer='numeric', rule_str='r2'),
     # 同参数多条规则 → 同层聚合
     RuleAdjustment(param_name='inj_pres_1', delta=5.0, activation=0.6,
-                   layer='numeric', rule_str='r3'),
+                   raw_activation=0.85, layer='numeric', rule_str='r3'),
 ]
 
 ADVISORY_RESULTS = [
     RuleAdjustment(param_name='hold_time', delta=1.5, activation=0.5,
-                   layer='advisory', rule_str='r4'),
+                   raw_activation=0.50, layer='advisory', rule_str='r4'),
     # inj_pres_1 已被数值层覆盖 → 应作为 advisory_reference，不覆盖
     RuleAdjustment(param_name='inj_pres_1', delta=999, activation=0.4,
-                   layer='advisory', rule_str='r5'),
+                   raw_activation=0.40, layer='advisory', rule_str='r5'),
     # 文本建议（检查/弹窗类）→ 必须单独输出，不进数值聚合
     RuleAdjustment(param_name='MEL', delta=0.0, activation=0.0,
-                   layer='advisory', rule_str='r6', advice='请检查计量终点位置'),
+                   raw_activation=0.0, layer='advisory', rule_str='r6',
+                   advice='请检查计量终点位置'),
 ]
 
 CURRENT_PARAMS = {'inj_pres_1': 50, 'inj_pres_2': 80, 'hold_time': 3, 'MEL': 10}
@@ -60,6 +61,10 @@ def test_aggregate_same_layer_sum():
     assert abs(inj1.delta - 15.0) < 1e-6, f'aggregated delta={inj1.delta}'
     assert inj1.rule_count == 2, inj1.rule_count
     assert abs(inj1.activation_sum - 1.5) < 1e-6, f'activation_sum={inj1.activation_sum}'
+    # ⚠️ 置信度来源是**原始激活度之和**，不是组内占比之和
+    assert abs(inj1.raw_activation_sum - 1.8) < 1e-6, (
+        f'raw_activation_sum={inj1.raw_activation_sum}'
+    )
 
 
 def test_aggregate_cross_layer_becomes_reference():
@@ -99,13 +104,19 @@ def test_to_recommendations_numeric_fields():
     recs = to_recommendations(aggregated, advice_items, FACTOR, CURRENT_PARAMS)
     rec_by_name = {r.param_name: r for r in recs}
 
-    # recommended = current + delta * factor；confidence = activation_sum / rule_count
+    # recommended = current + delta * factor；
+    # confidence = raw_activation_sum / rule_count（**原始激活度**，非组内占比）
     inj1_rec = rec_by_name['inj_pres_1']
     assert abs(inj1_rec.recommended_value - (50 + 15.0 * 1.2)) < 1e-6, inj1_rec.recommended_value
-    assert abs(inj1_rec.confidence - (1.5 / 2)) < 1e-6, inj1_rec.confidence
+    assert abs(inj1_rec.confidence - (1.8 / 2)) < 1e-6, inj1_rec.confidence
     assert inj1_rec.direction == 'increase', inj1_rec.direction
     assert inj1_rec.source == 'fuzzy.numeric', inj1_rec.source
     assert inj1_rec.reason == "模糊推理 (sources=['numeric', 'advisory'])", inj1_rec.reason
+
+    # 仅提示层命中的参数：confidence = 它的原始激活度（0.5）
+    assert abs(rec_by_name['hold_time'].confidence - 0.5) < 1e-6, (
+        rec_by_name['hold_time'].confidence
+    )
 
 
 def test_to_recommendations_advice_fields():

@@ -32,19 +32,21 @@
 """
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Dict, Iterable, List, Optional
 
 
 __all__ = [
     'KeywordProfile',
     'RuleProfile',
+    'keyword_profile_issues',
+    'rule_profile_issues',
     'validate_keyword_profiles',
     'validate_rule_profiles',
 ]
 
 
 # 内核支持的模糊等级数（与 RuleKeyword.FUZZY_LEVELS、macros.LEVEL_WORDS_BY_LVL 的键一致）
-VALID_LVL = (3, 5, 7, 9)
+VALID_LVL = (3, 5, 7)
 
 # 结论形态（按结论形态分流：能不能算出数值；不是规则库的组织维度）
 VALID_CONCLUSION_KINDS = ('numeric', 'advisory')
@@ -115,6 +117,22 @@ class RuleProfile:
         **不参与算法**，仅用于「这条建议来自哪条规则」这类排查与展示。
         ⚠️ 这里放**字符串**而不是数据源对象 —— 放对象就等于把来源焊回契约
         （旧实现里的 `method` 字段装 ORM 实例，正是这个问题）。
+    parsed : dict | None
+        规则串的**拆解产物**（`fuzzy_core.parsing.parse_rule` 的返回值：
+        ``{'preconditions': [...], 'solutions': [...]}``）。
+
+        ⚠️ **为什么装在契约里**：同一条规则串在整条链路上会被拆**三次**
+        （来源适配层判结论形态 / 编排层判缺陷名 / 内核第 4 层建对象），
+        1646 条规则 ⇒ 约 5000 次重复拆解。拆解是**纯函数**且结果只与规则串有关，
+        因此「拆一次、带着走」是唯一无损的收敛方式（缓存也有同样的效果，
+        但缓存的键/失效时机得额外维护）。
+
+        ⚠️ **可选**（默认 `None`）：为 `None` 时下游（`fuzzy_core.rules_filter`）
+        会自行拆解 ⇒ 直接构造 `RuleProfile` 的调用方（测试替身 / 离线脚本 /
+        demo 案例）**不必关心本字段**。
+
+        ⚠️ **必须与 `rule_description` 同源**：由来源适配层用**同一个**规则串
+        解析一次产出。若二者不一致，下游用的是 `parsed` 而非重新拆解 ⇒ 会静默错位。
     """
 
     rule_description: str
@@ -122,11 +140,58 @@ class RuleProfile:
     conclusion_kind: str = 'numeric'
     specificity: int = 4
     source_ref: str = ''
+    parsed: Optional[Dict[str, List[Dict[str, str]]]] = None
 
 
 # ============================================================================
 # 校验：数据来源的产出必须过这道关口
 # ============================================================================
+
+def keyword_profile_issues(p: KeywordProfile) -> List[str]:
+    """单条关键字档案的问题清单（**空列表 = 合法**）。
+
+    与 `validate_keyword_profiles` **同口径**，但不抛异常 ——
+    供「逐条校验、跳过坏的、保住好的」场景使用
+    （见 `library/repository.py` 的两个出库点）。
+
+    ⚠️ 为什么需要单条版：整批版语义是「任一条不合法即抛 ValueError」，
+    适合需要 fail-fast 的调用方；而生产路径要求的是**一条脏档案只废掉自己**，
+    不能让整次调优塌成空推荐（`engine.recommend` 的兜底会把异常吞成空推荐）。
+    """
+    issues: List[str] = []
+    if not str(p.keyword or '').strip():
+        issues.append('keyword 不能为空')
+    if p.lvl not in VALID_LVL:
+        issues.append(f'lvl={p.lvl!r} 非法（合法值 {VALID_LVL}）')
+    if not (p.min_val < p.max_val):
+        issues.append(f'min_val({p.min_val}) 必须 < max_val({p.max_val})')
+    if not (p.step > 0):
+        issues.append(f'step({p.step}) 必须 > 0')
+    return issues
+
+
+def rule_profile_issues(p: RuleProfile) -> List[str]:
+    """单条规则档案的问题清单（**空列表 = 合法**）。
+
+    与 `validate_rule_profiles` 同口径，但不抛异常（理由同
+    `keyword_profile_issues`）。
+    """
+    issues: List[str] = []
+    if not str(p.rule_description or '').strip():
+        issues.append('rule_description 不能为空')
+    try:
+        float(p.priority)
+    except (TypeError, ValueError):
+        issues.append(f'priority={p.priority!r} 不是数值')
+    if p.conclusion_kind not in VALID_CONCLUSION_KINDS:
+        issues.append(
+            f'conclusion_kind={p.conclusion_kind!r} 非法'
+            f'（合法值 {VALID_CONCLUSION_KINDS}）')
+    if p.specificity not in VALID_SPECIFICITY:
+        issues.append(f'specificity={p.specificity!r} 非法'
+                      f'（合法值 {VALID_SPECIFICITY}）')
+    return issues
+
 
 def validate_keyword_profiles(profiles: Iterable[KeywordProfile]) -> None:
     """校验关键字档案；任一条不合法即抛 `ValueError`（一次列全所有问题）。
@@ -134,19 +199,15 @@ def validate_keyword_profiles(profiles: Iterable[KeywordProfile]) -> None:
     这是"数据来源可插拔"的前提：来源可能是数据库、也可能是本地文件，
     解析出的档案必须**先过校验**才能进入构建层 ⇒ 脏数据在边界被拦下，
     而不是等到内核算隶属度时才抛异常。
+
+    ⚠️ 生产路径（`library/repository.py`）用的是**单条版**
+    `keyword_profile_issues` —— 逐条跳过坏的、保住好的，而不是整批抛：
+    一条脏档案只废掉自己，不能让整次调优塌成空推荐。
     """
     errors = []
     for idx, p in enumerate(profiles):
         where = f'keyword_profiles[{idx}]'
-        if not str(p.keyword or '').strip():
-            errors.append(f'{where}: keyword 不能为空')
-        if p.lvl not in VALID_LVL:
-            errors.append(f'{where}: lvl={p.lvl!r} 非法（合法值 {VALID_LVL}）')
-        if not (p.min_val < p.max_val):
-            errors.append(
-                f'{where}: min_val({p.min_val}) 必须 < max_val({p.max_val})')
-        if not (p.step > 0):
-            errors.append(f'{where}: step({p.step}) 必须 > 0')
+        errors.extend(f'{where}: {msg}' for msg in keyword_profile_issues(p))
     if errors:
         raise ValueError('关键字档案校验失败:\n  ' + '\n  '.join(errors))
 
@@ -156,20 +217,7 @@ def validate_rule_profiles(profiles: Iterable[RuleProfile]) -> None:
     errors = []
     for idx, p in enumerate(profiles):
         where = f'rule_profiles[{idx}]'
-        if not str(p.rule_description or '').strip():
-            errors.append(f'{where}: rule_description 不能为空')
-        try:
-            float(p.priority)
-        except (TypeError, ValueError):
-            errors.append(f'{where}: priority={p.priority!r} 不是数值')
-        if p.conclusion_kind not in VALID_CONCLUSION_KINDS:
-            errors.append(
-                f'{where}: conclusion_kind={p.conclusion_kind!r} 非法'
-                f'（合法值 {VALID_CONCLUSION_KINDS}）')
-        if p.specificity not in VALID_SPECIFICITY:
-            errors.append(
-                f'{where}: specificity={p.specificity!r} 非法'
-                f'（合法值 {VALID_SPECIFICITY}）')
+        errors.extend(f'{where}: {msg}' for msg in rule_profile_issues(p))
     if errors:
         raise ValueError('规则档案校验失败:\n  ' + '\n  '.join(errors))
 

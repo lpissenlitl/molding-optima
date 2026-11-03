@@ -16,9 +16,13 @@
 - 分类与建对象**同处一处**：编排层不再持有分流逻辑，也不再碰规则串
 - 编排层因此**零解析**：它只负责把 Profile 列表交给本模块，再把产物交给 net
 
-**三段判定**（口径固定，不做"优化"）：
+**四段判定**（口径固定，不做"优化"）：
 
-1. **结论形态** —— 与 `library/rules.py::classify_conclusion_kind` 同口径：
+0. **代数式结论** —— ``X=a*Y+b*Z``：**内核不支持**该形态，显式跳过并留痕。
+   （历史包袱：它无 action ⇒ 会被下面第 1 段判成 advisory ⇒ 默默进 Mamdani 层
+   当一条「无结论列」的空规则，不报错也不留痕；原 `NumTskRule` 里的
+   `parameter_vector` 分支则**永远执行不到**（代数式不会建 NumTskRule）。）
+1. **结论形态** —— 与规则层共用同一判定（`parsing.classify_conclusion_kind`）：
    只要有一个结论的动作不是 add/reduce ⇒ advisory；
    全是 add/reduce 时，至少一个结论值是数字 ⇒ numeric。
 2. **数值可推理性** —— 数值类规则的所有结论值都必须是数字，
@@ -36,7 +40,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
 from .models.rules import FuzzyRule, NumTskRule
-from .parsing import is_param_name, parse_rule
+from .parsing import (
+    classify_conclusion_kind,
+    is_numeric_value,
+    is_param_name,
+    parse_rule,
+)
 from .profiles import RuleProfile
 
 
@@ -75,6 +84,12 @@ class FilteredRules:
         数值层用到的工艺参数名（决定要拉哪些 RuleKeyword 论域元数据）。
     mamdani_param_names : set[str]
         提示层用到的工艺参数名。
+    defect_param_names : set[str]
+        数值层用到的**缺陷类**名字（缺陷名 + 缺陷位置名）。
+        决定要拉哪些缺陷关键词的论域元数据，用于把缺陷程度（档位）
+        翻译成推理输入里的数值。⚠️ 与 `numeric_param_names` **必须分开放**
+        —— 后者用于"规则缺一个门控条件"的体检，混进缺陷名会让体检把
+        缺陷维度误判为缺失门控。
     skipped : list[dict]
         被跳过的规则及原因（诊断信息，不参与推理）。
     """
@@ -84,39 +99,13 @@ class FilteredRules:
     advice_items: List[AdviceItem] = field(default_factory=list)
     numeric_param_names: Set[str] = field(default_factory=set)
     mamdani_param_names: Set[str] = field(default_factory=set)
+    defect_param_names: Set[str] = field(default_factory=set)
     skipped: List[Dict[str, str]] = field(default_factory=list)
 
 
 # ============================================================================
 # 判定（口径固定，见文件头说明）
 # ============================================================================
-
-def _is_numeric_value(value) -> bool:
-    """结论值是否是数值。
-
-    口径与 `library/rules.py::classify_conclusion_kind` **完全一致**
-    （同一套 isdigit 判定），保证"判为数值类"⇒"一定可安全推理"。
-    """
-    text = '' if value is None else str(value)
-    return text.rstrip('%').lstrip('-').replace('.', '', 1).isdigit()
-
-
-def _conclusion_kind(solutions: List[Dict]) -> str:
-    """结论形态：'numeric' / 'advisory'。
-
-    复刻 `library/rules.py::classify_conclusion_kind` 的判定口径，
-    但输入是**已拆解的结论段**（不再重新拆规则串）。
-    """
-    has_numeric = False
-    for sol in solutions:
-        action = sol.get('action')
-        if action in ('add', 'reduce'):
-            if _is_numeric_value(sol.get('value', '')):
-                has_numeric = True
-        else:
-            return 'advisory'
-    return 'numeric' if has_numeric else 'advisory'
-
 
 def _first_non_numeric_value(solutions: List[Dict]):
     """数值类规则里**第一个**不能安全 float 的结论值（None = 全部安全）。
@@ -128,7 +117,7 @@ def _first_non_numeric_value(solutions: List[Dict]):
         if action not in ('add', 'reduce'):
             continue
         value = sol.get('value', '')
-        if not _is_numeric_value(value):
+        if not is_numeric_value(value):
             return str(value)
     return None
 
@@ -144,6 +133,17 @@ def _has_check_conclusion(solutions: List[Dict]) -> bool:
     return False
 
 
+def _has_algebra_conclusion(solutions: List[Dict]) -> bool:
+    """结论里是否有**代数式**（``X=a*Y+b*Z``）。
+
+    内核不支持该形态 ⇒ 命中即整条跳过并留痕。
+    """
+    for sol in solutions:
+        if sol.get('kind') == 'algebra':
+            return True
+    return False
+
+
 def _collect_param_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None:
     """把一条规则的参数名并进集合（与 `parsing.is_param_name` 同口径）。
 
@@ -152,6 +152,27 @@ def _collect_param_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None:
     for info in parsed['preconditions'] + parsed['solutions']:
         name = info.get('name')
         if is_param_name(name):
+            into.add(name)
+
+
+def _collect_defect_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None:
+    """把一条规则的**缺陷类**名字并进集合（与 `_collect_param_names` 互补）。
+
+    「缺陷类」= 缺陷名（SHORTSHOT / FLASH / …）+ 缺陷位置名（DLOVERSIZE1 / …）。
+    判定口径与 `parsing.is_param_name` **正好相反**：那边收"是参数"的，
+    这边收"不是参数"的。
+
+    为什么单独收：缺陷程度要作为**算法输入**进推理（缺陷维度必须能表达
+    "越严重越激进"），因此需要缺陷关键词的论域元数据
+    （RuleKeyword.range / fuzzy_level）把档位词翻译成论域上的数值。
+
+    ⚠️ 走的是**已拆解产物**，不再重新拆规则串 ⇒ 第 4 层仍然只拆一次。
+    """
+    for info in parsed['preconditions'] + parsed['solutions']:
+        name = info.get('name')
+        if not name:
+            continue
+        if not is_param_name(name):
             into.add(name)
 
 
@@ -174,23 +195,37 @@ def build_rule_objects(profiles: List[RuleProfile]) -> FilteredRules:
 
     Notes
     -----
-    - 每条规则串**只拆一次**（``parse_rule``），拆解产物同时供
+    - 每条规则串**只拆一次**（``parse_rule``）：优先复用来源适配层放进
+      ``RuleProfile.parsed`` 的拆解产物，拆解产物同时供
       「分类」「建对象」「收参数名」三处使用
     - 保持输入顺序（各组内部顺序与 ``profiles`` 一致）⇒ 推理结果的排序稳定
     """
     result = FilteredRules()
 
     for profile in profiles:
-        parsed = parse_rule(profile.rule_description)
+        # ★ 规则串**只拆一次**：优先复用来源适配层拆好的产物
+        #   （`RuleProfile.parsed`）；没有（直接构造档案的调用方：测试替身 /
+        #   离线脚本 / demo 案例）才现拆 ⇒ 兼容旧构造方式。
+        parsed = (profile.parsed if profile.parsed is not None
+                  else parse_rule(profile.rule_description))
         solutions = parsed['solutions']
 
+        # ---- 判定 0：代数式结论 → 内核不支持，显式跳过并留痕 --------------
+        if _has_algebra_conclusion(solutions):
+            result.skipped.append({
+                'rule': profile.rule_description,
+                'reason': '代数式结论（X=a*Y+b*Z）内核不支持，已跳过',
+            })
+            continue
+
         # ---- 判定 1：结论形态 -------------------------------------------
-        if _conclusion_kind(solutions) == 'numeric':
+        if classify_conclusion_kind(solutions) == 'numeric':
             # ---- 判定 2：数值可推理性 ----------------------------------
             bad_value = _first_non_numeric_value(solutions)
             if bad_value is None:
                 result.numeric_rules.append(NumTskRule(profile, parsed))
                 _collect_param_names(parsed, result.numeric_param_names)
+                _collect_defect_names(parsed, result.defect_param_names)
                 continue
             result.skipped.append({
                 'rule': profile.rule_description,

@@ -10,7 +10,8 @@ URL 段架构 (2026-10-13):
 设计原则:
 - 业务级 CRUD 走 records 段, 纯数据级 CRUD 走 conditions / parameters 段
 - parameter 是独立业务对象, URL 单段化, condition_id 退化为可选 query 过滤
-- parameter-tree / tuning-feedback: view + service 保留, 路由暂不挂出, 需要时再加回
+- tuning-feedback: view + service 保留, 路由暂不挂出, 需要时再加回
+- records 段子视图: parameter-list (平铺) / parameter-tree (树形) / history (调机时间线)
 """
 from django.urls import path
 
@@ -19,6 +20,7 @@ from .views.processes import (
     ProcessRecordDetailView,
     ProcessRecordParameterListView,
     ProcessRecordParameterTreeView,
+    ProcessRecordHistoryView,
     ConditionListView,
     ConditionDetailView,
     ParameterListView,
@@ -50,6 +52,8 @@ urlpatterns = [
     path("processes/records/<int:condition_id>/", ProcessRecordDetailView.as_view()),
     path("processes/records/<int:condition_id>/parameter-list/", ProcessRecordParameterListView.as_view()),
     path("processes/records/<int:condition_id>/parameter-tree/", ProcessRecordParameterTreeView.as_view()),
+    # 调机历史 (时间线视图: 全部调机轮次按 created_at 倒序)
+    path("processes/records/<int:condition_id>/history/", ProcessRecordHistoryView.as_view()),
 
     # conditions 数据级 (独立创建/查询, 2026-10-13 接入)
     path("processes/conditions/", ConditionListView.as_view()),

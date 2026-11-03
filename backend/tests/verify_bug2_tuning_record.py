@@ -1,6 +1,13 @@
 """Bug 2 修复验证：_create_process_parameter / _copy_process_parameter 同步创建 TuningRecord"""
-import django
 import os
+import sys
+
+# ★ backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
+#   直接 `python tests/verify_bug2_tuning_record.py` 时，sys.path[0] 是脚本所在目录
+#   （= backend/tests）⇒ 拿不到 `_moldx` 等顶层包。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 django.setup()

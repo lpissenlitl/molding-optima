@@ -3,6 +3,21 @@
 > 日期：2026-10-23
 > 用途：**新对话的起点**。本文档自包含，不需要重跑考古。
 > 上一轮上下文已耗尽且过长，用户要求换会话继续。
+>
+> ⚠️ **状态说明（2026-10-28 核对）** —— **本文已被大量后续工作超越，不要再按 §0 的
+> 「从 §6 Step 1 开始」执行**（Step 1 早已完成，Step 2~7 已被 E1~E26 入口重构、
+> 批 B/C 聚合与缺陷语义改造取代）。当前接手请改读：
+>
+> | 主题 | 现行文档 |
+> |---|---|
+> | 引擎现状 / 聚合与缺陷语义 / 遗留清单 | `2026-10-27-fuzzy-post-refactor-review.md`（最新） |
+> | 档位词语义（绝对词义 / 填不进怎么办） | `backend/_refs/system/algorithm/fuzzy-level-semantics-design.md`（决策 D1/D3/D5） |
+> | 改造顺序与各阶段落地情况 | `2026-10-22-fuzzy-engine-paradigm-decision.md` §6 |
+> | 档位→桶接线的执行记录 | `2026-10-23-fuzzy-implementation-checklist.md` §11 |
+>
+> 本文保留的价值：**§3.2 单规则旅程 / §7 研发流程规范 / §8 错误台账**（仍是团队规范），
+> 以及 §1~§5 作为**决策过程的考古记录**。文中 `diag_fuzzy_*.py` 脚本已随 commit `f181df6`
+> **全部删除**，不可复跑。
 
 ---
 
@@ -35,7 +50,7 @@
 | 零阶 T-S 推理链（模糊化→规则库→t-norm 激活→按输出分组加权平均） | ✅ **思想正确** | 继承，并写清每一步语义 |
 | 「库 / 业务」分离（fuzzykit 无 I/O，业务在 services） | ✅ **思想正确** | 继承 |
 | 矩阵化（规则库编译成矩阵） | ⚠️ 可用，但**列布局成为隐式契约** | 继承思想，**列布局必须显式化** |
-| 档位词全局静态表（low=0/high=2） | ❌ **实现粗糙** | 重新设计（见 §5-❶） |
+| 档位词全局静态表（low=0/high=2） | ❌ **实现粗糙** | 重新设计（见 §5-❶）<br>✅ **已落地（2026-10-23）**：全局表弃用，档位→桶按**字段自身词表**定位 |
 | 静默跳过前件、continue 兜底 | ❌ **漏洞** | 重新设计（显式失败） |
 | 桶峰位 `quantile` 计算 | ⚠️ 逐字保留但**语义要重新论证** | 保留实现，补论证 |
 | `induction/` 目录（4778 行规则自动归纳） | ❌ 新版不需要 | 不迁移 |
@@ -251,9 +266,9 @@ python -m pytest process/algorithms/fuzzy/fuzzy_core/tests/ tests/test_fuzzy_fie
 
 ### 4.7 ✅ Step 1 实测结果（2026-10-23 新增）
 
-> 脚本：`backend/_dev_refs/diag_fuzzy_rule_journey.py`（只读诊断）
+> 脚本：`backend/_dev_refs/diag_fuzzy_rule_journey.py`（只读诊断）—— ⚠️ **已随 commit `f181df6` 删除，不可复跑**
 > 输出：`_dev_refs/_step1_out.txt`
-> 复现：`cd backend; python _dev_refs\diag_fuzzy_rule_journey.py`
+> 复现：`cd backend; python _dev_refs\diag_fuzzy_rule_journey.py`（脚本已删，需重写）
 
 **选取的 4 条代表性规则（按 RuleMethod.id 固定）**
 
@@ -297,8 +312,8 @@ python -m pytest process/algorithms/fuzzy/fuzzy_core/tests/ tests/test_fuzzy_fie
 
 | 解读 | `low` | `medium` | `high` | 浪费的桶 | 后果 |
 |---|---|---|---|---|---|
-| **旧版（现行线上）** | 桶0 = **0%** | 桶1 = 25% | 桶2 = **50%** | 桶3、4 | "高"只要到中位就算高 ⇒ **偏松** |
-| **E2（已写好未接线）** | 桶1 = 25% | 桶2 = 50% | 桶3 = **75%** | 桶0、4 | "高"要过 75% ⇒ 更符合直觉，但**改 1643 条规则行为** |
+| **旧版（当时的线上，2026-10-23 快照）** | 桶0 = **0%** | 桶1 = 25% | 桶2 = **50%** | 桶3、4 | "高"只要到中位就算高 ⇒ **偏松**（**已于 2026-10-23 修复**） |
+| **E2（当时已写好未接线 → 现已接线）** | 桶1 = 25% | 桶2 = 50% | 桶3 = **75%** | 桶0、4 | "高"要过 75% ⇒ 更符合直觉，但**改 1643 条规则行为**<br>✅ **E2 已于 2026-10-23 接线**（commit `4f50bfd`）。现行口径 = 档位词**绝对词义**，落格随**字段自身档数**变（3 档→桶0、5 档→桶1、7 档→桶2）⇒ **规则不需要声明档位体系**，算法也不假设规则与关键词同档 |
 
 **Step 1 已把后果量化（F2/F3）**：
 
@@ -359,7 +374,7 @@ python -m pytest process/algorithms/fuzzy/fuzzy_core/tests/ tests/test_fuzzy_fie
 - ✅ 跑出每一步真实中间值：解析 → 校验 → 隶属度函数参数（峰位/σ）→ 列区间 → 矩阵置位 → 每列隶属度 → 激活度 → 归一化权重 → 最终建议
 - ✅ 结果已写入 §3.2 + §4.7（F1~F8）
 - ✅ 附对拍：与真实 `FuzzyEngine.recommend()` 逐项一致（F8）
-- 脚本：`backend/_dev_refs/diag_fuzzy_rule_journey.py`；输出 `_dev_refs/_step1_out.txt`
+- 脚本：`backend/_dev_refs/diag_fuzzy_rule_journey.py`（⚠️ **已随 commit `f181df6` 删除**）；输出 `_dev_refs/_step1_out.txt`
 
 ⚠️ **Step 1 暴露的待办**（需在后续步骤消化）：
 - F1 的 58 条“死规则”（激活度恒 0）—— 算不算 bug？要不要纳入修复范围？

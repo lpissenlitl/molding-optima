@@ -5,6 +5,7 @@
 - `split_phase()`  把一个规则词法单元解析为结构化字段
 - `classify_name()`  判定名字是"缺陷"还是"工艺参数"
 - `is_param_name()`  判定名字是否是"工艺参数名"（唯一判定口径）
+- `is_numeric_value()` 判定结论值是否是数值（规则层与 filter 层唯一判定口径）
 
 为什么要统一口径：算法层与规则层都要按规则串反推"这条规则涉及哪些参数"、
 按"结论形态"分流规则，两处各自解析会让 `X_add_2` / `X_adjust_提示语`
@@ -17,11 +18,7 @@
 
 from typing import Dict, List
 
-from .macros import ALL_LEVEL_WORDS, DEFECT_CONST, LEVEL_WORD_ALIASES
-
-
-# 规则关键字（IF / AND / THEN）——不是词法单元，跳过
-RULE_KEYWORDS = frozenset({'IF', 'AND', 'THEN', 'Then', 'then'})
+from .macros import ALL_LEVEL_WORDS, DEFECT_CONST, LEVEL_WORD_ALIASES, LEVEL_WORD_SUFFIXES
 
 
 def split_phase(phase: str) -> Dict[str, str]:
@@ -82,11 +79,11 @@ def split_phase(phase: str) -> Dict[str, str]:
     #   档位词可能是多段的（very_low / extremely_low / slightly_low ...），
     #   必须按“最长后缀”匹配：'IV0_very_low' 应拆成 name='IV0' + level='very_low'，
     #   而不是 name='IV0_very' + level='low'（那样档位会错一档）。
-    for seg_count in range(min(3, len(parts) - 1), 0, -1):
-        suffix = '_'.join(parts[-seg_count:])
-        if suffix in ALL_LEVEL_WORDS:
-            name = '_'.join(parts[:-seg_count])
-            return {'name': name, 'level': suffix, 'kind': 'precondition'}
+    #   后缀表由 macros.LEVEL_WORD_SUFFIXES 给出（已按段数降序排好）。
+    for level_word in LEVEL_WORD_SUFFIXES:
+        if phase.endswith('_' + level_word):
+            name = phase[: -len(level_word) - 1]
+            return {'name': name, 'level': level_word, 'kind': 'precondition'}
 
     # ---- 兜底：按空格 + 第一段下划线拆分 -----------------------------------
     #   注：兜底结果的 level 未必是合法等级词（如 'worse'），调用方必须
@@ -145,6 +142,66 @@ def is_param_name(name: str) -> bool:
     return classify_name(name) != 'defect'
 
 
+def is_numeric_value(value) -> bool:
+    """结论值是否是数值（**唯一判定口径**）。
+
+    规则层（`library/rules.py::classify_conclusion_kind`）与第 4 层
+    （`fuzzy_core/rules_filter.py`）必须用同一份判定：一旦两处分叉，
+    被判为数值类的规则可能混进模糊等级值，送进数值层会 ``float('low')``
+    抛 ValueError ⇒ **一条脏规则拖垮整层**。
+
+    口径：去百分号 → 去**一个**前导负号 → 去一个小数点 → 必须是纯数字。
+    ⇒ ``3.8`` / ``-5`` / ``30%`` 是数值；``low`` / ``None`` / ``''`` 不是。
+
+    ⚠️ 两条边界（2026-10-27 修正，原实现各错一处）：
+
+    1. **只去一个负号** —— 原实现用 ``lstrip('-')`` 会把 ``--5`` 削成 ``5``
+       判为数值，于是数值层 ``float('--5')`` 抛 ValueError ⇒
+       **一条脏规则拖垮整层**（正是本函数 docstring 警告的那种塌方）。
+    2. **允许前后空白** —— 原实现不剥空白，``' 5'`` 判为非数值 ⇒
+       合法结论被降级成文本建议（静默错误，且方向相反：值是对的、形态错了）。
+    """
+    text = '' if value is None else str(value).strip()
+    if text.endswith('%'):
+        text = text[:-1].strip()
+    if text.startswith('-'):
+        text = text[1:]
+    return text.replace('.', '', 1).isdigit()
+
+
+def classify_conclusion_kind(solutions: List[Dict]) -> str:
+    """结论形态：'numeric' / 'advisory'（**唯一判定口径**）。
+
+    输入是**已拆解的结论段**（`parse_rule(rule_str)['solutions']`），
+    不再重新拆规则串 —— 两个调用点的输入粒度因此一致。
+
+    - 'numeric'：数值结论（`X_add_2` / `X_reduce_3` / `X_reduce_30%`）
+      → 数值层零阶 TSK 推理（NumTskRuleNet）
+    - 'advisory'：提示类结论（`X_adjust_请检查锁模力是否不合理。`）
+      或模糊等级结论（`X_add_low`）
+      → 提示层（文本建议 / Mamdani 全模糊推理）
+
+    口径：
+    - 只要有一个结论的动作不是 add/reduce（adjust / popup）⇒ 'advisory'
+    - 全是 add/reduce 时，至少一个结论值是数字 ⇒ 'numeric'，否则 'advisory'
+
+    ⚠️ **单一真相源**（与 `is_numeric_value` 同理）：规则层
+    （`library/rules.py::classify_conclusion_kind`）与第 4 层
+    （`fuzzy_core/rules_filter.py`）必须用这一份判定。两处各写一份时，
+    一处收紧、另一处放宽，就会让同一批规则分流到**不同的推理层**。
+    """
+    has_numeric = False
+    for sol in solutions:
+        action = sol.get('action')
+        if action in ('add', 'reduce'):
+            if is_numeric_value(sol.get('value', '')):
+                has_numeric = True
+        else:
+            # adjust / popup：检查类结论，不进数值推理层
+            return 'advisory'
+    return 'numeric' if has_numeric else 'advisory'
+
+
 def parse_rule(rule_str: str) -> Dict[str, List[Dict[str, str]]]:
     """把一条规则串拆成前件 / 结论两部分。
 
@@ -178,9 +235,9 @@ def parse_rule(rule_str: str) -> Dict[str, List[Dict[str, str]]]:
 
 __all__ = [
     'ALL_LEVEL_WORDS',
-    'RULE_KEYWORDS',
     'classify_name',
     'is_level_word',
+    'is_numeric_value',
     'is_param_name',
     'is_position_name',
     'normalize_level_word',

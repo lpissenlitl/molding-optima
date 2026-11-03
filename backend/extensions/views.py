@@ -1,5 +1,6 @@
 from django.views import View
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
+from django.http.response import HttpResponseBase
 from dataclasses import dataclass, field, is_dataclass, asdict
 from datetime import datetime
 import typing
@@ -32,6 +33,7 @@ class BaseView(View):
 
         支持：
         - HttpResponse            原样返回
+        - StreamingHttpResponse   原样返回（文件下载等流式响应）
         - None                    → 默认成功响应
         - dataclass               → asdict() 转换后包装
         - dict / list / str / int / float / bool → JSON 包装
@@ -39,8 +41,8 @@ class BaseView(View):
         注意：不处理 tuple。Tuple 表示分页结果时，view 应用
         `PaginationResponse(total, items)` 包装为 dataclass。
         """
-        # 已经是 HttpResponse 直接返回
-        if isinstance(response, HttpResponse):
+        # 已经是 HttpResponse / StreamingHttpResponse 直接返回
+        if isinstance(response, HttpResponseBase):
             return response
         # dataclass → asdict（主用于 PaginationResponse）
         if is_dataclass(response):

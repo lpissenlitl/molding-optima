@@ -923,8 +923,8 @@ memory 里已经沉淀：
 ## 十一、关联文档
 
 - `docs/process-initialization-design-summary-2026-09-22.md` —— 已完成工艺初始化的设计总结
-- `backend/_dev_refs/2026-09-11-recommendation-tuning-redesign-discussion.md` —— Recommendation + TuningRecord 设计参考
-- `backend/_dev_refs/process-models-design.md` —— ProcessCondition + ProcessParameter 模型设计
+- `backend/_refs/module/process/2026-09-11-recommendation-tuning-redesign-discussion.md` —— Recommendation + TuningRecord 设计参考
+- `backend/_refs/system/model/process-models-design.md` —— ProcessCondition + ProcessParameter 模型设计
 
 ---
 

@@ -56,12 +56,16 @@ PROCESS_SET_FIELDS: Dict[str, Dict[str, Any]] = {
     },
     'vps_mode': {
         'source_model': 'ProcessSet',
-        'source': '前端用户输入（缺失时取 default）',
+        'source': '前端用户输入（缺失时由算法层按 Level-3 兑底为位置切换）',
         'attr_name': 'vps_mode',
-        'desc': 'VP 切换模式（0=位置/1=时间/2=其他）',
+        'desc': 'VP 切换模式（0=位置/1=时间/2=压力/3=位置&时间）',
         'type': int,
         'condition': '可选',
-        'default': 0,  # 位置切换（最常见）
+        # sentinel：None = 「未指定」→ 算法层 Level-3 兑底为 0（位置切换）
+        # ⚠️ 不能预填 0：算法层的 Level-1 判定（int 0~3）与 Level-2 字符串兼容
+        #    是**互斥**的分支，预填 0 会让 Level-1 必然命中 ⇒ Level-2 永久不可达
+        #    （老数据传 VP_switch_mode='时间' 会被静默降级为「位置切换」）
+        'default': None,
     },
     'pre_met_decomp_mode': {
         'source_model': 'ProcessSet',
@@ -87,7 +91,10 @@ PROCESS_SET_FIELDS: Dict[str, Dict[str, Any]] = {
 # ---- 工艺设置默认值（前端不传时填充） ----
 # 区分两种默认值语义：
 # 1. Sentinel 默认值（None）：明确表达「未指定」，算法层走自动推荐
-#    目前只有 inj_stg——因为算法会按 total_len 自动推荐多级注射
+#    目前有 inj_stg / vps_mode：
+#    - inj_stg：算法会按 total_len 自动推荐多级注射
+#    - vps_mode：算法层有 Level-3 兑底（默认位置切换），且 Level-1(int) 与
+#      Level-2(字符串兼容) 是互斥分支 ⇒ 预填具体值会让字符串分支永久不可达
 # 2. 业务默认值（2 / 1 / 5 / 0）：走这个值业务上是合理的
 #    （如 hold_stg=2 是行业标准, met_stg=1 是单段计量, brl_temp_stg=5 是 5 段温度）
 #    算法层没「自动推荐」逻辑时，必须保留业务默认（否则 `ps.get('hold_stg', 2)` 会因 None 漏洞返回 None）
@@ -104,7 +111,9 @@ PROCESS_SET_DEFAULTS: Dict[str, Any] = {
     'met_stg': 1,  # 行业标准：单段计量
     # 其他业务参数：保留业务默认
     'brl_temp_stg': 5,  # 行业标准：5 段温度
-    'vps_mode': 0,  # 位置切换（最常见）
+    # VP 切换模式：sentinel（None = 走算法 Level-3 兑底）
+    # ⚠️ 不能预填 0 —— 会让算法 Level-2 的字符串兼容分支（VP_switch_mode）永久不可达
+    'vps_mode': None,
     'pre_met_decomp_mode': 0,  # 否（默认不松退）
     'pst_met_decomp_mode': 0,  # 否（默认不松退）
 }
@@ -128,10 +137,18 @@ class ProcessSetDefaults:
             process_set: 工艺设置 dict（会被直接修改，填充默认值）
 
         Note:
-            只填充缺失字段，已存在的字段不会被覆盖
+            只填充缺失字段，已存在的字段不会被覆盖。
+            ⚠️ sentinel 字段（默认值为 None）例外：**用户显式传的值一律保留**，
+            包括 0（`vps_mode=0` 是合法输入，不能被 None 覆盖）。
         """
         for key, value in cls.DEFAULTS.items():
-            if not process_set.get(key):
+            if value is None:
+                # sentinel：None 表示「未指定」
+                # ⇒ 用户显式传的值（含 0）不覆盖；未传 / 传 None 才置 None
+                if key in process_set and process_set[key] is not None:
+                    continue
+                process_set[key] = value
+            elif not process_set.get(key):
                 process_set[key] = value
 
 

@@ -584,7 +584,7 @@ def _get_family_hold_time_max(self, family: str, c_hold: Dict[str, Any]) -> floa
 # 【重构】保压时间 = 浇口凝固时间 × 5 维修正因子
 # 推导链：Fourier 热扩散 t ≈ h² / α_eff → family × thickness 基准 × 浇口修正 × 流道修正 × 模温修正 × 结晶拉长 → family 自适应上限钳制
 # 数据源：4 级兜底（精确值 / family×bucket 查表 / family 兜底 / 默认）
-# 物理详见 _dev_refs/2026-07-05-holding-time-physics-design.md
+# 物理详见 _refs/system/algorithm/2026-07-05-holding-time-physics-design.md
 mold_temp_val = mat.get('recommend_mold_temperature', 50)
 freeze_t, freeze_level = self._get_family_gate_freeze_time(family, bucket, c_hold)
 hold_time_raw = (
@@ -915,9 +915,9 @@ logger.debug(
 | `process/engines/expert/initializer.py` | 算法主体（_calc_hold_time 重构 + 4 个新辅助函数）|
 | `process/engines/expert/expert_rules/init_rules.json` | 规则配置（DEFAULT.holding 追加 5 维参数）|
 | `process/engines/expert/rule_matcher.py` | `_BUILTIN_DEFAULTS['holding']` 同步 |
-| `_dev_refs/2026-07-04-algorithm-refactor-roadmap.md` | roadmap（算法 #8 状态变更）|
-| `_dev_refs/2026-07-05-holding-pressure-physics-design.md` | #6 保压压力设计文档（runner_factor 来源）|
-| `_dev_refs/2026-07-05-holding-time-physics-design.md` | 本文档（算法 #8）|
+| `_refs/system/algorithm/2026-07-04-algorithm-refactor-roadmap.md` | roadmap（算法 #8 状态变更）|
+| `_refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md` | #6 保压压力设计文档（runner_factor 来源）|
+| `_refs/system/algorithm/2026-07-05-holding-time-physics-design.md` | 本文档（算法 #8）|
 
 ---
 

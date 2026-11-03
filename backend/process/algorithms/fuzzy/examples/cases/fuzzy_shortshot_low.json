@@ -1,0 +1,438 @@
+{
+  "case_id": "fuzzy_shortshot_low",
+  "title": "PP 包装件 · 短射(低档) · 注射/保压参数调优",
+  "description": "真实调优记录原样抽出的输入数据集：缺陷 SHORTSHOT/low（位置 DLSHORTSHOT1），基线工艺参数取自该轮调优的父版本。规则池是导出时刻的快照（当时只含 base 通用库中该缺陷的规则）；当前选库口径为「未指定 ⇒ 全量模糊库」，本上下文下实际命中集见 README「已知边界」。关键词元数据已同步 2026-10-29 的论域修复：MBP0 的 range_min 由 10 改为 0（与 DB / file 通道一致）；expected 于同日按同步后的数据重刷，作为当前行为基线。",
+  "source": {
+    "tuning_record_id": 44,
+    "baseline_process_parameter_id": 149,
+    "optimized_process_parameter_id": 150,
+    "captured_at": "2026-10-28T11:36:17.976334",
+    "note": "由 export_case.py 从生产库导出；导出后本案例可完全离线复现"
+  },
+  "context": {
+    "feedback": {
+      "defect": [
+        {
+          "level": "low",
+          "position": "DLSHORTSHOT1",
+          "keyword_id": 1228,
+          "keyword_name": "SHORTSHOT"
+        }
+      ]
+    },
+    "polymer_info": {
+      "abbreviation": "PP",
+      "min_melt_temp": 200.0,
+      "max_melt_temp": 280.0,
+      "recommended_melt_temp": 230.0,
+      "min_mold_temp": 20.0,
+      "max_mold_temp": 80.0,
+      "recommended_mold_temp": 40.0
+    },
+    "mold_info": {
+      "product_category": "汽车内饰件",
+      "target_cycle_time": 45.0
+    },
+    "machine_info": {
+      "drive_system": "全液压驱动",
+      "max_set_injection_pressure": 100.0,
+      "max_set_injection_speed": 80.0,
+      "max_set_holding_pressure": 100.0,
+      "max_set_holding_speed": 80.0,
+      "max_set_screw_rotation_speed": 200.0,
+      "max_set_metering_pressure": 100.0,
+      "max_set_metering_back_pressure": 100.0,
+      "max_set_decompression_pressure": 20.0,
+      "max_set_decompression_speed": 80.0
+    },
+    "process_parameter": {
+      "inj_stg": 4,
+      "inj_spd_1": 30.0,
+      "inj_spd_2": 35.0,
+      "inj_spd_3": 38.0,
+      "inj_spd_4": 17.0,
+      "inj_pres_1": 84.0,
+      "inj_pres_2": 84.0,
+      "inj_pres_3": 88.0,
+      "inj_pres_4": 84.0,
+      "inj_pos_1": 272.97,
+      "inj_pos_2": 136.34,
+      "inj_pos_3": 68.03,
+      "inj_pos_4": 27.04,
+      "inj_t": 4.0,
+      "inj_dly_t": 0.2,
+      "vps_mode": 0,
+      "vps_pos": 27.04,
+      "hold_stg": 2,
+      "hold_pres_1": 44.0,
+      "hold_pres_2": 22.0,
+      "hold_spd_1": 24.0,
+      "hold_spd_2": 12.0,
+      "hold_t_1": 15.0,
+      "hold_t_2": 15.0,
+      "cool_t": 9.5,
+      "met_stg": 1,
+      "met_pres_1": 18.0,
+      "met_rot_spd_1": 60.0,
+      "met_back_pres_1": 5.0,
+      "met_pos_1": 282.65,
+      "pre_met_decomp_mode": 0,
+      "pst_met_decomp_mode": 1,
+      "pst_met_decomp_pres": 5.0,
+      "pst_met_decomp_spd": 50.0,
+      "pst_met_decomp_dist": 5.6,
+      "met_lim_t": 0.5,
+      "met_end_pos": 288.25,
+      "brl_temp_stg": 5,
+      "noz_temp": 230.0,
+      "brl_temp_1": 230.0,
+      "brl_temp_2": 220.0,
+      "brl_temp_3": 207.0,
+      "brl_temp_4": 193.0,
+      "brl_temp_5": 177.0
+    }
+  },
+  "rules": [
+    {
+      "rule_description": "IF SHORTSHOT_low AND MEL_low THEN MEL_add_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:20"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND MEL_low THEN MEL_add_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:21"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND MEL_low THEN MEL_add_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:22"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND IV0_low THEN IV0_add_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:23"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND IV0_low THEN IV0_add_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:24"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND IV0_low THEN IV0_add_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:25"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND PV0_low THEN PV0_add_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:26"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND PV0_low THEN PV0_add_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:27"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND PV0_low THEN PV0_add_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:28"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND IV0_high THEN IV0_reduce_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:29"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND IV0_high THEN IV0_reduce_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:30"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND IV0_high THEN IV0_reduce_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:31"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND BT_low THEN BT_add_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:32"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND BT_low THEN BT_add_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:33"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND BT_low THEN BT_add_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:34"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND IT_low THEN IT_add_0.5",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:35"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND IT_low THEN IT_add_0.75",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:36"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND IT_low THEN IT_add_0.95",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:37"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND PT0_low THEN PT0_add_0.5",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:38"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND PT0_low THEN PT0_add_0.75",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:39"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND PT0_low THEN PT0_add_0.95",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:40"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND MBP0_low THEN MBP0_add_1",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:41"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND MBP0_low THEN MBP0_add_1.5",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:42"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND MBP0_low THEN MBP0_add_1.9",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:43"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND IP0_low THEN IP0_add_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:44"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND IP0_low THEN IP0_add_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:45"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND IP0_low THEN IP0_add_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:46"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_low AND PP0_low THEN PP0_add_2",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:47"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_medium AND PP0_low THEN PP0_add_3.0",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:48"
+    },
+    {
+      "rule_description": "IF SHORTSHOT_high AND PP0_low THEN PP0_add_3.8",
+      "priority": 1.0,
+      "conclusion_kind": "numeric",
+      "specificity": 4,
+      "source_ref": "RuleMethod:49"
+    }
+  ],
+  "keywords": [
+    {
+      "keyword_name": "BT",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 50.0,
+      "step": null,
+      "description": "料筒温度"
+    },
+    {
+      "keyword_name": "IP0",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 200.0,
+      "step": null,
+      "description": "注射压力一段"
+    },
+    {
+      "keyword_name": "IT",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 20.0,
+      "step": null,
+      "description": "注射时间"
+    },
+    {
+      "keyword_name": "IV0",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 120.0,
+      "step": null,
+      "description": "注射速度一段"
+    },
+    {
+      "keyword_name": "MBP0",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 50.0,
+      "step": null,
+      "description": "储料背压一段"
+    },
+    {
+      "keyword_name": "MEL",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 200.0,
+      "step": null,
+      "description": "计量终止位置"
+    },
+    {
+      "keyword_name": "PP0",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 140.0,
+      "step": null,
+      "description": "保压压力一段"
+    },
+    {
+      "keyword_name": "PT0",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 10.0,
+      "step": null,
+      "description": "保压时间一段"
+    },
+    {
+      "keyword_name": "PV0",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 100.0,
+      "step": null,
+      "description": "保压速度一段"
+    },
+    {
+      "keyword_name": "SHORTSHOT",
+      "fuzzy_level": 5,
+      "range_min": 0.0,
+      "range_max": 1.0,
+      "step": null,
+      "description": "短射"
+    }
+  ],
+  "expected": {
+    "recommendations": [
+      {
+        "param_name": "PV0",
+        "business_param_name": "hold_spd_1",
+        "current_value": 24.0,
+        "recommended_value": 26.028486139161025,
+        "confidence": 0.47509170151697916,
+        "direction": "increase",
+        "source": "fuzzy.numeric"
+      },
+      {
+        "param_name": "IT",
+        "business_param_name": "inj_t",
+        "current_value": 4.0,
+        "recommended_value": 4.507121534790256,
+        "confidence": 0.47509170151697916,
+        "direction": "increase",
+        "source": "fuzzy.numeric"
+      },
+      {
+        "param_name": "IV0",
+        "business_param_name": "inj_spd_1",
+        "current_value": 30.0,
+        "recommended_value": 32.18242552380636,
+        "confidence": 0.07418659429492462,
+        "direction": "increase",
+        "source": "fuzzy.numeric"
+      },
+      {
+        "param_name": "PP0",
+        "business_param_name": "hold_pres_1",
+        "current_value": 44.0,
+        "recommended_value": 46.300524812590155,
+        "confidence": 0.04503298149333761,
+        "direction": "increase",
+        "source": "fuzzy.numeric"
+      },
+      {
+        "param_name": "MBP0",
+        "business_param_name": "met_back_pres_1",
+        "current_value": 5.0,
+        "recommended_value": 6.16369649146612,
+        "confidence": 0.04133725836898068,
+        "direction": "increase",
+        "source": "fuzzy.numeric"
+      }
+    ]
+  }
+}

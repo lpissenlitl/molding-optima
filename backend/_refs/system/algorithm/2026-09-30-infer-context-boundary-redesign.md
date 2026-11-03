@@ -672,7 +672,12 @@ context['process_parameter'] = algorithm_params
 | 3 | **可扩展多算法** | ExpertEngine 等也可声明自己的 `FIELD_NAME_ALIAS` |
 | 4 | **可演进性** | 前端改命名 → 只改 helper（业务/算法/规则都不动） |
 
-**当前状态**：`FuzzyEngine.FIELD_NAME_ALIAS` 已填入完整映射表（基于 RuleKeyword + ProcessParameter 实际数据），业务命名 → 算法命名 翻译生效。**70/71 业务字段已覆盖**（仅 `met_lim_t` 为边界 case）。
+**当前状态（2026-09-30）**：`FuzzyEngine.FIELD_NAME_ALIAS` 已填入完整映射表（基于 RuleKeyword + ProcessParameter 实际数据），业务命名 → 算法命名 翻译生效。**70/71 业务字段已覆盖**（仅 `met_lim_t` 为边界 case）。
+
+> ⚠️ **2026-10-27 现状**：映射表本体在 `field_names.FIELD_NAME_ALIAS`；
+> `FuzzyEngine` 上的同名别名与 `to_business_name` / `to_algo_name` / `to_algo_params`
+> 兼容入口**已全部移除**（编排层 `parameter_optimize.py` 直接调 `field_names.*`）。
+> 本节描述的是 2026-09-30 当时的实现。
 
 **完整性检查**：通过脚本（`tmp_check_mapping.py`，已删）扫了 ProcessParameter 中 71 个工艺字段，仅 `met_lim_t`（嫧胶延时，算法侧未启用）未映射。
 

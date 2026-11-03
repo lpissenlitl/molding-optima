@@ -6,12 +6,25 @@
 关键字（`RuleKeyword`）没有 `rule_library` 外键，是公司级系统参数元数据
 （ORM 侧 `unique_together = (company, keyword_name)`），与规则的隔离维度不同，
 故分文件。
+
+⚠️ **转换类已迁出本模块**（2026-10-28）：
+
+- `RuleKeywordAdapter`（契约转换，零 ORM）→ `library/adapters.py`
+
+迁出的原因与规则侧一致：文件来源（`library/files/`）要用同一个转换器把
+本地 JSON 规约成内核契约，若转换器留在本模块，文件通道就得 import ORM
+（依赖倒置的实质检验 = 高层不被低层实现拖住）。
+本模块保留**兼容导出**，既有引用路径（`library.keywords.RuleKeywordAdapter`）不变。
 """
 
-from typing import Any, Dict, List
+from typing import List
 
 from process.algorithms.fuzzy.fuzzy_core.profiles import KeywordProfile
+from process.algorithms.fuzzy.library.adapters import RuleKeywordAdapter
 from process.models.rules import RuleKeyword
+
+
+__all__ = ['KeywordQueryService', 'RuleKeywordAdapter']  # 后者为兼容导出
 
 
 # --- KeywordQueryService: 查库 → 内核契约 ---
@@ -36,60 +49,3 @@ class KeywordQueryService:
             return []
         keywords = RuleKeyword.objects.filter(keyword_name__in=names)
         return RuleKeywordAdapter.to_keyword_profiles(keywords)
-
-
-# --- RuleKeywordAdapter: RuleKeyword → KeywordProfile ---
-
-class RuleKeywordAdapter:
-    """`RuleKeyword` → `KeywordProfile`（内核输入契约）。纯转换器，不访问数据库。
-
-    产出**契约对象**而不是裸 dict —— 内核输入格式由 `fuzzy_core/profiles.py`
-    定义，本适配器只负责把来源侧的字段搬过去。
-    """
-
-    @staticmethod
-    def to_keyword_profiles(keywords: List[Any]) -> List[KeywordProfile]:
-        """ORM 实例 / dict 列表 → `KeywordProfile` 列表。"""
-        return [
-            RuleKeywordAdapter._dict_to_profile(kw)
-            if isinstance(kw, dict)
-            else RuleKeywordAdapter._orm_to_profile(kw)
-            for kw in keywords
-        ]
-
-    @staticmethod
-    def _orm_to_profile(keyword: RuleKeyword) -> KeywordProfile:
-        step = getattr(keyword, 'step', None)
-        if step is None:
-            # 兜底：step 字段为空时使用区间范围的 1/3
-            try:
-                span = float(keyword.range_max) - float(keyword.range_min)
-                step = max(span / 3.0, 0.01)
-            except Exception:
-                step = 1.0
-        return KeywordProfile(
-            keyword=keyword.keyword_name,
-            lvl=int(keyword.fuzzy_level or 3),
-            min_val=float(keyword.range_min),
-            max_val=float(keyword.range_max),
-            step=float(step),
-        )
-
-    @staticmethod
-    def _dict_to_profile(keyword: Dict[str, Any]) -> KeywordProfile:
-        step = keyword.get('step')
-        if step is None:
-            try:
-                span = float(keyword['range_max']) - float(keyword['range_min'])
-                step = max(span / 3.0, 0.01)
-            except Exception:
-                step = 1.0
-        return KeywordProfile(
-            keyword=keyword.get('keyword_name') or keyword.get('keyword'),
-            lvl=int(keyword.get('fuzzy_level', 3)),
-            min_val=float(keyword.get('range_min', 0)),
-            max_val=float(keyword.get('range_max', 1)),
-            step=float(step),
-            # dict 输入可带元数据来源标记（推测论域）；ORM 输入无此概念
-            meta_source=keyword.get('meta_source', ''),
-        )

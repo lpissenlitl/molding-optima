@@ -24,7 +24,13 @@ from typing import Dict, Any, List, Optional, Tuple, TypedDict
 
 from django.db import transaction as db_transaction
 
-from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND, ERROR_OPERATION_FAILED, ERROR_REQUIRED_FIELD
+from extensions.exceptions import (
+    BizException,
+    ERROR_DATA_INVALID,
+    ERROR_DATA_NOT_FOUND,
+    ERROR_OPERATION_FAILED,
+    ERROR_REQUIRED_FIELD,
+)
 from process.models import (
     ProcessCondition,
     ProcessParameter,
@@ -32,51 +38,39 @@ from process.models import (
     TuningRecord,
 )
 from process.algorithms.base import AlgorithmRegistry
-from process.algorithms.base import AlgorithmRecommendation
 from process.algorithms.fuzzy import (
     field_names,  # 命名契约：业务字段名 ↔ 算法字段名（双向映射，契约层唯一真相源）
-    is_valid_defect_level_word,  # 缺陷程度（level）合法性校验
+)
+from process.algorithms.fuzzy.over_limit import (
+    detect_blocking_over_limits,  # 越限分层口径（device = 设备安全红线 ⇒ 阻断）
 )
 from process.algorithms.fuzzy.specs import (
     OPTIMIZE_MACHINE_INFO_FIELDS,
     OPTIMIZE_POLYMER_INFO_FIELDS,
     OPTIMIZE_MOLD_INFO_FIELDS,
-    VALID_DEFECT_LEVEL_WORDS_TEXT,  # 合法档位词（错误提示用）
+    audit_feedback_defects,  # 缺陷反馈审计（契约层：字段字典 + 机制）
+    OptimizeDataValidator,  # 入参契约校验器（2026-10-27 接线）
+    resolve_param_limits,  # 机台物理上限 → {参数族: 上限}
 )  # 算法入参契约（字段字典）—— service 层按此白名单提取，不传全量 ORM 字段
 
 _logger = logging.getLogger(__name__)
 
 
-# --- 模块级 lazy 引擎注册（避免重复注册 + 避免循环依赖） ---
-_engines_registered = False
-
-
-def _ensure_engines_registered() -> None:
-    """模块级 lazy 触发引擎注册（幂等）
-
-    显式注册两个 optimization 引擎：
-    - `fuzzy`：模糊推理（规则库驱动）
-    - `empirical`：经验推理（硬编码经验表，兜底）
-
-    不依赖 `process/algorithms/__init__.py` 的隐式 import 副作用：
-    那种注册方式只要有人调整 import 顺序就会静默丢失引擎。
-    """
-    global _engines_registered
-    if _engines_registered:
-        return
-    try:
-        from process.algorithms.fuzzy import FuzzyEngine
-        if not AlgorithmRegistry.get_algorithm("fuzzy"):
-            AlgorithmRegistry.register("fuzzy", FuzzyEngine())
-    except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize] FuzzyEngine 注册失败: %s", e)
-    try:
-        from process.algorithms.empirical.empirical_algorithm import EmpiricalReasoning
-        if not AlgorithmRegistry.get_algorithm("empirical"):
-            AlgorithmRegistry.register("empirical", EmpiricalReasoning())
-    except Exception as e:  # noqa: BLE001
-        _logger.warning("[optimize] EmpiricalReasoning 注册失败: %s", e)
-    _engines_registered = True
+# ⚠️ **引擎注册不再在本模块重复做**（2026-10-28 清理 C10）：
+#   `fuzzy` / `empirical` 两个引擎的**唯一注册点**是各自的引擎模块本身
+#   （`fuzzy/engine.py` 与 `empirical/empirical_algorithm.py` 的模块级
+#   `AlgorithmRegistry.register(...)`），由 `process/algorithms/__init__.py`
+#   的显式 import 触发。
+#
+#   本模块顶层已经 `from process.algorithms.base import AlgorithmRegistry`
+#   ⇒ `process/algorithms/__init__.py` 必然被完整执行 ⇒ 两个引擎必然已注册。
+#
+#   ⚠️ **为什么原来那段是死代码**：`from process.algorithms.fuzzy import FuzzyEngine`
+#     这条 import 语句本身就会执行 `fuzzy/__init__.py` ⇒ `from .engine import FuzzyEngine`
+#     ⇒ `engine.py` 模块级注册 ⇒ **注册早已完成**；
+#     后面的 `if not AlgorithmRegistry.get_algorithm("fuzzy")` 恒为 False
+#     ⇒ `register(...)` 那行永远不执行（`empirical` 同理）。
+#   ⇒ 保留它只会让人误以为「注册在这里」。
 
 
 # --- 算法接口契约（AlgorithmContext schema） ---
@@ -157,13 +151,6 @@ _NON_SNAPSHOT_FIELDS = frozenset({
 })
 
 
-# "无缺陷" sentinel keyword 名称
-_DEFECTFREE_KEYWORD_NAME = "DEFECTFREE"
-
-# 合法缺陷程度取值（错误提示用；词表由算法包 fuzzy.specs 提供，单一真相源）
-_VALID_LEVEL_WORDS_TEXT = VALID_DEFECT_LEVEL_WORDS_TEXT
-
-
 # --- ORM 序列化 + 字段命名翻译 helper ---
 #
 # 字段命名翻译（业务名 ↔ 算法名）**不在本层实现**：
@@ -227,31 +214,49 @@ def _validate_feedback(feedback: Dict[str, Any]) -> None:
 
     DEFECTFREE（无缺陷）是例外：前端不展示程度/位置输入框，这两项免校验。
 
+    ⚠️ 校验口径落在**算法契约层**（`fuzzy.specs.OPTIMIZE_FEEDBACK_FIELDS` +
+       `fuzzy.specs.audit_feedback_defects`），本函数只负责把问题清单转成
+       BizException —— 口径不再手写第二遍，改契约即同步。
+
     Raises:
         BizException(ERROR_REQUIRED_FIELD): 字段缺失或取值不合法
     """
-    defects = feedback.get("defect") or []
-    if not isinstance(defects, list) or len(defects) == 0:
-        raise BizException(ERROR_REQUIRED_FIELD, "请填写缺陷反馈信息")
+    issues = audit_feedback_defects((feedback or {}).get("defect"))
+    if issues:
+        raise BizException(ERROR_REQUIRED_FIELD, issues[0])
 
-    for i, d in enumerate(defects, 1):
-        if not isinstance(d, dict):
-            raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷格式错误：应为对象")
-        if d.get("keyword_name") is None:
-            raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷未选择缺陷类型（keyword_name 必填）")
-        is_defect_free = d.get("keyword_name") == _DEFECTFREE_KEYWORD_NAME
-        if not is_defect_free:
-            level = d.get("level")
-            if not level:
-                raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷未选择缺陷程度")
-            if not is_valid_defect_level_word(level):
-                raise BizException(
-                    ERROR_REQUIRED_FIELD,
-                    f"第 {i } 项缺陷的缺陷程度取值不合法：{level}"
-                    f"（合法取值：{_VALID_LEVEL_WORDS_TEXT}）",
-                )
-            if not d.get("position"):
-                raise BizException(ERROR_REQUIRED_FIELD, f"第 {i } 项缺陷未填写缺陷位置")
+
+# --- Step 0b：调优入参契约校验（两个 inference 入口共用） ---
+def _validate_optimize_inputs(
+    machine_info: Dict[str, Any],
+    polymer_info: Dict[str, Any],
+    mold_info: Dict[str, Any],
+) -> None:
+    """Step 0b —— 调优入参契约校验（`OptimizeDataValidator` 接线）
+
+    校验器是**算法层的对外契约**（`process/algorithms/fuzzy/specs.py`），
+    但它此前**从未被任何生产代码调用**（只有单测引过）⇒ 契约形同虚设。
+    现由 service 层接上，校验失败 ``ValueError`` 转 ``BizException``（400）。
+
+    ⚠️ **为什么在 service 层调**：算法层不 import 业务异常（`BizException`），
+    保持 fuzzy 包零业务耦合；错误码与文案由 service 层决定。
+
+    ⚠️ **当前实际拦截面**：三份字段字典里只有 ``machine_info.drive_system``
+    标了「必填」，其余全是「可选 / 推荐」⇒ 本校验目前**只拦**
+    「机台没填驱动方式」这一件事。
+    （实测：44/44 个 ProcessCondition 的 drive_system 均已填 ⇒ 线上不被拦。）
+
+    Raises:
+        BizException(ERROR_REQUIRED_FIELD): 入参缺失必填字段
+    """
+    try:
+        OptimizeDataValidator.validate(
+            machine_info=machine_info or {},
+            polymer_info=polymer_info or {},
+            mold_info=mold_info or {},
+        )
+    except ValueError as exc:
+        raise BizException(ERROR_REQUIRED_FIELD, str(exc)) from exc
 
 
 # --- Step 1：装配推理上下文 ---
@@ -409,12 +414,51 @@ def _empty_algorithm_result() -> Dict[str, Any]:
     }
 
 
+def _select_algorithm_result(
+    algorithm_sources: Dict[str, List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Step 3b —— 汇总后选优：最终建议集只取优先级最高的那个有产出的引擎。
+
+    业务约定（2026-10-28）：**经验推理只作兜底**。
+    - 模糊推理有产出 ⇒ 最终建议集完全取自模糊推理，经验推理整体让位
+      （否则同一参数会在建议列表里出现「模糊数值建议 + 经验方向建议」两条：
+       工艺员看到的是重复项；若两者方向相反，更是自相矛盾）
+    - 模糊推理无产出 ⇒ 由经验推理接手（只给方向、不给数值）
+
+    优先级取自 ``AlgorithmRegistry._priorities``：fuzzy=1 → llm=2 → empirical=3。
+    落选引擎的原始产出仍保留在 ``algorithm_sources`` 里
+    （供 ``_resolve_primary_source`` 判定 source_type 与日志留痕）。
+
+    ⚠️ 选优**只影响建议集**，不影响 ``new_parameter``：
+       经验推理项本就没有 ``recommended_value``，
+       ``_apply_recommendations_to_baseline`` 早就会跳过它们 ⇒ 参数结果不变。
+
+    Args:
+        algorithm_sources: {subtype: 该引擎的推荐列表}（全部引擎的产出）
+
+    Returns:
+        选中的推荐列表；所有引擎都无产出时返回空列表
+    """
+    for subtype, payload in sorted(
+        algorithm_sources.items(),
+        key=lambda kv: AlgorithmRegistry.get_priority(kv[0]),
+    ):
+        if payload:
+            _logger.info(
+                "[optimize] 选优: 采用 %s 的 %d 条建议（各引擎产出: %s）",
+                subtype, len(payload),
+                {k: len(v) for k, v in algorithm_sources.items()},
+            )
+            return payload
+    return []
+
+
 def _call_algorithms(context: AlgorithmContext) -> Dict[str, Any]:
-    """Step 3 —— 纯调用已注册引擎，不查 DB
+    """Step 3 —— 调用已注册引擎（各引擎并行）→ 汇总后选优，不查 DB
 
     Returns:
         {
-            'recommendations': [...],       # 合并后的扁平推荐列表
+            'recommendations': [...],       # 选优后的最终建议列表
             'algorithm_sources': {subtype: [...]},   # key = algorithm_subtype（fuzzy / empirical）
             'algorithm_names': {name: [...]},        # key = algorithm_name（展示用）
             'best_recommendation': {...} | None,
@@ -442,7 +486,6 @@ def _call_algorithms(context: AlgorithmContext) -> Dict[str, Any]:
         _logger.info("[optimize] 无可用引擎")
         return _empty_algorithm_result()
 
-    all_recommendations: List[AlgorithmRecommendation] = []
     algorithm_sources: Dict[str, List[Dict[str, Any]]] = {}
     algorithm_names: Dict[str, List[Dict[str, Any]]] = {}
     for algorithm in engines:
@@ -454,15 +497,38 @@ def _call_algorithms(context: AlgorithmContext) -> Dict[str, Any]:
         payload = [r.to_dict() for r in recs]
         algorithm_sources[algorithm.algorithm_subtype] = payload
         algorithm_names[algorithm.algorithm_name] = payload
-        all_recommendations.extend(recs)
 
-    merged = [r.to_dict() for r in all_recommendations]
+    # 汇总后选优：各引擎仍并行调用，但最终建议集只采用优先级最高的那个有产出的引擎
+    merged = _select_algorithm_result(algorithm_sources)
     return {
         "recommendations": merged,
         "algorithm_sources": algorithm_sources,
         "algorithm_names": algorithm_names,
         "best_recommendation": merged[0] if merged else None,
     }
+
+
+def _extract_context_overrides(condition_orm: ProcessCondition) -> Dict[str, Any]:
+    """取工艺条件里保存的**上下文覆盖项**（建档时人工指定的精度旋钮）。
+
+    目前真正影响选库的只有 `rule_library_code`（显式指定用哪个规则库）：
+    - **不指定 ⇒ 全量模糊库**（2026-10-29 改造）—— 旧的「产品类别 → 库编码」
+      映射表指向的 code 在库里根本不存在（packaging / auto_parts / medical …）
+      ⇒ 候选必然落空 ⇒ 9 个补充库共 1058 条规则（占全库 64%）从不参与推理；
+      现在改为**加载全部模糊库**，由规则自身标注的材料 / 产品维度判定适用性
+      （`RuleService.matches_context` + `resolve_specificity`）；
+    - **显式指定 ⇒ 只用它**（引擎 `engine.py` 读 `context['rule_library_code']`）——
+      用户已圈定范围时尊重用户的指定。
+
+    ⚠️ 取不到就返回空 dict ⇒ 调用方按「未指定」处理（= 全量模糊库）。
+
+    详见评审文档 §3.6。
+    """
+    snapshot = getattr(condition_orm, 'process_context_snapshot', None) or {}
+    if not isinstance(snapshot, dict):
+        return {}
+    overrides = snapshot.get('overrides') or {}
+    return overrides if isinstance(overrides, dict) else {}
 
 
 def _compose_algorithm_context(
@@ -472,12 +538,17 @@ def _compose_algorithm_context(
     mold_info: Dict[str, Any],
     parameter: Dict[str, Any],
     feedback: Dict[str, Any],
+    rule_library_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Step 2 核心 —— 装成 AlgorithmContext（Port-Adapter 模式）
 
     - 字段选择（业务多 → 算法少）
     - 字段名翻译（业务命名 → 算法命名，规则见算法侧契约 field_names.to_algo_params）
     - 上下文组装
+
+    `rule_library_code`：显式指定规则库（None = 由算法侧按上下文自动解析）。
+    ⚠️ 自动解析目前**必然落空**（映射表指向的 code 库里不存在）⇒ 要用补充库
+    必须显式指定 —— 详见评审文档 §3.6。
     """
     algorithm_params = field_names.to_algo_params(parameter)
     return {
@@ -486,7 +557,106 @@ def _compose_algorithm_context(
         'mold_info': mold_info,
         'process_parameter': algorithm_params,
         'feedback': feedback,
+        'rule_library_code': rule_library_code,
     }
+
+
+# --- 越限守卫（设备安全红线）---
+
+def _format_limit_number(value: float) -> str:
+    """上限 / 当前值的展示格式：整数不带小数尾巴（'100' 而不是 '100.0000'）"""
+    try:
+        if float(value) == int(value):
+            return str(int(value))
+    except (TypeError, ValueError):
+        pass
+    return ('%.4f' % value).rstrip('0').rstrip('.')
+
+
+def _format_over_limit_message(items: List[Any]) -> str:
+    """越限拒绝文案 —— 说清「哪个参数 / 当前值 / 上限」
+
+    否则用户只看到一个「数据无效」，无从下手改。
+    """
+    details = []
+    for item in items[:3]:
+        details.append('%s 当前 %s 超出机台上限 %s'
+                       % (item.business_name or item.param_name,
+                          _format_limit_number(item.current_value),
+                          _format_limit_number(item.limit)))
+    if len(items) > 3:
+        details.append('等 %d 项' % len(items))
+    return '；'.join(details) + '，该设定超出设备可设定范围，请修正后再试'
+
+
+def _summarize_conclusions(
+    blocking: List[Any],
+    recommendations: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """越限参数在**同期 recommendations** 里的结论（**只留痕**，不参与判定）。
+
+    为什么留：判定发生在 recommendations **之后**（用户口径：「有了结论才能讨论
+    参数是否合理」）⇒ 事后要能查证「拒绝的那一刻，结论是什么」。
+
+    Args:
+        blocking: 命中的越限项。
+        recommendations: 本次推理的原始推荐列表（``to_dict()`` 后的 dict）。
+
+    Returns:
+        {算法参数名: 结论摘要}；无结论的参数标为「无结论」。
+    """
+    if not blocking:
+        return {}
+    index: Dict[str, Dict[str, Any]] = {}
+    for rec in recommendations or []:
+        if isinstance(rec, dict):
+            index.setdefault(rec.get('param'), rec)
+
+    out: Dict[str, Any] = {}
+    for item in blocking:
+        rec = index.get(item.param_name)
+        if rec is None:
+            out[item.param_name] = '无结论'
+            continue
+        out[item.param_name] = '→ %s（conf=%s, %s）' % (
+            rec.get('recommended_value'), rec.get('confidence'),
+            rec.get('direction'))
+    return out
+
+
+def _guard_blocking_over_limits(
+    *,
+    process_parameter: Dict[str, Any],
+    machine_info: Dict[str, Any],
+    interface_tag: str,
+    recommendations: Optional[List[Dict[str, Any]]] = None,
+) -> None:
+    """越限守卫 —— **设备安全红线**命中即拒绝（400）
+
+    判定时机（2026-10-29 用户口径）：**recommendations 产出之后**。
+    「参数是否合理」要以结论为参照 ⇒ 不能在推理前就下判断；
+    本守卫跑在 `_call_algorithms` 之后，与 fail-fast 同属 recommendations 阶段。
+
+    判据：当前设定值 > 机台物理上限（`specs.resolve_param_limits`）。
+
+    分层（安全分层口径，固化在算法契约层 `over_limit.BLOCKING_LIMIT_SOURCES`）：
+      - ``device``（设定值类）—— **操作设备涉及安全** ⇒ 阻断；
+      - ``material``（温度类）—— 降解/变色，不涉及设备安全 ⇒ 不阻断（只告警）。
+
+    ⚠️ 缺上限（机台没填）⇒ **不阻断**：缺数据不等于参数不合理。
+
+    Raises:
+        BizException(ERROR_DATA_INVALID): 命中设备安全红线
+    """
+    blocking = detect_blocking_over_limits(
+        process_parameter, resolve_param_limits(machine_info))
+    if not blocking:
+        return
+    _logger.warning(
+        "[optimize] %s 越限拒绝（设备安全红线）: %s ｜ 同期结论: %s",
+        interface_tag, [item.to_trace() for item in blocking],
+        _summarize_conclusions(blocking, recommendations))
+    raise BizException(ERROR_DATA_INVALID, _format_over_limit_message(blocking))
 
 
 # --- Step 3：字段提取（按 specs.py 白名单） ---
@@ -585,6 +755,33 @@ def _extract_mold_info(condition: ProcessCondition) -> Dict[str, Any]:
 
 
 # --- Step 4：应用推荐 + 构造 suggestion ---
+def _quantize_numeric_fields(
+    params: Dict[str, Any],
+    ndigits: int = 2,
+) -> Dict[str, Any]:
+    """工艺参数字典 → 数值字段量化（最多 ndigits 位小数）
+
+    模糊推理的推荐值是「当前值 + Σ(规则结论值 × 组内占比)」，
+    加权平均的产物天然带长小数（inj_spd_1: 30 → 32.053805467920334）——
+    工艺员读不动，参数表显示成一串浮点尾数，DB 里也存着同样的脏值。
+
+    只动**数值**字段：str / datetime / None / bool 原样保留
+    （bool 是 int 的子类，必须先排除，否则 True 会被量化成 1）。
+
+    量化口径与建议文案的 ``_format_value`` 一致（最多 2 位小数），
+    保证「建议文案里的数字」与「参数表里的数字」长得一样。
+    """
+    out: Dict[str, Any] = {}
+    for key, value in params.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            out[key] = value
+            continue
+        quantized = round(value, ndigits)
+        # -0.0 归一为 0.0（否则会渲染成 "-0"）
+        out[key] = 0.0 if quantized == 0 else quantized
+    return out
+
+
 def _apply_recommendations_to_baseline(
     baseline: Dict[str, Any],
     algorithm_recommendations: List[Dict[str, Any]],
@@ -593,6 +790,10 @@ def _apply_recommendations_to_baseline(
 
     注意：算法返回的 ``param`` 是算法命名空间（``IV0`` / ``BT1``），
     必须先译回业务字段名（``inj_spd_1`` / ``brl_temp_1``）才能命中 baseline。
+
+    出口统一量化（最多 2 位小数）—— 本函数是 optimize 路径**唯一的值出口**，
+    落库（``_create_new_parameter``）与响应（``new_parameter``）同源于此，
+    量化一次即可让「DB / 响应 / 建议文案」三处数字口径一致。
     """
     new_parameter = dict(baseline)
     for rec in algorithm_recommendations:
@@ -600,7 +801,7 @@ def _apply_recommendations_to_baseline(
         recommended_value = rec.get("recommended_value")
         if param_name and param_name in new_parameter and recommended_value is not None:
             new_parameter[param_name] = recommended_value
-    return new_parameter
+    return _quantize_numeric_fields(new_parameter)
 
 
 def _resolve_primary_source(algorithm_sources: Dict[str, List[Dict[str, Any]]]) -> Optional[str]:
@@ -930,11 +1131,11 @@ class ParameterOptimizeService:
     - 算法侧是接口契约：本服务只负责编排，不实现具体推理
     - 所有 Step 在一个原子事务内完成（避免半成品落库）
     - 公开入口：infer / infer_from_provided（调用形式与 view 层一致）
-    """
 
-    def __init__(self):
-        # 触发模块级 lazy 引擎注册（幂等）
-        _ensure_engines_registered()
+    ⚠️ 本类**不需要**在 `__init__` 里触发引擎注册 —— 引擎由
+    `process/algorithms/__init__.py` 的显式 import 链在**模块 import 时**
+    就已完成注册（见文件头的说明）。
+    """
 
     def infer(
         self,
@@ -980,6 +1181,10 @@ class ParameterOptimizeService:
         machine_info = ctx["machine_info"]
         polymer_info = ctx["polymer_info"]
         mold_info = ctx["mold_info"]
+        # Step 0b: 入参契约校验（论域上界缺失 → 判级失真，提前拒）
+        _validate_optimize_inputs(machine_info, polymer_info, mold_info)
+        # 建档时人工指定的上下文覆盖项（目前只有 rule_library_code 有效）
+        overrides = _extract_context_overrides(condition_orm)
 
         # ---------- Step 2: 纯推理（与 DB 无关）----------
         new_parameter_dict, suggestion_payload, algorithm_recommendations = self._infer_kernel(
@@ -989,6 +1194,7 @@ class ParameterOptimizeService:
             baseline=baseline,
             feedback=feedback,
             interface_tag=f"infer(condition_id={condition_id}, parent_seq_idx={parent_seq_idx})",
+            rule_library_code=overrides.get('rule_library_code'),
         )
 
         # ---------- Step 3: 原子事务落库 ----------
@@ -1073,6 +1279,8 @@ class ParameterOptimizeService:
         feedback = feedback or {}
         # Step 0: feedback 防御性校验（与 infer() 同套约束镜像）
         _validate_feedback(feedback)
+        # Step 0b: 入参契约校验（三维由调用方直传，同样要过契约）
+        _validate_optimize_inputs(machine_info, polymer_info, mold_info)
 
         # 调 self._infer_kernel 纯推理（与 infer() 走同一函数）
         # 第 3 个返回值 algorithm_recommendations 无需落库（FromProvided 是纯推理）
@@ -1100,6 +1308,7 @@ class ParameterOptimizeService:
         baseline: Dict[str, Any],
         feedback: Dict[str, Any],
         interface_tag: str,
+        rule_library_code: Optional[str] = None,
         fail_fast_message: str = "推荐算法暂不可用，请稍后重试或联系管理员",
     ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
         """【Step 3+4 纯算法内核】5 维 dict → (new_parameter, suggestion, algorithm_recommendations)
@@ -1132,11 +1341,23 @@ class ParameterOptimizeService:
             mold_info=mold_info,
             parameter=baseline,
             feedback=feedback,
+            rule_library_code=rule_library_code,
         )
 
         algorithm_result = _call_algorithms(algorithm_context)
         raw_recommendations = algorithm_result.get("recommendations", []) or []
         algorithm_sources = algorithm_result.get("algorithm_sources", {}) or {}
+
+        # 越限守卫（**recommendations 阶段**的判定，详见 _guard_blocking_over_limits）
+        #
+        # 放在 fail-fast **之前**：超限往往就是「推不出结论」的根因，
+        # 先报根因（参数超出设备可设定范围）比报「推荐算法暂不可用」准确。
+        _guard_blocking_over_limits(
+            process_parameter=algorithm_context.get('process_parameter') or {},
+            machine_info=machine_info,
+            interface_tag=interface_tag,
+            recommendations=raw_recommendations,
+        )
 
         # fail-fast 守卫（基于算法原始输出：有没有给出推荐）
         if not raw_recommendations:

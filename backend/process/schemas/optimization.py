@@ -160,12 +160,20 @@ class OptimizeMachineInfoSchema(BaseSchema):
     未纳入的能力字段（对调优无意义，initialize 才需要）：
     screw_diameter / max_injection_volume / plasticizing_capacity 等。
 
-    必填等级见 algorithms/fuzzy/specs.py::OPTIMIZE_MACHINE_INFO_FIELDS：除
-    max_set_decompression_speed（可选）与 3 个「液压机必填」项外，这里的
-    max_set_* 全部是必填——缺上界不是精度下降，而是判级错误。
+    必填等级见 algorithms/fuzzy/specs.py::OPTIMIZE_MACHINE_INFO_FIELDS：
+    max_set_decompression_pressure / max_set_decompression_speed 是「可选」
+    （无对应规则参数族，不参与判级论域）；
+    max_set_metering_pressure / max_set_metering_back_pressure 是「液压机必填」
+    （全电机 HMI 物理上无此栏，缺失属正常）；
+    其余 5 个（注射压力/速度、保压压力/速度、螺杆转速）是「必填」
+    ——缺上界不是精度下降，而是判级错误。
+    ⚠️ **单位不在算法层考虑**：这里取的就是**界面值**（HMI 面板显示上限），
+    算法侧直接用，**不做单位换算、不做单位一致性校验**（用户口径 2026-10-27：
+    「我们取的就是界面值，不需要关心单位」）。ORM 字段声明的单位仅作字段描述用。
 
     命名空间：本 schema 的字段名 == ORM 字段名（InjectionUnit / InjectionMoldingMachine）。
-    fuzzy 侧的命名空间就是业务/ORM 名（FuzzyEngine.FIELD_NAME_ALIAS 为空 dict）。
+    fuzzy 侧的命名空间就是业务/ORM 名 —— 这些**机器属性字段不在** fuzzy 的命名映射表内
+    （`field_names.FIELD_NAME_ALIAS` 只收工艺参数，如 ``inj_spd`` → ``IV``）。
     """
 
     # --- 驱动形式（InjectionMoldingMachine 主表）：「液压机必填」等级的评估前提 ---
@@ -176,15 +184,15 @@ class OptimizeMachineInfoSchema(BaseSchema):
     )
 
     # --- HMI 可设定上限（InjectionUnit「成型能力」段）---
-    max_set_injection_pressure: Optional[float] = Field(None, description="最大可设定注射压力 [MPa]")
-    max_set_injection_speed: Optional[float] = Field(None, description="最大可设定注射速度 [mm/s]")
-    max_set_holding_pressure: Optional[float] = Field(None, description="最大可设定保压压力 [MPa]")
-    max_set_holding_speed: Optional[float] = Field(None, description="最大可设定保压速度 [mm/s]")
-    max_set_metering_pressure: Optional[float] = Field(None, description="最大可设定计量压力 [MPa]")
-    max_set_metering_back_pressure: Optional[float] = Field(None, description="最大可设定计量背压 [MPa]")
-    max_set_screw_rotation_speed: Optional[float] = Field(None, description="最大可设定螺杆转速 [rpm]")
-    max_set_decompression_pressure: Optional[float] = Field(None, description="最大可设定松退压力 [MPa]")
-    max_set_decompression_speed: Optional[float] = Field(None, description="最大可设定松退速度 [mm/s]")
+    max_set_injection_pressure: Optional[float] = Field(None, description="最大可设定注射压力（HMI 界面值）")
+    max_set_injection_speed: Optional[float] = Field(None, description="最大可设定注射速度（HMI 界面值）")
+    max_set_holding_pressure: Optional[float] = Field(None, description="最大可设定保压压力（HMI 界面值）")
+    max_set_holding_speed: Optional[float] = Field(None, description="最大可设定保压速度（HMI 界面值）")
+    max_set_metering_pressure: Optional[float] = Field(None, description="最大可设定计量压力（HMI 界面值）")
+    max_set_metering_back_pressure: Optional[float] = Field(None, description="最大可设定计量背压（HMI 界面值）")
+    max_set_screw_rotation_speed: Optional[float] = Field(None, description="最大可设定螺杆转速（HMI 界面值）")
+    max_set_decompression_pressure: Optional[float] = Field(None, description="最大可设定松退压力（HMI 界面值）")
+    max_set_decompression_speed: Optional[float] = Field(None, description="最大可设定松退速度（HMI 界面值）")
 
 
 class OptimizePolymerInfoSchema(BaseSchema):

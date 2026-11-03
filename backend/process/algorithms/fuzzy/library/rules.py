@@ -1,21 +1,43 @@
-"""规则资源 —— 规则的取数与语义判定。
+"""规则资源 —— 规则的**取数**（查询线，依赖 ORM）。
 
 规则分两层：library（规则库分组 `RuleLibrary`）、method（挂在库下的规则条目 `RuleMethod`）。
 
-- `RuleQueryService`：查库（依赖 ORM）
-- `RuleService`：规则串语义判定（不查库），文件来源可复用同一份
+- `RuleQueryService`：查库（依赖 ORM），产出**来源无关记录**（`RuleRecord` / `LibraryRecord`）
 - `ResourceRepository`（`library/repository.py`）负责把规则组织成算法要用的资源
+
+⚠️ **语义类与转换类已迁出本模块**（2026-10-28）：
+
+- `RuleService`（规则串语义判定，零 ORM）→ `library/semantics.py`
+- `RuleAdapter` / `RuleRecordAdapter` / `LibraryRecordAdapter`（契约转换，零 ORM）
+  → `library/adapters.py`
+
+迁出的原因：文件来源（`library/files/`）必须**零 ORM** 地复用这些判定，
+否则会把 Django ORM 拖进文件通道（依赖倒置的实质检验 = 高层不被低层实现拖住）。
+本模块保留**兼容导出**，既有引用路径（`library.rules.RuleService` 等）不变。
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from process.algorithms.fuzzy.fuzzy_core.parsing import (
-    normalize_level_word,
-    parse_rule,
+from process.algorithms.fuzzy.library.adapters import (
+    LibraryRecordAdapter,
+    RuleAdapter,
+    RuleRecordAdapter,
 )
-from process.algorithms.fuzzy.fuzzy_core.profiles import RuleProfile
-from process.algorithms.fuzzy.library.contracts import RuleQueryContext
+from process.algorithms.fuzzy.library.contracts import (
+    LibraryRecord,
+    RuleRecord,
+)
+from process.algorithms.fuzzy.library.semantics import RuleService
 from process.models.rules import RuleLibrary, RuleMethod
+
+
+__all__ = [
+    'RuleQueryService',
+    'RuleService',          # 兼容导出（实体在 library/semantics.py）
+    'RuleAdapter',          # 兼容导出（实体在 library/adapters.py）
+    'RuleRecordAdapter',
+    'LibraryRecordAdapter',
+]
 
 
 # --- RuleQueryService: 查询侧（只访问数据库，不含业务判断） ---
@@ -64,145 +86,88 @@ class RuleQueryService:
 
     @staticmethod
     def get_methods(
-        rule_library: RuleLibrary,
-        polymer_abbreviation: Optional[str],
-        product_category: Optional[str],
+        library_id: int,
         defect_code: str,
-    ) -> List[RuleMethod]:
-        """按「规则库 + 聚合物 + 产品 + 缺陷」取规则方法。
+    ) -> List[RuleRecord]:
+        """按「规则库 + 缺陷」取**候选**规则方法。
 
-        排序：``priority`` 降序、``id`` 升序。
+        返回**来源无关记录** `RuleRecord`（不是 ORM 实例）—— 编排层只认这一种
+        形态，数据库来源与文件来源在此汇流。
+
+        ⚠️ **入参用 `library_id`（主键）而不是 ORM 实例**：编排层拿到的是
+          `LibraryRecord`（来源无关），只有主键能跨来源地定位到库。
+
+        ⚠️ **本方法只取「候选」，不做适用性判定**：聚合物 / 产品两维的筛选
+          在编排层（`RuleAssembler.assemble`）用 `RuleService.matches_context`
+          统一完成 —— **匹配谓词只在那一处实现**，两个来源共用。
+
+        ⚠️ **「通用」的判定已不只看 NULL**（2026-10-29 改造）：全库实测
+          ``polymer_abbreviation`` / ``product_category`` **无空串**
+          （只有 NULL 与有值两种），但**有值里包含字面值「通用」**
+          —— 那是「明确写了适用于所有产品/材料」，业务含义与 NULL 相同
+          （该维不设限）。⇒ 判定统一走 ``RuleService.is_generic_label``
+          （NULL **或** 字面值「通用」都算通用），**不要**在本层另写一套。
+
+        排序：``priority`` 降序、``id`` 升序（与文件来源的排序口径一致）。
         """
-        return list(
-            RuleMethod.objects.filter(
-                rule_library=rule_library,
-                polymer_abbreviation=polymer_abbreviation,
-                product_category=product_category,
-                defect_code=defect_code,
-                is_active=True,
-                is_deleted=False,
-            ).order_by('-priority', 'id')
+        qs = RuleMethod.objects.filter(
+            rule_library_id=library_id,
+            defect_code=defect_code,
+            is_active=True,
+            is_deleted=False,
         )
-
-
-# --- RuleService: 规则语义（不访问数据库） ---
-
-class RuleService:
-    """规则语义服务 —— 判断规则「是什么」，不取数。
-
-    不 import ORM，也不接受 ORM 实例；「取哪条规则」由来源侧负责
-    （数据库来源见 `RuleQueryService`）。
-    """
-
-    # —— 选库策略（业务约定映射）——————————————————————————————
+        methods = list(qs.order_by('-priority', 'id'))
+        return [RuleRecordAdapter.to_record(m) for m in methods]
 
     @staticmethod
-    def product_to_library_codes(product_category: str) -> List[str]:
-        """产品类别 → 规则库编码候选列表。
-
-        按「精确产品类 + 大类」两级尝试。只产出编码候选，不查库。
+    def get_all_libraries() -> List[RuleLibrary]:
+        """取**全部**规则库（``is_deleted=False``，按主键升序）。
+    
+        ⚠️ **口径与文件来源逐条一致**：`library/files/export.py::export_libraries`
+          用的就是 ``filter(is_deleted=False).order_by('id')`` + 同码只留第一条
+          ⇒ 两条来源的库索引**内容与顺序完全相同**（顺序决定同 priority 库的
+          相对先后，进而决定下游规则遍历顺序）。
+    
+        ⚠️ **不过滤 ``is_active``**：停用库保留在索引里（``LibraryRecord.is_active``），
+          由 `RuleAssembler.select_libraries` 统一判断 —— 与文件来源
+          （`libraries.json` 里带 ``is_active`` 字段、读取时再判）口径一致。
         """
-        candidates = []
-        # 1) 精确产品类（如 product_category='PE酒瓶' → library_code='PE_bottle'）
-        candidates.append(product_category.replace(' ', '_'))
-
-        # 2) 大类约定（product_category '酒瓶' → library_code 'packaging'）
-        # 实际项目里这里应通过业务配置表/查找表展开，这里用启发式映射
-        major_category_map = {
-            '酒瓶': 'packaging',
-            '食品包装': 'packaging',
-            '化妆品容器': 'packaging',
-            '通用包装': 'packaging',
-            '汽车件': 'auto_parts',
-            '医疗器械': 'medical',
-        }
-        for keyword, lib_code in major_category_map.items():
-            if keyword in product_category and lib_code not in candidates:
-                candidates.append(lib_code)
-
-        return candidates
-
-    # —— 适用性判定 ————————————————————————————————————————
-
+        return list(RuleLibrary.objects.filter(is_deleted=False).order_by('id'))
+    
     @staticmethod
-    def match_defect_level(rule_str: str, context: RuleQueryContext) -> bool:
-        """规则前件的缺陷档位是否与反馈档位一致。
-
-        规则库约定：缺陷一定是第一个前件（1646 条规则实测 100% 一致），格式
-        `IF {defect}_{level} AND ...`。反馈档位（low/medium/high）决定命中哪一档
-        规则 —— 三档规则是三套完全不同的调整方案，不能混用。
+    def get_library_index(codes: Optional[List[str]]) -> Dict[str, LibraryRecord]:
+        """按候选编码取库，返回 `library_code` → `LibraryRecord` 的索引。
+    
+        两种口径：
+    
+        - ``codes is None``（**未指定规则库**）⇒ **全量索引**：取全部规则库
+          （`get_all_libraries`）——「哪条规则适用于当前产品/材料」交给
+          规则级判定（`RuleService.matches_context` / `resolve_specificity`）；
+        - 否则 ⇒ **候选库**（不按库类型过滤）+ **通用兜底库 `base`**
+          （单独按 ``library_type='fuzzy'`` 取，与历史行为一致）。
+    
+        ⚠️ **同编码多记录时的口径**：`get_libraries_by_codes` 用 ``qs.first()``
+          取**第一条**（无 order_by ⇒ Django 按主键升序 ⇒ 取 id 最小的那条）。
+          本方法保持同一口径（``setdefault`` 只留第一条）⇒ 文件来源导出时
+          也只保留每个编码的第一条 ⇒ 两条路径选中的库**逐条相同**。
+    
+        ⚠️ **全库实测**（2026-10-28）：11 条库记录，**无一码多记录**，
+          且 ``base`` 库唯一（id=14，``library_type='fuzzy'``）⇒ 候选口径与
+          兜底口径不会分叉。若将来出现同码多记录，需重新审视此处口径。
         """
-        if not context.defect_level:
-            return True
-        preconditions = parse_rule(rule_str)['preconditions']
-        if not preconditions:
-            return True
-        first = preconditions[0]
-        if first.get('name') != context.defect_name:
-            return True
-        # 本模块内 level 统一指「档位」，结论形态用 conclusion_kind
-        defect_level = normalize_level_word(first.get('level'))
-        return defect_level == normalize_level_word(context.defect_level)
+        index: Dict[str, LibraryRecord] = {}
+        if codes is None:
+            # 未指定库 ⇒ 全量（与文件来源 libraries.json 同内容、同顺序）
+            for lib in RuleQueryService.get_all_libraries():
+                record = LibraryRecordAdapter.to_record(lib)
+                index.setdefault(record.library_code, record)
+            return index
+        for lib in RuleQueryService.get_libraries_by_codes(codes):
+            record = LibraryRecordAdapter.to_record(lib)
+            index.setdefault(record.library_code, record)
+        # 通用兜底库（必须存在）：**单独按库类型取**，与历史行为逐条一致
+        for lib in RuleQueryService.get_libraries_by_codes(['base'], library_type='fuzzy'):
+            record = LibraryRecordAdapter.to_record(lib)
+            index.setdefault(record.library_code, record)
+        return index
 
-    @staticmethod
-    def classify_conclusion_kind(rule_str: str) -> str:
-        """按结论形态判定规则所属推理层。
-
-        这里的「层」指结论能不能算出数值，与规则库的组织维度（base 库 / 产品库 /
-        特异级）无关。
-
-        - 'numeric'：数值结论（`X_add_2` / `X_reduce_3` / `X_reduce_30%`）
-          → 数值层零阶 TSK 推理（NumTskRuleNet）
-        - 'advisory'：提示类结论（`X_adjust_请检查锁模力是否不合理。`）
-          或模糊等级结论（`X_add_low`）
-          → 提示层（文本建议 / Mamdani 全模糊推理）
-        """
-        solutions = parse_rule(rule_str)['solutions']
-        has_numeric = False
-        for sol in solutions:
-            action = sol.get('action')
-            if action in ('add', 'reduce'):
-                value = str(sol.get('value', ''))
-                if value.rstrip('%').lstrip('-').replace('.', '', 1).isdigit():
-                    has_numeric = True
-            else:
-                # adjust / popup：检查类结论，不进数值推理层
-                return 'advisory'
-        return 'numeric' if has_numeric else 'advisory'
-
-
-# --- RuleAdapter: RuleMethod → RuleProfile ---
-
-class RuleAdapter:
-    """`RuleMethod` → `RuleProfile`（内核输入契约）。纯转换器，不访问数据库。
-
-    与 `RuleKeywordAdapter`（`library/keywords.py`）成对：那边管关键字侧，
-    这边管规则侧。
-
-    规则串取 `RuleMethod.rule_description`（权威来源）；结论形态由
-    `RuleService.classify_conclusion_kind` 判定 —— 语义判定归 `RuleService`，
-    本类只负责把来源侧字段搬进契约档案。
-    """
-
-    @staticmethod
-    def to_rule_profile(
-        rule_method: RuleMethod,
-        specificity: int,
-    ) -> Optional[RuleProfile]:
-        """`RuleMethod` 实例 → `RuleProfile`；规则串为空返回 `None`。
-
-        Args:
-            rule_method: `RuleMethod` ORM 实例。
-            specificity: 特异级 1~4（由取数时的匹配层级决定，不在规则记录里）。
-        """
-        rule_description = (rule_method.rule_description or '').strip()
-        if not rule_description:
-            return None
-        return RuleProfile(
-            rule_description=rule_description,
-            priority=float(rule_method.priority or 1.0),
-            conclusion_kind=RuleService.classify_conclusion_kind(rule_description),
-            specificity=specificity,
-            # 溯源标识（字符串，不携带 ORM 对象）
-            source_ref=f'RuleMethod:{rule_method.id}',
-        )

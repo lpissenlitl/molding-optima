@@ -9,6 +9,11 @@
 > 关联文档：
 > - `2026-10-22-fuzzy-algorithm-internals.md`（当前版算法包内部整理，A/B/C 三类问题）
 > - `2026-10-22-fuzzy-feature-full-chain-guide.md`（全链路背景，非当前焦点）
+>
+> ⚠️ **状态说明（2026-10-28 核对）**：本文的「当前版」是 **2026-10-22 的快照**，其后发生了
+> 档位→桶接线（E2，2026-10-23）、入口重构（E1~E26）、聚合与缺陷语义改造（批 B/C）、
+> 文件来源通道等大量变更。**看引擎现状请改读
+> `2026-10-27-fuzzy-post-refactor-review.md`**；本文的价值在于**旧版考古对照**本身。
 
 ---
 
@@ -129,12 +134,18 @@ for k in x:
 
 ### 第二层 规则层（门控 + 连乘）
 
+> ⚠️ **2026-10-28 更新（批 M）**：本节代码块与下方「新旧逐层对照」表是
+> **2026-10-22 的历史快照**（当时新旧两版确实“逐行相同”）。
+> 当前版已改为 **`np.min(conditions)`**（弱连接，规格 §5.2）⇒ 连乘描述**已过时**。
+> 详见 `2026-10-23-fuzzy-implementation-design.md` §5.2 与
+> `2026-10-27-fuzzy-post-refactor-review.md` §22。
+
 ```python
 rule_matrix = self.connected_matrix * membership_degrees
 for i in range(self.rule_nums):
     conditions = rule_matrix[i, rule_matrix[i] != 0]
     if conditions.size != 0:
-        rule_activations[i] = np.prod(conditions)      # 连乘
+        rule_activations[i] = np.prod(conditions)      # 连乘（当前版已改为 np.min）
 ```
 
 ### 第三层 归一化层
@@ -182,7 +193,7 @@ sol_matrix = self.solution_matrix.T * cur_params
 | 层 | 旧版 nets.py | 当前版 nets.py | 是否一致 |
 |---|---|---|---|
 | 隶属度层 | L1184-1192 | L671-686 | **逐行相同** |
-| 规则层 `np.prod` | L1195-1202 | L688-700 | **逐行相同** |
+| 规则层 `np.prod` | L1195-1202 | L688-700 | **逐行相同**（⚠️ 2026-10-28 起当前版已改 `np.min`，见批 M） |
 | 归一化 `sum` 全库 | L1205-1209 | L702-712 | **逐行相同** |
 | 结论层 `sol_matrix.T * cur_params` | L1213-1223 | L714-726 | **逐行相同** |
 | 第五层聚合 | **注释掉** | **自创「直接相加」** | **分叉点** |
@@ -889,7 +900,7 @@ RuleKeyword 中含 'SCT' 的字段: 9 个 -> ['SCT0'..'SCT8']
 |---|---|
 | 词法层 `split_phase` | **能解析**（`IV0_level3` → name='IV0', level='level3'） |
 | 映射表 `LEVEL_NUMBER_TO_BUCKET` | **在**（9 条目，N → N−1） |
-| `resolve_bucket()` 编号轨道 | **在**，但未接线（步骤 2 未做） |
+| `resolve_bucket()` 编号轨道 | **在**，但未接线（步骤 2 未做）—— ⚠️ **2026-10-23 已接线**（commit `4f50bfd`）：现按**字段自身词表**定位 |
 | 现行 `nets.py:634` 活路径 | **死分支**——规则库只有 low/medium/high 三个词 |
 | 前端产出 | **不产出**——`LEVEL_WORDS` 按 `fuzzy_level` 给语义词，用户只能从列表里选 |
 

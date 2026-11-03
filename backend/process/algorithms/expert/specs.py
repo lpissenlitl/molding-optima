@@ -157,6 +157,10 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'desc': '最大可设定注射速度 [mm/s]（HMI）',
         'type': float,
         'condition': '必填',
+        # 0 是合法业务值（机器未标定注射速度）：算法层有除零保护
+        # （inj_time_geo = inj_len / equivalent_velo if equivalent_velo > 0 else min_t）
+        # ⇒ 不能被契约当「缺失」拦死
+        'allow_zero': True,
     },
     'max_set_holding_pressure': {
         'source_model': 'InjectionUnit',

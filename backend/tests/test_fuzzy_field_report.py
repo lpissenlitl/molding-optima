@@ -62,7 +62,7 @@ def _param_names():
 def _build_engine():
     engine = FuzzyEngine()
 
-    def _fake_load(param_names, process_parameter):
+    def _fake_load(param_names, process_parameter, domain_limits=None):
         # 真实实现只返回查到的字段
         names = set(param_names)
         return [kp for kp in KEYWORD_PROFILES if kp.keyword in names]

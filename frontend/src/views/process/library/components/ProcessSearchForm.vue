@@ -50,6 +50,7 @@
  * - 通过 emit('search') / emit('reset') 通知父组件触发查询
  */
 import BaseSearchForm from '@/components/BaseSearchForm.vue'
+import type { SearchItem } from '@/types/search-item'
 
 // ============================================================================
 // Props / Emits
@@ -100,7 +101,7 @@ const ORIGIN_OPTIONS = [
 
 // BaseSearchForm 通过 v-model="query[prop]" 直接绑定父组件的 reactive 对象
 // 所以这里直接传 props.queryDetail，不做包装
-const search_items = [
+const search_items: SearchItem[] = [
   {
     label: '状态',
     prop: 'status',
@@ -137,7 +138,15 @@ const search_items = [
     query: { table: 'polymer', column: 'abbreviation' },
   },
   // 日期范围占位
-  { slot_name: 'date-range' },
+  // - type: 'slot' → BaseSearchForm 走自定义插槽分支，不渲染默认控件
+  // - label / prop 仅为满足 SearchItem 结构要求，实际文案与绑定由插槽内部负责
+  {
+    label: '录入日期',
+    prop: 'start_date',
+    type: 'slot',
+    level: 'basic',
+    slot_name: 'date-range',
+  },
 ]
 
 // ============================================================================

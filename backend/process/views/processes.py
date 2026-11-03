@@ -140,7 +140,9 @@ class ProcessRecordListView(BaseView):
         URL: DELETE /api/processes/records/actions/batch-delete/  (与 BaseRequest 通用规则对齐, 2026-10-13)
         body: {"ids": [condition_id1, condition_id2, ...]}
         """
-        return condition.batch_delete_condition(cleaned_data["ids"])
+        return condition.batch_delete_condition(
+            cleaned_data["ids"], company_id=request.user.company_id
+        )
 
 
 class ProcessRecordDetailView(BaseView):
@@ -175,7 +177,7 @@ class ProcessRecordDetailView(BaseView):
         复用 condition.get_condition_frontend (已有 service)
         返回结构: {condition: {...}, parameter: {setting_process: {...}}}
         """
-        return condition.get_condition_frontend(condition_id)
+        return condition.get_condition_frontend(condition_id, company_id=request.user.company_id)
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessConditionAndParameterSchema))
@@ -199,6 +201,7 @@ class ProcessRecordDetailView(BaseView):
             condition_id,
             condition_data=condition_data,
             parameter_data=parameter_data,
+            company_id=request.user.company_id,
         )
 
     @method_decorator(require_login)
@@ -207,7 +210,7 @@ class ProcessRecordDetailView(BaseView):
 
         复用 condition.delete_condition (已有 service)
         """
-        condition.delete_condition(condition_id)
+        condition.delete_condition(condition_id, company_id=request.user.company_id)
 
 
 class ProcessRecordParameterListView(BaseView):
@@ -222,7 +225,9 @@ class ProcessRecordParameterListView(BaseView):
     """
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return condition.get_condition_with_parameter_list(condition_id)
+        return condition.get_condition_with_parameter_list(
+            condition_id, company_id=request.user.company_id
+        )
 
 
 class ProcessRecordParameterTreeView(BaseView):
@@ -237,7 +242,30 @@ class ProcessRecordParameterTreeView(BaseView):
     """
     @method_decorator(require_login)
     def get(self, request, condition_id):
-        return condition.get_condition_with_parameter_tree(condition_id)
+        return condition.get_condition_with_parameter_tree(
+            condition_id, company_id=request.user.company_id
+        )
+
+
+class ProcessRecordHistoryView(BaseView):
+    """调机历史 (GET) - 某个 condition 下的全部调机轮次 (时间线)
+
+    GET /api/processes/records/<int:condition_id>/history/   -- 返回 {condition, count, history[]}
+                                                  业务: 调机记录弹窗数据源
+                                                        (每条 parameter = 一轮调机)
+
+    与兄弟端点的区别:
+    - records/<id>/                 -> 摘要视图 (condition + 最新 1 条 parameter)
+    - records/<id>/parameter-list/  -> 平铺视图 (condition + 全部 parameter, 按 seq_idx 排序)
+    - records/<id>/parameter-tree/  -> 树形视图 (condition + parameter 树)
+    - records/<id>/history/         -> 时间线视图 (按 created_at 倒序, 调机迭代过程)
+    """
+
+    @method_decorator(require_login)
+    def get(self, request, condition_id):
+        return condition.get_condition_history(
+            condition_id, company_id=request.user.company_id
+        )
 
 
 # ============================================================
@@ -324,7 +352,7 @@ class ConditionDetailView(BaseView):
         复用 condition.get_condition (已有 service)
         与 records/<id>/ 的区别: records GET 返回 condition + 最新 parameter
         """
-        return condition.get_condition(condition_id)
+        return condition.get_condition(condition_id, company_id=request.user.company_id)
 
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessConditionWriteSchema))
@@ -334,7 +362,9 @@ class ConditionDetailView(BaseView):
         允许: status / process_context
         锁定: condition_no / origin_type / process_context_snapshot / mold_id / injection_machine_id / polymer_id / shot_index / injection_index
         """
-        return condition.update_condition(condition_id, **cleaned_data)
+        return condition.update_condition(
+            condition_id, company_id=request.user.company_id, **cleaned_data
+        )
 
 
 # ============================================================

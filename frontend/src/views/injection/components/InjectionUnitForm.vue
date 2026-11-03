@@ -62,7 +62,7 @@
             clearable
           >
             <template #suffix v-if="item.unit">{{ item.unit }}</template>
-            <template #suffix v-else-if="item.dynamicUnit">{{ injectionUnit[item.dynamicUnit] }}</template>
+            <template #suffix v-else-if="item.dynamicUnit">{{ injectionUnit[item.dynamicUnit!] }}</template>
           </el-input>
         </el-form-item>
 
@@ -80,7 +80,7 @@
             clearable
           >
             <template #suffix v-if="item.unit">{{ item.unit }}</template>
-            <template #suffix v-else-if="item.dynamicUnit">{{ injectionUnit[item.dynamicUnit] }}</template>
+            <template #suffix v-else-if="item.dynamicUnit">{{ injectionUnit[item.dynamicUnit!] }}</template>
           </el-input>
         </el-form-item>
 

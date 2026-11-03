@@ -52,6 +52,15 @@ coverage.xml
 .mypy_cache/
 .ruff_cache/
 
+# verify 脚本的运行时产物（可再生，不入库）
+backend/tests/*.out
+backend/tests/_flat_out.json
+backend/tests/_acc_*.txt
+
+# 临时取脚本 / 日志（一次性用完即删，不入库）
+/_tmp_*.py
+/_tmp_*.txt
+
 # ========================
 # 包管理 & 构建产物
 # ========================
