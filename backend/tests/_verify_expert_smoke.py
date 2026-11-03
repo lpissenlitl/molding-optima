@@ -14,8 +14,8 @@
 ⚠️ 与「逐位回归锁」的区别：
     各 smoke 脚本是**断言式**护栏（校验领域不变量）；
     `_snapshot_expert.py` + `_golden_expert.json` 是**逐位**护栏（输出逐条比对）。
-    二者互补 —— 逐位锁已于 2026-11-03 退役（生成器不可重建，见
-    `backend/_refs/README.md` §维护说明），当前 expert 侧以本 runner 为准。
+    二者互补 —— 逐位锁已于 2026-11-03 退役（生成器不可重建），
+    当前 expert 侧以本 runner 为准。
 """
 import glob
 import os

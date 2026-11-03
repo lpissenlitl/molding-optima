@@ -149,7 +149,6 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         # 推导公式：t_cool = max_thickness² × family_cool_factor × ΔT_factor × crystallinity_kick
         # 物理依据：Fourier 热扩散 t ∝ h²/α × ln((T_melt-T_mold)/(T_eject-T_mold))
         # 物理正交：与 #8 保压时间正交（局部 vs 整体）
-        # 详见 _refs/system/algorithm/2026-07-05-cool-time-physics-design.md
         'cool_time_min': 5.0,
         'else_time': 1.5,
         # 材料系数（11 family × 1 系数，行业共识 Tederic 2026 / Moldflow / 海天工艺手册）
@@ -285,7 +284,6 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'default_speed_factor': 1.0,     # rpm_ratio 缺失兑底（不修正）
     },
     # 🆕 v1.1 松退参数族（#15-#18）：5 维物理化
-    # 设计依据：2026-07-05-suckback-decompression-physics-design.md
     # - 压力 P：base_ratio × family × mode_factor × nozzle_factor（仅液压机）
     # - 距离 D：base_dist × family × nozzle × runner × gate（5 维）
     # - 速度 V：max_decomp_velo × family × nozzle（3 维）

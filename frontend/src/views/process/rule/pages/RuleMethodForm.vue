@@ -571,7 +571,7 @@ interface ActionItem {
    * 为什么不预设模糊量词下拉？
    * - 会暗示用户「必须从这 7 个里选」
    * - 但工程上有时是数值（`2`），有时是模糊词（`low`），不应让前端判断
-   * - 后端有自动清洗逻辑（fuzzy-engine-migration-design.md），前端可信赖
+   * - 后端有自动清洗逻辑，前端可信赖
    *
    * 如果未来业务要求强制区分（比如审计、合规），可拆字段：
    * { kind: 'numeric', n: number } | { kind: 'fuzzy', w: string }
@@ -722,7 +722,7 @@ function generateRuleText() {
   //   - 错误例：`IF WELDLINE low THEN VPTTadd10`（条件拆为两个 token / 动作未分隔）
   //
   // 参考：
-  //   - backend/_refs/module/process/data/rule_method_by_library.json L24: "IF SHORTSHOT_low AND MEL_low THEN MEL_add_2 "
+  //   - backend/_data/rule_method_by_library.json L24: "IF SHORTSHOT_low AND MEL_low THEN MEL_add_2 "
   //   - backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py L52-112 _split_phase
   //   - backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py L793-823 ParticularRules._rule_process
   const condDesc = form.preconditions

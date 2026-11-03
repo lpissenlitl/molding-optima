@@ -2058,7 +2058,6 @@ class AlgorithmEngine:
         # 【重构】注射压力 = 材料黏度等级 × 流长比修正（二维物理推导）
         # 推导链：流变学定律 → 材料黏度等级（base_ratio） × 流长比修正（length_factor）
         # 数据源：3 级兜底（精确值 / 大类查表 / 默认值）
-        # 物理详见 _refs/system/algorithm/2026-07-05-injection-pressure-physics-design.md
         family = parse_material_family(mat.get('abbreviation', ''))
         base_ratio, base_level = self._get_base_pressure_ratio(family, c_inj)
         length_factor, factor_level = self._get_length_factor(inj_ratio, c_inj)
@@ -2079,7 +2078,6 @@ class AlgorithmEngine:
         # 推导链：体积流量恒等式 + 剪切速率约束 → 流动性等级 × 几何修正 × 温度修正
         # 数据源：3 级兑底（精确值 / 大类查表 / 默认值）
         # 复用上层已计算的 family（同函数中 inj_pres 也用），inj_ratio
-        # 物理详见 _refs/system/algorithm/2026-07-05-injection-velocity-physics-design.md
         # 必填字段，audit 兑底
         # 注意：algorithm 入参 dict key 是 spec key（无 ed），不是 ORM 字段名（有 ed）
         mold_temp = mat['recommend_mold_temperature']
@@ -2103,7 +2101,6 @@ class AlgorithmEngine:
         # 【重构】注射时间 = 几何下限 + 工艺窗口钳制（家族 × 壁厚档，二维差异化）
         # 推导链：体积守恒 → 几何下限 (inj_len / inj_velo) → 材料×壁厚钳制窗口 (min_t, max_t)
         # 数据源：3 级兜底（精确值 / 大类×壁厚查表 / 默认值）
-        # 物理详见 _refs/system/algorithm/2026-07-05-injection-time-physics-design.md
         max_thickness = prod.get('max_thickness') or 0
         bucket, bucket_level = self._get_thickness_bucket(max_thickness, c_inj)
         (min_t, max_t), window_level = self._get_inj_time_window(family, bucket, c_inj)
@@ -2209,7 +2206,6 @@ class AlgorithmEngine:
         # 【重构】保压压力 = 注射压力 × 材料相对保压比例 × 壁厚修正 × 浇口修正 × 流道修正
         # 推导链：保压是注射的延续 → 材料黏度等级 × 几何修正（壁厚/浇口） × 流道状态 → 安全钳制
         # 数据源：3 级兜底（精确值 / 大类查表 / 默认值）
-        # 物理详见 _refs/system/algorithm/2026-07-05-holding-pressure-physics-design.md
         inj_pres_1st = proc.inj_pres_steps[0] if proc.inj_pres_steps else inj_pres
         gate_type = prod.get('gate_type', '其他')
         max_thickness = prod.get('max_thickness') or 0
@@ -2246,7 +2242,6 @@ class AlgorithmEngine:
         # 推导链：剪切速率约束 γ̇ = v × (A_screw / A_gate) / h_gate → 防剪切降解上限
         # 数据源：3 级兜底（精确值 / family×bucket 查表 / 默认）+ 机器上限钳制（≤ 30% HMI 上限）
         # 与 #6 保压压力正交拆分：#6 是流变学驱动（ΔP = Q × R），本算法是运动学上限约束（v × A = Q ≤ Q_max）
-        # 物理详见 _refs/system/algorithm/2026-07-05-holding-velocity-physics-design.md
         family_velo_ratio, velo_level = self._get_family_hold_velo_ratio(family, c_hold)
         gate_factor_velo = self._get_gate_factor_for_hold_velo(bucket, c_hold)
 
@@ -2264,7 +2259,6 @@ class AlgorithmEngine:
         # 【重构】保压时间 = 浇口凝固时间 × 5 维修正因子（Fourier 热扩散 + 五维差异化）
         # 推导链：Fourier 热扩散 t ≈ h² / α_eff → family × thickness 基准 × 浇口修正 × 流道修正 × 模温修正 × 结晶拉长 → family 自适应上限钳制
         # 数据源：4 级兜底（精确值 / family×bucket / family 中桶兜底 / 默认）+ family 自适应上限（**移除 10s 硬上限**）
-        # 物理详见 _refs/system/algorithm/2026-07-05-holding-time-physics-design.md
         freeze_t, freeze_level = self._get_family_gate_freeze_time(family, bucket, c_hold)
         gate_factor_hold = self._get_gate_factor_for_hold(gate_type, c_hold)
         runner_factor_hold, runner_level = self._get_runner_factor(runner_type, runner_weight, c_hold)
@@ -2298,7 +2292,6 @@ class AlgorithmEngine:
         # 推导公式：t_cool = max_thickness² × family_cool_factor × ΔT_factor × crystallinity_kick
         # 物理依据：Fourier 热扩散 t ∝ h²/α × ln((T_melt-T_mold)/(T_eject-T_mold))
         # 物理正交：与 #8 保压时间正交（保压时间=浇口凝固局部，冷却时间=制品整体冷到 ejection_temp）
-        # 详见 _refs/system/algorithm/2026-07-05-cool-time-physics-design.md
 
         # Step 1: 基础冷却时间（材料系数 × 壁厚²）
         family_cool_factor_map = c_cool.get('family_cool_factor', {})
@@ -2406,7 +2399,6 @@ class AlgorithmEngine:
         proc.met_pos_steps = [meter_posi]
 
         # ========== 松退参数（#15-#18，v1.1：5 维物理化推导）==========
-        # 设计依据：2026-07-05-suckback-decompression-physics-design.md
         # 推导链：
         #   #15 模式决策（3 级兑底：用户输入 → DEFAULT 规则 → 默认）
         #   #16+#17 参数推导（液压机/全电机分支）

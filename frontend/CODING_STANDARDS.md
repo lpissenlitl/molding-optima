@@ -721,8 +721,7 @@ src/
 │   └── machine.js         # 设备相关接口
 ├── components/            # 公共组件
 │   ├── BaseSearchForm.vue
-│   ├── UploadFile.vue
-│   └── README_BaseSearchForm.md
+│   └── UploadFile.vue
 ├── constants/             # 常量定义
 │   ├── mold-const.js
 │   ├── machine-const.js
@@ -874,15 +873,6 @@ data() {
   }
 }
 ```
-
----
-
-## 📚 相关文档
-
-- [BaseSearchForm 使用指南](./src/components/_devRefs/README_BaseSearchForm.md)
-- [搜索表单优化方案](./src/styles/devRefs/SEARCH_FORM_OPTIMIZATION.md)
-- [样式系统使用指南](./src/styles/devRefs/STYLE_USAGE_GUIDE.md)
-- [MoldSearchForm 改造示例](./src/components/_devRefs/MoldSearchForm_Migration_Example.md)
 
 ---
 

@@ -92,7 +92,6 @@ LEVEL_NUMBER_TO_BUCKET = {f'level{i}': i - 1 for i in range(1, 8)}
 #   ⇒ 规则**不需要**声明自己属于哪套档位体系，算法无需知道这件事。
 #   ⇒ 落格随字段档数变化**不列为风险**；规则**填不进**词表时的处理见
 #     `nets.py::_construct_numtskruleNet`（整条规则激活度 0，**不静默删条件**）。
-#   详见 `backend/_refs/system/algorithm/fuzzy-level-semantics-design.md` 决策 D1 / D3 / D5。
 # ⚠️ **9 档已于 2026-11-03 移除**（与 RuleKeyword.FUZZY_LEVELS、前端 FuzzyLevel 3|5|7 对齐）：
 #    9 档独有词 ultra_low / ultra_high 前端没有对应命名，字段一旦设成 9 档，
 #    前端 levelOptionsFor() 会静默兜底成 3 档 ⇒ 选出来的档位与论域对不上。

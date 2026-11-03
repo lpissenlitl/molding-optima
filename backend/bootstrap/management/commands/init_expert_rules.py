@@ -12,7 +12,7 @@ from identity.const import SYSTEM_DEMO_COMPANY_CODE
 from identity.models.company import Company
 from process.models.rules import RuleLibrary, ExpertRule
 from utils.console import configure_console_encoding
-from utils.refs import EXPERT_RULES_JSON, resolve_data_path
+from utils.data_paths import EXPERT_RULES_JSON, resolve_data_path
 
 
 class Command(BaseCommand):

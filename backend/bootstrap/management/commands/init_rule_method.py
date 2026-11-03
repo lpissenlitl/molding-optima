@@ -1,7 +1,7 @@
 """
 Django management command: 导入规则方法（RuleMethod / 模糊规则）到数据库
 
-数据源：_refs/module/process/data/rule_method_by_library.json（旧系统导出的按库分组的模糊规则清单）
+数据源：_data/rule_method_by_library.json（旧系统导出的按库分组的模糊规则清单）
 
 策略：
 - 基础库（JSON 中 rule_type='基础库'）→ DB library_code='base'，主基础库，priority=100
@@ -38,7 +38,7 @@ from identity.const import SYSTEM_DEMO_COMPANY_CODE
 from identity.models.company import Company
 from process.models.rules import RuleLibrary, RuleMethod
 from utils.console import configure_console_encoding
-from utils.refs import RULE_METHOD_JSON, resolve_data_path
+from utils.data_paths import RULE_METHOD_JSON, resolve_data_path
 
 
 # 默认 JSON 路径

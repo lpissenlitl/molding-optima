@@ -2,7 +2,7 @@
 Django management command: 为 RuleKeyword 迁移 step（推理步长）
 
 数据源（二选一）：
-  1. 默认：_refs/module/process/data/rule_keyword_curated.json
+  1. 默认：_data/rule_keyword_curated.json
      该文件是从老 fuzzykit process_ranges.csv 提炼出的关键词清单，
      其 action_max_val 即老 CSV 的 col7（单次最大调整量，fuzzykit 用作 step）。
   2. --csv：直接指定老 fuzzykit 的 process_ranges.csv（该文件不在本仓库，需手动提供）
@@ -37,7 +37,7 @@ from django.core.management.base import BaseCommand
 
 from process.models.rules import RuleKeyword
 from utils.console import configure_console_encoding
-from utils.refs import RULE_KEYWORD_JSON, resolve_data_path
+from utils.data_paths import RULE_KEYWORD_JSON, resolve_data_path
 
 
 logger = logging.getLogger(__name__)

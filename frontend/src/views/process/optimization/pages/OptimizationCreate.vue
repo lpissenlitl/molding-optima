@@ -602,10 +602,6 @@ function applyInferResultToForm(result: any) {
  *   （由 ProcessCondition.checkFormDataValid 统一校验）
  * - 响应写入 form.condition.id（condition_id）和 activeRound.parameter_id（parameter_id）
  * - 响应写入 activeRound.parameter（工艺参数嵌套结构，由 parameterFromFlat 从 flat 翻译而来）
- *
- * 关联文档：
- * docs/process-get-initial-frontend-integration-2026-09-23.md
- * docs/process-frontend-param-mapping-atomic-2026-09-23.md
  */
 async function getInitialProcess() {
   const isValid = await conditionRef.value?.checkFormDataValid()
@@ -682,8 +678,6 @@ function validateFeedback(feedback: any): FeedbackValidation {
  * 响应处理：
  * - new_parameter.parameter_id / seq_idx → 新轮次
  * - suggestion.groups → previousSuggestion.groups（供 UI 展示“上一轮调整建议”）
- *
- * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
  */
 async function getOptimizedProcess() {
   // 前置校验：必须先调过 getInitialProcess（依赖 condition.id + activeRound.seq_idx）

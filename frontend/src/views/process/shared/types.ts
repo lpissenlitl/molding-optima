@@ -3,7 +3,7 @@
  *
  * 设计原则：
  * - 所有 interface 使用 export，方便子组件 + composable 引用
- * - 字段语义与后端 schema 对齐（参考 backend/_refs 中的设计文档）
+ * - 字段语义与后端 schema 对齐
  * - 用 [key: string]: any 兼容后端可能扩展的字段
  */
 import type { InjectionKey } from 'vue'

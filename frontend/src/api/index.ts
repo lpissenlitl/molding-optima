@@ -278,7 +278,6 @@ export const processTransplant = (data: { source_parameter_id: number; target_ma
 /**
  * 工艺参数初始化（Mode B：基于 masterdata ID 算法生成 + 落库）
  * 返回 condition_id / parameter_id / seq_idx / process
- * 关联文档：docs/process-get-initial-frontend-integration-2026-09-23.md
  */
 export const processInitializationFromMasterdata = (data: {
   mold_id: number
@@ -298,7 +297,6 @@ export const processInitializationFromMasterdata = (data: {
  * - 若用户在 settingProcessForm 改了参数：先由前端 parameterToFlat 翻译为
  *   ProcessParameterFlat 再传入（flat 字段对齐后端 ProcessParameterSchema）
  * - 若用户没改参数：传 undefined / 不传（service 从 ORM 反查 parent_param 作 baseline）
- * 关联文档：docs/process-get-optimized-frontend-integration-2026-09-23.md
  */
 export const processOptimizationInfer = (data: {
   condition_id: number
@@ -318,7 +316,6 @@ export const processOptimizationInfer = (data: {
 /**
  * 提交人工调机反馈（TuningRecord 落库，幂等覆盖）
  * URL: POST /api/processes/parameters/<parameter_id>/tuning-feedback/
- * 关联文档：docs/process-tuning-feedback-frontend-2026-10-12.md
  */
 export interface TuningFeedbackPayload {
   defect_feedbacks?: any[]

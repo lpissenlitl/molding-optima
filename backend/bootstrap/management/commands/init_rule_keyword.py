@@ -1,9 +1,9 @@
 """
 Django management command: 导入 RuleKeyword 主数据
 
-数据源：_refs/module/process/data/rule_keyword_curated.json（旧系统导出的关键词清单，已人工审校）
+数据源：_data/rule_keyword_curated.json（旧系统导出的关键词清单，已人工审校）
 
-字段映射（按 2026-09-15 设计文档）：
+字段映射：
   JSON.keyword_type (中文)  →  Model.category (3 类业务角色)
   JSON.description            →  Model.keyword_alias (中文别名)
   JSON.fuzzy_level            →  Model.fuzzy_level
@@ -45,7 +45,7 @@ from identity.const import SYSTEM_DEMO_COMPANY_CODE
 from identity.models.company import Company
 from process.models.rules import RuleKeyword
 from utils.console import configure_console_encoding
-from utils.refs import RULE_KEYWORD_JSON, resolve_data_path
+from utils.data_paths import RULE_KEYWORD_JSON, resolve_data_path
 
 
 DEFAULT_JSON_PATH = RULE_KEYWORD_JSON

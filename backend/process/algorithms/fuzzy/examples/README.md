@@ -190,7 +190,7 @@ MBP0   met_back_pres_1               5.0 6.16369649146612   0.041337  increase
 | 纯内核 pytest | 算法数值路径的单元测试（无需 DB） | `process/algorithms/fuzzy/fuzzy_core/tests/` |
 | 回归对拍脚本 | 改前/改后副本的等价性证明 + 黄金快照 | `tests/fuzzy_kernel/_snapshot_core.py`、`tests/fuzzy_kernel/_golden_M1.json` |
 | 离线边界验证 | 脏规则隔离、DB 故障降级 | `tests/_verify_e2_offline.py` |
-| 规则库全量快照 | 规则/关键词的完整导出（非案例切片） | `_refs/module/process/data/*.json` |
+| 规则库全量快照 | 规则/关键词的完整导出（非案例切片） | `_data/*.json` |
 
 ⚠️ 本目录的 runner **没有**接进 pytest（默认不新增测试用例）。
 它是**手动跑**的回归基线：改了算法后跑一次 `run_demo.py --check`，

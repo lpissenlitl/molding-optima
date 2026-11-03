@@ -29,7 +29,7 @@
 - optimize 无 process_set 维度：段数与模式（inj_stg / hold_stg / vps_mode ...）属于
   当前工艺本身，已包含在 parameter 基线内，不是外部配置。所以是三维而非四维。
 
-调用链路（详见 docs/optimization-infer-design-status-2026-09-22.md）：
+调用链路：
   Step 1: 入口适配  —— condition_id + parent_seq_idx（业务编号）反查 parent_param
   Step 2: 数据准备  —— parent_param.parameters 作为基线，可选 parameter 覆盖
   Step 3: 推理算法  —— recommendation_service.get_recommendations()（接口契约）

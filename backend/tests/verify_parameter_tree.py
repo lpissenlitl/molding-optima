@@ -8,7 +8,7 @@ verify_parameter_tree.py
 - list_parameters：过滤 + 分页
 
 2026-10-20 修复说明：
-原测试按 backend/_refs/ 里的参考设计稿编写，引用了 4 个从未在服务层实现的函数
+原测试按参考设计稿编写，引用了 4 个从未在服务层实现的函数
 （get_parameter_lineage / get_parameter_descendants / create_adjustment_version /
 revert_parameter）——它们只有本测试在引用，view / URL / 前端均无调用方。
 按既定决策（改写测试对齐现有 API，不新增生产代码），本测试改为覆盖
