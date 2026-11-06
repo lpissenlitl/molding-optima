@@ -62,8 +62,10 @@
               <el-descriptions-item label="轮次">
                 第 {{ current_item.seq_idx ?? '-' }} 轮
               </el-descriptions-item>
-              <el-descriptions-item label="parameter_id">
-                {{ current_item.id ?? '-' }}
+              <!-- 工艺编号：有值才展示。数据库主键（parameter_id）不面向用户展示 ——
+                   它只是内部标识，对调机追溯无意义。 -->
+              <el-descriptions-item v-if="current_item.parameter_no" label="工艺编号">
+                {{ current_item.parameter_no }}
               </el-descriptions-item>
               <el-descriptions-item label="参数来源">
                 {{ sourceLabel(current_item.param_source) }}

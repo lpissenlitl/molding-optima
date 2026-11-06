@@ -2,8 +2,10 @@
 工艺参数模型
 """
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Max
+from django.utils import timezone
 
 from extensions.models import BusinessBaseModel
 
@@ -31,7 +33,10 @@ class ProcessParameter(BusinessBaseModel):
     )
 
     # --- 基本信息 ---
-    # 格式: PP-{YYYYMM}-{NNNN}，由 service 层自动生成
+    # 格式: PP-{YYYYMMDD}-{HHMMSS}-{NNN}，由 save() 自动生成（系统生成字段）
+    #   - YYYYMMDD-HHMMSS：创建时刻（用户可读，也天然具备时间排序性）
+    #   - NNN：同一租户同一秒内的递增序号（并发兜底 ⇒ 租户内唯一）
+    # 语义：这是面向用户的业务编号；数据库主键 id 不面向用户展示。
     parameter_no = models.CharField(
         null=True, blank=True,
         max_length=50,
@@ -188,8 +193,45 @@ class ProcessParameter(BusinessBaseModel):
                 process_condition=self.process_condition
             ).aggregate(Max('seq_idx'))['seq_idx__max'] or 0
             self.seq_idx = last_idx + 1
+            # 自动分配 parameter_no（系统生成字段，与 seq_idx 同机制）
+            # 已显式指定编号的（如 demo 种子数据）不覆盖
+            if not self.parameter_no:
+                self.parameter_no = self._generate_parameter_no(self.company_id)
         super().save(*args, **kwargs)
+
+    @classmethod
+    def _generate_parameter_no(cls, company_id=None) -> str:
+        """生成工艺参数编号：PP-{YYYYMMDD}-{HHMMSS}-{NNN}
+
+        - YYYYMMDD-HHMMSS = 创建时刻（用户可读，且天然按时间排序）
+        - NNN = 同一租户同一秒内的递增序号（并发兜底 ⇒ 租户内唯一）
+
+        为什么是租户内唯一而非全局唯一：跨租户数据互相不可见，允许重号不影响唯一性语义，
+        而全局序列在多租户 / 分库下更难保证。
+
+        序号计算含软删记录（all_objects）：编号一经分配不回收，
+        避免同号在不同时间指向两条历史数据。
+        """
+        now = timezone.now()
+        if settings.USE_TZ:
+            now = timezone.localtime(now)
+        prefix = f"PP-{now:%Y%m%d}-{now:%H%M%S}-"
+
+        used = cls.all_objects.filter(
+            company_id=company_id,
+            parameter_no__startswith=prefix,
+        ).values_list('parameter_no', flat=True)
+        seq = 1
+        for no in used:
+            tail = no.rsplit('-', 1)[-1]
+            if tail.isdigit():
+                seq = max(seq, int(tail) + 1)
+        return f"{prefix}{seq:03d}"
 
     class Meta:
         verbose_name = "工艺参数"
         verbose_name_plural = "工艺参数"
+        indexes = [
+            # 编号生成按「租户 + 编号前缀」查已用序号，需索引避免全表扫描
+            models.Index(fields=['company_id', 'parameter_no'], name='proc_param_company_no_idx'),
+        ]

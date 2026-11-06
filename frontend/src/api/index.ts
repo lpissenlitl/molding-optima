@@ -263,6 +263,8 @@ export interface TuningRoundItem {
   id: number
   seq_idx: number | null
   param_source?: string | null
+  /** 工艺参数编号（业务编号，非数据库主键）；历史数据可能为空 */
+  parameter_no?: string | null
   created_at?: string | null
   /** 归档标记：该轮已落库评价 ⇒ 参数锁死（只读）。判据由后端给出，前端不自行推算 */
   sealed?: boolean

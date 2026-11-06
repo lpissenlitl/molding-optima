@@ -849,9 +849,9 @@ async function getOptimizedProcess() {
 
     const groupCount = inferData.suggestion.groups.length
     const seqIdx = inferData.new_parameter?.seq_idx ?? '-'
-    const paramId = inferData.new_parameter?.parameter_id ?? '-'
+    // 面向用户只说「第几轮」，不暴露数据库主键（parameter_id 是内部标识）
     ElMessage.success(
-      `优化工艺已生成 seq_idx=${seqIdx}, parameter_id=${paramId}，建议 ${groupCount} 类`,
+      `优化工艺已生成（第 ${seqIdx} 轮），建议 ${groupCount} 类`,
     )
   } catch {
     // 拦截器已统一 toast（已在 getOptimizedProcess 顶部校验响应有效性）

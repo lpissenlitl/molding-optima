@@ -275,10 +275,17 @@ molding-optima 前端功能模块
 | 模型 | 职责 | 关键字段 |
 |---|---|---|
 | `ProcessCondition` | 工艺条件（一台模具 + 一种材料的调机场景） | `condition_no` / `mold` / `polymer` |
-| `ProcessParameter` | **一轮调机**（工艺参数快照） | `seq_idx` 轮次号 / `parent_param` 自关联调机树 / `param_source` |
+| `ProcessParameter` | **一轮调机**（工艺参数快照） | `seq_idx` 轮次号 / `parameter_no` 工艺编号 / `parent_param` 自关联调机树 / `param_source` |
 | `TuningRecord` | 与 `ProcessParameter` **1:1** 的试模结果 | `defect_feedbacks` 缺陷 / `result` 评价 / `adjustments` 训练样本 / `previous_parameter` 前一轮快照 |
 
 **配对不变式**：界面上的「第 N 轮」= 参数(N) + 反馈(N)。反馈属于该轮自身的试模结果，**不跨轮搬运**。
+
+**轮次标识：面向用户的是编号，不是主键**
+
+- `parameter_no`（工艺参数编号）是**系统生成字段**，格式 `PP-{YYYYMMDD}-{HHMMSS}-{NNN}`，由 `ProcessParameter.save()` 在新建时自动分配（与 `seq_idx` 同一机制）——一处覆盖全部建轮入口（算法初始化 / 模板复制 / infer / clone）。
+- `NNNN` 是**同一租户同一秒内**的递增序号，为并发兜底 ⇒ **租户内唯一**；跨租户允许重号（跨租户数据互相不可见，不影响唯一性语义）。
+- 编号一经分配不回收（序号计算含软删记录）。
+- **数据库主键 `id` 不面向用户展示**——它是内部标识，对调机追溯无意义；界面一律用「第 N 轮」与工艺编号定位轮次。
 
 **归档判据（单一事实来源）**：`process/services/tuning.py::is_record_sealed(record)` —— 存在 `TuningRecord` 且 `result != 'pending'` ⇒ 该轮已落库评价 ⇒ **已归档**。`is_round_sealed(parameter)` 是其按 `process_parameter` 反查最近一条记录的便捷包装。
 
