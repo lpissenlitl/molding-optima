@@ -653,7 +653,7 @@ def update_record(
         latest = (
             condition.process_parameters
             .filter(is_deleted=False)
-            .order_by("-created_at")
+            .order_by("-created_at", "-id")
             .first()
         )
         if not latest:
@@ -688,6 +688,17 @@ def batch_delete_condition(ids: list, company_id: int = None):
 # 详情 / 列表查询
 # ============================================================================
 
+def _fk_info(obj) -> dict | None:
+    """FK 关联对象 → dict；关联为空时返回 None
+
+    condition 的 mold / injection_machine / polymer 三个 FK 都允许为空
+    （如 mining demo 种子只建编号不挂主数据）。直接 obj.to_dict() 会在
+    None 上抛 AttributeError ⇒ 接口 500，调用方（如「继续调机」重建轮次）
+    整条链路静默失败，页面回落到草稿里的其它 condition ⇒ 显示错误信息。
+    """
+    return obj.to_dict(include_rvs=True) if obj else None
+
+
 def get_condition(condition_id: int, view_type: str = "parameter", company_id: int = None) -> dict:
     """获取工艺条件详情
 
@@ -713,18 +724,18 @@ def get_condition(condition_id: int, view_type: str = "parameter", company_id: i
     if view_type == "all":
         return {
             **condition.to_dict(include_rvs=True),
-            "mold_info": condition.mold.to_dict(include_rvs=True),
-            "machine_info": condition.injection_machine.to_dict(include_rvs=True),
-            "polymer_info": condition.polymer.to_dict(include_rvs=True),
+            "mold_info": _fk_info(condition.mold),
+            "machine_info": _fk_info(condition.injection_machine),
+            "polymer_info": _fk_info(condition.polymer),
             "parameters": [p.to_dict() for p in condition.process_parameters.all()],
         }
 
     # default: 'parameter'
     ret_dict = condition.to_dict(include_rvs=True)
     ret_dict.update({
-        "mold_info": condition.mold.to_dict(include_rvs=True),
-        "machine_info": condition.injection_machine.to_dict(include_rvs=True),
-        "polymer_info": condition.polymer.to_dict(include_rvs=True),
+        "mold_info": _fk_info(condition.mold),
+        "machine_info": _fk_info(condition.injection_machine),
+        "polymer_info": _fk_info(condition.polymer),
     })
     return ret_dict
 
@@ -737,7 +748,8 @@ def get_condition_frontend(condition_id: int, company_id: int = None) -> dict:
     用于"移植（Transplant）"页和"参数表单（ProcessParameterForm）"加载前端结构。
     """
     condition = _get_process_condition_by_id(condition_id, company_id=company_id)
-    parameter = condition.process_parameters.first()
+    # 档案参数 = 最新一条 parameter（同 created_at 时取 id 最大）
+    parameter = condition.process_parameters.order_by("-created_at", "-id").first()
     if not parameter:
         raise BizException(ERROR_DATA_NOT_FOUND, "工艺参数不存在")
 
@@ -752,13 +764,13 @@ def get_condition_frontend(condition_id: int, company_id: int = None) -> dict:
     return {
         "condition": {
             "id": condition.id,
-            "mold_info": condition.mold.to_dict(include_rvs=True),
+            "mold_info": _fk_info(condition.mold),
             "shot_index": condition.shot_index,
             "gating_system": (condition.process_context_snapshot or {}).get("mold", {}).get("gating_system"),
-            "machine_info": condition.injection_machine.to_dict(include_rvs=True),
+            "machine_info": _fk_info(condition.injection_machine),
             "injection_index": condition.injection_index,
             "injection_unit": injection_unit.to_dict() if injection_unit else None,
-            "polymer_info": condition.polymer.to_dict(include_rvs=True),
+            "polymer_info": _fk_info(condition.polymer),
         },
         "parameter": {
             "setting_process": _condition_to_frontend_payload(parameter, injection_unit),
@@ -830,6 +842,7 @@ def get_condition_list(
     company_id: int = None,
     status: str = None,
     origin_type: str = None,
+    exclude_origin_type: str = None,
     param_source: List[str] = None,
     mold_no: str = None,
     machine_model: str = None,
@@ -849,6 +862,10 @@ def get_condition_list(
         param_source:
             可选 List[str], 用于过滤"该 condition 至少有一条 matching param_source 的 parameter"
             (人工调机 = MANUAL_PARAM_SOURCES, 算法调机 = ALGORITHM_PARAM_SOURCES)
+        exclude_origin_type:
+            可选 str, 精确排除某个 origin_type 的记录。
+            工艺档案列表据此排除调机建档记录（origin_type=ai_recommendation）；
+            origin_type 为 NULL 的记录保留（Django exclude 不命中 NULL）。
         company_id, status, origin_type, ...   过滤条件
     """
     filter_map = {
@@ -869,6 +886,10 @@ def get_condition_list(
     ).annotate(
         parameters_count=Count("process_parameters"),
     )
+
+    # 排除指定起源类型（精确匹配）：工艺档案列表据此排除调机建档记录
+    if exclude_origin_type:
+        qs = qs.exclude(origin_type=exclude_origin_type)
 
     # 单独处理日期范围：created_at 在 [start_date, end_date] 之间
     if start_date is not None or end_date is not None:
@@ -910,23 +931,26 @@ def get_condition_list(
             "polymer_grade": safe_get(item, "polymer.grade"),
             "parameters_count": item.parameters_count,
         }
-        # 归一化“起源”：按调机起源 (manual / algorithm / system / unknown)
         params = list(item.process_parameters.all())
+        # 档案参数 = 最新一条 parameter（同 created_at 时取 id 最大），
+        # 与 update_record / get_condition_frontend 的定位口径保持一致
+        latest = max(params, key=lambda p: (p.created_at, p.id), default=None) if params else None
+
+        # 归一化“起源”：档案视角只算档案参数（1 条），调机视角算全部轮次
+        origin_params = [latest] if (view_type == "parameter" and latest is not None) else params
         origin_summary = {"manual": 0, "algorithm": 0, "system": 0, "unknown": 0}
-        for p in params:
+        for p in origin_params:
             category = _param_source_to_origin_category(p.param_source)
             origin_summary[category] = origin_summary.get(category, 0) + 1
         result["origin_summary"] = origin_summary
 
-        if view_type == "parameter":
-            # 工艺参数模式：附加最新一条 parameter (按 created_at 取最近)
-            latest = max(params, key=lambda p: p.created_at, default=None) if params else None
-            if latest:
-                param_data = latest.to_dict()
-                # 补 parent_param_id（to_dict 会排除反向关系）
-                if "parent_param_id" not in param_data:
-                    param_data["parent_param_id"] = latest.parent_param_id
-                result["parameter"] = param_data
+        if view_type == "parameter" and latest is not None:
+            # 工艺参数模式：附加档案参数 (最新一条 parameter)
+            param_data = latest.to_dict()
+            # 补 parent_param_id（to_dict 会排除反向关系）
+            if "parent_param_id" not in param_data:
+                param_data["parent_param_id"] = latest.parent_param_id
+            result["parameter"] = param_data
         results.append(result)
 
     return pagination["total_count"], results

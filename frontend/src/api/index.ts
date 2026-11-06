@@ -230,7 +230,7 @@ export const processRecordParameterTree = (conditionId: number) =>
 export const processRecordHistory = (conditionId: number) =>
   request({ url: `/api/processes/records/${conditionId}/history/`, method: 'get' })
 
-/** 工艺条件详情（前端嵌套结构：condition + mold_info / machine_info / polymer_info） */
+/** 工艺条件详情（**扁平** condition 结构：mold_info / machine_info / polymer_info 在顶层，不是 {condition: {...}} 包装） */
 
 export const processConditionDetail = (conditionId: number) =>
   request({ url: `/api/processes/conditions/${conditionId}/`, method: 'get' })

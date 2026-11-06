@@ -484,22 +484,33 @@ function inferRoundType(item: TuningRoundItem, index: number): 'initial' | 'opti
  * 两者同源时用草稿，不同源时以 URL 指定的 condition 为准（用户明确意图）。
  */
 async function restoreFromServer(conditionId: number): Promise<boolean> {
-  const [detailRes, historyRes]: any[] = await Promise.all([
+  // allSettled 而非 all：detail 只负责补嵌套结构（mold_info / machine_info / polymer_info），
+  // 拿不到时仍要能重建轮次。若用 all，detail 一失败整个 Promise 就被 reject，
+  // 异常被 loadForm 的 catch 吞掉 ⇒ form.condition 停留在草稿里的其它 condition
+  // ⇒ 页面显示的是错的工艺条件（用户点的是 URL 指定的那条）。
+  const [detailRes, historyRes] = await Promise.allSettled([
     processConditionDetail(conditionId),
     processRecordHistory(conditionId),
   ])
-  const detail = detailRes?.data?.condition ?? {}
-  const historyData = historyRes?.data ?? {}
+  const detailData = detailRes.status === "fulfilled" ? (detailRes.value?.data ?? {}) : {}
+  // detail 接口返回的是**扁平** condition（mold_info / machine_info / polymer_info 在顶层），
+  // 不是 {condition: {...}} 包装 —— 兼容两种形态再取，否则嵌套结构恒为 undefined
+  const detail = detailData.condition ?? detailData
+  const historyData = historyRes.status === "fulfilled" ? (historyRes.value?.data ?? {}) : {}
   const history: TuningRoundItem[] = historyData.history ?? []
   if (!history.length) return false
 
   // condition：扁平字段（condition_no / id / *_id）取 history.condition，
-  // 嵌套结构（mold_info / machine_info / polymer_info）取 detail.condition。
+  // 嵌套结构（mold_info / machine_info / polymer_info）取 detail。
   // 先清空旧键再合并，避免草稿残留字段混进来（保持 form.condition 引用不变）
   for (const key of Object.keys(form.condition)) {
     delete (form.condition as Record<string, any>)[key]
   }
-  Object.assign(form.condition, historyData.condition ?? {}, detail)
+  // process_parameters 是 detail 带出的反向关系（全量轮次），前端用不到，
+  // 剔除以免 form.condition 被写进 sessionStorage 草稿时体积膨胀
+  const detailRest = { ...detail }
+  delete detailRest.process_parameters
+  Object.assign(form.condition, historyData.condition ?? {}, detailRest)
 
   // 后端按 created_at 倒序返回 → 按 seq_idx 正序（第 1 轮在前）
   const ordered = [...history].sort((a, b) => (a.seq_idx ?? 0) - (b.seq_idx ?? 0))

@@ -32,6 +32,10 @@ class ProcessConditionListSchema(PaginationBaseSchema):
 
     status: Optional[str] = Field(None, description="状态")
     origin_type: Optional[str] = Field(None, description="工艺起源类型")
+    exclude_origin_type: Optional[str] = Field(
+        None,
+        description="要排除的起源类型（精确匹配）。用于工艺档案列表排除调机建档记录",
+    )
     mold_id: Optional[int] = Field(None, description="模具 ID")
     injection_machine_id: Optional[int] = Field(None, description="注塑机 ID")
     polymer_id: Optional[int] = Field(None, description="材料 ID")

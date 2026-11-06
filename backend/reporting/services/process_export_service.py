@@ -3,8 +3,10 @@ molding-optima 工艺参数导出服务
 
 仅服务于 process app，不集成试模/模流相关的报告。
 
-导出结构（每行 = 一条 ProcessParameter）：
+导出结构（每行 = 一条工艺档案的档案参数）：
     工艺条件编号 | 工艺参数编号 | 序列序号 | 参数来源 | <模板决定的具体参数列>
+    每个工艺条件只导一行（取最新一条 parameter = 档案参数），
+    调机过程的中间轮次不属于工艺档案，不导出。
 
 三档模板：
     compact  精简总览：各段第 1 段 + 关键单值（约 20 列）
@@ -265,25 +267,31 @@ def export_process_parameters(
     # --- 数据行 ---
     row = 2
     for condition in conditions:
-        params = list(
-            condition.process_parameters.filter(is_deleted=False).order_by("seq_idx")
+        # 工艺档案一条记录只表示一个工艺参数：只取最新一条（档案参数），
+        # 调机过程的中间轮次不进入档案导出
+        param = (
+            condition.process_parameters
+            .filter(is_deleted=False)
+            .order_by("-created_at", "-id")
+            .first()
         )
-        for param in params:
-            for col_idx, (field, _) in enumerate(columns, start=1):
-                if field == "condition_no":
-                    value = condition.condition_no
-                elif field == "param_source":
-                    value = param_source_labels.get(param.param_source, param.param_source)
-                elif field == "__process_context__":
-                    value = _json_text(condition.process_context)
-                else:
-                    value = _format_value(getattr(param, field, None))
-                ws.cell(row=row, column=col_idx, value=value)
+        if param is None:
+            continue
+        for col_idx, (field, _) in enumerate(columns, start=1):
+            if field == "condition_no":
+                value = condition.condition_no
+            elif field == "param_source":
+                value = param_source_labels.get(param.param_source, param.param_source)
+            elif field == "__process_context__":
+                value = _json_text(condition.process_context)
+            else:
+                value = _format_value(getattr(param, field, None))
+            ws.cell(row=row, column=col_idx, value=value)
 
-            if include_snapshots:
-                ws.cell(row=row, column=len(headers), value=_json_text(condition.process_context_snapshot))
+        if include_snapshots:
+            ws.cell(row=row, column=len(headers), value=_json_text(condition.process_context_snapshot))
 
-            row += 1
+        row += 1
 
     # --- 列宽（>26 列时用 get_column_letter，不能用 chr 拼接）---
     for col_idx, header in enumerate(headers, start=1):

@@ -200,6 +200,8 @@ async function fetchList() {
       page_size: query.page_size,
       status: query.status || undefined,
       origin_type: query.origin_type || undefined,
+      // 工艺档案只收明确归档的工艺：排除调机流程建出来的档（智能调机场景）
+      exclude_origin_type: 'ai_recommendation',
       mold_no: query.mold_no || undefined,
       machine_model: query.machine_model || undefined,
       polymer_abbreviation: query.polymer_abbreviation || undefined,

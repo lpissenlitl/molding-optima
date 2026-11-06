@@ -65,7 +65,6 @@ const STATUS_OPTIONS = CONDITION_STATUS_OPTIONS
 const ORIGIN_OPTIONS = [
   { label: '手工新建', value: 'manual_creation' },
   { label: '基于模板', value: 'template_based' },
-  { label: 'AI 推荐启动', value: 'ai_recommendation' },
   { label: '实验设计（DOE）', value: 'doe_experiment' },
   { label: '历史工艺导入', value: 'legacy_import' },
   { label: '设备参数捕获', value: 'equipment_capture' },
