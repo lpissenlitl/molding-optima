@@ -65,6 +65,7 @@
               </el-input>
               <span
                 v-else
+                style="width: 100%;"
                 class="readonly-value"
                 :class="{
                   'field-changed-text': isFieldChanged(
@@ -72,7 +73,7 @@
                   )
                 }"
               >
-                {{ scope.row.sections[col_idx] || '-' }}
+                {{ displayValue(scope.row.sections[col_idx]) }}
               </span>
             </template>
           </el-table-column>
@@ -95,8 +96,16 @@
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('injection.injection_time') }">
-              {{ injection.injection_time }} <small>s</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('injection.injection_time') }"
+            >
+              {{ displayValue(injection.injection_time) }}
+              <template v-if="!isEmptyValue(injection.injection_time)">
+                <small>s</small>
+              </template>
             </span>
           </el-form-item>
           <el-form-item label="注射延迟">
@@ -109,8 +118,16 @@
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('injection.delay_time') }">
-              {{ injection.delay_time }} <small>s</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('injection.delay_time') }"
+            >
+              {{ displayValue(injection.delay_time) }}
+              <template v-if="!isEmptyValue(injection.delay_time)">
+                <small>s</small>
+              </template>
             </span>
           </el-form-item>
           <el-form-item label="冷却时间">
@@ -123,8 +140,16 @@
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('injection.cooling_time') }">
-              {{ injection.cooling_time }} <small>s</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('injection.cooling_time') }"
+            >
+              {{ displayValue(injection.cooling_time) }}
+              <template v-if="!isEmptyValue(injection.cooling_time)">
+                <small>s</small>
+              </template>
             </span>
           </el-form-item>
         </el-form>
@@ -155,7 +180,12 @@
               >
               </el-option>
             </el-select>
-            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged('vp_switch.mode') }">
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value"
+              :class="{ 'field-changed-text': isFieldChanged('vp_switch.mode') }"
+            >
               {{ getVpSwitchModeLabel(vp_switch.mode) }}
             </span>
           </el-form-item>
@@ -170,8 +200,16 @@
             >
               <template #suffix>mm</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.position') }">
-              {{ vp_switch.position }} <small>mm</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('vp_switch.position') }"
+            >
+              {{ displayValue(vp_switch.position) }}
+              <template v-if="!isEmptyValue(vp_switch.position)">
+                <small>mm</small>
+              </template>
             </span>
           </el-form-item>
           <el-form-item label="切换时间">
@@ -185,8 +223,16 @@
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.time') }">
-              {{ vp_switch.time }} <small>s</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('vp_switch.time') }"
+            >
+              {{ displayValue(vp_switch.time) }}
+              <template v-if="!isEmptyValue(vp_switch.time)">
+                <small>s</small>
+              </template>
             </span>
           </el-form-item>
           <el-form-item label="切换压力">
@@ -200,8 +246,16 @@
             >
               <template #suffix>{{ pressure_unit }}</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.pressure') }">
-              {{ vp_switch.pressure }} <small>{{ pressure_unit }}</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('vp_switch.pressure') }"
+            >
+              {{ displayValue(vp_switch.pressure) }}
+              <template v-if="!isEmptyValue(vp_switch.pressure)">
+                <small>{{ pressure_unit }}</small>
+              </template>
             </span>
           </el-form-item>
           <el-form-item label="切换速度">
@@ -215,8 +269,16 @@
             >
               <template #suffix>{{ speed_unit }}</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('vp_switch.velocity') }">
-              {{ vp_switch.velocity }} <small>{{ speed_unit }}</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('vp_switch.velocity') }"
+            >
+              {{ displayValue(vp_switch.velocity) }}
+              <template v-if="!isEmptyValue(vp_switch.velocity)">
+                <small>{{ speed_unit }}</small>
+              </template>
             </span>
           </el-form-item>
         </el-form>
@@ -275,7 +337,7 @@
                 :class="{ 'field-changed': isFieldChanged(`holding.table_data[${scope.$index}].sections[${col_idx}]`) }"
               >
               </el-input>
-              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`holding.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ scope.row.sections[col_idx] || '-' }}</span>
+              <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`holding.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ displayValue(scope.row.sections[col_idx]) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -337,7 +399,7 @@
                 :class="{ 'field-changed': isFieldChanged(`metering.table_data[${scope.$index}].sections[${col_idx}]`) }"
               >
               </el-input>
-              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ scope.row.sections[col_idx] || '-' }}</span>
+              <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ displayValue(scope.row.sections[col_idx]) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -366,7 +428,12 @@
               >
               </el-option>
             </el-select>
-            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged('metering.pre_decompress_mode') }">
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value"
+              :class="{ 'field-changed-text': isFieldChanged('metering.pre_decompress_mode') }"
+            >
               {{ getDecompressModeLabel(metering.pre_decompress_mode) }}
             </span>
           </el-form-item>
@@ -385,7 +452,12 @@
               >
               </el-option>
             </el-select>
-            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged('metering.post_decompress_mode') }">
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value"
+              :class="{ 'field-changed-text': isFieldChanged('metering.post_decompress_mode') }"
+            >
               {{ getDecompressModeLabel(metering.post_decompress_mode) }}
             </span>
           </el-form-item>
@@ -425,7 +497,7 @@
                 :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].pressure`) }"
               >
               </el-input>
-              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].pressure`) }">{{ scope.row.pressure || '-' }}</span>
+              <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].pressure`) }">{{ displayValue(scope.row.pressure) }}</span>
             </template>
           </el-table-column>
           <el-table-column
@@ -447,7 +519,7 @@
                 :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].velocity`) }"
               >
               </el-input>
-              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].velocity`) }">{{ scope.row.velocity || '-' }}</span>
+              <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].velocity`) }">{{ displayValue(scope.row.velocity) }}</span>
             </template>
           </el-table-column>
           <el-table-column
@@ -469,7 +541,7 @@
                 :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].distance`) }"
               >
               </el-input>
-              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].distance`) }">{{ scope.row.distance || '-' }}</span>
+              <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].distance`) }">{{ displayValue(scope.row.distance) }}</span>
             </template>
           </el-table-column>
           <el-table-column
@@ -491,7 +563,7 @@
                 :class="{ 'field-changed': isFieldChanged(`metering.decompress_table_data[${scope.$index}].time`) }"
               >
               </el-input>
-              <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].time`) }">{{ scope.row.time || '-' }}</span>
+              <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`metering.decompress_table_data[${scope.$index}].time`) }">{{ displayValue(scope.row.time) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -512,8 +584,16 @@
             >
               <template #suffix>s</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('metering.delay_time') }">
-              {{ metering.delay_time }} <small>s</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('metering.delay_time') }"
+            >
+              {{ displayValue(metering.delay_time) }}
+              <template v-if="!isEmptyValue(metering.delay_time)">
+                <small>s</small>
+              </template>
             </span>
           </el-form-item>
           <el-form-item label="终止位置">
@@ -526,8 +606,16 @@
             >
               <template #suffix>mm</template>
             </el-input>
-            <span v-else class="readonly-value-with-unit" :class="{ 'field-changed-text': isFieldChanged('metering.ending_position') }">
-              {{ metering.ending_position }} <small>mm</small>
+            <span
+              v-else
+              style="width: 8rem;"
+              class="readonly-value-with-unit"
+              :class="{ 'field-changed-text': isFieldChanged('metering.ending_position') }"
+            >
+              {{ displayValue(metering.ending_position) }}
+              <template v-if="!isEmptyValue(metering.ending_position)">
+                <small>mm</small>
+              </template>
             </span>
           </el-form-item>
         </el-form>
@@ -589,7 +677,7 @@
               :class="{ 'field-changed': isFieldChanged(`barrel_temperature.table_data[${scope.$index}].sections[${col_idx}]`) }"
             >
             </el-input>
-            <span v-else class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`barrel_temperature.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ scope.row.sections[col_idx] || '-' }}</span>
+            <span v-else style="width: 100%;" class="readonly-value" :class="{ 'field-changed-text': isFieldChanged(`barrel_temperature.table_data[${scope.$index}].sections[${col_idx}]`) }">{{ displayValue(scope.row.sections[col_idx]) }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -729,6 +817,16 @@ export default {
       }, obj)
     },
     
+    /** 判空（唯一口径）：null / undefined / '' 互为“空”；0 / 0.0 不算空（数值字段 0 有意义） */
+    isEmptyValue(value) {
+      return value === null || value === undefined || value === ""
+    },
+
+    /** 只读展示值：空值统一占位 '-'，且 0 等合法数值不会被误判为空 */
+    displayValue(value) {
+      return this.isEmptyValue(value) ? "-" : value
+    },
+
     /** 判断指定路径的字段是否发生变更 */
     isFieldChanged(path) {
       if (!this.original_process) return false
@@ -739,9 +837,8 @@ export default {
       // - 业务语义：input 清空后 v-model 值为 ''，与初始 null 同义
       // - 双向绑定 input 的常见"空"表示（v-number 不 emit，el-input 已被 Vue 设为 ''）
       // - 0 / 0.0 不视为空（数值字段 0 有意义）
-      const isEmpty = (v) => v === null || v === undefined || v === ''
-      if (isEmpty(current_value) && isEmpty(original_value)) return false
-      if (isEmpty(current_value) !== isEmpty(original_value)) return true
+      if (this.isEmptyValue(current_value) && this.isEmptyValue(original_value)) return false
+      if (this.isEmptyValue(current_value) !== this.isEmptyValue(original_value)) return true
       // number 容差比较（NaN 容差）
       if (typeof current_value === "number" && typeof original_value === "number") {
         if (isNaN(current_value) && isNaN(original_value)) return false
@@ -810,12 +907,12 @@ export default {
 
     getVpSwitchModeLabel(mode) {
       const mode_map = new Map(this.vp_switch_mode_options.map(item => [item.value, item.label]))
-      return mode_map.get(mode) || "-"
+      return this.displayValue(mode_map.get(mode))
     },
 
     getDecompressModeLabel(mode) {
       const mode_map = new Map(this.decompressure_mode_options.map(item => [item.value, item.label]))
-      return mode_map.get(mode) || "-"
+      return this.displayValue(mode_map.get(mode))
     },
 
     /** 根据段数调整表格数据长度 */
