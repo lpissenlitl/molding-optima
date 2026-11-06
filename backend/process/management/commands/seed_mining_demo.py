@@ -222,7 +222,9 @@ class Command(BaseCommand):
         group: dict,
     ) -> ProcessParameter:
         """取（或建）demo 工艺参数（把变更后的值写进对应字段）。"""
-        parameter = ProcessParameter.objects.filter(
+        # 用 all_objects 查找（含软删）：命中被软删的上一代时应恢复它，
+        # 否则会新建同 parameter_no 的第二条 ⇒ 同一编号两条并存。
+        parameter = ProcessParameter.all_objects.filter(
             process_condition=condition, parameter_no=parameter_no,
         ).first()
         if parameter is None:
@@ -232,6 +234,8 @@ class Command(BaseCommand):
                 parameter_no=parameter_no,
                 param_source='manual_adjusted',
             )
+        elif parameter.is_deleted:
+            parameter.restore()
         # 把变更后的值写进对应字段（快照里才看得到这次调整）
         setattr(parameter, group['param'], group['after'])
         parameter.save()
@@ -278,7 +282,7 @@ class Command(BaseCommand):
             },
         }
 
-        record = TuningRecord.objects.filter(
+        record = TuningRecord.all_objects.filter(
             process_parameter=parameter,
         ).first()
         if record is None:
@@ -293,6 +297,8 @@ class Command(BaseCommand):
             )
             return True
 
+        if record.is_deleted:
+            record.restore()
         record.defect_feedbacks = defect_feedbacks
         record.adjustments = adjustments
         record.result = group['result']

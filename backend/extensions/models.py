@@ -285,6 +285,23 @@ class BaseModel(TracedModel):
 
         return self
     
+    def restore(self):
+        """恢复软删除
+
+        与 soft_delete() 对称。用途：幂等重建场景下，
+        “查不到（已软删）就新建”会变成“同编号两条并存”，
+        此时应当恢复旧记录而不是新建。
+        """
+        if not self.is_deleted: return self
+        
+        with transaction.atomic():
+            self.is_deleted = False
+            self.deleted_at = None
+            self.updated_at = datetime.now()
+            self.save(update_fields=["is_deleted", "updated_at", "deleted_at"])
+
+        return self
+    
     @classmethod
     def batch_soft_delete(cls, ids: list):
         """批量软删除"""
