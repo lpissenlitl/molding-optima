@@ -60,10 +60,18 @@
         @changed="loadLibrary"
       />
       <ExpertRuleSection
-        v-else-if="library.library_type === 'expert'"
+        v-else-if="library.library_type === 'expert' && isSuperuser"
         :library-id="libraryId"
-        :is-superuser="isSuperuser"
         @changed="loadLibrary"
+      />
+      <el-alert
+        v-else-if="library.library_type === 'expert'"
+        class="expert-readonly-hint"
+        type="info"
+        :closable="false"
+        show-icon
+        title="专家规则由平台超管维护"
+        description="专家规则是工艺参数初始化系数，属平台级资产：仅平台超管可查看与维护，租户私有专家库同样由超管代办维护。"
       />
     </div>
 
@@ -267,5 +275,10 @@ onMounted(() => {
 .mono {
   font-family: 'Courier New', Consolas, monospace;
   color: #303133;
+}
+
+/* 专家规则只读提示：内容区垂直居中，避免顶部孤零零一条 alert */
+.expert-readonly-hint {
+  margin-top: 48px;
 }
 </style>

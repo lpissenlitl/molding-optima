@@ -16,10 +16,15 @@ URL 段 (4 类资源对称, 全部为 list + detail):
 from django.utils.decorators import method_decorator
 
 from extensions.decorators import validate_parameters
-from extensions.schemas import PaginationBaseSchema
 from extensions.views import BaseView, PaginationResponse
 from identity.decorators import require_login, require_superuser
 
+from process.schemas import (
+    ExpertRuleListSchema,
+    RuleKeywordListSchema,
+    RuleLibraryListSchema,
+    RuleMethodListSchema,
+)
 from process.services import rule, rule_promotion
 
 
@@ -41,7 +46,7 @@ def _operator_name(request) -> str:
 class RuleKeywordListView(BaseView):
     """规则关键字列表 / 创建"""
 
-    @method_decorator(validate_parameters(PaginationBaseSchema))
+    @method_decorator(validate_parameters(RuleKeywordListSchema))
     def get(self, request, cleaned_data):
         result = rule.get_list_of_rule_keyword(
             company_id=getattr(request.user, "company_id", None),
@@ -79,7 +84,7 @@ class RuleKeywordDetailView(BaseView):
 class RuleLibraryListView(BaseView):
     """规则库列表 / 创建"""
 
-    @method_decorator(validate_parameters(PaginationBaseSchema))
+    @method_decorator(validate_parameters(RuleLibraryListSchema))
     def get(self, request, cleaned_data):
         # 默认按当前用户公司过滤；平台超管未接管时可看全部（已接管则跟租户走）
         result = rule.get_list_of_rule_library(
@@ -101,10 +106,14 @@ class RuleLibraryListView(BaseView):
 
 @method_decorator(require_login, name="dispatch")
 class RuleLibraryDetailView(BaseView):
-    """规则库详情"""
+    """规则库详情（含归属校验：租户只能读自己的库 + 系统级库）"""
 
     def get(self, request, rule_library_id):
-        return rule.get_rule_library(rule_library_id)
+        return rule.get_rule_library(
+            rule_library_id,
+            company_id=getattr(request.user, "company_id", None),
+            is_superuser=getattr(request.user, "is_superuser", False),
+        )
 
     def patch(self, request, rule_library_id):
         return rule.update_rule_library(
@@ -136,17 +145,12 @@ class RuleMethodListView(BaseView):
     - 其余分页参数 page_no / page_size / sort
     """
 
-    @method_decorator(validate_parameters(PaginationBaseSchema))
+    @method_decorator(validate_parameters(RuleMethodListSchema))
     def get(self, request, cleaned_data):
-        defect_code = request.GET.get("defect_code")
-        if defect_code:
-            # 业务功能: 按缺陷查所有启用的规则, 不分页
-            cleaned_data["defect_code"] = defect_code
+        # 业务功能: 按缺陷查所有启用的规则, 不分页（覆盖 schema 解析出的 is_active / page_size）
+        if cleaned_data.get("defect_code"):
             cleaned_data["is_active"] = True
             cleaned_data["page_size"] = 9999
-        rule_library_id = request.GET.get("rule_library_id")
-        if rule_library_id:
-            cleaned_data["rule_library_id"] = int(rule_library_id)
         result = rule.get_list_of_rule_method(**cleaned_data)
         return PaginationResponse(total=result["total"], items=result["items"])
 
@@ -181,11 +185,8 @@ class RuleMethodDetailView(BaseView):
 class ExpertRuleListView(BaseView):
     """专家规则列表 / 创建"""
 
-    @method_decorator(validate_parameters(PaginationBaseSchema))
+    @method_decorator(validate_parameters(ExpertRuleListSchema))
     def get(self, request, cleaned_data):
-        rule_library_id = request.GET.get("rule_library_id")
-        if rule_library_id:
-            cleaned_data["rule_library_id"] = int(rule_library_id)
         result = rule.get_list_of_expert_rule(**cleaned_data)
         return PaginationResponse(total=result["total"], items=result["items"])
 

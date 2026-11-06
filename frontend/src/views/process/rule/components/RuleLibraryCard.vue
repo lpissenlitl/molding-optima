@@ -60,8 +60,8 @@
         <span class="stat-label">规则方法</span>
         <span class="stat-value">{{ library.method_count ?? 0 }}</span>
       </div>
-      <!-- 专家规则数：仅超级管理员可见（平台级内部规则） -->
-      <template v-if="isSuperuser">
+      <!-- 专家规则数：系统级库（平台资产）仅超管可见；租户级库对库归属方可见 -->
+      <template v-if="showExpertRuleCount">
         <div class="stat-divider"></div>
         <div class="stat-item">
           <span class="stat-label">专家规则</span>
@@ -128,6 +128,11 @@ const ownerTypeLabel = computed(() =>
 
 const libraryTypeLabel = computed(() =>
   props.library.library_type === 'fuzzy' ? '模糊规则库' : '专家规则库',
+)
+
+/** 专家规则数：系统级库（平台资产）仅超管可见；租户级库对库归属方可见 */
+const showExpertRuleCount = computed(
+  () => props.isSuperuser || props.library.owner_type !== 'system',
 )
 
 function handleClick() {

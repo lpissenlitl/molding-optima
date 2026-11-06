@@ -1,4 +1,4 @@
-<!-- ExpertRuleSection.vue - 专家规则 section（ExpertRule 列表 + CRUD）：RuleLibraryDetail 的子组件，接收 libraryId prop，自包含搜索/列表/分页/新建编辑抽屉（含 JSON 实时校验），emit('changed') 通知父组件刷新 expert_rule_count；专家规则属平台级内部规则，仅 superadmin 可见 -->
+<!-- ExpertRuleSection.vue - 专家规则 section（ExpertRule 列表 + CRUD）：RuleLibraryDetail 的子组件，接收 libraryId prop，自包含搜索/列表/分页/新建编辑抽屉（含 JSON 实时校验），emit('changed') 通知父组件刷新 expert_rule_count；专家规则属平台级内部规则，仅平台超管可进入（父组件按超管分流，非超管展示只读说明） -->
 <template>
   <div ref="sectionRef" class="section-container">
     <!-- 搜索区 -->
@@ -212,8 +212,6 @@ import type { ExpertRule } from '@/types/rule'
 
 const props = defineProps<{
   libraryId: number
-  /** 是否超管理员。后端已有 require_superuser 二次防护，此处预留未来前端控制位 */
-  isSuperuser?: boolean
 }>()
 
 const emit = defineEmits<{

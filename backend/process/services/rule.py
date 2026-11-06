@@ -154,7 +154,6 @@ def delete_rule_keyword(rule_keyword_id):
 def get_list_of_rule_keyword(
     name=None,
     keyword_type=None,
-    show_on_page=None,
     company_id=None,
     is_superuser=False,
     page_no=1,
@@ -166,6 +165,10 @@ def get_list_of_rule_keyword(
     隔离逻辑：
     - is_superuser=True 且未接管（company_id=None） → 看全部（平台超管视角）
     - 接管后或租户用户 → 看当前 company 的关键字 + 系统演示公司的关键字
+
+    筛选参数（与 `RuleKeywordListSchema` 字段一一对应）：
+    - name：模糊匹配 **关键词名称 / 别名**（前端参数名沿用 `name`）
+    - keyword_type：参数类型（pressure / speed / time / temperature / position / force / length / weight）
     """
     from identity.models.company import Company
     from identity.const import SYSTEM_DEMO_COMPANY_CODE
@@ -183,11 +186,13 @@ def get_list_of_rule_keyword(
         qs = qs.filter(company_id__in=visible_company_ids)
 
     if name:
-        qs = qs.filter(name__icontains=name)
+        # 前端参数名 `name` ⇒ 模型上落到「关键词名称 / 别名」两列
+        qs = qs.filter(
+            db_models.Q(keyword_name__icontains=name)
+            | db_models.Q(keyword_alias__icontains=name)
+        )
     if keyword_type:
         qs = qs.filter(keyword_type=keyword_type)
-    if show_on_page is not None:
-        qs = qs.filter(show_on_page=show_on_page)
 
     qs = qs.order_by(*parse_ordering(sort or "-id"))
     pagination = paginate_queryset(qs, page_no, page_size)
@@ -309,13 +314,45 @@ def get_list_of_rule_method(
 
 # ==================== RuleLibrary ====================
 
-def get_rule_library(rule_library_id):
-    """获取规则库详情（带规则数量统计）"""
+def _visible_library_company_ids(company_id, is_superuser):
+    """规则库可见的归属公司 id 集合（列表与详情**共用同一口径**）。
+
+    - 平台超管未接管（`company_id=None`）⇒ 返回 `None`（不限归属，看全部）
+    - 其余 ⇒ 当前公司 + 系统演示公司（系统级库对所有租户可见）
+
+    ⚠️ 系统演示公司必须通过 **code 反查**，不能硬编码 id（演示 / 生产环境 id 不同）。
+    """
+    from identity.const import SYSTEM_DEMO_COMPANY_CODE
+    from identity.models.company import Company
+
+    if is_superuser and company_id is None:
+        return None
+
+    ids = []
+    if company_id is not None:
+        ids.append(company_id)
+    system_company = Company.objects.filter(code=SYSTEM_DEMO_COMPANY_CODE).first()
+    if system_company and system_company.id not in ids:
+        ids.append(system_company.id)
+    return ids
+
+
+def get_rule_library(rule_library_id, company_id=None, is_superuser=False):
+    """获取规则库详情（带规则数量统计）
+
+    ⚠️ **归属校验**：可见性口径与列表一致（见 `_visible_library_company_ids`）——
+    租户只能读自己的库 + 系统级库；读他人租户私库一律拒绝
+    （否则登录用户可按 id 遍历越权读取其它租户的规则库）。
+    """
     lib = RuleLibrary.objects.filter(
         id=rule_library_id, is_deleted=False,
     ).first()
     if not lib:
         raise BizException(ERROR_DATA_NOT_FOUND, "该规则库不存在")
+
+    visible_company_ids = _visible_library_company_ids(company_id, is_superuser)
+    if visible_company_ids is not None and lib.company_id not in visible_company_ids:
+        raise BizException(ERROR_ACCESS_LIMIT, "无权访问该规则库")
 
     data = lib.to_dict()
     # 附加统计：规则方法数量、专家规则数量
@@ -451,6 +488,7 @@ def get_list_of_rule_library(
     library_name=None,
     library_code=None,
     owner_type=None,
+    library_type=None,
     is_active=None,
     company_id=None,
     is_superuser=False,
@@ -463,25 +501,21 @@ def get_list_of_rule_library(
     隔离逻辑：
     - is_superuser=True 且未接管（company_id=None） → 看全部（平台超管视角）
     - 接管后或租户用户 → 看当前 company 的库 + 系统演示公司的库（system 库共享）
-    """
-    from identity.models.company import Company
-    from identity.const import SYSTEM_DEMO_COMPANY_CODE
 
+    筛选参数（**均与 `RuleLibraryListSchema` 字段一一对应**）：
+    - library_name / library_code：模糊匹配
+    - owner_type：system / tenant
+    - library_type：expert / fuzzy（⚠️ 决定库内允许的规则种类，租户建库时选定）
+    - is_active：启用状态
+    """
     qs = RuleLibrary.objects.filter(is_deleted=False)
 
-    # 超管未接管 → 看全部（仅平台级视角）
-    is_platform_admin_view = is_superuser and company_id is None
-
-    if not is_platform_admin_view and company_id is not None:
-        # 租户视角：本租户 + 系统演示公司（system 库共享给所有租户）
-        # 注意：通过 code 反查 system 公司的 id，不能硬编码
-        system_company = Company.objects.filter(code=SYSTEM_DEMO_COMPANY_CODE).first()
-        system_company_ids = [system_company.id] if system_company else []
-        visible_company_ids = [company_id] + [
-            cid for cid in system_company_ids if cid != company_id
-        ]
+    # 可见性：与详情共用同一口径（见 `_visible_library_company_ids`）
+    # - 平台超管未接管 → 看全部（平台级视角）
+    # - 接管后 / 租户用户 → 当前公司 + 系统演示公司（system 库共享）
+    visible_company_ids = _visible_library_company_ids(company_id, is_superuser)
+    if visible_company_ids is not None:
         qs = qs.filter(company_id__in=visible_company_ids)
-    # 超管未接管：不过滤 company，看全部
 
     if library_name:
         qs = qs.filter(library_name__icontains=library_name)
@@ -489,6 +523,8 @@ def get_list_of_rule_library(
         qs = qs.filter(library_code__icontains=library_code)
     if owner_type:
         qs = qs.filter(owner_type=owner_type)
+    if library_type:
+        qs = qs.filter(library_type=library_type)
     if is_active is not None:
         qs = qs.filter(is_active=is_active)
 

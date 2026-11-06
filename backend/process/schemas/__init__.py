@@ -5,6 +5,14 @@
 - 本文件统一 re-export，外部统一 `from process.schemas import XxxSchema`
 - 跨文件依赖单向: record.py → condition.py (records 写入强验证 condition 字段)
 """
+# ===== 规则中心（规则库 / 规则关键字 / 规则方法 / 专家规则 列表筛选）=====
+from .rule import (
+    ExpertRuleListSchema,
+    RuleKeywordListSchema,
+    RuleLibraryListSchema,
+    RuleMethodListSchema,
+)
+
 # ===== 工艺条件 =====
 from .condition import (
     ProcessConditionSchema,
@@ -72,6 +80,11 @@ from .transplant import (
 
 
 __all__ = [
+    # 规则中心
+    "ExpertRuleListSchema",
+    "RuleKeywordListSchema",
+    "RuleLibraryListSchema",
+    "RuleMethodListSchema",
     # 工艺条件
     "ProcessConditionSchema",
     "ProcessConditionListSchema",
