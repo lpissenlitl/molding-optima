@@ -200,33 +200,58 @@ class ProcessParameter(BusinessBaseModel):
         super().save(*args, **kwargs)
 
     @classmethod
+    def _to_local(cls, at):
+        """转本地时间：naive 直接返回；aware 按 TIME_ZONE 转换"""
+        if settings.USE_TZ and timezone.is_aware(at):
+            return timezone.localtime(at)
+        return at
+
+    @classmethod
+    def parameter_no_prefix(cls, at) -> str:
+        """编号前缀：PP-{YYYYMMDD}-{HHMMSS}-
+
+        `at` 可以是当前时刻，也可以是历史时刻（回填时用记录的 created_at）
+        """
+        local = cls._to_local(at)
+        return f"PP-{local:%Y%m%d}-{local:%H%M%S}-"
+
+    @classmethod
+    def build_parameter_no(cls, at, seq: int) -> str:
+        """按时刻 + 序号拼出编号：PP-{YYYYMMDD}-{HHMMSS}-{NNN}"""
+        return f"{cls.parameter_no_prefix(at)}{seq:03d}"
+
+    @classmethod
+    def used_parameter_seqs(cls, company_id, prefix: str) -> set:
+        """查该租户下已占用该编号前缀的序号集合
+
+        含软删记录（all_objects）：编号一经分配不回收，避免同号指向两条历史数据。
+        """
+        used = cls.all_objects.filter(
+            company_id=company_id,
+            parameter_no__startswith=prefix,
+        ).values_list('parameter_no', flat=True)
+        seqs = set()
+        for no in used:
+            tail = no.rsplit('-', 1)[-1]
+            if tail.isdigit():
+                seqs.add(int(tail))
+        return seqs
+
+    @classmethod
     def _generate_parameter_no(cls, company_id=None) -> str:
-        """生成工艺参数编号：PP-{YYYYMMDD}-{HHMMSS}-{NNN}
+        """生成下一个可用编号（新建轮次时调用）
 
         - YYYYMMDD-HHMMSS = 创建时刻（用户可读，且天然按时间排序）
         - NNN = 同一租户同一秒内的递增序号（并发兜底 ⇒ 租户内唯一）
 
         为什么是租户内唯一而非全局唯一：跨租户数据互相不可见，允许重号不影响唯一性语义，
         而全局序列在多租户 / 分库下更难保证。
-
-        序号计算含软删记录（all_objects）：编号一经分配不回收，
-        避免同号在不同时间指向两条历史数据。
         """
-        now = timezone.now()
-        if settings.USE_TZ:
-            now = timezone.localtime(now)
-        prefix = f"PP-{now:%Y%m%d}-{now:%H%M%S}-"
-
-        used = cls.all_objects.filter(
-            company_id=company_id,
-            parameter_no__startswith=prefix,
-        ).values_list('parameter_no', flat=True)
-        seq = 1
-        for no in used:
-            tail = no.rsplit('-', 1)[-1]
-            if tail.isdigit():
-                seq = max(seq, int(tail) + 1)
-        return f"{prefix}{seq:03d}"
+        now = cls._to_local(timezone.now())
+        prefix = cls.parameter_no_prefix(now)
+        used = cls.used_parameter_seqs(company_id, prefix)
+        seq = (max(used) + 1) if used else 1
+        return cls.build_parameter_no(now, seq)
 
     class Meta:
         verbose_name = "工艺参数"
