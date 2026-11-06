@@ -109,77 +109,13 @@
       </template>
     </BaseTable>
 
-    <!-- 调机历史 dialog -->
-    <el-dialog
-      v-model="history_dialog_visible"
-      :title="`调机历史 — ${history_dialog_title}`"
-      width="900px"
-      :close-on-click-modal="false"
-    >
-      <div v-loading="history_loading">
-        <el-empty
-          v-if="!history_loading && history_items.length === 0"
-          description="该工艺条件下暂无调机记录"
-        />
-        <el-timeline v-else>
-          <el-timeline-item
-            v-for="(item, idx) in history_items"
-            :key="item.id ?? idx"
-            :type="idx === 0 ? 'primary' : 'success'"
-            :timestamp="formatDate(item.created_at)"
-            placement="top"
-          >
-            <el-card class="history-item">
-              <div class="history-item__header">
-                <span class="history-item__seq">
-                  <AppIcon icon="mdi:counter" style="margin-right: 4px;" />
-                  seq_idx = {{ item.seq_idx ?? '-' }}
-                </span>
-                <div class="history-item__tags">
-                  <el-tag size="small" :type="idx === 0 ? 'primary' : 'info'">
-                    {{ sourceLabel(item.param_source) }}
-                  </el-tag>
-                  <el-tag size="small" type="info">
-                    parameter_id = {{ item.id ?? '-' }}
-                  </el-tag>
-                  <el-tag size="small" :type="resultTagType(item.tuning?.tuning_result)">
-                    {{ resultLabel(item.tuning?.tuning_result) }}
-                  </el-tag>
-                </div>
-              </div>
-              <div v-if="item.tuning?.defect_feedbacks?.length" class="history-item__defects">
-                <span class="history-item__defects-label">缺陷</span>
-                <el-tag
-                  v-for="(d, di) in item.tuning.defect_feedbacks"
-                  :key="di"
-                  size="small"
-                  type="danger"
-                  effect="plain"
-                >
-                  {{ d?.keyword_name ?? '未知缺陷' }}{{ d?.level ? ` / ${d.level}` : '' }}
-                </el-tag>
-              </div>
-              <div class="history-item__body">
-                <el-descriptions :column="2" size="small" border>
-                  <el-descriptions-item label="注射压力 (段 1)">
-                    {{ item.inj_pres_1 ?? '-' }} MPa
-                  </el-descriptions-item>
-                  <el-descriptions-item label="保压时间 (段 1)">
-                    {{ item.hold_t_1 ?? '-' }} s
-                  </el-descriptions-item>
-                  <el-descriptions-item label="冷却时间">
-                    {{ item.cool_t ?? '-' }} s
-                  </el-descriptions-item>
-                  <el-descriptions-item label="料筒温度 (段 1)">
-                    {{ item.brl_temp_1 ?? '-' }} ℃
-                  </el-descriptions-item>
-                </el-descriptions>
-              </div>
-            </el-card>
-          </el-timeline-item>
-        </el-timeline>
-      </div>
-    </el-dialog>
+    <!-- 调机历史抽屉（左轮次列表 + 右全量只读详情） -->
+    <TuningHistoryDrawer
+      v-model:visible="history_drawer_visible"
+      :title="`调机历史 — ${history_drawer_title}`"
+      :loading="history_loading"
+      :items="history_items"
+    />
   </div>
 </template>
 
@@ -190,31 +126,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import ProcessSearchForm from '@/views/process/library/components/ProcessSearchForm.vue'
 import { processRecordMethod, processRecordHistory } from '@/api'
+import type { TuningRoundItem } from '@/api'
 import { conditionStatusLabel, conditionStatusTagType } from '@/views/process/shared/condition-status'
+import TuningHistoryDrawer from '../components/TuningHistoryDrawer.vue'
 
 // 类型
 interface ListData {
   total: number
   items: any[]
-}
-
-interface HistoryItem {
-  id?: number
-  seq_idx?: number
-  created_at?: string
-  param_source?: string
-  inj_pres_1?: number | null
-  hold_t_1?: number | null
-  cool_t?: number | null
-  brl_temp_1?: number | null
-  /** 该轮自身的试模反馈（与该轮参数配对） */
-  tuning?: {
-    tuning_result?: 'effective' | 'unchanged' | 'ineffective' | 'qualified' | 'unqualified' | null
-    result?: string | null
-    defect_feedbacks?: any[]
-    result_detail?: string | null
-  }
-  [k: string]: any
 }
 
 // 路由
@@ -262,52 +181,8 @@ const ORIGIN_MAP: Record<string, string> = {
   process_transplant: '工艺移植',
 }
 
-// 参数来源（与后端 ProcessParameter.PARAMETER_SOURCE_CHOICES 对齐）
-const PARAM_SOURCE_MAP: Record<string, string> = {
-  unknown: '未标记',
-  manual: '手工录入',
-  import: '外部导入',
-  algorithm_init: '算法初始化',
-  system_inferred: '系统推理',
-  manual_adjusted: '人工调整',
-  equipment_sync: '设备同步',
-  template_copy: '模板复制',
-  ai_recommended: 'AI 推荐',
-}
-
 function originLabel(o: string) {
   return ORIGIN_MAP[o] ?? o
-}
-
-function sourceLabel(s?: string | null) {
-  if (!s) return '未标记'
-  return PARAM_SOURCE_MAP[s] ?? s
-}
-
-/** 效果评价 → 文案（null = 未评价） */
-const RESULT_LABEL: Record<string, string> = {
-  effective: '改善',
-  unchanged: '无变化',
-  ineffective: '变差',
-  qualified: '合格',
-  unqualified: '不合格',
-}
-
-/** 效果评价 → 标签色 */
-const RESULT_TAG_TYPE: Record<string, 'success' | 'warning' | 'danger'> = {
-  effective: 'success',
-  unchanged: 'warning',
-  ineffective: 'danger',
-  qualified: 'success',
-  unqualified: 'danger',
-}
-
-function resultLabel(v?: string | null) {
-  return v ? (RESULT_LABEL[v] ?? v) : '未评价'
-}
-
-function resultTagType(v?: string | null): 'success' | 'warning' | 'danger' | 'info' {
-  return v ? (RESULT_TAG_TYPE[v] ?? 'info') : 'info'
 }
 
 // 列表数据加载
@@ -348,19 +223,19 @@ function onReset() {
   fetchList()
 }
 
-// 调机历史 dialog
-const history_dialog_visible = ref(false)
+// 调机历史抽屉
+const history_drawer_visible = ref(false)
 const history_loading = ref(false)
-const history_items = ref<HistoryItem[]>([])
-const history_dialog_title = ref('')
+const history_items = ref<TuningRoundItem[]>([])
+const history_drawer_title = ref('')
 
 async function openHistory(row: any) {
   if (!row?.id) {
     ElMessage.warning('记录缺少 ID，无法查看调机历史')
     return
   }
-  history_dialog_title.value = row.condition_no || `#${row.id}`
-  history_dialog_visible.value = true
+  history_drawer_title.value = row.condition_no || `#${row.id}`
+  history_drawer_visible.value = true
   history_items.value = []
   history_loading.value = true
   try {
@@ -374,20 +249,6 @@ async function openHistory(row: any) {
     // 拦截器已统一 toast
   } finally {
     history_loading.value = false
-  }
-}
-
-function formatDate(s: string | undefined | null): string {
-  if (!s) return '-'
-  // ISO datetime → 本地化时间
-  try {
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return s
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
-      + `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  } catch {
-    return s
   }
 }
 
@@ -459,38 +320,3 @@ onMounted(() => {
   fetchList()
 })
 </script>
-
-<style scoped lang="scss">
-.history-item {
-  &__header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-
-  &__seq {
-    font-weight: 600;
-    color: var(--el-text-color-primary);
-  }
-
-  &__tags {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  &__defects {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-
-  &__defects-label {
-    font-size: 13px;
-    color: var(--el-text-color-secondary);
-  }
-}
-</style>

@@ -37,24 +37,56 @@
           <!-- 右侧：当前轮次详情 -->
           <main class="optimization-workspace__detail">
             <template v-if="activeRound">
+              <!-- 本轮操作：归档轮参数锁死，这里给出「以本轮为基线开新轮」的出口 -->
+              <div class="round-action-bar">
+                <div class="round-action-bar__info">
+                  <span class="round-action-bar__title">
+                    第 {{ activeRound.seq_idx ?? '-' }} 轮
+                  </span>
+                  <el-tag v-if="isRoundSealed" size="small" type="info">
+                    <AppIcon icon="mdi:lock-outline" style="margin-right: 2px;" />
+                    已归档
+                  </el-tag>
+                  <el-tag v-else size="small" type="warning">未评价</el-tag>
+                </div>
+                <el-button
+                  type="primary"
+                  plain
+                  size="small"
+                  :loading="clone_loading"
+                  :disabled="activeRound.parameter_id == null"
+                  @click="cloneFromActiveRound"
+                >
+                  <AppIcon icon="mdi:content-copy" style="margin-right: 4px;" />
+                  以此轮为基线开新轮
+                </el-button>
+              </div>
+
               <!-- 工艺参数展示 -->
               <div class="round-detail-block round-detail-block--embedded">
                 <div class="round-detail-block__title">
                   <AppIcon icon="mdi:cog-outline" />
                   <span>工艺参数</span>
                   <el-switch
-                    v-model="isProcessReadonly"
+                    :model-value="isParameterReadonly"
+                    :disabled="isRoundSealed"
                     class="round-detail-block__action"
                     inline-prompt
                     active-text="只读"
                     inactive-text="编辑"
                     size="small"
+                    @change="toggleReadonly"
                   />
+                </div>
+                <div v-if="isRoundSealed" class="round-sealed-hint">
+                  <AppIcon icon="mdi:lock-outline" />
+                  该轮参数已归档（是当时实际使用的工艺，属历史事实，不可修改）；评价仍可修改，
+                  需要调整参数请「以此轮为基线开新轮」。
                 </div>
                 <TuningParameterPanel
                   :setting-process="activeRound.parameter"
                   :original-process="originalParameter"
-                  :readonly="isProcessReadonly"
+                  :readonly="isParameterReadonly"
                 />
               </div>
 
@@ -156,7 +188,7 @@
         @click="getOptimizedProcess"
       >
         <AppIcon icon="mdi:tune" style="margin-right: 4px;" />
-        获取优化工艺
+        {{ isRoundSealed ? '基于本轮重新优化' : '获取优化工艺' }}
       </el-button>
       <el-button @click="toggleCondition">
         <AppIcon
@@ -193,6 +225,7 @@ import { listRuleKeywords } from '@/api/rule'
 import {
   processInitializationFromMasterdata,
   processOptimizationInfer,
+  processParameterCloneRound,
   tuningFeedback,
   processRecordHistory,
   processConditionDetail,
@@ -295,6 +328,8 @@ function makeRound(type: 'initial' | 'optimized' | 'manual' = 'initial') {
     created_at: new Date(now).toISOString(),
     parameter_id: null as number | null,
     seq_idx: null as number | null,
+    /** 该轮是否已归档（已落库评价 ⇒ 参数锁死，只能只读查看） */
+    sealed: false,
     parameter: structuredClone(settingProcessForm) as any,
     // 该轮自身的算法建议（Recommendation 锚在该轮参数上；历史轮次回显时从后端还原）
     suggestion: null as Suggestion | null,
@@ -369,6 +404,19 @@ const observationExpanded = ref(false)
 
 /** 工艺参数区是否只读（用户手动切换，跨调机轮次保留） */
 const isProcessReadonly = ref(false)
+
+/** 当前轮是否已归档（已落库评价 ⇒ 参数锁死，只能只读查看） */
+const isRoundSealed = computed(() => activeRound.value?.sealed === true)
+
+/** 实际只读态：归档轮强制只读，用户开关只能进一步收紧（不能解锁归档轮） */
+const isParameterReadonly = computed(() => isProcessReadonly.value || isRoundSealed.value)
+
+/** 只读/编辑开关（归档轮下开关禁用，此函数不会被触发） */
+function toggleReadonly(value: boolean) {
+  isProcessReadonly.value = value
+}
+
+const clone_loading = ref(false)
 
 const loaded = ref(false)
 const save_loading = ref(false)
@@ -463,6 +511,8 @@ async function restoreFromServer(conditionId: number): Promise<boolean> {
       created_at: item.created_at ?? new Date().toISOString(),
       parameter_id: item.id,
       seq_idx: item.seq_idx ?? null,
+      // 归档标记由后端给出（该轮已落库评价 ⇒ 参数锁死）
+      sealed: item.sealed ?? false,
       parameter: parameterFromFlat(item as any),
       // 该轮自身的算法建议（后端 Recommendation 锚在该轮参数上，重建为前端 Suggestion 结构）
       suggestion: item.tuning?.suggestion
@@ -667,6 +717,43 @@ function validateFeedback(feedback: any): FeedbackValidation {
   return { ok: true }
 }
 
+/**
+ * 以当前轮为基线开新轮（clone）
+ *
+ * 归档轮的参数不可改写，但用户可以「回到某一轮重来」——
+ * 后端以源轮参数为起点新建第 N+1 轮（parent 指向源轮），源轮零改动；
+ * 新轮未评价 ⇒ 参数可继续编辑。
+ */
+async function cloneFromActiveRound() {
+  const round = activeRound.value
+  if (!round?.parameter_id) {
+    ElMessage.warning('当前轮次尚未落库，无法作为基线')
+    return
+  }
+  clone_loading.value = true
+  try {
+    const res: any = await processParameterCloneRound(round.parameter_id)
+    const data = res?.data ?? {}
+    if (res?.status !== 0 || data?.id == null) {
+      ElMessage.error(res?.msg || '开新轮失败，请稍后重试')
+      return
+    }
+    const newRound = makeRound('manual')
+    newRound.parameter_id = data.id
+    newRound.seq_idx = data.seq_idx ?? null
+    newRound.parameter = parameterFromFlat(data)
+    form.rounds.push(newRound)
+    form.active_round_id = newRound.id
+    ElMessage.success(
+      `已基于第 ${round.seq_idx ?? '-'} 轮创建新轮（第 ${data.seq_idx ?? '-'} 轮），参数可继续编辑`,
+    )
+  } catch {
+    // 拦截器已统一 toast
+  } finally {
+    clone_loading.value = false
+  }
+}
+
 /** 获取优化工艺：调 /optimization/infer/ 生成新轮次（需先有初始工艺与完整缺陷反馈；infer 后新建轮次而非替换当前轮次） */
 async function getOptimizedProcess() {
   // 前置校验：必须先调过 getInitialProcess（依赖 condition.id + activeRound.seq_idx）
@@ -790,15 +877,25 @@ async function onSubmit() {
     // 工艺参数一并提交：后端在**同一事务**里写回参数 + 评价，
     // 语义 = 「我用了这组参数，试模结果是 X」（参数没改则不传，退化为只写评价）
     const flatParameter = parameterToFlat(activeRound.value.parameter)
+    // 归档轮次参数锁死：只提交评价（后端也会忽略参数，这里先不传避免无谓往返）
+    const parameterPayload = isRoundSealed.value
+      ? undefined
+      : (isEmptyFlatParameter(flatParameter) ? undefined : flatParameter)
     const res: any = await tuningFeedback(activeRound.value.parameter_id, {
       defect_feedbacks: feedback.defect ?? [],
       observations: feedback.observations ?? [],
       tuning_result: feedback.tuning_result ?? null,
-      parameter: isEmptyFlatParameter(flatParameter) ? undefined : flatParameter,
+      parameter: parameterPayload,
     })
     if (res?.status === 0) {
       const created = res.data?.created
-      ElMessage.success(created ? '已保存当前试模结果' : '已更新当前试模结果')
+      if (res.data?.parameter_locked) {
+        ElMessage.warning('该轮参数已归档，仅保存了试模评价')
+      } else {
+        // 落库评价后该轮即归档（参数锁死），同步本地标记让参数区立即变只读
+        activeRound.value.sealed = true
+        ElMessage.success(created ? '已保存当前试模结果' : '已更新当前试模结果')
+      }
     } else {
       // HTTP 200 但 status !== 0：业务失败（不走 catch，由调用方自己 toast）
       ElMessage.error(res?.msg || '保存失败，请稍后重试')
@@ -899,6 +996,44 @@ onBeforeUnmount(() => {
     flex-direction: column;
     gap: 16px;
   }
+}
+
+/*
+ * 本轮操作条：归档轮参数锁死，这里给出「以本轮为基线开新轮」的出口
+ */
+.round-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid var(--color-border-extra-light, #ebeef5);
+  border-radius: 4px;
+
+  &__info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__title {
+    font-weight: 600;
+    font-size: 14px;
+  }
+}
+
+/* 归档提示：浅底 + 锁图标，说明「为什么不能改」 */
+.round-sealed-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--color-bg-overlay, #f5f7fa);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
 }
 
 /* 详情区每个区块：浅色背景条 + 图标，与左侧时间线 header 视觉呼应 */

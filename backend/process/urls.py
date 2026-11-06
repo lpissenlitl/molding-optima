@@ -27,6 +27,7 @@ from .views.processes import (
     ConditionDetailView,
     ParameterListView,
     ParameterDetailView,
+    ProcessParameterCloneRoundView,
     ParameterTreeView,
     TuningFeedbackView,
     AlgorithmsInitializeView,
@@ -73,6 +74,8 @@ urlpatterns = [
     path("processes/parameters/<int:parameter_id>/", ParameterDetailView.as_view()),
     # 人工调机反馈: tuning 业务上属于 parameter, 挂 parameter 段下
     path("processes/parameters/<int:parameter_id>/tuning-feedback/", TuningFeedbackView.as_view()),
+    # 以某一轮为基线新建一轮 (源轮不改写, 新轮未评价可编辑)
+    path("processes/parameters/<int:parameter_id>/clone-round/", ProcessParameterCloneRoundView.as_view()),
     # 参数版本树: view + service 保留, 路由暂不挂出, 需要时再加回
 
     # algorithms 段

@@ -70,6 +70,7 @@ from process.services import (
     ParameterOptimizeService,
     TuningService,
 )
+from process.services.tuning import is_round_sealed
 
 
 # ============================================================
@@ -438,6 +439,27 @@ class ParameterDetailView(BaseView):
         parameter_service.delete_parameter(parameter_id)
 
 
+class ProcessParameterCloneRoundView(BaseView):
+    """以某一轮为基线新建一轮 (POST)
+
+    POST /api/processes/parameters/<int:parameter_id>/clone-round/
+
+    业务: 已落库评价的轮次已归档、参数不可改写；但用户可以「回到某一轮重来」——
+    本端点以源轮参数为起点，在同一 condition 下新建第 N+1 轮（parent 指向源轮），
+    **源轮不被改写**。新轮未评价 ⇒ 参数可继续编辑。
+
+    与 infer 的区别：infer 会跑算法、参数由算法推导；
+    本端点是纯复制（用户以历史参数为基线自己走试模/优化）。
+    """
+
+    @method_decorator(require_login)
+    def post(self, request, parameter_id):
+        return parameter_service.clone_round_from_parameter(
+            parameter_id,
+            company_id=request.user.company_id,
+        )
+
+
 class ParameterTreeView(BaseView):
     """工艺参数版本树
 
@@ -512,16 +534,23 @@ class TuningFeedbackView(BaseView):
         # 两者必须同生共死，否则会出现「参数存了、评价没存」的错配
         # （评价属于「该轮参数自身的试模结果」，参数变了评价就对不上了）。
         parameter_payload = cleaned_data.get("parameter")
+        parameter_locked = False
         with transaction.atomic():
             # ⚠️ 用真值判断而非 `is not None`：空 dict 传进来会让 update_parameter
             #    报「parameter 不能为空」，而它的语义就是「没改参数，只写评价」
             if parameter_payload:
-                # 部分更新：只写传了的字段（validate_parameters 已 exclude_none，
-                # 未传的字段保持原值）；parent_param / seq_idx 等版本关系字段受锁保护
-                parameter_service.update_parameter(
-                    parameter_id,
-                    parameter=parameter_payload,
-                )
+                if is_round_sealed(parameter):
+                    # 归档轮次：参数是「当时实际用的工艺」这一历史事实，不允许改写。
+                    # 这里**不抛错而是忽略参数** —— 本端点的语义是「参数+评价一起落库」，
+                    # 直接抛错会连带评价也存不进去，与「参数锁死、评价可改」的口径矛盾。
+                    parameter_locked = True
+                else:
+                    # 部分更新：只写传了的字段（validate_parameters 已 exclude_none，
+                    # 未传的字段保持原值）；parent_param / seq_idx 等版本关系字段受锁保护
+                    parameter_service.update_parameter(
+                        parameter_id,
+                        parameter=parameter_payload,
+                    )
 
             record, created = TuningService.upsert_tuning_record(
                 parameter=parameter,
@@ -534,6 +563,8 @@ class TuningFeedbackView(BaseView):
             "tuning_record_id": record.id,
             "parameter_id": parameter.id,
             "created": created,
+            # 参数被忽略的标记（前端据此提示「参数已锁定，仅保存评价」）
+            "parameter_locked": parameter_locked,
             "updated_at": record.updated_at,
         }
 

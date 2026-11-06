@@ -37,10 +37,13 @@ from django.db import transaction
 from django.db.models import Max, Q
 
 from extensions.exceptions import (
-    BizException, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT,
+    BizException, ERROR_ACCESS_DENIED, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT,
 )
-from process.models import ProcessParameter, ProcessCondition
+from process.exceptions import ERROR_PROCESS_ROUND_SEALED
+from process.models import ProcessParameter, ProcessCondition, TuningRecord
 from utils.db import build_filters, parse_ordering, paginate_queryset
+
+from .tuning import is_round_sealed, snapshot_parameter
 
 _logger = logging.getLogger(__name__)
 
@@ -308,17 +311,28 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
     两者都经 PARAMETER_LOCKED_FIELDS 过滤：关系字段 / 版本序号 / 来源标记
     不允许通过本服务修改（见模块 docstring 设计原则）。
 
+    归档轮次锁：已落库试模评价的轮次，其参数是「当时实际用的工艺」这一历史事实，
+    不允许再改（抛 ERROR_PROCESS_ROUND_SEALED）。评价仍可改 —— 评价走
+    tuning-feedback，不经过本函数；要调整参数请新开一轮，而不是改写归档。
+
     Returns:
         dict: 更新后的 parameter 序列化字典
 
     Raises:
-        BizException: parameter 不存在 / parameter.setting_process 为空
+        BizException: parameter 不存在 / parameter.setting_process 为空 / 该轮次已归档
     """
     parameter_obj = ProcessParameter.all_objects.filter(id=parameter_id).first()
     if not parameter_obj:
         raise BizException(
             ERROR_DATA_NOT_FOUND,
             f"parameter 不存在: id={parameter_id}",
+        )
+
+    # 归档轮次锁：参数是历史事实，不允许改写（评价可改，走另一条通道）
+    if is_round_sealed(parameter_obj):
+        raise BizException(
+            ERROR_PROCESS_ROUND_SEALED,
+            f"parameter_id={parameter_id}，如需调整参数请新建一轮",
         )
 
     if not parameter:
@@ -342,6 +356,69 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
     allowed_fields = ProcessParameter.get_allowed_fields() - PARAMETER_LOCKED_FIELDS
     parameter_obj.update_info(allow_fields=allowed_fields, **parameter_kwargs)
     return _serializable_parameter_dict(parameter_obj)
+
+
+def clone_round_from_parameter(parameter_id: int, company_id: int = None) -> dict:
+    """以某一轮为基线，在同一 condition 下新建一轮（clone）
+
+    业务语义：历史轮次一旦落库评价即归档，参数不可改写；
+    但用户可能想「回到某一轮重来」—— 本函数以源轮参数为起点新建第 N+1 轮
+    （parent 指向源轮），**源轮不被改写** ⇒ 同时满足「归档不可变」与「可以从任一轮重来」。
+
+    新轮状态：
+    - 工艺参数：源轮逐字段复制（快照口径，只拷工艺标量字段）
+    - 无缺陷、无评价：同步建一条 pending 的 TuningRecord，维持 ProcessParameter ↔ TuningRecord 1:1
+      ⇒ 按归档判据（result != 'pending'）新轮**未封存** ⇒ 参数可编辑
+    - param_source='manual_adjusted'（人工以历史轮为基线）
+
+    Args:
+        parameter_id: 源轮（基线轮）ID
+        company_id: 租户 ID（不为 None 时校验归属，防跨租户克隆）
+
+    Returns:
+        dict: 新轮的序列化信息（parameter_id / seq_idx / parent_param_id ...）
+
+    Raises:
+        BizException: 源轮不存在 / 跨租户访问
+    """
+    source = ProcessParameter.objects.filter(id=parameter_id).first()
+    if not source:
+        raise BizException(
+            ERROR_DATA_NOT_FOUND,
+            f"parameter 不存在: id={parameter_id}",
+        )
+    if (
+        company_id is not None
+        and source.company_id is not None
+        and source.company_id != company_id
+    ):
+        raise BizException(
+            ERROR_ACCESS_DENIED,
+            f"无权克隆其他公司的工艺参数: parameter_id={parameter_id}",
+        )
+
+    # 只拷工艺标量字段（快照口径：排除元数据 / 关系 / 来源标记 / 版本序号）
+    snapshot = snapshot_parameter(source)
+
+    new_param = ProcessParameter.objects.create(
+        process_condition=source.process_condition,
+        parent_param=source,
+        param_source="manual_adjusted",
+        company_id=source.company_id,
+        organization_id=source.organization_id,
+        **snapshot,
+    )
+
+    # 1:1 契约：同步建 pending 的 TuningRecord（新轮未评价 ⇒ 未封存 ⇒ 参数可编辑）
+    TuningRecord.objects.create(
+        process_parameter=new_param,
+        defect_feedbacks=[],
+        result="pending",
+        company_id=source.company_id,
+        organization_id=source.organization_id,
+    )
+
+    return _serializable_parameter_dict(new_param)
 
 
 def delete_parameter(parameter_id: int) -> None:

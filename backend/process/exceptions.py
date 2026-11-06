@@ -60,6 +60,8 @@ ERROR_PROCESS_PARAMETER_INVALID        = BizErrorCode.create(MOD_PROCESS, 33, "�
 ERROR_PROCESS_PARAMETER_GENERATION_FAILED = BizErrorCode.create(MOD_PROCESS, 34, "工艺参数生成失败")
 ERROR_PROCESS_SNAPSHOT_INVALID         = BizErrorCode.create(MOD_PROCESS, 35, "工艺条件快照无效")
 ERROR_PROCESS_INSUFFICIENT_FIELDS      = BizErrorCode.create(MOD_PROCESS, 36, "工艺参数输入字段不足")
+# 归档轮次（已落库试模评价）参数不可改；评价仍可改（两者生命周期不同，分开设防）
+ERROR_PROCESS_ROUND_SEALED             = BizErrorCode.create(MOD_PROCESS, 37, "该调机轮次已归档，参数不可修改")
 
 
 # ============================================================

@@ -37,7 +37,7 @@ from utils.validation import validate_pk, validate_id_list
 from utils.db import build_filters, parse_ordering, paginate_queryset
 from utils.objects import safe_get
 from utils.code_generator import generate_unique_code
-from process.services.tuning import TuningService, tuning_result_from_record
+from process.services.tuning import TuningService, tuning_result_from_record, is_record_sealed
 from process.services.parameter_optimize import build_recommendation_suggestion
 
 _logger = logging.getLogger(__name__)
@@ -1060,6 +1060,9 @@ def get_condition_history(condition_id: int, company_id: int = None) -> dict:
             parameter=h,
             recommendation=recommendations.get(h.id),
         )
+        # 归档标记：已落库评价的轮次参数锁死（前端只读展示 + 禁用编辑入口）。
+        # 判据取自服务层的同一口径，避免前后端各写一份而漂移。
+        item["sealed"] = is_record_sealed(records.get(h.id))
         items.append(item)
 
     return {

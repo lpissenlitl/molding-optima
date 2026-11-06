@@ -39,6 +39,11 @@
     "vue/attributes-order": "off",         // 不强制属性顺序
     "vue/max-attributes-per-line": "off",  // 不限制每行属性数
     "vue/html-indent": ["warn", 2],        // HTML 缩进 2 空格（可修复）
-    "vue/html-self-closing": "off"         // 不强制自闭合标签
+    "vue/html-self-closing": "off",        // 不强制自闭合标签
+
+    // 🔹 项目已升级 Vue3（见 architecture.md ADR-001），v-model:xxx 是合法语法；
+    //    但 extends 里的 plugin:vue/recommended 是 Vue2 规则集，会把 v-model 带参写法误判为 error。
+    //    这里按事实关掉该 Vue2-only 规则（其余 Vue3 规则集问题另行排期）。
+    "vue/no-v-model-argument": "off"
   }
 }

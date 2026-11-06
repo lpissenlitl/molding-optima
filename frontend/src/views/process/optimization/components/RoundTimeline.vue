@@ -25,6 +25,7 @@
           <div class="round-item__title">
             第 {{ round.seq_idx ?? idx + 1 }} 轮
             <el-tag size="small" :type="TYPE_TAG[round.type]">{{ TYPE_LABEL[round.type] }}</el-tag>
+            <AppIcon v-if="round.sealed" icon="mdi:lock-outline" class="round-item__lock" />
           </div>
           <!-- 占位 round（parameter_id 为 null）不显示时间：占位是页面初始化时建的，时间不准确
             只有 infer / 优化 / 手动保存后真正“创建” round 时才显示 -->
@@ -48,6 +49,8 @@ defineProps<{
     seq_idx?: number | null
     /** 后端 ProcessParameter.id：占位 round 为 null（页面初始化时建的未提交 round） */
     parameter_id?: number | null
+    /** 该轮是否已归档（已落库评价 ⇒ 参数锁死） */
+    sealed?: boolean
   }>
   activeId?: number | string | null
 }>()
@@ -146,6 +149,12 @@ function formatLocalTime(iso: string): string {
     font-size: 12px;
     color: var(--el-text-color-secondary, #909399);
     margin-top: 2px;
+  }
+
+  /* 归档锁标记：该轮参数已锁定 */
+  &__lock {
+    font-size: 13px;
+    color: var(--el-text-color-secondary, #909399);
   }
 
   &__summary {

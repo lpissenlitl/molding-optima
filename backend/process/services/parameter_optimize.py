@@ -57,6 +57,7 @@ from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数�
     TUNING_RESULT_MAP,
     build_adjustments,
     is_qualified_result,
+    is_round_sealed,
     snapshot_parameter,
 )
 
@@ -1019,8 +1020,18 @@ def _sync_user_modified_parameter(
 
     只写**真正变化**的字段：值相同的字段不进 UPDATE，
     避免写放大与无谓的 updated_at 变化。
+
+    归档轮次不写回：父轮已落库评价时，它的参数是「当时实际用的工艺」这一历史事实，
+    写回会改写归档 ⇒ 跳过（只记一条 warning）。
+    ⚠️ 不影响子轮次：Step 1 装配基线时已按用户改值覆盖，手改不会丢。
     """
     if not changed_fields:
+        return
+    if is_round_sealed(parent_param):
+        _logger.warning(
+            "[optimize/infer] 父轮已归档，跳过参数写回: parameter_id=%s",
+            parent_param.id,
+        )
         return
     for key, value in changed_fields.items():
         setattr(parent_param, key, value)

@@ -264,6 +264,8 @@ export interface TuningRoundItem {
   seq_idx: number | null
   param_source?: string | null
   created_at?: string | null
+  /** 归档标记：该轮已落库评价 ⇒ 参数锁死（只读）。判据由后端给出，前端不自行推算 */
+  sealed?: boolean
   /** 该轮自身的试模反馈 */
   tuning?: TuningRoundFeedback
   [k: string]: any
@@ -325,6 +327,18 @@ export const tuningFeedback = (parameterId: number, payload: TuningFeedbackPaylo
     url: `/api/processes/parameters/${parameterId}/tuning-feedback/`,
     method: 'post',
     data: payload,
+  })
+
+/**
+ * 以某一轮为基线新建一轮（POST /api/processes/parameters/<id>/clone-round/）
+ *
+ * 语义：已落库评价的轮次已归档、参数不可改写，但用户可以「回到某一轮重来」。
+ * 源轮零改动，新轮未评价 ⇒ 参数可继续编辑。
+ */
+export const processParameterCloneRound = (parameterId: number) =>
+  request({
+    url: `/api/processes/parameters/${parameterId}/clone-round/`,
+    method: 'post',
   })
 
 

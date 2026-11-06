@@ -55,6 +55,37 @@ def is_qualified_result(tuning_result: Optional[str]) -> bool:
     return tuning_result == "qualified"
 
 
+def is_record_sealed(record: Optional[TuningRecord]) -> bool:
+    """归档判据（纯函数，可离线判一条记录）
+
+    有评价记录且 ``result != 'pending'`` ⇒ 该轮已归档（参数锁死，评价仍可改）。
+    """
+    return bool(record is not None and record.result != "pending")
+
+
+def is_round_sealed(parameter: ProcessParameter) -> bool:
+    """该调机轮次是否已归档（参数锁死，评价仍可改）
+
+    判据：存在 TuningRecord 且 ``result != 'pending'``（判据本体见 is_record_sealed）。
+
+    为什么不是「有 TuningRecord 就算归档」：
+    infer 建新轮时会预建一条 ``pending`` 的 TuningRecord（等该轮自身的试模反馈），
+    那条记录表示「这一轮已建、还没评价」⇒ 参数仍允许改。
+
+    为什么「评价仍可改」：
+    参数记录的是「当时实际用的工艺」，属历史事实；评价是「当时的结果」，
+    允许事后补录 / 纠错（走 tuning-feedback，不经过 update_parameter）。
+    两者生命周期不同 ⇒ 分开设防。
+    """
+    record = (
+        TuningRecord.objects
+        .filter(process_parameter=parameter)
+        .order_by("-created_at")
+        .first()
+    )
+    return is_record_sealed(record)
+
+
 # --- 参数快照（不可变基准） ---
 #
 # 快照 = 某一时刻的工艺标量字段集合，是「变更」这一定义的**唯一**依据：
