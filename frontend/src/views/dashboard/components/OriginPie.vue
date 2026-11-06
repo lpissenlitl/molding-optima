@@ -1,12 +1,5 @@
-<!--
-  DashboardOriginPie.vue - 起源类型分布（环形图）
+<!-- DashboardOriginPie.vue - 起源类型分布（环形图）：ECharts 5 按需加载，props.data 为 {name,value,origin_type}[]（与后端对齐），环形图 radius 50%/70% 中间显示总数，7 色项目主题色板对应 7 种工艺起源 -->
 
-  设计要点：
-  - ECharts 5 按需加载（仅引入饼图 + 提示框 + 图例 + 标题）
-  - 接收 props.data：{name, value, origin_type}[]（与后端对齐）
-  - 环形图（radius: 50%/70%）+ 中间显示总数
-  - 项目主题色板（7 种工艺起源：蓝/绿/橙/紫/青/红/灰）
--->
 <template>
   <div ref="chartRef" class="origin-pie" v-loading="loading" />
 </template>
@@ -24,9 +17,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 
 echarts.use([PieChart, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
 
-/**
- * Dashboard 起源分布项（与后端 statistics_service.py 对齐）
- */
+/** Dashboard 起源分布项（与后端 statistics_service.py 对齐） */
 export interface DashboardOriginItem {
   name: string
   value: number
@@ -149,7 +140,6 @@ function buildOption() {
 function renderChart() {
   if (!chartRef.value) return
   // 防御：layout 仍为 0 时跳过 init（避免 ECharts "Can't get DOM width or height" warning）
-  // 下一次 resize / data 变化时会再尝试
   if (chartRef.value.clientWidth === 0 || chartRef.value.clientHeight === 0) return
   if (!chart) {
     chart = echarts.init(chartRef.value, undefined, { renderer: 'canvas' })
@@ -161,14 +151,8 @@ function handleResize() {
   chart?.resize()
 }
 
-/*
- * 渲染时机：使用 requestAnimationFrame 而非 nextTick
- * - nextTick 是 microtask，触发时机早于浏览器 layout，此时 DOM 节点存在但
- *   clientWidth/Height 仍为 0，echarts.init() 会触发 "Can't get DOM width or height" warning
- * - requestAnimationFrame 在浏览器 paint 前回调，到那时 layout 已计算完毕
- *   （ECharts 5 官方建议在 window.onload 或 RAF 回调中初始化）
- * - 双重防御：renderChart 内仍检查容器尺寸（0 时跳过，下一次 resize/data 变化会重试）
- */
+/* 渲染时机：使用 requestAnimationFrame 而非 nextTick —— nextTick 是 microtask，早于浏览器 layout，此时 DOM 节点存在但 clientWidth/Height 仍为 0，echarts.init() 会触发 "Can't get DOM width or height" warning；RAF 在 paint 前回调时 layout 已计算完毕（ECharts 5 官方建议在 onload 或 RAF 回调中初始化），renderChart 内再检查容器尺寸作二次防御 */
+
 onMounted(() => {
   requestAnimationFrame(() => {
     renderChart()

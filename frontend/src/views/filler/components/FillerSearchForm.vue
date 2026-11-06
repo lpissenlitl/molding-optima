@@ -1,12 +1,5 @@
-<!--
-  FillerSearchForm - 填充物搜索表单
+<!-- FillerSearchForm - 填充物搜索表单：对齐 PolymerSearchForm 规范，始终展示（:expandable="false"）、控件宽 200px（:control-width="200"）、4 个字段全部 level: 'basic' -->
 
-  对齐 PolymerSearchForm 规范：
-    - 始终展示（:expandable="false"）
-    - 控件宽度 200px（:control-width="200"）
-    - 4 个字段全部 level: 'basic'
-    - Vue 3 + Element Plus（Composition API）
--->
 <template>
   <BaseSearchForm
     :query="query_params"

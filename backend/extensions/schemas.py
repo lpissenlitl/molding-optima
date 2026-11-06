@@ -2,10 +2,7 @@
 通用 Schema 定义 - Pydantic 版本
 
 本文件为所有模块提供基础 Schema 定义，作为序列化库统一的核心。
-迁移自 marshmallow，所有字段注释和类型定义保持不变。
 
-版本历史：
-- v2.0.0 (2026-06-27) - 从 marshmallow 迁移到 Pydantic
 """
 import re
 from datetime import datetime

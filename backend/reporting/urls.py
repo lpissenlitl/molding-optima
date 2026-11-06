@@ -7,7 +7,6 @@ from django.urls import path, re_path
 from .views import (
     ExportListView,
     ProcessExportView,
-    ProcessReportGenerateView,
     ReportDownloadView,
 )
 
@@ -19,5 +18,4 @@ urlpatterns = [
     re_path(r"^reports/download/(?P<path>.+)/$", ReportDownloadView.as_view(), name="reporting-download"),
     # --- 工艺相关 ---
     path("process/export/", ProcessExportView.as_view(), name="reporting-process-export"),
-    path("process/report/", ProcessReportGenerateView.as_view(), name="reporting-process-report"),
 ]

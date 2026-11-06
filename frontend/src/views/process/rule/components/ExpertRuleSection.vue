@@ -1,14 +1,4 @@
-<!--
-  ExpertRuleSection.vue - 专家规则 section（ExpertRule 列表 + CRUD）
-
-  作为 RuleLibraryDetail 的子组件使用：
-  - 接收 libraryId prop
-  - 自包含：搜索、列表、分页、新建/编辑抽屉（含 JSON 实时校验）
-  - 通过 emit('changed') 通知父组件刷新 expert_rule_count
-
-  注意：专家规则属于平台级内部规则，仅 superadmin 可见。
-  后端 ExpertRuleListByLibraryView / ExpertRuleDetailView 已加 require_superuser 装饰器做二次防护。
--->
+<!-- ExpertRuleSection.vue - 专家规则 section（ExpertRule 列表 + CRUD）：RuleLibraryDetail 的子组件，接收 libraryId prop，自包含搜索/列表/分页/新建编辑抽屉（含 JSON 实时校验），emit('changed') 通知父组件刷新 expert_rule_count；专家规则属平台级内部规则，仅 superadmin 可见 -->
 <template>
   <div ref="sectionRef" class="section-container">
     <!-- 搜索区 -->
@@ -103,8 +93,9 @@
         </el-tag>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="160" fixed="right" align="center">
+    <el-table-column label="操作" width="220" fixed="right" align="center">
       <template #default="{ row }">
+        <el-button link type="primary" @click="openDetailExpertRule(row)">详情</el-button>
         <el-button link type="primary" @click="showEditExpertRuleDialog(row)">编辑</el-button>
         <el-button link type="danger" @click="deleteExpertRule(row)">删除</el-button>
       </template>
@@ -126,10 +117,10 @@
     />
   </div>
 
-  <!-- 专家规则抽屉（新建/编辑共用）-->
+  <!-- 专家规则抽屉（新建/编辑/详情共用）-->
   <el-drawer
     v-model="expertDialogVisible"
-    :title="expertDialogMode === 'create' ? '新建专家规则' : '编辑专家规则'"
+    :title="expertDialogTitle"
     direction="rtl"
     size="640px"
     :close-on-click-modal="false"
@@ -137,10 +128,10 @@
   >
     <el-form :model="expertForm" label-width="100px">
       <el-form-item label="规则编码" required>
-        <el-input v-model="expertForm.rule_code" placeholder="英文编码，如 default_injection" />
+        <el-input v-model="expertForm.rule_code" :disabled="isExpertReadonly" placeholder="英文编码，如 default_injection" />
       </el-form-item>
       <el-form-item label="规则名称" required>
-        <el-input v-model="expertForm.rule_name" placeholder="中文名称" />
+        <el-input v-model="expertForm.rule_name" :disabled="isExpertReadonly" placeholder="中文名称" />
       </el-form-item>
       <el-form-item label="匹配条件">
         <div class="hint">JSON 数组（每项含 field/operator/value），留空 = 默认规则</div>
@@ -148,6 +139,7 @@
           v-model="expertForm.conditionsText"
           type="textarea"
           class="json-input"
+          :disabled="isExpertReadonly"
           :autosize="{ minRows: 6, maxRows: 16 }"
           placeholder='[{"field":"polymer.abbreviation","operator":"exact","value":"ABS"}]'
           @blur="formatJson('conditionsText')"
@@ -166,6 +158,7 @@
           v-model="expertForm.coefficientsText"
           type="textarea"
           class="json-input"
+          :disabled="isExpertReadonly"
           :autosize="{ minRows: 6, maxRows: 16 }"
           placeholder='{"holding":{"hold_pres_inj_ratio_max":0.85}}'
           @blur="formatJson('coefficientsText')"
@@ -179,28 +172,34 @@
         </div>
       </el-form-item>
       <el-form-item label="优先级">
-        <el-input-number v-model="expertForm.priority" :min="0" />
+        <el-input-number v-model="expertForm.priority" :min="0" :disabled="isExpertReadonly" />
       </el-form-item>
       <el-form-item label="启用">
-        <el-switch v-model="expertForm.is_active" />
+        <el-switch v-model="expertForm.is_active" :disabled="isExpertReadonly" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="expertDialogVisible = false">
+      <!-- 详情态：只读展示，无保存动作 -->
+      <el-button v-if="isExpertReadonly" @click="expertDialogVisible = false">
         <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
-        取消
+        关闭
       </el-button>
-      <el-button type="primary" :loading="expertSubmitting" @click="submitExpertRule">
-        保存
-      </el-button>
+      <template v-else>
+        <el-button @click="expertDialogVisible = false">
+          <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+          取消
+        </el-button>
+        <el-button type="primary" :loading="expertSubmitting" @click="submitExpertRule">
+          保存
+        </el-button>
+      </template>
     </template>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-// AppIcon 是 ComponentsPlugin 全局注册的组件，无需 import
 import {
   listExpertRules,
   createExpertRule,
@@ -209,9 +208,7 @@ import {
 } from '@/api/rule'
 import type { ExpertRule } from '@/types/rule'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 const props = defineProps<{
   libraryId: number
@@ -224,9 +221,7 @@ const emit = defineEmits<{
   changed: []
 }>()
 
-// ============================================================================
 // 列表状态
-// ============================================================================
 
 const expertRules = ref<ExpertRule[]>([])
 const expertTotal = ref(0)
@@ -277,10 +272,7 @@ function onExpertSizeChange(s: number) {
   loadExpertRules()
 }
 
-/**
- * 匹配条件摘要：取前 2 条条件拼成可读字符串，作为 tooltip 内容
- * 例: "polymer.abbreviation exact \"ABS\"\nmolder.brand exact \"海天\""
- */
+/** 匹配条件摘要：取前 2 条条件拼成可读字符串，作为 tooltip 内容 */
 function conditionsSummary(conditions: ExpertRule['conditions']): string {
   if (!conditions || conditions.length === 0) return '默认规则（无条件）'
   const formatValue = (v: unknown) =>
@@ -294,14 +286,24 @@ function conditionsSummary(conditions: ExpertRule['conditions']): string {
   return preview.join('\n')
 }
 
-// ============================================================================
-// 抽屉（新建/编辑共用）+ JSON 实时校验
-// ============================================================================
+// 抽屉（新建/编辑/详情共用）+ JSON 实时校验
 
 const expertDialogVisible = ref(false)
-const expertDialogMode = ref<'create' | 'edit'>('create')
+const expertDialogMode = ref<'create' | 'edit' | 'detail'>('create')
 const expertEditId = ref<number>(0)
 const expertSubmitting = ref(false)
+
+/** 抽屉标题：随模式切换 */
+const expertDialogTitle = computed(() =>
+  expertDialogMode.value === 'create'
+    ? '新建专家规则'
+    : expertDialogMode.value === 'edit'
+      ? '编辑专家规则'
+      : '专家规则详情',
+)
+
+/** 详情态只读：所有表单控件 disabled，底部只给「关闭」 */
+const isExpertReadonly = computed(() => expertDialogMode.value === 'detail')
 const expertForm = reactive({
   rule_code: '',
   rule_name: '',
@@ -317,10 +319,7 @@ const jsonStatus = reactive<{ conditions: string; coefficients: string }>({
   coefficients: '',
 })
 
-/**
- * 自动格式化 JSON + 实时校验提示
- * - 输入框失焦时调用：成功则 JSON.stringify(parsed, null, 2)，失败则仅提示错误不动数据
- */
+/** 自动格式化 JSON + 实时校验提示 */
 function formatJson(field: 'conditionsText' | 'coefficientsText') {
   const text = expertForm[field].trim()
   const key = field === 'conditionsText' ? 'conditions' : 'coefficients'
@@ -365,7 +364,23 @@ function showEditExpertRuleDialog(row: ExpertRule) {
   expertDialogVisible.value = true
 }
 
+/** 打开专家规则详情（只读抽屉） */
+function openDetailExpertRule(row: ExpertRule) {
+  expertDialogMode.value = 'detail'
+  expertEditId.value = row.id
+  expertForm.rule_code = row.rule_code
+  expertForm.rule_name = row.rule_name
+  expertForm.conditionsText = row.conditions ? JSON.stringify(row.conditions, null, 2) : '[]'
+  expertForm.coefficientsText = row.coefficients ? JSON.stringify(row.coefficients, null, 2) : '{}'
+  expertForm.priority = row.priority
+  expertForm.is_active = row.is_active
+  jsonStatus.conditions = '✓ 格式正确'
+  jsonStatus.coefficients = '✓ 格式正确'
+  expertDialogVisible.value = true
+}
+
 async function submitExpertRule() {
+  if (isExpertReadonly.value) return
   if (!expertForm.rule_code || !expertForm.rule_name) {
     ElMessage.warning('请填写规则编码和规则名称')
     return
@@ -454,16 +469,8 @@ async function deleteExpertRule(row: ExpertRule) {
   }
 }
 
-// ============================================================================
 // 初始化：进入页面立即加载一次 + 动态计算表格高度
-// ============================================================================
-
-/**
- * 表格高度 = .table-wrapper 的真实 clientHeight（flex 容器已分配的空间）
- * - 不依赖 window.innerHeight 估算（避免顶部导航/库信息卡高度变动造成偏移）
- * - 首次 onMounted 后 flex 已完成布局，clientHeight 已是准确值
- * - resize 时 flex 重分配 → 高度同步更新
- */
+/** 表格高度 = .table-wrapper 的真实 clientHeight（flex 容器已分配的空间） */
 const sectionRef = ref<HTMLElement | null>(null)
 const tableHeight = ref<number>(400)
 
@@ -492,14 +499,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/*
- * Flex 布局：
- * - .section-container 是外层 flex 容器（垂直排列）
- * - .search-container / .pagination flex-shrink: 0 → 不被压衡
- * - .table-wrapper flex: 1 + min-height: 0 → 吃掉所有剩余空间
- *   min-height: 0 关键：flex 子项默认 min-height: auto，会被内容撑开
- *   设为 0 后子项可以收缩，让 .table-wrapper 高度 = flex 分配的空间
- */
+/* Flex 布局：.section-container 为垂直 flex 容器；.search-container / .pagination 设 flex-shrink: 0 不被压缩；.table-wrapper 用 flex: 1 + min-height: 0 吃掉剩余空间（min-height: 0 是关键，flex 子项默认 min-height: auto 会被内容撑开） */
 .section-container {
   display: flex;
   flex-direction: column;

@@ -1,10 +1,4 @@
-<!--
-  RuleLibraryTab.vue - 规则库 tab 内容
-  - 父组件 RuleLibraryList 通过 v-show 控制显示（保持组件存活）
-  - 接收 activeTab + isSuperuser props
-  - 自己 watch activeTab 决定是否加载数据
-  - 不写 scoped style：复用全局 custom-form.scss 样式（.search-container / .search-form / .search-actions）
--->
+<!-- RuleLibraryTab.vue - 规则库 tab 内容 -->
 <template>
   <div class="tab-panel">
     <!-- 搜索卡片 -->
@@ -89,6 +83,7 @@
       :mode="libraryDialogMode"
       :form="libraryForm"
       :submitting="createLibrarySubmitting"
+      :is-superuser="isSuperuser"
       @submit="submitCreateLibrary"
     />
   </div>
@@ -113,9 +108,7 @@ const props = defineProps<{
   isSuperuser: boolean
 }>()
 
-// ============================================================================
 // 状态
-// ============================================================================
 const libraries = ref<RuleLibrary[]>([])
 const libraryTotal = ref(0)
 const libraryLoading = ref(false)
@@ -128,9 +121,7 @@ const libraryQuery = reactive({
   page_size: 12,
 })
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 async function loadLibraries() {
   libraryLoading.value = true
   try {
@@ -166,9 +157,7 @@ function onLibraryPageChange(p: number) {
   loadLibraries()
 }
 
-// ============================================================================
 // 新建/编辑规则库抽屉
-// ============================================================================
 const createLibraryVisible = ref(false)
 const createLibrarySubmitting = ref(false)
 const libraryDialogMode = ref<'create' | 'edit'>('create')
@@ -182,6 +171,7 @@ const libraryForm = reactive<RuleLibraryFormData>({
   version: 1,
   is_active: true,
   description: '',
+  target_company_id: null,
 })
 
 function showCreateLibraryDialog() {
@@ -195,6 +185,7 @@ function showCreateLibraryDialog() {
   libraryForm.version = 1
   libraryForm.is_active = true
   libraryForm.description = ''
+  libraryForm.target_company_id = null
   createLibraryVisible.value = true
 }
 
@@ -263,18 +254,13 @@ async function handleDeleteLibrary(lib: RuleLibrary) {
 const isLibraryReadonly = (lib: RuleLibrary) =>
   lib.owner_type === 'system' && !props.isSuperuser
 
-// ============================================================================
 // 路由跳转
-// ============================================================================
 const router = useRouter()
 function goLibraryDetail(lib: RuleLibrary) {
   router.push(`/process/rules/${lib.id}`)
 }
 
-// ============================================================================
-// 生命周期：按需加载
-// ============================================================================
-// 父组件用 v-show，子组件始终挂载。仅在首次激活 / 切回激活时加载数据
+// 生命周期：进入页面立即加载一次
 onMounted(() => {
   if (props.activeTab === 'libraries') {
     loadLibraries()
@@ -288,8 +274,6 @@ watch(() => props.activeTab, (val, oldVal) => {
 })
 </script>
 
-<!--
-  本组件不写 scoped style：表单字段提示样式（.field-tip）已在子组件 RuleLibraryFormDrawer 内定义。
--->
+<!-- 本组件不写 scoped style：表单字段提示样式（.field-tip）已在子组件 RuleLibraryFormDrawer 内定义。 -->
 <style lang="scss">
 </style>

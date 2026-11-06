@@ -1,11 +1,5 @@
-<!--
-  RoleFormDrawer - 角色表单抽屉（一体化组件：el-drawer + el-form + 提交逻辑）
-  - 使用方：v-model:visible 控制显示，:id 传编辑 id，@success 接收提交成功事件
-  - 基础字段：name、code、description、is_active
-  - 权限分配：el-tree 多选
-  - 创建时：必填 name + code
-  - 编辑时：code 只读
--->
+<!-- RoleFormDrawer - 角色表单抽屉：v-model:visible 控制显隐、:id 传编辑 id、@success 接收提交成功；权限用 el-tree 多选，创建必填 name+code，编辑时 code 只读 -->
+
 <template>
   <el-drawer
     :model-value="visible"
@@ -137,9 +131,7 @@ import { ref, reactive, watch, nextTick, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { roleMethod, getPermissionTree } from '@/api'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 interface Props {
   visible: boolean
@@ -162,9 +154,7 @@ function onVisibleChange(val: boolean) {
   emit('update:visible', val)
 }
 
-// ============================================================================
 // 表单数据
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 const treeRef = ref<any>()
@@ -197,9 +187,7 @@ const rules: FormRules = {
   ],
 }
 
-// ============================================================================
 // 权限树
-// ============================================================================
 
 const treeProps = {
   label: 'name',
@@ -288,9 +276,7 @@ function setCheckedFromCodes(codes: string[]) {
   onTreeCheck()
 }
 
-// ============================================================================
 // 详情加载（编辑模式）
-// ============================================================================
 
 async function loadRoleDetail(roleId: number) {
   loading.value = true
@@ -316,9 +302,7 @@ async function loadRoleDetail(roleId: number) {
   }
 }
 
-// ============================================================================
 // 模式切换
-// ============================================================================
 
 watch(
   () => props.id,
@@ -345,9 +329,7 @@ watch(
   { immediate: true }
 )
 
-// ============================================================================
 // 提交
-// ============================================================================
 
 async function submit() {
   if (!formRef.value) return

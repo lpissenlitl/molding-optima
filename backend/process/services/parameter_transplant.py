@@ -1,11 +1,14 @@
-"""
-molding-optima 工艺参数移植 service（迁移自 molding-expert）
+"""工艺参数移植 service —— 把源机台的工艺参数按物理比例换算到目标机台。
 
-算法来源：
-- molding-expert/molding-expert-service/process/services/process_transplant.py
+对外函数：
+- transplant_process_parameter(source_parameter_id, target_machine_spec)：
+  查源工艺参数 → 换算 → 返回目标机台的 setting_process
+- transplant_process(...)：纯换算（不查库）
 
-阶段 1：迁移 molding-expert 算法
-阶段 2：从 old/mdprocess 提炼更复杂的移植算法（机器自适应、多轴联动等）
+换算口径：
+- 压力 / 速度：按可设定上限归一化（源值 ÷ 源上限 × 目标上限）
+- 位置类（注射位置 / 止逆环位置）：按螺杆面积比换算
+- 计量段背压 / 储压：电驱 → 液压时按目标上限的固定比例取值
 """
 import copy
 from typing import Optional, Dict, Any
@@ -15,7 +18,7 @@ from process.models import ProcessParameter
 
 
 # ============================================================
-# 工具函数（迁移自 molding-expert process_transplant.py）
+# 工具函数
 # ============================================================
 
 def _is_valid_number(val: Any) -> bool:
@@ -308,7 +311,7 @@ def _transplant_barrel_temperature(origin_temp, target_injt, target_temp):
 
 
 # ============================================================
-# 工艺参数转换主函数（迁移自 molding-expert）
+# 工艺参数转换主函数
 # ============================================================
 
 def transplant_process(
@@ -362,7 +365,7 @@ def transplant_process(
 
 
 # ============================================================
-# molding-optima 入口函数（保留旧签名，内部调用 molding-expert 算法）
+# 工艺参数移植入口
 # ============================================================
 
 def transplant_process_parameter(
@@ -399,9 +402,6 @@ def transplant_process_parameter(
     from process.services.condition import _condition_to_frontend_payload
     origin_setting = {
         "setting_process": _condition_to_frontend_payload(parameter, source_injt)
-    } if False else {
-        # 阶段 1：直接使用 ProcessParameter 字段（具体前端结构由后续视图层封装）
-        "setting_process": _condition_to_frontend_payload(parameter, source_injt)
     }
 
     target_injt = target_machine_spec
@@ -410,7 +410,7 @@ def transplant_process_parameter(
     }
     target_setting = {"setting_process": {}}
 
-    # 调用 molding-expert 算法
+    # 调用换算主函数
     return transplant_process(
         origin_setting={"injection": {}, "vp_switch": {}, "holding": {}, "metering": {}, "barrel_temperature": {}},
         origin_machine={"drive_system": getattr(source_machine, "drive_system", None)},
@@ -439,42 +439,3 @@ def transplant_process_parameter(
         target_machine=target_machine,
         target_injection_unit=target_injt,
     )
-
-
-def get_process_no_list(company_id=None, mold_id=None, status="approved"):
-    """获取已批准的工艺条件列表（用于移植下拉）"""
-    from process.models import ProcessCondition
-
-    qs = ProcessCondition.objects.filter(is_deleted=False)
-    if status:
-        qs = qs.filter(status=status)
-    if mold_id is not None:
-        qs = qs.filter(mold_id=mold_id)
-    return [
-        {
-            "id": c.id,
-            "status": c.status,
-            "origin_type": c.origin_type,
-            "mold_id": c.mold_id,
-            "injection_machine_id": c.injection_machine_id,
-            "polymer_id": c.polymer_id,
-        }
-        for c in qs.order_by("-created_at")[:100]
-    ]
-
-
-# 保留 old 中的 transfer_process 函数（基于 MongoDB 文档的旧版本）
-def transfer_process_legacy(
-    company_id=None,
-    process_id=None,
-    mac_id=None,
-    mac_trademark=None,
-    mac_serial_no=None,
-):
-    """工艺移植（old/mdprocess 移植过来的参考实现）。"""
-    return {
-        "source_process_id": process_id,
-        "source_process_no": None,
-        "target_machine": {"trademark": mac_trademark, "serial_no": mac_serial_no},
-        "message": "请使用 transplant_process_parameter 实施完整移植",
-    }

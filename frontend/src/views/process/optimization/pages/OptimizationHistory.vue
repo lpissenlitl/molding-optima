@@ -1,25 +1,4 @@
-<!--
-  OptimizationHistory - 调机记录列表
-
-  路由：/process/optimization/history
-  数据源：后端 /api/processes/parameter/（同 ProcessParameterList，复用通用工艺条件表）
-  业务说明：
-    列出每条 ProcessCondition 对应的调机任务全链路状态：调机轮次数、模具/机台/材料等
-    与“工艺参数列表”的区别：聚焦在“调机迭代”视角，凸显调机轮次 + 调机记录入口
-
-    范围演进：
-      v1：仅智能调机（origin_type=optimization / 'AI 调机'）；view_type=optimization
-      v2+：预计合并人工调机记录（origin_type=manual），入口统一为“调机记录”
-            不再区分智能 / 人工入口（二者同为“调机任务”）。具体范围等人工调机设计完成后再定。
-
-  设计要点：
-    - 复用 BaseTable / ProcessSearchForm：避免重复开发搜索 + 列表 + 列偏好持久化
-    - 调机轮次列（parameters_count）：后端 annotation 注入（2026-09-23 加）
-    - 行操作：
-      - 查看调机历史（dialog，调用 /api/processes/records/<id>/history/）
-      - 启动新调机（跳转 OptimizationCreate，但 OptimizationCreate 是空白表单场景，
-        见 v1 暂不预填 condition，用户需手动填条件生成新调机）
--->
+<!-- OptimizationHistory - 调机记录列表 -->
 <template>
   <div class="page-stack">
     <!-- 搜索表单（复用工艺参数搜索） -->
@@ -81,10 +60,10 @@
       <template #cell-status="{ row }">
         <el-tag
           v-if="row.status"
-          :type="row.status === 'active' ? 'success' : 'info'"
+          :type="conditionStatusTagType(row.status)"
           size="small"
         >
-          {{ statusLabel(row.status) }}
+          {{ conditionStatusLabel(row.status) }}
         </el-tag>
         <span v-else style="color: #c0c4cc;">—</span>
       </template>
@@ -109,9 +88,13 @@
 
       <!-- 行操作列 -->
       <template #append-columns>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="290" align="center" fixed="right">
           <template #default="{ row }">
             <span class="row-action-buttons">
+              <el-button type="text" @click="continueTuning(row)">
+                <AppIcon icon="mdi:play-circle-outline" style="margin-right: 4px; font-size: 14px;" />
+                继续调机
+              </el-button>
               <el-button type="text" @click="openHistory(row)">
                 <AppIcon icon="mdi:history" style="margin-right: 4px; font-size: 14px;" />
                 调机历史
@@ -159,7 +142,22 @@
                   <el-tag size="small" type="info">
                     parameter_id = {{ item.id ?? '-' }}
                   </el-tag>
+                  <el-tag size="small" :type="resultTagType(item.tuning?.tuning_result)">
+                    {{ resultLabel(item.tuning?.tuning_result) }}
+                  </el-tag>
                 </div>
+              </div>
+              <div v-if="item.tuning?.defect_feedbacks?.length" class="history-item__defects">
+                <span class="history-item__defects-label">缺陷</span>
+                <el-tag
+                  v-for="(d, di) in item.tuning.defect_feedbacks"
+                  :key="di"
+                  size="small"
+                  type="danger"
+                  effect="plain"
+                >
+                  {{ d?.keyword_name ?? '未知缺陷' }}{{ d?.level ? ` / ${d.level}` : '' }}
+                </el-tag>
               </div>
               <div class="history-item__body">
                 <el-descriptions :column="2" size="small" border>
@@ -186,36 +184,15 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 优化记录列表数据流：
- * - 列表查询走 processRecordList (URL = /api/processes/records/?view_type=optimization, 拿 parameters_count annotation)
- * - 列表字段顺序/列显隐/密度/pageSize 通过 view-name="optimization_list" 持久化
- * - 调机历史：调用 /api/processes/records/<id>/history/ (后端 condition.get_condition_history)
- *   响应 {condition, count, history[]}，history 按 created_at 倒序（头部 = 最新一轮）
- *
- * 后端响应结构（condition.get_condition_list view_type=parameter）：
- *   {
- *     id, condition_no, status, origin_type,
- *     mold_no, mold_name, mold_type, cavity_layout, product_category,
- *     machine_brand, machine_model, machine_device_code,
- *     polymer_abbreviation, polymer_grade,
- *     shot_index, injection_index,
- *     parameters_count,  // 2026-09-23 加：调机轮次数
- *     created_at, updated_at
- *   }
- */
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
 import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import ProcessSearchForm from '@/views/process/library/components/ProcessSearchForm.vue'
 import { processRecordMethod, processRecordHistory } from '@/api'
+import { conditionStatusLabel, conditionStatusTagType } from '@/views/process/shared/condition-status'
 
-// ============================================================================
 // 类型
-// ============================================================================
-
 interface ListData {
   total: number
   items: any[]
@@ -230,19 +207,20 @@ interface HistoryItem {
   hold_t_1?: number | null
   cool_t?: number | null
   brl_temp_1?: number | null
+  /** 该轮自身的试模反馈（与该轮参数配对） */
+  tuning?: {
+    tuning_result?: 'effective' | 'unchanged' | 'ineffective' | 'qualified' | 'unqualified' | null
+    result?: string | null
+    defect_feedbacks?: any[]
+    result_detail?: string | null
+  }
   [k: string]: any
 }
 
-// ============================================================================
 // 路由
-// ============================================================================
-
 const router = useRouter()
 
-// ============================================================================
 // 列表状态
-// ============================================================================
-
 const query = reactive({
   page_no: 1,
   page_size: 20,
@@ -260,10 +238,7 @@ const list_loading = ref(false)
 const table_size = ref<'small' | 'default' | 'large'>('default')
 const selected_rows = ref<any[]>([])
 
-// ============================================================================
 // 列定义（调机视角，凸显 parameters_count）
-// ============================================================================
-
 const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '工艺编号', prop: 'condition_no', minWidth: 160, align: 'center', sortable: true, tooltip: true, filterable: false },
   { visible: true, label: '调机轮次', prop: 'parameters_count', minWidth: 100, align: 'center', sortable: true, tooltip: true, filterable: false },
@@ -276,15 +251,7 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '创建时间', prop: 'created_at', minWidth: 170, align: 'center', sortable: true, tooltip: true, filterable: false },
 ])
 
-// ============================================================================
 // 标签转换
-// ============================================================================
-
-const STATUS_MAP: Record<string, string> = {
-  active: '使用中',
-  archived: '已归档',
-}
-
 const ORIGIN_MAP: Record<string, string> = {
   manual_creation: '手工新建',
   template_based: '基于模板',
@@ -308,10 +275,6 @@ const PARAM_SOURCE_MAP: Record<string, string> = {
   ai_recommended: 'AI 推荐',
 }
 
-function statusLabel(s: string) {
-  return STATUS_MAP[s] ?? s
-}
-
 function originLabel(o: string) {
   return ORIGIN_MAP[o] ?? o
 }
@@ -321,10 +284,33 @@ function sourceLabel(s?: string | null) {
   return PARAM_SOURCE_MAP[s] ?? s
 }
 
-// ============================================================================
-// 列表数据加载
-// ============================================================================
+/** 效果评价 → 文案（null = 未评价） */
+const RESULT_LABEL: Record<string, string> = {
+  effective: '改善',
+  unchanged: '无变化',
+  ineffective: '变差',
+  qualified: '合格',
+  unqualified: '不合格',
+}
 
+/** 效果评价 → 标签色 */
+const RESULT_TAG_TYPE: Record<string, 'success' | 'warning' | 'danger'> = {
+  effective: 'success',
+  unchanged: 'warning',
+  ineffective: 'danger',
+  qualified: 'success',
+  unqualified: 'danger',
+}
+
+function resultLabel(v?: string | null) {
+  return v ? (RESULT_LABEL[v] ?? v) : '未评价'
+}
+
+function resultTagType(v?: string | null): 'success' | 'warning' | 'danger' | 'info' {
+  return v ? (RESULT_TAG_TYPE[v] ?? 'info') : 'info'
+}
+
+// 列表数据加载
 async function fetchList() {
   list_loading.value = true
   try {
@@ -362,10 +348,7 @@ function onReset() {
   fetchList()
 }
 
-// ============================================================================
 // 调机历史 dialog
-// ============================================================================
-
 const history_dialog_visible = ref(false)
 const history_loading = ref(false)
 const history_items = ref<HistoryItem[]>([])
@@ -408,12 +391,18 @@ function formatDate(s: string | undefined | null): string {
   }
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
-
 function goCreate() {
   router.push('/process/optimization')
+}
+
+/** 继续调机：带 condition_id 进智能调机页，由该页从后端重建该 condition 的历史轮次 */
+function continueTuning(row: any) {
+  if (!row?.id) {
+    ElMessage.warning('记录缺少 ID，无法继续调机')
+    return
+  }
+  router.push({ path: '/process/optimization', query: { condition_id: row.id } })
 }
 
 async function deleteOne(row: any) {
@@ -465,10 +454,7 @@ async function batchDelete() {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
-
 onMounted(() => {
   fetchList()
 })
@@ -492,6 +478,19 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  &__defects {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  &__defects-label {
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
   }
 }
 </style>

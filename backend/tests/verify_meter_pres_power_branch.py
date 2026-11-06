@@ -2,13 +2,12 @@
 verify_meter_pres_power_branch.py
 验证 _compute_meter_pres 的动力源分支在标准化 power_method 词表下行为正确。
 
-背景（2026-10-20）：
+背景：
     field_contract.drive_system_to_power_method 把 drive_system 标准化为
-    '液压机' / '电动机'（不是 '全电机'），而 expert/algorithm_engine.py
-    的 _compute_meter_pres 原先判断 `== '全电机'`，导致：
-      - 全电机（'电动机'）走错分支 → max_set_metering_pressure 为 None → TypeError
-      - 同文件的 _compute_suckback_pres 却用 `!= '液压机'`，两处口径不一致
-    → 已把 _compute_meter_pres 统一为 `!= '液压机'`。
+    '液压机' / '电动机'（不是 '全电机'），故 expert/algorithm_engine.py 的
+    _compute_meter_pres 与同文件的 _compute_suckback_pres 统一用 `!= '液压机'`
+    判断动力源 —— 两处口径必须一致，否则全电机（'电动机'）会走错分支
+    → max_set_metering_pressure 为 None → TypeError。
 
 本脚本直接调用 _compute_meter_pres，验证三种 power_method：
     '液压机'  → 走 3 维公式（结果 > 0）

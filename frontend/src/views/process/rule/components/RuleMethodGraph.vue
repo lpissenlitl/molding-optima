@@ -1,21 +1,4 @@
-<!--
-  RuleMethodGraph.vue - 模糊规则流程图预览
-
-  业务说明：
-    - 把"前置条件 + 结论动作"以节点化思维可视化展示
-    - 采用「聚合节点（AND-gate）」模式，替代笛卡尔积全连接
-    - 节点点击 → 通知父组件滚动到对应行 + 高亮闪烁
-
-  视觉设计：
-    - 三列布局：左 IF 条件列 / 中 AND 聚合节点 / 右 THEN 动作列
-    - 节点 = 圆角白底卡片 + 主题色左边框 + 阴影
-    - AND 节点 = 蓝绿渐变胶囊 + 圆形 icon，明确标识"规则核心"
-    - 连线策略：所有条件 → AND 节点（汇聚），AND 节点 → 所有动作（发散）
-
-  数据流：
-    - props: conditions[] / actions[] / keywords[]
-    - emit: node-click({ type, index })
--->
+<!-- RuleMethodGraph.vue - 模糊规则流程图预览：三列布局（左 IF 条件列 / 中 AND 聚合节点 / 右 THEN 动作列），采用聚合节点模式替代笛卡尔积全连接；节点点击 emit('node-click') 让父组件滚动到对应行并高亮 -->
 <template>
   <el-card
     header="流程图预览"
@@ -126,24 +109,11 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 模糊规则流程图预览（Vue 3 Composition API 版）
- *
- * 关键设计：
- * 1. 节点类型判断：根据 keyword.category 决定颜色 + 图标
- * 2. 连线策略（聚合节点版）：
- *    - 输入段：所有条件 → 中间 AND 节点（汇聚，蓝色无箭头）
- *    - 输出段：中间 AND 节点 → 所有动作（发散，绿色有箭头）
- *    - 避免笛卡尔积交叉，可读性远优于全连接
- * 3. 连线坐标：根据节点 DOM 位置实时计算（响应式）
- * 4. 节点点击：emit('node-click') 让父组件处理滚动 + 高亮
- */
+/** 模糊规则流程图预览：节点颜色/图标按 keyword.category 决定；连线分两段（输入汇聚到 AND 节点、AND 节点发散到各动作）避免笛卡尔积；坐标按 DOM 实时计算 */
 import { ref, onMounted, onBeforeUnmount, nextTick, watch as watchRef, computed } from 'vue'
 import type { RuleKeyword } from '@/types/rule'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 const props = defineProps<{
   conditions: Array<{ keyword: string; level: string }>
@@ -155,9 +125,7 @@ defineEmits<{
   (e: 'node-click', payload: { type: 'condition' | 'action'; index: number }): void
 }>()
 
-// ============================================================================
 // 节点元数据（颜色 + 图标 + 类型判断）
-// ============================================================================
 
 /** 根据 keyword_name 在 keywords 中查 category */
 function categoryOf(keywordName: string): string {
@@ -199,19 +167,13 @@ function actionLabel(action: string): string {
   return map[action] || action
 }
 
-// ============================================================================
 // 连线计算
-// ============================================================================
 
 interface EdgePath {
   d: string
 }
 
-/**
- * 连线列表（分两段：输入线 + 输出线）
- * - inputEdges：条件 → AND 节点（蓝色、无箭头，输入汇聚）
- * - outputEdges：AND 节点 → 动作（绿色、有箭头，输出发散）
- */
+/** 连线列表（分两段：输入线 + 输出线） */
 const inputEdges = ref<EdgePath[]>([])
 const outputEdges = ref<EdgePath[]>([])
 
@@ -222,21 +184,10 @@ const ruleCoreNode = ref<HTMLElement | null>(null)
 const conditionRefs = ref<HTMLElement[]>([])
 const actionRefs = ref<HTMLElement[]>([])
 
-/**
- * SVG 容器的尺寸（动态跟随 rootRef）
- * - 用于 SVG width/height 属性
- * - 避免 SVG 坐标系与 path 坐标不一致
- */
+/** SVG 容器的尺寸（动态跟随 rootRef） */
 const svgSize = ref<{ width: number; height: number }>({ width: 0, height: 0 })
 
-/**
- * 容器实际宽度（动态测量）
- *
- * 与 ResizeObserver 联动，依据宽度切换：
- *   - ≥ 480px：layout-wide（条件列 : 动作列 = 2 : 1）
- *   - 360~480px：layout-compact（条件列 : 动作列 = 1 : 1）
- *   - < 360px：layout-stacked（上下布局）
- */
+/** 容器实际宽度（动态测量） */
 const containerWidth = ref(0)
 
 const layoutClass = computed(() => {
@@ -256,15 +207,7 @@ function setActionRef(el: any, i: number) {
   else if (i in actionRefs.value) actionRefs.value[i] = null as any
 }
 
-/**
- * 计算连线坐标（两段：输入 + 输出）
- *
- * 布局自适应：
- *   - 大屏（flex-direction: row）：连线从条件节点右边 → AND 节点左边（水平贝塞尔）
- *                              AND 节点右边 → 动作节点左边（水平贝塞尔）
- *   - 小屏（flex-direction: column）：连线从条件节点底边 → AND 节点顶边（垂直贝塞尔）
- *                              AND 节点底边 → 动作节点顶边（垂直贝塞尔）
- */
+/** 计算连线坐标（两段：输入 + 输出） */
 function computeEdges(): { input: EdgePath[]; output: EdgePath[] } {
   const rootEl = rootRef.value
   if (!rootEl) return { input: [], output: [] }
@@ -283,10 +226,6 @@ function computeEdges(): { input: EdgePath[]; output: EdgePath[] } {
   const acts = actionRefs.value.filter(Boolean) as HTMLElement[]
 
   // path 起止点偏移：避免「贴脸」在节点边缘
-  // - input 起点（从条件节点右边）：往外偏移 6px
-  // - input 终点（到 AND 节点左边）：往内偏移 8px（避免穿插 AND 节点）
-  // - output 起点（从 AND 节点右边）：往外偏移 6px
-  // - output 终点（到动作节点左边）：往内偏移 12px（为箭头预留空间）
   const INPUT_GAP_OUT = 6
   const INPUT_GAP_IN = 8
   const OUTPUT_GAP_OUT = 6
@@ -358,9 +297,7 @@ function computeEdges(): { input: EdgePath[]; output: EdgePath[] } {
   return { input, output }
 }
 
-// ============================================================================
 // 响应式：条件/动作变化 → 重算连线
-// ============================================================================
 
 let resizeObserver: ResizeObserver | null = null
 
@@ -468,9 +405,7 @@ watchRef(
   min-height: 260px;
 }
 
-/*
- * 节点列默认 flex: 1（条件列、动作列等宽，与 AND 节点对称）
- */
+/* 节点列默认 flex: 1（条件列、动作列等宽，与 AND 节点对称） */
 .node-column {
   flex: 1;
   min-width: 0;
@@ -480,9 +415,7 @@ watchRef(
   z-index: 1;
 }
 
-/*
- * AND 聚合节点中间列：完全居中（垂直 + 水平）
- */
+/* AND 聚合节点中间列：完全居中（垂直 + 水平） */
 .rule-core-wrapper {
   flex: 0 0 auto;
   display: flex;
@@ -492,13 +425,7 @@ watchRef(
   z-index: 2;
 }
 
-/*
- * AND 聚合节点本身
- * - 胶囊（border-radius 50%）确保不管内容多少都保持正圆对称
- * - 蓝绿渐变背景表达「输入→输出」语义
- * - 中间圆形 icon + 文字表达「规则聚合」
- * - 阴影增加立体感
- */
+/* AND 聚合节点本身 */
 .rule-core {
   display: flex;
   flex-direction: column;

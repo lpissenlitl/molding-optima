@@ -1,23 +1,10 @@
-<!--
-  MoldSection - 模具区域子组件
-
-  职责：
-    1. 模具主选（autocomplete）
-    2. 模具派生字段（基本信息）
-    3. 工艺射次主选
-    4. 浇注系统（含制品循环 + 浇口循环）
-
-  通信：通过 inject(ConditionKey) 获取共享的 reactive condition，直接 mutate
-
-  索引：后端 shot_index 是 0 索引，UI 显示用 1 索引（shotIndexStr 转换）
--->
+<!-- MoldSection - 模具区域子组件 -->
 <template>
   <div class="area-section">
     <div class="selection-area">
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :md="6">
-          <!-- prop 必须用 "mold_info.id"：顶层 mold_id 是提交态平铺字段（buildPayload 从
-               mold_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
+          <!-- prop 必须用 "mold_info.id"：顶层 mold_id 是提交态平铺字段（buildPayload 从 mold_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
           <el-form-item label="选择模具" prop="mold_info.id">
             <el-autocomplete
               v-model="moldQuery"
@@ -280,14 +267,7 @@ const props = withDefaults(
 const condition = inject(ConditionKey)!
 
 // 型腔布局 tooltip（领域知识，仅模具使用）
-/**
- * 型腔布局 tooltip
- * 1: 单色模具, 单腔, 共1个制品
- * 1+1: 单色模具, 两腔, 共2个制品, 制品参数不同
- * 1*2: 单色模具, 两腔, 共2个制品, 制品参数相同
- * 1&1: 双色模具, 1射单腔, 成型1个制品, 2射单腔, 成型1个制品
- * 1&1+1: 双色模具, 1射单腔, 成型1个制品, 2射双腔, 成型2个制品, 制品参数不同
- */
+/** 型腔布局 tooltip */
 const CAVITY_LAYOUT_TOOLTIP = [
   '1: 单色模具, 单腔, 共1个制品',
   '1+1: 单色模具, 两腔, 共2个制品, 制品参数不同',
@@ -374,8 +354,6 @@ async function onMoldSelect(item: any) {
   condition.shot_index = 0
   shotIndexStr.value = '1'
   // 同步前置写入列表项（已含 id）：
-  // el-form-item 的 change 校验在 moldQuery 变化的同一轮微任务里执行，
-  // 若等详情接口返回后才写 mold_info，校验读到的仍是 null ⇒ 必填红字永久残留
   condition.mold_info = mold
   // 列表 API(to_dict() 不带 include_rvs=True)不返回反向关联
   // 必须调详情 API 获取完整的 gating_systems / cavities / gates
@@ -400,8 +378,6 @@ function onMoldClear() {
 
 <style lang="scss" scoped>
 // 全局 .subsection-block* 定义在 src/styles/utilities/subsection-block.scss
-// 本组件私有：.selection-area（选择区容器）
-// 派生区内部所有 subsection-block 统一使用全局 card 风格（同源区块样式一致）
 
 .selection-area {
   margin-bottom: 0;

@@ -16,15 +16,15 @@
 - DataValidator.validate() 在校验前调用 MaterialDatabase.fill_defaults()
 - 缺失字段按材料族自动填充，业务侧可补充新材料
 
-混合材料处理（2026-10-14）：
+混合材料处理：
 - 优先全名匹配（PC+ABS / PA66+GF30 等预填的）
 - 全名未匹配 → 拆 '+' 取第一个主材料兑底（PP+PA66 → 取 PP）
 - 主料也查不到 → 返回空（让上游 audit 拦）
 
-族归并（2026-10-29）：
+族归并：
 - 全名与主料都没命中 → 按**材料大类**归并（HDPE / LDPE / LLDPE → PE）
 - 大类口径复用算法层的 `helpers.parse_material_family`
-  ⇒ 与算法层「同一份族解析」不再分裂（此前算法层认得 PE 族、兑底层认不得）
+  ⇒ 与算法层「同一份族解析」不分裂
 - 仍查不到 → 返回空（让上游 audit 拦）
 
 字段名约定：
@@ -113,8 +113,8 @@ class MaterialDatabase:
                 return cls.DEFAULTS[main]
 
         # 3. 材料大类归并（与算法层 parse_material_family 同一口径）
-        #    HDPE / LDPE / LLDPE → PE：这三类常用牌号此前在此层查不到
-        #    ⇒ 生产上必然 400（算法层认得 PE 族、兑底层认不得，口径分裂）
+        #    HDPE / LDPE / LLDPE → PE
+        #    ⇒ 生产上必然 400（兑底层认不得 PE 族，与算法层口径分裂）
         family = parse_material_family(abbr_upper)
         if family and family in cls.DEFAULTS:
             return cls.DEFAULTS[family]

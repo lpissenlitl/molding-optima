@@ -7,12 +7,10 @@ verify_parameter_tree.py
 - get_parameter_tree：树形结构（嵌套 children）
 - list_parameters：过滤 + 分页
 
-2026-10-20 修复说明：
-原测试按参考设计稿编写，引用了 4 个从未在服务层实现的函数
+覆盖范围说明：
+本测试只覆盖 services.parameter 实际导出的 5 个函数。
 （get_parameter_lineage / get_parameter_descendants / create_adjustment_version /
-revert_parameter）——它们只有本测试在引用，view / URL / 前端均无调用方。
-按既定决策（改写测试对齐现有 API，不新增生产代码），本测试改为覆盖
-services.parameter 实际导出的 5 个函数。
+revert_parameter 在服务层并未实现，view / URL / 前端亦无调用方。）
 
 另：update_parameter 的调用形式按真实签名 update_parameter(id, {..dict..}) 改写
 （原测试用的是 kwargs 形式 update_parameter(id, inj_pres_1=..)，与实现不符）。

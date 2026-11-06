@@ -1,10 +1,5 @@
-/**
- * 创建一个长度为 length 的数组，每个元素是 value 的独立副本。
- * - 基本类型：直接复用
- * - 数组：浅拷贝（[...value]）
- * - 普通对象：浅拷贝（{...value}）
- * - null / undefined / 非对象：直接使用
- */
+/** 创建长度为 length 的数组，每个元素是 value 的独立副本：基本类型直接复用，数组/普通对象走浅拷贝，null/undefined/非对象直接使用 */
+
 export function initArray<T>(length: number, value: T): T[] {
   if (length <= 0) return []
 

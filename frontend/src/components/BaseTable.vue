@@ -1,16 +1,4 @@
-<!--
-  BaseTable 业务表格封装组件
-  - 列定义 columns 驱动 + 列筛选（filterable）
-  - 表格密度切换 + 分页 + 用户偏好持久化（density / pageSize / columns）
-  - 行双击 / 选择变化事件透传
-  - responsiveToolbar=true 时，窗口 < mobileBreakpoint 后把 #toolbar-more 折叠到"更多 ▾"
-  - 列显隐偏好持久化依赖 viewName（必须传入）
-
-  Slots：
-    #toolbar / #toolbar-more  — 顶部按钮插槽
-    #cell-xxx                  — 各列自定义单元格插槽
-    #append-columns             — 行操作列等业务定制的尾随列
--->
+<!-- BaseTable 业务表格封装组件：列定义 columns 驱动 + 列筛选、表格密度切换 + 分页 + 用户偏好持久化（density/pageSize/columns）、行双击/选择变化事件透传。responsiveToolbar=true 时，窗口 < mobileBreakpoint 后把 #toolbar-more 折叠到"更多 ▾"；列显隐偏好持久化依赖 viewName（必须传入）。Slots：#toolbar / #toolbar-more / #cell-xxx / #append-columns -->
 <template>
   <div class="base-table">
     <!-- Toolbar：左侧密度切换 + 右侧工具栏插槽 -->
@@ -41,11 +29,8 @@
       </div>
       <div class="toolbar-buttons">
         <slot name="toolbar" />
-        <!--
-          responsiveToolbar + isMobile 启用时，把 toolbar-more 折叠成 popover。
-          - 桌面端：直接展开 toolbar-more 插槽（与 toolbar 同一行）。
-          - 移动端：收集到“更多”下拉中，避免按钮过多导致换行错乱。
-        -->
+        <!-- responsiveToolbar + isMobile 启用时，把 toolbar-more 折叠成 popover：
+             桌面端直接展开 toolbar-more 插槽（与 toolbar 同一行）；移动端收集到“更多”下拉中，避免按钮过多导致换行错乱。 -->
         <slot v-if="!shouldFoldToolbar" name="toolbar-more" />
         <el-popover
           v-else-if="$slots['toolbar-more']"
@@ -162,10 +147,9 @@
 <script setup lang="ts">
 /**
  * BaseTable 列定义类型
- *
- * 最小必填：prop + label
- * 常用可选：minWidth / width / align / sortable / tooltip / filterable / visible
- * 进阶可选：formatLabel(value) => string、map: Record<string, any>
+ * - 最小必填：prop + label
+ * - 常用可选：minWidth / width / align / sortable / tooltip / filterable / visible
+ * - 进阶可选：formatLabel(value) => string、map: Record<string, any>
  */
 export interface BaseTableColumn {
   /** 字段名（必填） */
@@ -246,24 +230,16 @@ interface Props {
   pageSizes?: number[]
   /** 分页布局 */
   paginationLayout?: string
-  /**
-   * 外部数据库唯一值（{ prop: [values, ...] }）
-   * 优先级最高：覆盖当前页数据，保证列筛选弹窗中能看到数据库中所有可选项
-   */
+  /** 外部数据库唯一值（{ prop: [values, ...] }）：优先级最高，覆盖当前页数据，保证列筛选弹窗中能看到数据库中所有可选项 */
   externalUniqueValues?: Record<string, any[]>
   /**
    * 启用 toolbar 响应式折叠
    * - false：工具栏始终平铺（推荐：列表页、业务后台）
    * - true：移动端检测启用后，#toolbar-more 插槽会被收集到“更多 ▾”下拉中
-   *
-   * 业务调用：
-   *   <template #toolbar>...</template>
-   *   <template #toolbar-more>...</template>
+   * - 业务调用：<template #toolbar>...</template> 与 <template #toolbar-more>...</template>
    */
   responsiveToolbar?: boolean
-  /**
-   * 移动端断点（像素）。窗口宽度 < 该值时视为移动端
-   */
+  /** 移动端断点（像素）。窗口宽度 < 该值时视为移动端 */
   mobileBreakpoint?: number
 }
 
@@ -320,8 +296,7 @@ const internal_table_size = ref(props.tableSize)
 
 /**
  * 响应式断点检测（仅在 responsiveToolbar=true 时启用）
- * - 在 setup 阶段安全初始化（typeof window 防御 SSR）
- * - resize 事件监听尺寸变化
+ * - 在 setup 阶段安全初始化（typeof window 防御 SSR）；resize 事件监听尺寸变化
  */
 const isMobile = ref(false)
 function checkMobile() {
@@ -364,14 +339,8 @@ const resolvedPageSizes = computed(() => {
 
 /**
  * 应用列筛选后的列表（纯前端过滤）
- *
- * 筛选语义（同一列内可同时设置 include 与 exclude）：
- * - include 非空：行值必须在 include 列表中
- * - exclude 非空：行值不能在 exclude 列表中
- * - 两者同时：行值 = 在 include AND 不在 exclude
- * - 两者都空：本列不参与筛选
- *
- * 空值匹配：row 值为 null/undefined/"" 均视为空值，与后端 `isnull | empty` 匹配
+ * - 筛选语义：include 非空 → 行值必须在 include 列表中；exclude 非空 → 行值不能在 exclude 列表中；两者同时 → 在 include AND 不在 exclude；两者都空 → 本列不参与筛选
+ * - 空值匹配：row 值为 null/undefined/"" 均视为空值，与后端 `isnull | empty` 匹配
  */
 const filteredItems = computed(() => {
   const items = props.data || []
@@ -477,11 +446,7 @@ watch(
 
 /**
  * 按列 prop 实时计算列筛选可选项值
- *
- * 数据源优先级：
- * 1. externalUniqueValues（外部传入的数据库全量唯一值，最优先）
- * 2. props.data（当前页数据）
- * 3. column_filters 中历史已选值（保证取消筛选后仍能看到曾经选过的选项）
+ * 数据源优先级：externalUniqueValues（数据库全量唯一值，最优先）> props.data（当前页数据）> column_filters 中历史已选值（保证取消筛选后仍能看到曾经选过的选项）
  */
 function getColumnUniqueValuesFor(prop: string): any[] {
   if (!props.enableColumnFilter) return []
@@ -530,9 +495,7 @@ function getColumnUniqueValuesFor(prop: string): any[] {
   })
 }
 
-/**
- * 应用持久化的用户偏好（columns / density / pageSize）
- */
+/** 应用持久化的用户偏好（columns / density / pageSize） */
 function applyStoredPreferences() {
   if (!props.viewName) return
   const pref = loadTablePreference(props.viewName)
@@ -567,12 +530,7 @@ function applyStoredPreferences() {
   }
 }
 
-/**
- * 默认单元格渲染：
- * - 若 column.formatLabel 提供：使用自定义函数
- * - 若 column.map 提供字典映射：使用 map[value]
- * - 都不提供则显示原始值
- */
+/** 默认单元格渲染：column.formatLabel 提供则用自定义函数；column.map 提供字典映射则用 map[value]；都不提供则显示原始值 */
 function formatCell(row: any, column: BaseTableColumn): any {
   const value = row[column.prop]
   if (typeof column.formatLabel === 'function') {
@@ -585,18 +543,14 @@ function formatCell(row: any, column: BaseTableColumn): any {
   return value
 }
 
-/**
- * 取列筛选项的 include 值
- */
+/** 取列筛选项的 include 值 */
 function getColumnFilterInclude(prop: string): any[] {
   const cfg = column_filters.value[prop]
   if (!cfg) return []
   return Array.isArray(cfg.include) ? cfg.include : []
 }
 
-/**
- * 取列筛选项的 exclude 值
- */
+/** 取列筛选项的 exclude 值 */
 function getColumnFilterExclude(prop: string): any[] {
   const cfg = column_filters.value[prop]
   if (!cfg) return []
@@ -604,9 +558,7 @@ function getColumnFilterExclude(prop: string): any[] {
 }
 
 /**
- * 派生 FormatLabel：业务列设了 column.map 时，弹窗中展示为 label，后端传的是 value
- * 优先级：column.formatLabel > column.map
- *
+ * 派生 FormatLabel：业务列设了 column.map 时，弹窗中展示为 label，后端传的是 value（优先级 column.formatLabel > column.map）
  * 空值标识：空字符串 "" 统一显示为 "(空值)"
  */
 function resolveColumnFormatLabel(column: BaseTableColumn): ((val: any) => string) | null {
@@ -633,11 +585,7 @@ function resolveColumnFormatExclude(column: BaseTableColumn): any[] {
 
 /**
  * 列筛选确认事件
- *
- * payload 形态（与 molding-expert 对齐）：
- * - { include, exclude }：新格式
- * - 数组：旧格式（仅 include）
- * - { values, exclude }：过渡格式
+ * payload 形态（与 molding-expert 对齐）：{ include, exclude }（新格式）/ 数组（旧格式，仅 include）/ { values, exclude }（过渡格式）
  */
 function handleColumnFilterChange(prop: string, payload: any) {
   let include: any[] = []
@@ -694,10 +642,7 @@ function onRowDblclick(row: any, column: any, event: any) {
 }
 
 /**
- * 派生 min-width：
- * - 优先 column.minWidth
- * - 否则 undefined（让 el-table 按内容自动伸展）
- *
+ * 派生 min-width：优先 column.minWidth，否则 undefined（让 el-table 按内容自动伸展）
  * 同时，width 和 minWidth 并存时输出 dev-only 警告
  */
 function resolveMinWidth(column: BaseTableColumn): number | string | undefined {
@@ -729,10 +674,8 @@ function resolveMinWidth(column: BaseTableColumn): number | string | undefined {
 
 /*
  * .toolbar-buttons: 取代 el-button-group
- * - el-button-group 要求子元素全部是 el-button，一旦混入 el-upload / el-dropdown / el-popover
- *   等 div 类组件，会破坏连接样式（圆角、border）→ 按钮错位
- * - 该容器采用 inline-flex + gap: 0：按钮独立圆角、不连接（兼容任意子组件）
- *   + flex-wrap: wrap 宽窄屏自动换行兑底
+ * - el-button-group 要求子元素全部是 el-button，混入 el-upload / el-dropdown / el-popover 等 div 类组件会破坏连接样式（圆角、border）→ 按钮错位
+ * - 该容器采用 inline-flex + gap: 0：按钮独立圆角、不连接（兼容任意子组件）+ flex-wrap: wrap 宽窄屏自动换行兑底
  */
 .toolbar-buttons {
   display: inline-flex;

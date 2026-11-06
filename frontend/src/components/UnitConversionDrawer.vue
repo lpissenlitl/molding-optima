@@ -1,20 +1,4 @@
-<!--
-  UnitConversionDrawer - 单位换算抽屉（命令式工具）
-
-  路由：无（命令式调用）
-
-  设计要点：
-  - 旧 UnitConversion.vue（Options API、无引用）已废弃
-  - 本组件改用 el-drawer + Vue 3 script setup + TS + 响应式 API
-  - 通过 utils/unit-conversion-drawer.ts 导出 openUnitConversionDrawer() 命令式调用
-  - 支持类目：压力 / 速度 / 位置 / 温度 / 时间 / 转速
-  - 数据预填：macTrademark（机器型号）+ injectorInfo（当前激活 tab 的注射单元）
-  - 顶部显著显示"当前射台"标识（如"注射部件-#1"），让用户随时知道引用了哪部分数据
-  - 螺杆直径可手动修改（覆盖预填值）
-  - 源/目标单位支持一键互换
-  - velocity / position / rotation 类目需螺杆直径（按类目级判断，
-    保守提示用户填写，避免按"单位组合"判断时遗漏需场景）
--->
+<!-- UnitConversionDrawer - 单位换算抽屉（命令式工具，通过 utils/unit-conversion-drawer.ts 的 openUnitConversionDrawer() 调用）：支持压力/速度/位置/温度/时间/转速类目；数据预填 macTrademark + injectorInfo，螺杆直径可手动覆盖，源/目标单位支持一键互换；velocity/position/rotation 类目需螺杆直径（按类目级保守判断） -->
 <template>
   <el-drawer
     v-model="visible"
@@ -218,17 +202,9 @@ const UNIT_MAP: Record<CategoryValue, { value: string; label: string }[]> = {
 const props = defineProps<{
   /** 机器型号（可选预填） */
   macTrademark?: string | null
-  /**
-   * 注射单元信息（当前激活 tab 的注射单元对象）
-   * - 取 screw_diameter 作为默认螺杆直径
-   * - 用户在 drawer 内可手动覆盖
-   */
+  /** 注射单元信息（当前激活 tab 的注射单元对象）：取 screw_diameter 作为默认螺杆直径，用户可在 drawer 内手动覆盖 */
   injectorInfo?: Record<string, any> | null
-  /**
-   * 当前射台的显示标签（如 "注射部件-#1（射台编号 A）"）
-   * - 仅用于顶部提示，不参与换算逻辑
-   * - 不传则不显示提示条
-   */
+  /** 当前射台的显示标签（如 "注射部件-#1（射台编号 A）"）：仅用于顶部提示，不参与换算逻辑；不传则不显示提示条 */
   injectorLabel?: string
 }>()
 
@@ -236,9 +212,7 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
-// ============================================================================
 // 可见性（drawer 本体）
-// ============================================================================
 
 const visible = defineModel<boolean>('visible', { default: true })
 
@@ -251,9 +225,7 @@ function handleClosed() {
   emit('close')
 }
 
-// ============================================================================
 // 表单状态
-// ============================================================================
 
 const category = ref<CategoryValue>('pressure')
 const source_value = ref<number | null>(null)
@@ -267,15 +239,11 @@ const hint_type = ref<'success' | 'info' | 'warning' | 'error'>('info')
 const mac_trademark = ref<string>('')
 const screw_diameter = ref<number | null>(null)
 
-// ============================================================================
 // 派生
-// ============================================================================
 
 const unitOptions = computed(() => UNIT_MAP[category.value] ?? [])
 
-// ============================================================================
 // 初始化 / 重置
-// ============================================================================
 
 function init() {
   mac_trademark.value = props.macTrademark ?? ''
@@ -297,9 +265,7 @@ function resetForm() {
   target_unit.value = units[1]?.value ?? null
 }
 
-// ============================================================================
 // 类目/单位变化：重置源/目标单位（避免非法组合）
-// ============================================================================
 
 watch(category, () => {
   // 切换类目时，重置源/目标单位（避免保留上一次的单位导致组合无效）
@@ -311,9 +277,7 @@ watch(category, () => {
   hint_message.value = ''
 })
 
-// ============================================================================
 // 互换方向
-// ============================================================================
 
 function swapDirection() {
   const old_src_unit = source_unit.value
@@ -332,9 +296,7 @@ function swapDirection() {
   recompute()
 }
 
-// ============================================================================
 // 换算计算
-// ============================================================================
 
 const injector_info_proxy = computed(() => ({
   screw_diameter: screw_diameter.value,
@@ -356,8 +318,7 @@ function recompute() {
     return
   }
 
-  // velocity / position / rotation 类目下的换算都需螺杆直径
-  // （保守按类目级检查，避免按"单位组合"检查时遗漏需场景）
+  // velocity / position / rotation 类目下的换算都需螺杆直径（保守按类目级检查，避免按"单位组合"检查时遗漏需场景）
   if (
     needsScrewDiameter(category.value)
     && !(screw_diameter.value && screw_diameter.value > 0)
@@ -406,9 +367,7 @@ watch(
   },
 )
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 init()
 </script>

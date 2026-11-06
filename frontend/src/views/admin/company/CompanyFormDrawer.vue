@@ -1,9 +1,5 @@
-<!--
-  CompanyFormDrawer - 公司表单抽屉（一体化组件：el-drawer + el-form + 提交逻辑）
-  - 使用方：v-model:visible 控制显示，:id 传编辑 id，@success 接收提交成功事件
-  - 新建：必填公司信息 + 公司管理员账号（username + password）
-  - 编辑：仅公司信息（admin_user 不在此处管理，统一在用户管理模块）
--->
+<!-- CompanyFormDrawer - 公司表单抽屉：v-model:visible 控制显隐、:id 传编辑 id、@success 接收提交成功；新建必填公司信息+公司管理员账号（username/password），编辑不含管理员账号（统一在用户管理模块） -->
+
 <template>
   <el-drawer
     :model-value="visible"
@@ -166,9 +162,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { companyMethod } from '@/api'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 interface Props {
   visible: boolean
@@ -194,9 +188,7 @@ function onVisibleChange(val: boolean) {
   emit('update:visible', val)
 }
 
-// ============================================================================
 // 表单数据
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -280,9 +272,7 @@ const rules: FormRules = {
   ],
 }
 
-// ============================================================================
 // 详情加载（编辑模式）
-// ============================================================================
 
 async function loadCompanyInfo(companyId: number) {
   loading.value = true
@@ -309,9 +299,7 @@ async function loadCompanyInfo(companyId: number) {
   }
 }
 
-// ============================================================================
 // 生命周期 + 模式切换
-// ============================================================================
 
 /** id 变化时重新初始化（外部切换 create/edit 模式） */
 watch(

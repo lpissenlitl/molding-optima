@@ -126,17 +126,11 @@ import { computed, ref, watch } from 'vue'
 
 /**
  * ColumnFilter 列筛选组件
- *
- * 设计要点：
- *   - BaseTable 通过 enableColumnFilter 接入，对 filterable: true 的列自动渲染
- *   - 支持 include（正向筛选）模式；exclude 字段保留向后兼容但当前 UI 未启用排除项
- *   - SVG 漏斗图标 + active 高亮（借鉴 molding-expert-web ColumnFilter 设计）
- *   - 通过 value_map 保留原始类型，避免 bool/number 被字符串化导致后端匹配失败
- *   - 向后兼容旧 props `values`（视为 include）、`exclude: true`（视为所有 values 为排除）
- *
- * 三态选择扩展点（molding-expert-web 完整版）：
- *   - 当前 UI 只有 '' (不参与) ↔ 'in' (包含) 两态
- *   - 内部状态结构已支持三态 ('in' / 'ex' / '')，后续可加 UI 入口
+ * - BaseTable 通过 enableColumnFilter 接入，对 filterable: true 的列自动渲染
+ * - 支持 include（正向筛选）模式；exclude 字段保留向后兼容但当前 UI 未启用排除项
+ * - SVG 漏斗图标 + active 高亮；通过 value_map 保留原始类型，避免 bool/number 被字符串化导致后端匹配失败
+ * - 向后兼容旧 props `values`（视为 include）、`exclude: true`（视为所有 values 为排除）
+ * - 三态扩展点：当前 UI 只有 '' (不参与) ↔ 'in' (包含) 两态，内部状态结构已支持三态 ('in' / 'ex' / '')，后续可加 UI 入口
  */
 
 // props
@@ -148,9 +142,7 @@ const props = withDefaults(
     title?: string
     // 当前包含筛选的值（向后兼容旧 props）
     values?: any[]
-    // 排除筛选的值（向后兼容旧 props）
-    // - Array: 直接作为 exclude 列表
-    // - true: 配合 values，把所有 values 视为排除（向后兼容旧 exclude=true 语义）
+    // 排除筛选的值（向后兼容旧 props）：Array 直接作为 exclude 列表；true 表示配合 values 把所有 values 视为排除
     exclude?: any[] | boolean
     // 所有可选值
     all_values?: any[]
@@ -187,19 +179,14 @@ const checked_values = ref<any[]>([])
 const search_keyword = ref('')
 
 // computed
-/**
- * 从 props.values 提取 include 列表
- * 兼容 exclude=true 时把所有 values 视为排除
- */
+/** 从 props.values 提取 include 列表（兼容 exclude=true 时把所有 values 视为排除） */
 const includeList = computed(() => {
   if (!Array.isArray(props.values)) return []
   if (props.exclude === true && props.values.length > 0) return []
   return [...props.values]
 })
 
-/**
- * 从 props.exclude 提取 exclude 列表
- */
+/** 从 props.exclude 提取 exclude 列表 */
 const excludeList = computed(() => {
   if (Array.isArray(props.exclude)) return [...props.exclude]
   if (props.exclude === true && Array.isArray(props.values) && props.values.length > 0) {
@@ -208,16 +195,12 @@ const excludeList = computed(() => {
   return []
 })
 
-/**
- * 是否有激活的筛选条件（用于图标高亮）
- */
+/** 是否有激活的筛选条件（用于图标高亮） */
 const hasActive = computed(() => {
   return includeList.value.length > 0 || excludeList.value.length > 0
 })
 
-/**
- * 搜索过滤后的值列表
- */
+/** 搜索过滤后的值列表 */
 const filteredValues = computed(() => {
   if (!search_keyword.value) return props.all_values
   const keyword = search_keyword.value.toLowerCase()
@@ -252,17 +235,12 @@ watch(() => props.exclude, () => {
 checked_values.value = [...includeList.value]
 
 // methods
-/**
- * 复选框变化（仅同步内部状态，不立即 emit）
- */
+/** 复选框变化（仅同步内部状态，不立即 emit） */
 function handleChange() {
   // 让用户点确定才 emit，cancel 会还原
 }
 
-/**
- * 确认筛选
- * payload 形态：{ include: [v1, v2], exclude: [] }
- */
+/** 确认筛选：payload 形态 { include: [v1, v2], exclude: [] } */
 function handleConfirm() {
   visible.value = false
   emit('confirm', {
@@ -271,9 +249,7 @@ function handleConfirm() {
   })
 }
 
-/**
- * 取消操作（还原为 props 当前值）
- */
+/** 取消操作（还原为 props 当前值） */
 function handleCancel() {
   visible.value = false
   search_keyword.value = ''
@@ -281,9 +257,7 @@ function handleCancel() {
   emit('cancel')
 }
 
-/**
- * 清空筛选
- */
+/** 清空筛选 */
 function handleClear() {
   checked_values.value = []
   visible.value = false
@@ -291,18 +265,14 @@ function handleClear() {
   emit('clear')
 }
 
-/**
- * 全选（仅作用于当前可见项，避免与搜索冲突）
- */
+/** 全选（仅作用于当前可见项，避免与搜索冲突） */
 function handleSelectAll() {
   const visible = new Set(filteredValues.value)
   const kept = checked_values.value.filter(v => !visible.has(v))
   checked_values.value = [...kept, ...filteredValues.value]
 }
 
-/**
- * 反选（仅作用于当前可见项）
- */
+/** 反选（仅作用于当前可见项） */
 function handleInvert() {
   const visibleSet = new Set(filteredValues.value)
   const kept = checked_values.value.filter(v => !visibleSet.has(v))

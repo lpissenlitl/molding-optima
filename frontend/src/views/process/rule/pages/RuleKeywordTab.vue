@@ -1,10 +1,4 @@
-<!--
-  RuleKeywordTab.vue - 关键词 tab 内容
-  - 父组件 RuleLibraryList 通过 v-show 控制显示（保持组件存活）
-  - 接收 activeTab + isSuperuser props
-  - 自己 watch activeTab 决定是否加载数据
-  - 不写 scoped style：复用全局 custom-form.scss 样式（.search-container / .search-form / .search-actions）
--->
+<!-- RuleKeywordTab.vue - 关键词 tab 内容：父组件 RuleLibraryList 用 v-show 控制显示（保持组件存活），接收 activeTab + isSuperuser，自行 watch activeTab 决定是否加载数据；复用全局 custom-form.scss 样式，不写 scoped -->
 <template>
   <div class="tab-panel">
     <!-- 搜索卡片 -->
@@ -232,9 +226,7 @@ const props = defineProps<{
   isSuperuser: boolean
 }>()
 
-// ============================================================================
 // 状态
-// ============================================================================
 const keywords = ref<RuleKeyword[]>([])
 const keywordTotal = ref(0)
 const keywordLoading = ref(false)
@@ -259,9 +251,7 @@ function keywordTypeLabel(t: string) {
   return KEYWORD_TYPE_LABELS[t as KeywordType] || t
 }
 
-// ============================================================================
 // 单位选项（按 keyword_type 动态展示常用单位，allow-create 支持自定义）
-// ============================================================================
 const UNIT_OPTIONS_BY_TYPE: Record<KeywordType, { value: string; label: string }[]> = {
   pressure: pressureUnitOptions,
   speed: speedUnitOptions,
@@ -291,9 +281,7 @@ const currentUnitOptions = computed(() => {
   return UNIT_OPTIONS_BY_TYPE[keywordForm.keyword_type as KeywordType] || []
 })
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 async function loadKeywords() {
   keywordLoading.value = true
   try {
@@ -325,9 +313,7 @@ function onKeywordPageChange(p: number) {
   loadKeywords()
 }
 
-// ============================================================================
 // 关键词抽屉
-// ============================================================================
 const keywordDrawerVisible = ref(false)
 const keywordDialogMode = ref<'create' | 'edit'>('create')
 const keywordDialogSubmitting = ref(false)
@@ -433,9 +419,7 @@ async function handleDeleteKeyword(row: RuleKeyword) {
   }
 }
 
-// ============================================================================
 // 生命周期：按需加载
-// ============================================================================
 onMounted(() => {
   if (props.activeTab === 'keywords') {
     loadKeywords()
@@ -449,11 +433,7 @@ watch(() => props.activeTab, (val, oldVal) => {
 })
 </script>
 
-<!--
-  本组件 scoped style（仅 .field-tip）：
-  - 复用父组件 RuleLibraryList.vue 提供的共享样式类
-  - .text-danger 已提升到全局 custom-table.scss，无需重复定义
--->
+<!-- 本组件 scoped style（仅 .field-tip）： -->
 <style lang="scss" scoped>
 /* 表单字段提示文字（紧贴在 el-input 下方）*/
 .field-tip {

@@ -10,18 +10,16 @@
 
 第 4 层的**唯一入口**是 `fuzzy_core.rules_filter.build_rule_objects`：
 它负责拆解规则串（每条规则只拆一次），并把拆解产物交给本模块的类。
-⇒ 本模块的类**不再自己拆规则串**，只做「拆解产物 → 策略化结构」的组装。
+⇒ 本模块的类**不拆规则串**，只做「拆解产物 → 策略化结构」的组装。
 
 两个类 = **两种结论取舍策略**，共用同一份拆解产物：
 
 - `FuzzyRule`   提示层（Mamdani）：结论**全收**（等级词结论）
 - `NumTskRule` 数值层（0 阶 TSK）：结论**两路分流**（popup 隔离 / 数值）
 
-⚠️ **代数式结论（`X=a*Y+b*Z`）已从内核移除**（2026-10-27）：它在第 4 层
-filter 就被判为 advisory（无 action）⇒ 永远不会进 `NumTskRule`，
-原 `parameter_vector` 分支是**永不执行的死代码**；且它恒为全零向量
-（`np.zeros`），即便执行也只会算出 0。现改为在 filter 层**显式跳过并留痕**
-（见 `rules_filter.build_rule_objects`）。
+⚠️ **代数式结论（`X=a*Y+b*Z`）不在内核支持范围**：它在第 4 层 filter
+就被判为 advisory（无 action）⇒ 不会进 `NumTskRule` ⇒ 数值层拿不到这类结论。
+filter 层对此**显式跳过并留痕**（见 `rules_filter.build_rule_objects`）。
 
 ⚠️ 二者**不做继承**：`RuleProfile` 不是基类。规则档案与解析产物是**组合**
    关系（规则对象持有 profile 引用），契约层不被内核反向污染。

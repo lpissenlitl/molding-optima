@@ -1,25 +1,5 @@
-<!--
-  GatingSystemForm - 浇注系统子表单（被 MoldForm 引用）
+<!-- GatingSystemForm - 浇注系统子表单（被 MoldForm 引用）：封装 1 个 GatingSystem + 1:N Cavities + 1:N Gates，由 MoldForm 包裹在 el-card 内（不含 page-header / form-actions / loaded），props.gatingSystem 直接双向绑定，字段数组按层级+条件分组，折叠状态用本地 ref（不放数据对象上，避免被序列化到后端），v-else-if 链渲染（plan §5.2 决策：5-7 个分支直接展开，不抽 BaseFormItem） -->
 
-  路由：无（子组件）
-
-  设计要点：
-  - 单层封装 1 个 GatingSystem + 1:N Cavities + 1:N Gates
-  - 由 MoldForm 包裹在 el-card 内使用，故不含 page-header / form-actions / loaded
-  - 数据通过 props.gatingSystem 直接双向绑定（修改 reactive 对象属性即可同步到 mold_info）
-  - 字段数组按层级 + 条件分组（basic / 热流道 / 冷流道 / cavity / gate / 矩形 / 圆形 / 环形）
-  - 折叠状态用本地 ref（不放数据对象上，避免被序列化到后端）
-  - v-else-if 链渲染（plan §5.2 决策：5-7 个分支直接展开，不抽 BaseFormItem）
-
-  折叠结构：
-    el-collapse (Cavity 外层)
-      └─ el-collapse-item (Cavity #1)
-          ├─ Cavity 字段（el-row + el-col）
-          └─ el-collapse (Gate 内层)
-              └─ el-collapse-item (Gate #1)
-                  ├─ Gate 基础字段
-                  └─ Gate 尺寸字段（按 gate_shape 条件显示）
--->
 <template>
   <el-form
     ref="formRef"
@@ -28,12 +8,8 @@
     class="custom-form"
     label-width="120px"
   >
-    <!--
-     * 原 top el-alert（runnerTypeHint）已删除
-     * 原因：流道类型提示已转移到 MoldForm 的 el-tab-pane label
-     *      （作为 tag 显示在 tab 上），不在这里重复
-     * 补充：选了"流道类别"后，下方 conditional 展开对应字段本身就是反馈
-     -->
+    <!-- 流道类型提示在 MoldForm 的 el-tab-pane label 上以 tag 呈现，这里不重复；选了"流道类别"后，下方 conditional 展开对应字段本身就是反馈 -->
+
 
     <!-- ============ 基础字段 ============ -->
     <el-row :gutter="24">
@@ -78,11 +54,8 @@
       </el-row>
     </template>
 
-    <!-- ============ Cavity 列表（平铺）============
-     * 设计：所有 cavity 块平铺展示，方便家族模具时横向对比参数
-     * 单 cavity 场景下与折叠视觉效果一致（只有一个块）
-     * 多 cavity 时每个块独立可删、可填
-     -->
+    <!-- ============ Cavity 列表（平铺）：所有 cavity 块平铺展示，方便家族模具时横向对比参数；单 cavity 场景下与折叠视觉效果一致（只有一个块），多 cavity 时每个块独立可删、可填 ============ -->
+
     <el-divider content-position="left" class="custom-form__divider">
       产品 
     </el-divider>
@@ -136,39 +109,25 @@ import {
 import GatingCavityPanel from './GatingCavityPanel.vue'
 import FormFieldRenderer from './FormFieldRenderer.vue'
 
-/**
- * props 数据双向绑定说明：
- * - props.gatingSystem 是 MoldForm.mold_info.gating_systems[i] 的引用（reactive 对象）
- * - cavities / gates 是数组，通过数组方法（push / splice）增删
- * - 子组件不创建本地 ref 镜像，保持单向数据流
- */
+/** props 数据双向绑定：props.gatingSystem 即 MoldForm.mold_info.gating_systems[i] 的 reactive 引用，cavities / gates 是数组，通过数组方法（push / splice）增删，子组件不建本地 ref 镜像，保持单向数据流 */
+
 const props = defineProps<{
   gatingSystem: Record<string, any>
 }>()
 
-/**
- * 表单验证规则（2026-09-08 引入 rules 架构）
- * - 详细规则优先使用 Element Plus rules 语法
- * - FormItem.required=true 仅控制是否显示红色星号
- * - 提交时调 formRef.value.validate() 触发验证
- * - 后续逐步补充其他必填字段（流道类别先定为必填）
- */
+/** 表单验证规则：详细规则优先使用 Element Plus rules 语法，FormItem.required=true 仅控制是否显示红色星号，提交时调 formRef.value.validate() 触发验证 */
+
 const rules: FormRules = {
   runner_type: [
     { required: true, message: '请选择流道类别', trigger: 'change' },
   ],
 }
 
-/**
- * 暴露 formRef 给父组件 MoldForm（让顶层保存按钮能调所有子表单的 validate）
- * - 当前只有 GatingSystemForm 实现，其他子组件（CoolingSystemForm / EjectionSystemForm）后续跟进
- */
+/** 暴露 formRef 给父组件 MoldForm（让顶层保存按钮能调所有子表单的 validate） */
 const formRef = ref<FormInstance>()
 defineExpose({ formRef })
 
-// ============================================================================
 // 字段定义（按层级 + 条件显示分组）
-// ============================================================================
 
 const basicItems: FormItem[] = [
   { label: '流道类别', prop: 'runner_type', type: 'select', options: runnerTypeOptions, required: true },
@@ -204,12 +163,9 @@ const cavityItems: FormItem[] = [
   { label: '最小壁厚', prop: 'min_wall_thickness', type: 'number', unit: 'mm', precision: 2 },
   { label: '平均壁厚', prop: 'ave_wall_thickness', type: 'number', unit: 'mm', precision: 2 },
   { label: '最大流长', prop: 'max_flow_length', type: 'number', unit: 'mm', precision: 2 },
-  /*
-   * 单腔投影面积（projected_area_per_cavity）
-   * - 状态：UI 暂时隐藏（2026-09-07），保留数据结构以备恢复
-   * - 原因：当前算法不需要用户填写此字段（算法从腔体几何参数推算）
-   * - 恢复方法：取消下面这行注释即可（数据结构无需改动）
-   */
+  /* 单腔投影面积（projected_area_per_cavity）：UI 暂时隐藏，保留数据结构以备恢复；
+     原因：当前算法不需要用户填写此字段（算法从腔体几何参数推算）；
+     恢复方法：取消下面这行注释即可（数据结构无需改动） */
   // { label: '单腔投影面积', prop: 'projected_area_per_cavity', type: 'number', unit: 'mm²', precision: 2 },
 ]
 
@@ -241,14 +197,9 @@ const gateAnnulusItems: FormItem[] = [
   { label: '间距', prop: 'gap', type: 'number', unit: 'mm', precision: 2 },
 ]
 
-// ============================================================================
-// 条件显示
-// ============================================================================
-//
-// 原 runnerTypeHint 已删除（2026-09-07）：
-// - 原因：流道类型提示不再用 el-alert 展示，改为在 MoldForm 的 tab label 上以 tag 形式呈现
-// - 如果未来需要在某处重新显示提示语，可从这里恢复逻辑
-//
+// 条件显示（流道类型提示在 MoldForm 的 tab label 上以 tag 呈现，这里不重复；
+//   若未来需要在某处重新显示提示语，可从这里恢复逻辑）
+
 
 const showHotRunner = computed(() =>
   props.gatingSystem.runner_type === '热流道' ||
@@ -260,20 +211,12 @@ const showColdRunner = computed(() =>
   props.gatingSystem.runner_type === '热转冷'
 )
 
-// ============================================================================
 // 折叠状态管理（本地 ref，不放数据对象上避免序列化）
-// ============================================================================
 
-/**
- * Cavity 折叠状态：默认全部展开（便于查看）
- * - value: 展开的 cavity 索引数组
- */
+/** Cavity 折叠状态：默认全部展开（便于查看） */
 // 折叠状态全部移到 GatingCavityPanel 内部（每个 panel 管自己的 gate 列表）
-// Cavity 改为平铺，不再需要外层折叠
 
-// ============================================================================
 // 添加 / 删除
-// ============================================================================
 
 function addCavity() {
   props.gatingSystem.cavities.push(structuredClone(cavityForm))
@@ -293,18 +236,8 @@ function removeCavity(cIdx: number) {
 </script>
 
 <style scoped lang="scss">
-/*
- * 折叠相关样式
- * - collapse-title：左侧图标 + 标题 + 右侧 tag
- * - collapse-actions：右上角操作按钮（删除）
- * - collapse-body：折叠体内边距
- * - add-button-wrapper：底部添加按钮居中
- */
-/*
- * cavity 平铺列表：每个 cavity 一个块，块间留空
- * - border + 浅背景色分隔（视觉上像"卡片"，但不嵌套 el-card）
- * - 单 cavity 场景下视觉简洁，多 cavity 场景下可横向对比
- */
+/* 折叠相关样式：collapse-title 为左侧图标+标题+右侧 tag，collapse-actions 为右上角操作按钮（删除），collapse-body 为折叠体内边距，add-button-wrapper 为底部添加按钮居中 */
+/* cavity 平铺列表：每个 cavity 一个块，块间留空 */
 .cavity-list {
   display: flex;
   flex-direction: column;

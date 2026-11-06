@@ -561,7 +561,7 @@
               <el-option
                 v-for="(option, idx) in barrel_temperature.max_stage"
                 :key="idx"
-                :label="`${option}段`"
+                :label="`${option}档`"
                 :value="option"
               >
               </el-option>
@@ -602,7 +602,7 @@ import { settingProcessForm } from "@/constants/process-const"
 import { machineInfoForm } from "@/constants/machine-const"
 
 export default {
-  name: "SettingProcess",
+  name: "TuningParameterPanel",
   props: {
     // 原始数据（用于变更检测）
     originalProcess: {
@@ -702,30 +702,13 @@ export default {
     "setting_process.metering.stage"() {
       this.adjustTableData("metering")
     },
-    // 监听料筒温度段数变化
+    // 监听料筒温度档数变化
     "setting_process.barrel_temperature.stage"() {
       this.adjustTableData("barrel_temperature")
     }
   },
-  mounted() {
-    /*
-     * 2026-10-08 清理：不再调 saveOriginalSnapshot()
-     * - 原因：与父级 OptimizationCreate 的 originalParameter watch 重复
-     *   （父级 watch(activeRound) 已经 JSON deep clone 了当前 round.parameter，
-     *    并通过 :original-process="originalParameter" 传到本组件）
-     * - SettingProcess 自身的 originalProcess watch（immediate: true）会把 prop
-     *   同步到 this.original_process，所以 mounted 里再 clone 一遍是浪费
-     * - 卸载 saveOriginalSnapshot() / resetSnapshot() 方法（dead code，从未被外部调用）
-     */
-  },
   methods: {
-    /**
-     * 根据路径字符串获取嵌套对象的值
-     * 支持格式：
-     * - 'vp_switch.position'
-     * - 'injection.table_data[0].sections[1]'
-     * - 'metering.decompress_table_data[10].pressure' (支持多位数索引)
-     */
+    /** 按路径字符串读取嵌套值（支持 'a.b' 与 'a.list[0].b' 多位数索引） */
     getNestedValue(obj, path) {
       if (!obj || !path) return undefined
       
@@ -746,11 +729,7 @@ export default {
       }, obj)
     },
     
-    /**
-     * 判断指定路径的字段是否发生变更
-     * @param {string} path - 字段路径
-     * @returns {boolean} - 是否变更
-     */
+    /** 判断指定路径的字段是否发生变更 */
     isFieldChanged(path) {
       if (!this.original_process) return false
 
@@ -770,13 +749,6 @@ export default {
       }
       return current_value !== original_value
     },
-
-    /*
-     * 2026-10-08：删除 saveOriginalSnapshot() / resetSnapshot() 方法
-     * - 这两个方法在 2026-10-08 之前由 mounted() 调用，但调用已被移除（避免与父级 originalParameter watch 重复深克隆）
-     * - 全文搜索确认无外部调用方（仅 SettingProcess 内部使用）
-     * - original_process 现在完全由 originalProcess prop watch (immediate: true) 同步
-     */
 
     stageHeader(type = "injection", max_stage = 6) {
       const label_arr = []
@@ -846,10 +818,7 @@ export default {
       return mode_map.get(mode) || "-"
     },
 
-    /**
-     * 根据段数调整表格数据长度
-     * @param {string} sectionKey - 数据段key
-     */
+    /** 根据段数调整表格数据长度 */
     adjustTableData(sectionKey) {
       const section = this.setting_process?.[sectionKey]
       if (!section || !section.table_data) return

@@ -1,39 +1,5 @@
-/**
- * 表单配置类型定义
- *
- * 设计目标：
- * - 把 flat items 配置的类型与算法解耦（算法在 form-layout.ts）
- * - 业务方 import 一处即可定义 card / items 结构
- * - 业务方专注字段顺序 + 列宽，模板自动渲染控件
- *
- * 适用场景：
- * - 基于 Element Plus el-col span 系统的响应式表单布局
- * - 任意业务模块的"卡片分组 + 字段平铺"表单
- *
- * @example
- * ```ts
- * import type { FormItem, FormCard } from '@/utils/form-types'
- * import { groupIntoRows } from '@/utils/form-layout'
- *
- * const cards: FormCard[] = [
- *   {
- *     title: '项目信息',
- *     items: [
- *       { label: '项目编号', prop: 'project_code', type: 'input', disabled: () => isEdit.value },
- *       { label: '项目名称', prop: 'project_name', type: 'input', span: 16,
- *         rules: [{ required: true, message: '请输入项目名称', trigger: 'blur' }] },
- *     ],
- *   },
- * ]
- *
- * const cardRows = computed(() =>
- *   cards.map((card) => ({
- *     title: card.title,
- *     rows: groupIntoRows(card.items, { columns: 4 }),
- *   }))
- * )
- * ```
- */
+/** 表单配置类型定义：把 flat items 配置的类型与算法解耦（算法在 form-layout.ts），业务方 import 一处即可定义 card/items 结构；基于 Element Plus el-col span 的响应式表单布局 */
+
 
 /**
  * 字段含义：
@@ -85,15 +51,13 @@ export interface FormItem {
   disabled?: boolean | ((item: FormItem) => boolean)
   rules?: any[]
   /**
-   * 是否必填（简化形式，2026-09-08 引入）
-   * - 由 FormFieldRenderer 渲染时传给 el-form-item 的 required 属性
-   * - 视觉上显示红色星号
-   * - 真正的验证需要 rules：[{ required: true, message: '...', trigger: '...' }]
-   * - 仅 required=true 时 el-form-item 不会自动产生验证错误提示
+   * 是否必填（简化形式）
+   * - 由 FormFieldRenderer 渲染时传给 el-form-item 的 required 属性，视觉上显示红色星号
+   * - 真正的验证需要 rules：[{ required: true, message: '...', trigger: '...' }]；仅 required=true 时不会自动产生验证错误提示
    */
   required?: boolean
   /**
-   * select 是否允许创建新选项（默认 true，2026-09-08 引入）
+   * select 是否允许创建新选项（默认 true）
    * - false: 只能从 options 中选（如注射次数、模具结构等硬编码分类）
    * - true: 允许用户输入自定义值（如规格、备注等场景）
    * - 设计原则：硬编码分类应显式设 false，避免误创建无意义的数据
@@ -110,29 +74,26 @@ export interface FormItem {
    * - object（如 { table, column }）：传给后端 `/selection-options` 接口的参数（默认）
    * - function：自定义查询函数（(queryString, cb) => cb(suggestions)）
    * - string：后端查询 endpoint（预留，暂未使用）
-   *
-   * 推荐使用 object 形式，配合 helper `querySuggestions(item.query)` 自动调用全局 mixin。
+   * 推荐使用 object 形式，配合 helper `querySuggestions(item.query)` 自动调用全局 mixin
    */
   query?: string | object | ((queryString: string, cb: (suggestions: any[]) => void) => void)
   /**
-   * 动态单位（2026-09-09 引入）
-   * - 用于从模型另一字段读取单位作为后缀显示
-   * - 例如 dynamicUnit: 'pressure_unit' 表示后缀显示 injectionUnit[pressure_unit] 的值
+   * 动态单位
+   * - 用于从模型另一字段读取单位作为后缀显示，如 dynamicUnit: 'pressure_unit' 表示后缀显示 injectionUnit[pressure_unit] 的值
    * - 与 unit 互斥：有 unit 时优先用 unit；都没有时不显示后缀
    * - 用例：HMI 可设定范围字段随单位系统字段联动
    */
   dynamicUnit?: string
   /**
-   * divider 分组说明文字（2026-09-09 引入）
+   * divider 分组说明文字
    * - 仅 divider 类型生效：在 divider 下方渲染 el-alert 提示
    * - 用于向使用者解释该分组的语义（如“为什么有设备参数 vs 面板参数”）
    */
   description?: string
   /**
-   * divider 是否需要“强调样式”（2026-09-09 引入）
+   * divider 是否需要“强调样式”
    * - 仅 divider 类型生效：true 时用浅色背景 + 左边框包裹该分组
-   * - 用于突出显示“参数难获取”或“使用频率高”的分组
-   * - 视觉上与普通 divider 分组区分，引导用户注意
+   * - 用于突出显示“参数难获取”或“使用频率高”的分组，与普通 divider 分组区分
    */
   notice?: boolean
 }

@@ -982,7 +982,7 @@ DEMO_INJECTION_MACHINES = [
 # ----------------------------------------------------------------------------
 # 注射单元（injection_unit）—— 按注塑机 device_no 映射
 #
-# 字段完整性（2026-10-20 修复）：
+# 字段完整性：
 #   工艺推理（initialize）与调优（optimize）的入参契约都把 InjectionUnit 的
 #   max_set_* 列为「必填」——它们是模糊判级的论域上界，缺失不是精度下降而是判级错误。
 #   早期 demo 数据只填了 6 个基础字段（喷嘴/螺杆/直径/行程/射胶量/塑化量），
@@ -1424,8 +1424,8 @@ class Command(BaseCommand):
                 if existing:
                     # 主表已存在：自动识别并补齐缺失数据（不重建主表、不覆盖已有值）
                     # 场景：
-                    # - 旧版 init_demo 跳过了射台生成 → 补建缺失的 Unit
-                    # - 旧版射台字段不全（缺 max_set_*，导致算法入参校验失败）
+                    # - 主表存在但缺少射台 Unit → 补建缺失的 Unit
+                    # - Unit 内字段为空（如缺 max_set_*，会导致算法入参校验失败）
                     #   → 补齐 Unit 内为空的字段
                     added_units = 0
                     updated_units = 0
@@ -1568,8 +1568,7 @@ class Command(BaseCommand):
         ).exclude(code="guest").update(is_deleted=True)
         self.stdout.write(f"  - 删除 demo 角色: {deleted_role_count}")
 
-        # 仅保留 init_platform 创建的根组织（system_demo_HQ），
-        # 历史 init_demo 旧版可能创建的 hq 节点也会被清理
+        # 仅保留 init_platform 创建的根组织（system_demo_HQ），其余组织节点一并清理
         deleted_org_count = Organization.objects.filter(
             company=company,
             is_deleted=False,

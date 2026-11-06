@@ -1,9 +1,5 @@
-<!--
-  OrganizationFormDrawer - 组织表单抽屉
-  - 创建模式：从行内"添加子组织"上下文传入 parentId
-  - 编辑模式：编辑现有组织，不修改父级（父级调整请使用拖拽）
-  - 字段：name、code、org_type、manager_id、description、sort_order、is_active
--->
+<!-- OrganizationFormDrawer - 组织表单抽屉：创建模式由行内"添加子组织"传入 parentId，编辑模式不修改父级（父级调整用拖拽）；字段 name/code/org_type/manager_id/description/sort_order/is_active -->
+
 <template>
   <el-drawer
     :model-value="visible"
@@ -124,9 +120,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { organizationMethod, userMethod } from '@/api'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 interface Props {
   visible: boolean
@@ -154,9 +148,7 @@ function onVisibleChange(val: boolean) {
   emit('update:visible', val)
 }
 
-// ============================================================================
 // 组织类型
-// ============================================================================
 
 const org_type_options = [
   { value: 'group', label: '集团' },
@@ -168,9 +160,7 @@ const org_type_options = [
   { value: 'team', label: '班组' },
 ]
 
-// ============================================================================
 // 表单数据
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -206,9 +196,7 @@ const rules: FormRules = {
   ],
 }
 
-// ============================================================================
 // 选项数据：用户列表（负责人下拉）
-// ============================================================================
 
 const user_options = ref<any[]>([])
 
@@ -223,9 +211,7 @@ async function loadUsers() {
   }
 }
 
-// ============================================================================
 // 详情加载（编辑模式）
-// ============================================================================
 
 async function loadOrgInfo(orgId: number) {
   loading.value = true
@@ -252,9 +238,7 @@ async function loadOrgInfo(orgId: number) {
   }
 }
 
-// ============================================================================
 // 生命周期 + 模式切换
-// ============================================================================
 
 /** id 变化时重新初始化（外部切换 create/edit 模式） */
 watch(

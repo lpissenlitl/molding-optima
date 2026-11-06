@@ -36,7 +36,10 @@ from process.algorithms.fuzzy.library.adapters import (
     LibraryRecordAdapter,
     RuleRecordAdapter,
 )
-from process.algorithms.fuzzy.library.contracts import LibraryRecord, RuleRecord
+from process.algorithms.fuzzy.library.contracts import (
+    LibraryIndex,
+    RuleRecord,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -107,18 +110,22 @@ class FileLibraryLoader:
 
     # —— 库清单 ————————————————————————————————————————————————
 
-    def load_libraries(self) -> Dict[str, LibraryRecord]:
-        """读库清单，返回 `library_code` → `LibraryRecord` 的索引。
+    def load_libraries(self) -> LibraryIndex:
+        """读库清单，返回 `library_code` → **同码全部** `LibraryRecord` 的索引。
 
-        ⚠️ **同编码多记录时只留第一条**（`setdefault`）—— 与数据库来源
+        ⚠️ **同编码多记录全部保留**（不再只留第一条）—— 与数据库来源
           `RuleQueryService.get_library_index` 的口径一致 ⇒ 两条路径
           选中的库**逐条相同**。
+          `library_code` 是业务分类编码、**跨租户可重复** ⇒ 同码多库是合法状态；
+          只留一条会让别家的库在文件侧消失（可见集合分叉，不报错，只是结果不同）。
         """
         data = self._read_json(self._root / LIBRARIES_FILE)
-        index: Dict[str, LibraryRecord] = {}
+        index: LibraryIndex = {}
         for item in data.get('libraries', []):
             record = LibraryRecordAdapter.from_dict(item)
-            index.setdefault(record.library_code, record)
+            records = index.setdefault(record.library_code, [])
+            if record not in records:
+                records.append(record)
         return index
 
     # —— 关键字 ————————————————————————————————————————————————
@@ -143,12 +150,34 @@ class FileLibraryLoader:
 
     # —— 规则 ————————————————————————————————————————————————
 
-    def load_library_rules(self, library_code: str) -> List[Dict[str, Any]]:
+    def _rules_path(self, library_code: str, library_id: Optional[int]) -> Path:
+        """规则文件路径 —— **同码多库时按库主键分文件**。
+
+        命名约定（与 `files/export.py` 的导出口径对齐）：
+
+        - 库编码唯一 ⇒ `<库码>.json`（历史命名，已导出的数据目录保持有效）；
+        - 同码多库 ⇒ `<库码>__<库主键>.json`（每个库一个文件）。
+
+        ⚠️ **找不到分文件时回退 `<库码>.json`**：兼容「还没有同码库时导出的
+          数据目录」⇒ 回退拿到的可能是另一条同码库的规则，
+          因此**导出工具一旦遇到同码库必须重跑**（它会先清空规则目录）。
+        """
+        if library_id is not None:
+            scoped = self.rules_dir / ('%s__%s.json' % (library_code, library_id))
+            if scoped.exists():
+                return scoped
+        return self.rules_dir / ('%s.json' % library_code)
+
+    def load_library_rules(
+        self,
+        library_code: str,
+        library_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """读某个库的规则条目（**原始 dict 形态**，未转契约）。
 
         库文件不存在 ⇒ 返回空列表（该库没有规则，例如专家规则库）。
         """
-        path = self.rules_dir / ('%s.json' % library_code)
+        path = self._rules_path(library_code, library_id)
         if not path.exists():
             return []
         data = self._read_json(path)
@@ -158,6 +187,7 @@ class FileLibraryLoader:
         self,
         library_code: str,
         defect_code: str,
+        library_id: Optional[int] = None,
     ) -> List[RuleRecord]:
         """取某库中「该缺陷的**候选**规则」，转成来源无关记录。
 
@@ -173,11 +203,12 @@ class FileLibraryLoader:
         Args:
             library_code: 规则库编码。
             defect_code: 缺陷标识。
+            library_id: 库主键（**同码多库时用于定位分文件**；None = 按编码取）。
 
         Returns:
             候选规则记录列表（已按数据库侧同口径排序）。
         """
-        rows = [r for r in self.load_library_rules(library_code)
+        rows = [r for r in self.load_library_rules(library_code, library_id)
                 if (r.get('defect_code') or '') == defect_code
                 and bool(r.get('is_active', True))]
         rows.sort(key=self._sort_key)

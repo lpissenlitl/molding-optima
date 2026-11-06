@@ -1,6 +1,6 @@
 // 此文件由 scripts/extract-mdi-used-icons.js 自动生成，请勿手动编辑。
 //
-// 项目实际用到的 92 个 mdi 图标（集合全量 7638 个）。
+// 项目实际用到的 94 个 mdi 图标（集合全量 7638 个）。
 // 仅打包这些图标，避免把整个 mdi 图标集（~3 MB）打进 bundle。
 
 /* eslint-disable */
@@ -59,6 +59,9 @@ export const mdiUsedIcons = {
     },
     "calculator-variant": {
       "body": "<path fill=\"currentColor\" d=\"M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m-6 4.1L14.1 6l1.4 1.4L16.9 6L18 7.1l-1.4 1.4L18 9.9L16.9 11l-1.4-1.4l-1.4 1.4L13 9.9l1.4-1.4zm-6.8.6h5v1.5h-5zm5.3 8.3h-2v2H8v-2H6v-1.5h2v-2h1.5v2h2zm6.5 1.2h-5v-1.5h5zm0-2.4h-5v-1.5h5z\"/>"
+    },
+    "calendar-check-outline": {
+      "body": "<path fill=\"currentColor\" d=\"M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14a2 2 0 0 0 2 2h14c1.11 0 2-.89 2-2V5a2 2 0 0 0-2-2m0 16H5V9h14zM5 7V5h14v2zm5.56 10.46l5.94-5.93l-1.07-1.06l-4.87 4.87l-2.11-2.11l-1.06 1.06z\"/>"
     },
     "calendar-today": {
       "body": "<path fill=\"currentColor\" d=\"M7 10h5v5H7m12 4H5V8h14m0-5h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2\"/>"
@@ -122,6 +125,9 @@ export const mdiUsedIcons = {
     },
     "download": {
       "body": "<path fill=\"currentColor\" d=\"M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7z\"/>"
+    },
+    "eye-outline": {
+      "body": "<path fill=\"currentColor\" d=\"M12 9a3 3 0 0 1 3 3a3 3 0 0 1-3 3a3 3 0 0 1-3-3a3 3 0 0 1 3-3m0-4.5c5 0 9.27 3.11 11 7.5c-1.73 4.39-6 7.5-11 7.5S2.73 16.39 1 12c1.73-4.39 6-7.5 11-7.5M3.18 12a9.821 9.821 0 0 0 17.64 0a9.821 9.821 0 0 0-17.64 0\"/>"
     },
     "factory": {
       "body": "<path fill=\"currentColor\" d=\"M4 18v2h4v-2zm0-4v2h10v-2zm6 4v2h4v-2zm6-4v2h4v-2zm0 4v2h4v-2zM2 22V8l5 4V8l5 4V8l5 4l1-10h3l1 10v10z\"/>"

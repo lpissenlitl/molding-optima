@@ -1,37 +1,4 @@
-<!--
-  RuleMethodForm.vue - 模糊规则方法编辑表单（new / edit / detail 三模式共用）
-
-  路由：
-    - /process/rules/:libraryId/methods/new               新建
-    - /process/rules/:libraryId/methods/:methodId/edit    编辑
-    - /process/rules/:libraryId/methods/:methodId/detail  只读详情
-
-  业务说明：
-    - RuleMethod 是"缺陷 → 工艺参数调整"的模糊规则
-    - 通过结构化字段（IF 条件列表 + THEN 动作列表）→ 自动生成 rule_description / rule_explanation
-    - 不允许用户直接编辑规则文本（防止填写错误）
-
-  架构（2026-09-16 重构）：
-    - 顶部 page-header（标题）
-    - 左编辑区（70%）：元数据卡 / IF 条件卡 / THEN 动作卡 / 文本预览卡
-    - 右流程图预览（30%，sticky）：RuleMethodGraph 组件
-    - 底部 form-actions：取消 / 重置（new）/ 保存
-
-  模式行为：
-    - new    → 空 form + 默认值；保存后 router.replace 到 edit 模式
-    - edit   → 加载现有数据 + 允许编辑；保存后重新加载刷新快照
-    - detail → 所有控件 disabled；无底部操作条
-
-  数据流：
-    - 加载：edit/detail 调用 getRuleMethod(id) 拉数据
-    - 字典：listRuleKeywords + polymerMethod.get 一次性加载，按 category 分组
-    - 提交：构造后端 payload（含自动生成的 rule_description / rule_explanation）
-
-  样式规范：
-    - 容器遵守全局表单规范（padding 16 16 96 / max-width 1400）
-    - 复用全局 .form-actions / .page-header
-    - 响应式：<1100px 时流程图折叠到顶部
--->
+<!-- RuleMethodForm.vue - 模糊规则方法编辑表单（new / edit / detail 三模式共用） -->
 <template>
   <div :class="['rule-method-form', embedded ? 'rule-method-form--embedded' : '']">
     <!-- 顶部 page-header（标题） -->
@@ -350,11 +317,7 @@
       </div>
 
       <!-- 底部操作（全局 .form-actions） -->
-      <!-- 两类模式：
-           - detail：   只显示【返回】
-           - new/edit： 显示【取消 / 重置 / 保存 · 更新】
-           （drawer 嵌入与独立路由共用同一套按钮，内部按 props.embedded 分流行为）
-      -->
+      <!-- 两类模式：独立路由（显示 page-header + form-actions）／drawer 嵌入（仅 form-actions） -->
       <div v-if="showFormActions" class="form-actions">
         <!-- detail 模式：只显示返回 -->
         <template v-if="mode === 'detail'">
@@ -385,16 +348,7 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 模糊规则方法编辑表单（Vue 3 Composition API 版）
- *
- * 关键设计：
- * 1. 三模式（new / edit / detail）由 route 切换
- * 2. 结构化编辑（preconditions + actions）→ 自动生成 rule_description / rule_explanation
- * 3. 字典（RuleKeyword + Polymer）一次性加载，按 category 分组
- * 4. 流程图预览（RuleMethodGraph）随结构化字段实时刷新
- * 5. 流程图节点点击 → 滚动到对应编辑行 + 高亮闪烁
- */
+/** 模糊规则方法编辑表单：new / edit / detail 三模式由 route 切换；结构化字段（preconditions + actions）自动生成 rule_description / rule_explanation（不允许直接编辑规则文本）；字典一次性加载后按 category 分组；流程图随字段实时刷新 */
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -408,20 +362,8 @@ import {
 import { polymerMethod } from '@/api'
 import type { RuleKeyword, RuleMethodCreatePayload } from '@/types/rule'
 
-// ============================================================================
 // 常量
-// ============================================================================
-
-// ============================================================================
-// 前置条件 level 词字典（与 RuleKeyword.fuzzy_level 联动）
-// ============================================================================
-//
-// 业界标准渐进式命名：每加一档在两端扩展（very_ / extremely_）
-// medium 永远在中心位置（对称）。
-//
-// 与后端规则 service 对齐：
-// - 新规则用 medium（与后端 rule_matcher.py 一致）
-// - 历史 1752 条数据用 mid（暂保留兼容，后续可一次性迁移）
+// 前置条件 level 词字典：业界渐进式命名（very_/extremely_ 两端扩展，medium 居中对称）；新规则用 medium，历史 1752 条用 mid 兼容
 
 import {
   LEVEL_WORDS,
@@ -429,11 +371,7 @@ import {
   PARAMETER_LEVEL_LABELS,
 } from '@/constants/rule-const'
 
-/**
- * 根据当前条件的 keyword 选填合适的 LEVEL_LABELS。
- * - parameter → PARAMETER_LEVEL_LABELS（偏小/中等/偏大）
- * - 其他（defect / defect_position） → DEFECT_LEVEL_LABELS（轻微/中等/严重）
- */
+/** 根据当前条件的 keyword 选填合适的 LEVEL_LABELS（parameter → PARAMETER_LEVEL_LABELS，defect / defect_position → DEFECT_LEVEL_LABELS）。 */
 function levelLabelsFor(cond: ConditionItem): Record<string, string> {
   const kw = allKeywords.value.find(k => k.keyword_name === cond.keyword)
   return kw?.category === 'parameter' ? PARAMETER_LEVEL_LABELS : DEFECT_LEVEL_LABELS
@@ -454,9 +392,7 @@ const ACTION_LABELS: Record<string, string> = {
   add: '增加', reduce: '减小', adjust: '弹窗', set: '设定',
 }
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 const props = withDefaults(
   defineProps<{
@@ -485,17 +421,12 @@ const emit = defineEmits<{
   (e: 'saved', methodId: number): void
 }>()
 
-// ============================================================================
 // 路由 & 模式
-// ============================================================================
 
 const route = useRoute()
 const router = useRouter()
 
-/**
- * 实际生效的 libraryId / methodId
- * props 优先，没有时从 route 读（fallback 使组件既能被 drawer 嵌入、也能路由独立访问）
- */
+/** 实际生效的 libraryId / methodId */
 const effectiveLibraryId = computed(() => 
   props.libraryId ?? Number(route.params.libraryId)
 )
@@ -513,9 +444,7 @@ const mode = computed<'new' | 'edit' | 'detail'>(() => {
 
 const isReadonly = computed(() => mode.value === 'detail')
 
-// ============================================================================
 // 字典加载
-// ============================================================================
 
 const allKeywords = ref<RuleKeyword[]>([])
 const parameterKeywords = computed(() => allKeywords.value.filter(k => k.category === 'parameter'))
@@ -539,19 +468,8 @@ function aliasOf(keywordName: string): string {
   return allKeywords.value.find(k => k.keyword_name === keywordName)?.keyword_alias || keywordName
 }
 
-// ============================================================================
 // 表单数据
-// ============================================================================
-
-/**
- * 前置条件
- * - keyword: 关键字（dropdown）
- *   - 第 1 项限缺陷类别（dropdown 只显示 defectKeywords），后续可任意
- * - level: 模糊等级（来自该 keyword.fuzzy_level 对应的 LEVEL_WORDS 档位）
- *
- * 业务约束：模糊规则的条件侧是纯模糊集词，不需要运算符。
- * 生成格式：IF keyword level AND keyword level THEN ...（空格分隔）
- */
+/** 前置条件：keyword（首项限缺陷类别）+ level（按 keyword.fuzzy_level 取档位）；条件侧是纯模糊集词，不需要运算符，生成格式 IF keyword level AND ... */
 interface ConditionItem {
   keyword: string
   level: string
@@ -560,22 +478,7 @@ interface ConditionItem {
 interface ActionItem {
   keyword: string
   action: string
-  /**
-   * action 调整量。前端是 el-input，接受任意文本（数值或模糊量词）。
-   *
-   * 架构立场：**前端不做任何限制，不预设选项**——用户填什么算什么。
-   * 后端会根据 value 的内容（数值 / 模糊词）自动分发到：
-   * - NumTskRuleNet（零阶 TSK，数值结论）：生产主路径
-   * - FuzzyRuleNet（Mamdani，模糊量词结论）：兑底层
-   *
-   * 为什么不预设模糊量词下拉？
-   * - 会暗示用户「必须从这 7 个里选」
-   * - 但工程上有时是数值（`2`），有时是模糊词（`low`），不应让前端判断
-   * - 后端有自动清洗逻辑，前端可信赖
-   *
-   * 如果未来业务要求强制区分（比如审计、合规），可拆字段：
-   * { kind: 'numeric', n: number } | { kind: 'fuzzy', w: string }
-   */
+  /** action 调整量：el-input，接受任意文本（数值或模糊量词）。前端不做任何限制、不预设下拉——后端按 value 内容自动分发到 NumTskRuleNet（数值结论，主路径）或 FuzzyRuleNet（Mamdani 模糊量词）。 */
   value: string
 }
 
@@ -585,11 +488,7 @@ const form = reactive<{
   product_category: string
   priority: number
   confidence: number
-  /**
-   * 来源：前端 UI 不展示不修改，但保留后端原值用于回写
-   * - 新建模式：默认 'expert'（前端只能手工创建专家经验）
-   * - 编辑模式：读入后端真实值（可能是 rule_miner / llm 由后端跑出来的）
-   */
+  /** 来源：前端 UI 不展示不修改，但保留后端原值用于回写（新建默认 'expert'，编辑读入后端真实值，可能是 rule_miner / llm 产出） */
   source: 'expert' | 'rule_miner' | 'llm'
   is_active: boolean
   rule_description: string
@@ -610,10 +509,7 @@ const form = reactive<{
   actions: [{ keyword: '', action: 'add', value: '' }],
 })
 
-/**
- * new 模式下重置为空白默认状态
- * - edit 模式已无"撤销修改"按钮（功能与"取消"重复，且刷新即失效）
- */
+/** new 模式下重置为空白默认状态（edit 模式无"撤销修改"按钮，功能与"取消"重复） */
 const initialFormState = () => ({
   rule_library_id: 0,
   polymer_abbreviation: '',
@@ -637,9 +533,7 @@ function resetForm() {
 const loaded = ref(false)
 const save_loading = ref(false)
 
-// ============================================================================
 // 增删条件/动作
-// ============================================================================
 
 function addCondition() {
   form.preconditions.push({ keyword: '', level: '' })
@@ -651,11 +545,7 @@ function removeCondition(i: number) {
   if (form.preconditions.length === 0) addCondition()
 }
 
-/**
- * level 下拉选项：根据该条件的 keyword.fuzzy_level 返回对应的 level 词列表
- * - 未选 keyword 时返回 []（UI 由 :disabled 控制不可点）
- * - fuzzy_level 不在 3/5/7 范围时兜底为 3 档
- */
+/** level 下拉选项：按 keyword.fuzzy_level 返回 level 词列表（未选 keyword 返回 []，fuzzy_level 不在 3/5/7 范围时兜底为 3 档） */
 function levelOptionsFor(cond: ConditionItem): string[] {
   if (!cond.keyword) return []
   const kw = allKeywords.value.find(k => k.keyword_name === cond.keyword)
@@ -667,9 +557,7 @@ function levelOptionsFor(cond: ConditionItem): string[] {
   return LEVEL_WORDS[3]
 }
 
-/**
- * keyword 切换时清空 level（因为 fuzzy_level 可能不同，旧 level 可能无效）
- */
+/** keyword 切换时清空 level（因为 fuzzy_level 可能不同，旧 level 可能无效） */
 function onConditionKeywordChange(cond: ConditionItem) {
   cond.level = ''
 }
@@ -683,12 +571,7 @@ function removeAction(i: number) {
   if (form.actions.length === 0) addAction()
 }
 
-// ============================================================================
-// 联动 & 交互
-// ============================================================================
-//
-// 缺陷名称 / 缺陷标识由后端自动从 preconditions 中提取，
-// 前端不展示不联动，保持表单简洁（详见元数据卡顶部注释）。
+// 联动 & 交互：缺陷名称 / 缺陷标识由后端从 preconditions 自动提取，前端不展示不联动
 
 /** 流程图节点点击 → 滚动到对应编辑行 + 高亮闪烁 */
 function onGraphNodeClick(payload: { type: 'condition' | 'action'; index: number }) {
@@ -703,28 +586,10 @@ function onGraphNodeClick(payload: { type: 'condition' | 'action'; index: number
   }
 }
 
-// ============================================================================
 // 自动生成规则文本（核心逻辑）
-// ============================================================================
 
 function generateRuleText() {
-  // 规则描述（机器语言）：IF keyword_level AND keyword_level THEN keyword_action_value AND ...
-  //
-  // **token 化要求**（后端 _split_phase 按空格 split 后按 _ split）：
-  //   - 条件侧：keyword_level 是单个 token（如 SHORTSHOT_low），不能拆为 "SHORTSHOT low"
-  //   - 动作侧：keyword_action_value 是单个 token，用 _ 分隔三部分
-  //     例：MEL_add_10   → name='MEL',    action='add', value='10'
-  //         inj_pres_1_add_10  → name='inj_pres_1', action='add', value='10'
-  //         MEL_add_low       → name='MEL',    action='add', value='low'（Mamdani 模糊量词）
-  //         IPOS_adjust_请检查...  → 弹窗规则（name='IPOS', action='adjust', value=提示文本）
-  //   - IF / AND / THEN 是独立的 token
-  //   - 正确例：`IF SHORTSHOT_low AND MEL_low THEN MEL_add_2`
-  //   - 错误例：`IF WELDLINE low THEN VPTTadd10`（条件拆为两个 token / 动作未分隔）
-  //
-  // 参考：
-  //   - backend/_data/rule_method_by_library.json L24: "IF SHORTSHOT_low AND MEL_low THEN MEL_add_2 "
-  //   - backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py L52-112 _split_phase
-  //   - backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py L793-823 ParticularRules._rule_process
+  // 规则描述（机器语言）：IF keyword_level AND keyword_level THEN keyword_action_value AND ...（token 化契约见后端 _split_phase：条件侧 keyword_level 必须是单 token，勿写成 "SHORTSHOT low"；动作侧用 _ 分隔 name_action_value，如 MEL_add_10 / MEL_add_low）
   const condDesc = form.preconditions
     .filter(c => c.keyword && c.level)
     .map(c => `${c.keyword}_${c.level}`)
@@ -739,9 +604,7 @@ function generateRuleText() {
     ? `IF ${condDesc} THEN ${actDesc}`
     : ''
 
-  // 规则解释（人类语言）：如果A为level，且B为level，那么A动作V，A动作V。
-  // 注意：中文拼接紧凑（不加空格），跟 JSON 数据中的中文风格保持一致。
-  // 例：「如果熔接痕为极轻微，且料筒温度五段为极小，那么切换时间增加10，切换方式为压力增加20。」
+  // 规则解释（人类语言）：如果A为level，且B为level，那么A动作V，A动作V。（中文拼接紧凑不加空格，跟 JSON 数据中的中文风格保持一致）
   const condExp = form.preconditions
     .filter(c => c.keyword && c.level)
     .map(c => {
@@ -772,9 +635,7 @@ watch(
   { deep: true },
 )
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 
 async function loadForm() {
   loaded.value = false
@@ -824,9 +685,7 @@ async function loadForm() {
   }
 }
 
-// ============================================================================
 // 校验 & 提交
-// ============================================================================
 
 function validate(): boolean {
   if (!form.rule_library_id) {
@@ -924,15 +783,9 @@ async function onSubmit() {
   }
 }
 
-// ============================================================================
 // 导航
-// ============================================================================
 
-/**
- * 返回上一级
- * - drawer 嵌入模式：emit('close')，由父组件关闭抽屉
- * - 独立路由模式：router.push 回规则库列表
- */
+/** 返回上一级：drawer 嵌入模式 emit('close')，独立路由模式 router.push 回规则库列表 */
 function goBack() {
   if (props.embedded) {
     emit('close')
@@ -941,16 +794,12 @@ function goBack() {
   }
 }
 
-/**
- * form-actions 取消按钮的点击处理（仅独立路由模式有底部操作区）
- */
+/** form-actions 取消按钮的点击处理（仅独立路由模式有底部操作区） */
 function onCancel() {
   goBack()
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   loadForm()
@@ -958,20 +807,13 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-/*
- * 容器遵守全局表单规范（padding 16 16 96）
- * 复用全局 .form-actions / .page-header
- */
+/* 容器遵守全局表单规范（padding 16 16 96），复用全局 .form-actions / .page-header */
 .rule-method-form {
   padding: 16px 16px 96px;
   box-sizing: border-box;
 }
 
-/*
- * drawer 嵌入模式（embedded=true）：
- * - 去掉 max-width 限制（充分利用 drawer 宽度）
- * - 去掉底部 96px padding（drawer 本身会提供滚动）
- */
+/* drawer 嵌入模式：去掉 max-width 限制与底部 96px padding（drawer 自身提供滚动） */
 .rule-method-form--embedded {
   max-width: none;
   margin: 0;
@@ -1001,13 +843,7 @@ onMounted(() => {
 
 .edit-area,
 .graph-area {
-  /*
-   * 1:1 左右布局（大屏 ≥ 1100px）：
-   * - flex: 1 1 0  → flex-basis: 0 + flex-grow: 1，两侧完全平分宽度
-   * - 不设置 flex-basis: 50% 是因为那样会导致右侧起始 50% 后再 grow，占有 ~75%
-   * - min-width: 0 防止内容溢出挤压
-   * - 窄屏 < 1100px 时改为上下布局（见底部 @media 块）
-   */
+  /* 1:1 左右布局（大屏 ≥ 1100px）：flex: 1 1 0 平分宽度（不用 flex-basis: 50%，否则右侧起始 50% 再 grow 会占 ~75%）；min-width: 0 防溢出；<1100px 改上下布局 */
   flex: 1 1 0;
   min-width: 0;
 }
@@ -1019,13 +855,7 @@ onMounted(() => {
 }
 
 .graph-area {
-  /*
-   * 流程图保持右侧粘性定位（sticky）
-   * - 卡片内部根据实际宽度自动切换：
-   *     - ≥ 480px：条件列 : 动作列 = 2 : 1
-   *     - 360-480px：条件列 : 动作列 = 1 : 1
-   *     - < 360px：上下 1:1 排布
-   */
+  /* 流程图保持右侧粘性定位（sticky）；卡片内按宽度切换列比：≥480px 为 2:1，360-480px 为 1:1，<360px 上下 1:1 */
   position: sticky;
   top: 16px;
 }

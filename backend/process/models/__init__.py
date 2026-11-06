@@ -19,6 +19,7 @@ from .rules import (
     RuleMethod,
     ExpertRule,
 )
+from .mining import MiningRule
 
 __all__ = [
     "ProcessCondition",
@@ -29,4 +30,5 @@ __all__ = [
     "RuleKeyword",
     "RuleMethod",
     "ExpertRule",
+    "MiningRule",
 ]

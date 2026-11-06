@@ -1,59 +1,11 @@
-/**
- * parameter 翻译器：嵌套 settingProcessForm ↔ flat ProcessParameterFlat
- *
- * 背景（2026-10-15 调优接口改造）：
- * - 后端 HTTP 入参契约统一为 flat（ProcessParameterSchema，88 字段镜像 ORM）
- * - 前端 UI 仍是嵌套（settingProcessForm，5 段含 table_data 数组）
- * - 「嵌套 ↔ flat」的翻译由前端 API 层负责，不能让 HTTP 契约承载嵌套结构
- *
- * 两个方向：
- * - parameterToFlat(nested)        —— 提交调优前用（嵌套 → flat）
- * - parameterFromFlat(flat)        —— 解析调优响应后用（flat → 嵌套）
- *
- * 后端契约（D1 决策，2026-10-22）：
- *   initialize（``result.process``）与 optimize（``new_parameter``）**都返回 flat**，
- *   前端是唯一的形态翻译方。两个接口的响应字段名不同但形态一致，
- *   因此本模块是全站唯一的 flat ↔ nested 翻译实现。
- *
- * 字段映射（与后端 backend/process/schemas/parameter.py 的 ProcessParameterSchema 一一对应）：
- * - injection           → inj_stg, inj_spd_1..6, inj_pres_1..6, inj_pos_1..6,
- *                         inj_t, inj_dly_t, cool_t
- * - vp_switch           → vps_mode, vps_pos, vps_t, vps_pres, vps_spd
- * - holding             → hold_stg, hold_pres_1..5, hold_spd_1..5, hold_t_1..5
- * - metering            → met_stg, met_pres_1..4, met_rot_spd_1..4,
- *                         met_back_pres_1..4, met_pos_1..4,
- *                         pre_met_decomp_{mode,pres,spd,t,dist},
- *                         pst_met_decomp_{mode,pres,spd,t,dist},
- *                         met_lim_t, met_end_pos
- * - barrel_temperature  → brl_temp_stg, noz_temp, brl_temp_1..9
-  *     （行业惯例：stage 1 = 喷嘴温度 = noz_temp；
-  *      stage 2..10 = 料筒 1..9 段 = brl_temp_1..9；与后端 ORM 拆分一致）
- *
- * 设计原则：
- * - 字段名严格按后端 ORM 字段名（不引入新别名）
- * - 嵌套缺失的段 → 对应 flat 字段不输出（保持稀疏，由后端 Pydantic 校验
- *   "至少一个非 None 工艺字段" 拦住「忘翻译」异常）
- * - table_data[i].sections[k] 是数组位置 → flat 后缀号（inj_pres_<k+1>）
- * - 不做"自动推断缺哪段"——只翻译前端实际有值的字段
- *
- * 业务元数据（process_condition_id / param_code / param_source / parent_seq_idx /
- * seq_idx）由后端 service 层维护，前端翻译不涉及。
- */
+/** parameter 翻译器：嵌套 settingProcessForm ↔ flat ProcessParameterFlat（前端是唯一的形态翻译方） */
 
 // ⚠️ 必须是**值导入**而非 `import type`：parameterFromFlat 在运行时以
 //    settingProcessForm 作为模板底（label / unit / max_stage 等 UI 元数据）。
 //    `import type` 会被编译期擦除 ⇒ 运行时 ReferenceError。
 import { settingProcessForm } from '@/constants/process-const'
 
-/**
- * 调优入参的 flat 形态（与 ProcessParameterSchema 字段一一对应，全 Optional）
- *
- * 前端调用方使用：提交调优前 parameterToFlat(nested) → ProcessParameterFlat，
- * 再通过 processOptimizationInfer({ ..., parameter: flatPayload }) 发送。
- *
- * 字段全 Optional：与后端 Pydantic BaseSchema 一致；前端翻译出的字段若全是 None
- * 会触发后端 _parameter_must_have_override 校验拒绝，避免「忘翻译」静默提交。
- */
+/** 调优入参的 flat 形态（与后端 ProcessParameterSchema 字段一一对应，全 Optional） */
 export interface ProcessParameterFlat {
   // --- 注射参数 ---
   inj_stg?: number | null
@@ -164,14 +116,7 @@ const TIME = ['hold_t']
 // barrel_temperature 例外（stage 1 = noz_temp，stage 2..10 = brl_temp_1..9），
 // 不走 expandSections，由调用点手工拆分见下方
 
-/**
- * 提取 table_data 行（label 匹配）的 sections 数组到 flat 字段后缀映射
- *
- * 设计要点：
- * - 按 `label` 而不是按位置匹配（前端 SettingProcess 的 table_data 行顺序可能
- *   因为 i18n / 业务调整而变化，按 label 是稳定契约）
- * - 段数 ≤ flat 后端 ORM 字段数时，超出段数被静默丢弃（与后端 extra="ignore" 同源）
- */
+/** 按 label（而非位置）匹配 table_data 行取 sections 展开为 flat 后缀字段；超出 ORM 字段数的段静默丢弃 */
 function pickRow(table_data: { label: string; sections: any[] }[] | undefined, label: string): any[] | undefined {
   if (!table_data) return undefined
   const row = table_data.find(r => r.label === label)
@@ -189,26 +134,7 @@ function expandSections(prefix: string, sections: any[] | undefined, max: number
   }
 }
 
-/**
- * 嵌套 settingProcessForm → flat ProcessParameterFlat
- *
- * 用法：
- *   const flat = parameterToFlat(activeRound.parameter)
- *   await processOptimizationInfer({
- *     condition_id: ..., parent_seq_idx: ..., parameter: flat, feedback: ...
- *   })
- *
- * 行为约定：
- * - 只翻译前端实际有值的字段（null / undefined 字段不进 flat dict）
- * - 段数超出后端 ORM 字段数的部分静默丢弃
- * - 不修改入参对象（返回新对象）
- *
- * 边界情况：
- * - null / undefined 入参 → 返回空对象 {}
- *   （调用方需要根据"用户是否真的改了参数"决定要不要把 parameter 字段设为 {} / null）
- * - 前端还没初始化（activeRound.parameter 是 settingProcessForm 默认值）→ 返回 {}
- *   此时调用方应把 parameter 字段设为 null（让后端从 ORM 反查 baseline）
- */
+/** 嵌套 settingProcessForm → flat：只翻译有值的字段，超出 ORM 字段数的段丢弃，不改入参；入参为 null/undefined 或未初始化时返回 {} */
 export function parameterToFlat(nested: SettingProcessForm | null | undefined): ProcessParameterFlat {
   if (!nested) return {}
 
@@ -279,7 +205,7 @@ export function parameterToFlat(nested: SettingProcessForm | null | undefined): 
   // ---- 料筒温度 ----
   // stage 1 = 喷嘴温度（noz_temp），stage 2..10 = 料筒 1..9 段（brl_temp_1..9）
   // 是注塑机 HMI 温度组表的行业惯例：喷嘴在入模端，其温度独立控制；
-  // 料筒温度表中 stage 1 不含喷嘴，后端 ORM 同样拆分为 noz_temp + brl_temp_1..9
+  // 后端 ORM 同样拆分为 noz_temp + brl_temp_1..9，stage（档位序号）原样存进 brl_temp_stg
   if (nested.barrel_temperature) {
     const brl = nested.barrel_temperature
     if (brl.stage != null) flat.brl_temp_stg = brl.stage
@@ -307,22 +233,7 @@ export function parameterToFlat(nested: SettingProcessForm | null | undefined): 
   return flat
 }
 
-/**
- * flat ProcessParameterFlat → 嵌套 settingProcessForm
- *
- * 用法：
- *   const nested = parameterFromFlat(inferData.new_parameter)
- *   newRound.parameter = nested
- *
- * 行为约定：
- * - 以 settingProcessForm 为模板底（保留 label / unit / max_stage 等 UI 元数据）
- * - 缺失字段 → null（**不补业务默认值**，避免伪造数据）
- * - barrel_temperature 段位：sections[0]=喷嘴（noz_temp）、sections[1..9]=料筒 1..9
- *   （brl_temp_1..9）—— 与 parameterToFlat 严格互逆
- *   ⚠️ 后端 nested 的 brl_temp_steps[0] 是「料筒 1 段」，两边语义不同，
- *      flat 用 noz_temp + brl_temp_1..9 两个独立字段消除了该歧义
- * - 只读白名单字段，多余字段（如 parameter_id / seq_idx / process_condition_id）忽略
- */
+/** flat → 嵌套 settingProcessForm：以 settingProcessForm 为模板底，缺失字段填 null 不补默认值；barrel_temperature sections[0]=喷嘴、[1..9]=料筒，与 parameterToFlat 互逆 */
 export function parameterFromFlat(flat: ProcessParameterFlat | null | undefined): SettingProcessForm {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const f: any = flat || {}
@@ -409,12 +320,7 @@ export function parameterFromFlat(flat: ProcessParameterFlat | null | undefined)
   }
 }
 
-/**
- * 工艺字段白名单（后端 ProcessParameterSchema 的 83 个工艺字段）
- *
- * 另有 5 个元数据字段（process_condition_id / param_code / param_source /
- * parent_seq_idx / seq_idx）不在此列——它们不参与工艺内容判定。
- */
+/** 工艺字段白名单（后端 ProcessParameterSchema 的 83 个工艺字段，不含 5 个元数据字段） */
 const PROCESS_FLAT_FIELDS: string[] = [
   'inj_stg', 'inj_t', 'inj_dly_t', 'cool_t',
   ...['inj_spd', 'inj_pres', 'inj_pos'].flatMap(p => Array.from({ length: 6 }, (_, i) => `${p}_${i + 1}`)),
@@ -429,25 +335,14 @@ const PROCESS_FLAT_FIELDS: string[] = [
   ...Array.from({ length: 9 }, (_, i) => `brl_temp_${i + 1}`),
 ]
 
-/**
- * flat 里是否含实际工艺内容（排除 parameter_id / seq_idx 等元数据）
- *
- * 用途：响应有效性校验——结构完整但工艺内容全空时提前告警，
- * 避免「接口 200、参数表却静默空白」这类问题难以定位。
- */
+/** flat 是否含实际工艺内容（排除 parameter_id / seq_idx 等元数据） */
 export function hasFlatParameterContent(flat: ProcessParameterFlat | null | undefined): boolean {
   if (!flat) return false
   const f = flat as Record<string, unknown>
   return PROCESS_FLAT_FIELDS.some((k) => f[k] !== null && f[k] !== undefined)
 }
 
-/**
- * 判断 flat payload 是否为空（前端翻译后无任何非 None 字段）
- *
- * 调用方在 parameterToFlat 后应检查：
- * - isEmptyFlatParameter(flat) === true → 用户没改参数，HTTP 入参 parameter = null
- * - 否则 → HTTP 入参 parameter = flat（后端 Pydantic 会校验"至少一个工艺字段"）
- */
+/** flat payload 是否为空（翻译后无任何非 None 字段 → 调用方应把 HTTP 入参 parameter 置 null） */
 export function isEmptyFlatParameter(flat: ProcessParameterFlat): boolean {
   return Object.keys(flat).length === 0
 }

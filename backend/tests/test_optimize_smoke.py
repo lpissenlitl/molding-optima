@@ -221,7 +221,7 @@ except Exception:
 service = ParameterOptimizeService()
 assert hasattr(service, "infer")
 assert hasattr(service, "infer_from_provided")
-# 模块顶层 helper（2026-10-15 整改后从类内移出，独立函数）
+# 模块顶层 helper（类内移出，独立函数）
 assert hasattr(_opt_mod, "_resolve_parent")
 assert hasattr(_opt_mod, "_resolve_baseline")
 assert hasattr(_opt_mod, "_build_suggestion_payload")
@@ -312,7 +312,7 @@ OK_MOLD = {"product_category": "空调"}
 OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, OK_MOLD)
 print("[5/5] OptimizeDataValidator accepts complete hydraulic input OK")
 
-# 5a. 缺机台上限 → **必拒**（2026-10-27 二次口径）：设备实际值是**判级论域上界的
+# 5a. 缺机台上限 → **必拒**：设备实际值是**判级论域上界的
 #     必需来源**（用户口径：「从设备读取参数主要是为了用实际值补全参数的论域」
 #     +「必须用设备值，设备值没有就报错」）⇒ 缺了论域上界无法确定 ⇒ 模糊等级判错
 #     ⇒ 直接拒，而不是「不拦请求、只不裁剪」。

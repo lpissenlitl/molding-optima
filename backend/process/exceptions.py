@@ -82,3 +82,8 @@ ERROR_OPTIMIZE_INFER_FAILED     = BizErrorCode.create(MOD_PROCESS, 71, "工艺�
 # 90-99 其他
 # ============================================================
 ERROR_DEFECT_FEEDBACK_INVALID = BizErrorCode.create(MOD_PROCESS, 90, "缺陷反馈无效")
+
+# 91-99 规则挖掘（候选规则审核流）
+ERROR_MINING_RULE_NOT_FOUND    = BizErrorCode.create(MOD_PROCESS, 91, "候选规则不存在")
+ERROR_MINING_RULE_REVIEWED     = BizErrorCode.create(MOD_PROCESS, 92, "候选规则已审核")
+ERROR_MINING_RULE_NOT_LANDABLE = BizErrorCode.create(MOD_PROCESS, 93, "候选规则无法落地")

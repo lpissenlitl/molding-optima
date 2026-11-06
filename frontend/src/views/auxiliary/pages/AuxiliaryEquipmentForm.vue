@@ -1,18 +1,5 @@
-<!--
-  AuxiliaryEquipmentForm - 辅助装置表单（new / edit / copy 三模式共用）
+<!-- AuxiliaryEquipmentForm - 辅助装置表单（new/edit/copy 三模式共用）：路由 /equipment/auxiliary/new|edit|copy（复制清空 id），单 section（辅助装置信息 el-card）+ el-row/el-col gutter:24 两列布局，底部 form-actions（fixed bottom），表单样式全部复用全局 custom-form.scss -->
 
-  路由：
-    - /equipment/auxiliary/new         新建
-    - /equipment/auxiliary/:id/edit    编辑
-    - /equipment/auxiliary/:id/copy    复制（清空 id）
-
-  架构（对齐 InjectionMachineForm）：
-    - 1 个 section：辅助装置信息（el-card）
-    - el-row + el-col + gutter:24 两列布局（与项目内表单一致）
-    - 底部 form-actions（全局统一样式：fixed bottom）
-    - 所有 .custom-form / .custom-form__section / .custom-form__title / .form-actions
-      均复用全局样式（src/styles/utilities/custom-form.scss）
--->
 <template>
   <div class="auxiliary-form">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
@@ -251,12 +238,8 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-/*
- * 页面样式（与 InjectionMachineForm 对齐）
- * - .custom-form / .custom-form__section / .custom-form__title / .form-actions
- *   均复用全局统一样式：src/styles/utilities/custom-form.scss
- * - 本页仅保留页面容器 / page-header / loading-placeholder 最小化样式
- */
+/* 页面样式：.custom-form / .custom-form__section / .custom-form__title / .form-actions 均复用全局 custom-form.scss，本页仅保留页面容器 / page-header / loading-placeholder 最小化样式 */
+
 .auxiliary-form {
   padding: 16px 16px 96px;
   box-sizing: border-box;

@@ -1,16 +1,13 @@
-"""molding-optima 工艺参数调优（optimize）Schema 定义
-
-对应接口：
-- POST /api/processes/algorithms/optimize/                  业务主流程（FromCondition）
-- POST /api/processes/algorithms/optimize-from-provided/     纯推理（FromProvided、待路由注册）
+"""工艺参数调优（optimize）Schema 定义
 
 两个入口（命名范式与 initialization.py 对齐：Process<动作>From<入口>）：
-- ProcessOptimizeFromConditionSchema：业务主流程。initialize 是其前置，落库时
-  mold/machine/polymer 已挂在 condition 上，后端全部可反查，前端只给 ID。
-- ProcessOptimizeFromProvidedSchema：纯推理。调用方自带完整上下文，后端不查库不落库。
-  面向第三方系统集成（其库内没有我们的 masterdata，却同样有「缺陷 → 调优」诉求）。
+- ProcessOptimizeFromConditionSchema：业务主流程，POST /api/processes/algorithms/optimize/
+  initialize 是其前置；mold/machine/polymer 已挂在 condition 上，后端全部可反查，前端只给 ID。
+- ProcessOptimizeFromProvidedSchema：纯推理，调用方自带完整上下文，后端不查库不落库
+  （路由尚未注册）。面向第三方系统集成（其库内没有我们的 masterdata，
+  却同样有「缺陷 → 调优」诉求）。
 
-设计原则（2026-10-15 确认）：
+设计原则：
 - 上下文三维按实体归属分组（mold_info / machine_info / polymer_info），不扁平化：
   ① 与 DB 模式反查的三张表 1:1 对应，字段来源可追溯；
   ② 调用方可按自己「知道什么」分段填，不必在混合字段堆里判断；
@@ -28,12 +25,6 @@
   MoldInfoSchema / MachineInfoSchema / PolymerInfoSchema。
 - optimize 无 process_set 维度：段数与模式（inj_stg / hold_stg / vps_mode ...）属于
   当前工艺本身，已包含在 parameter 基线内，不是外部配置。所以是三维而非四维。
-
-调用链路：
-  Step 1: 入口适配  —— condition_id + parent_seq_idx（业务编号）反查 parent_param
-  Step 2: 数据准备  —— parent_param.parameters 作为基线，可选 parameter 覆盖
-  Step 3: 推理算法  —— recommendation_service.get_recommendations()（接口契约）
-  Step 4: 落库       —— ProcessParameter + TuningRecord + Recommendation 原子事务
 
 术语规范：
 - parameter：调优基线 / 手动修改覆盖（两个入口语义不同，见各自 docstring）
@@ -93,7 +84,9 @@ class FeedbackSchema(BaseSchema):
     3 类反馈合一：
     - defect[]：缺陷反馈列表（多个，算法识别优先级）
     - observations[]：实测观察（按需传）
-    - tuning_result：增量反馈（effective / ineffective / null）
+    - tuning_result：试模效果评价（对【该轮工艺参数】的整体评价）
+
+    tuning_result：首轮 qualified/unqualified，第 2 轮起 qualified + effective/unchanged/ineffective
     """
 
     defect: List[DefectFeedbackDataSchema] = Field(
@@ -103,7 +96,14 @@ class FeedbackSchema(BaseSchema):
         default_factory=list, description="实测观察列表（按需传）",
     )
     tuning_result: Optional[str] = Field(
-        None, description="调机效果评价：effective / ineffective / null",
+        None,
+        description=(
+            "试模效果评价（对该轮工艺参数的整体评价，写入该轮 TuningRecord.result，"
+            "并作为该轮 Recommendation.is_adopted 的训练标签）。"
+            "前端枚举：qualified（合格）/ unqualified（不合格）/ effective（改善）/ "
+            "unchanged（无变化）/ ineffective（变差）/ null（未评价）；"
+            "首轮只提供 qualified/unqualified；第 2 轮起提供 qualified + 后三档"
+        ),
     )
 
 
@@ -127,7 +127,7 @@ class OptimizeMoldInfoSchema(BaseSchema):
     product_category 是精度旋钮（填了命中高特异度规则，不填退到默认规则，
     算法不报缺该值而不能运行），target_cycle_time 是同类。
 
-    未来候选（本期未纳入，需成对使用才有意义）：
+    未纳入的字段（需成对使用才有意义）：
     - projected_area（在 GatingSystem 表，按 shot_index 选）
       + 机台 max_clamping_force（在 InjectionMoldingMachine 主表）
       → 飞边类推荐的压力上界。两者跨两张表，单独取其一无法算出所需锁模力。
@@ -147,7 +147,7 @@ class OptimizeMachineInfoSchema(BaseSchema):
 
     作用：给推荐值划定「这台机设得出来」的物理边界，并参与参数模糊等级判定。
 
-    为何必需（2026-10-15 结论）：
+    为何必需：
     fuzzy 算法构造隶属度函数时需要参数论域 [min_val, max_val]。现状两处都不看设备：
     - RuleKeyword 覆盖到的参数：论域取 keyword.range_min/range_max（全厂通用值）
     - 未覆盖的参数：论域取 当前值×2（自我参照，等于猜）
@@ -168,7 +168,7 @@ class OptimizeMachineInfoSchema(BaseSchema):
     其余 5 个（注射压力/速度、保压压力/速度、螺杆转速）是「必填」
     ——缺上界不是精度下降，而是判级错误。
     ⚠️ **单位不在算法层考虑**：这里取的就是**界面值**（HMI 面板显示上限），
-    算法侧直接用，**不做单位换算、不做单位一致性校验**（用户口径 2026-10-27：
+    算法侧直接用，**不做单位换算、不做单位一致性校验**（用户口径：
     「我们取的就是界面值，不需要关心单位」）。ORM 字段声明的单位仅作字段描述用。
 
     命名空间：本 schema 的字段名 == ORM 字段名（InjectionUnit / InjectionMoldingMachine）。
@@ -210,10 +210,10 @@ class OptimizePolymerInfoSchema(BaseSchema):
     initialize 需要的 melt_density / 推荐剪切线速度等推导输入，调优不消费，不在此列。
 
     必填等级见 algorithms/fuzzy/specs.py::OPTIMIZE_POLYMER_INFO_FIELDS：都是可选。
-abbreviation 是精度旋钮（填了命中高特异度规则，不填退到默认规则），温度边界
-现阶段是「推荐」——不是因为不重要，而是 field_contract 的 condition_when 只能
-对本维度内的键求值，而温度的触发条件在维度外（本次调优是否涉及温度参数）。
-强行标必填会拦住纯压力类的调优，属过度约束。
+    abbreviation 是精度旋钮（填了命中高特异度规则，不填退到默认规则），温度边界
+    现阶段是「推荐」——不是因为不重要，而是 field_contract 的 condition_when 只能
+    对本维度内的键求值，而温度的触发条件在维度外（本次调优是否涉及温度参数）。
+    强行标必填会拦住纯压力类的调优，属过度约束。
     """
 
     abbreviation: Optional[str] = Field(
@@ -339,7 +339,7 @@ class ProcessOptimizeFromProvidedSchema(BaseSchema):
     响应：与 FromCondition 同构的 suggestion（groups / items），但无落库产物
     ——没有 new_parameter.parameter_id / seq_idx，也没有 recommendation_id。
 
-    两个入口 parameter 形状一致的说明（2026-10-15 统一为 ProcessParameterSchema）：
+    两个入口 parameter 形状一致的说明（统一为 ProcessParameterSchema）：
     - FromProvided 用全量基线：第三方需要明确契约，传不齐就是漏数据
     - FromCondition 用稀疏覆盖：调用方只带要改的几个键，service 按
       `_resolve_baseline`（入参优先，否则 ORM 反查）补齐未传的字段

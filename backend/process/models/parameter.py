@@ -16,8 +16,10 @@ class ProcessParameter(BusinessBaseModel):
     比旧版 molding-optima 的命名（IV0, IP0, IL0）更可读。
 
     版本管理：
-    - parent_param: 自关联，支持树形版本结构
-    - seq_idx: 同一父节点下递增，自动分配
+    - parent_param: 自关联，父子关系构成调机树；父指向哪个模次由业务指定，
+      **不由 seq_idx 推导**（树有分支，父未必是上一模）
+    - seq_idx: 模次序号，同一 condition 内全局递增（存储形态是 list）。
+      用于指认「第几模」，也可按模次定位 parameter
     - param_source: 标记参数来源（手动/AI/设备同步等）
     """
 
@@ -166,8 +168,8 @@ class ProcessParameter(BusinessBaseModel):
     met_lim_t = models.FloatField(null=True, blank=True, verbose_name="熔胶延时")
     met_end_pos = models.FloatField(null=True, blank=True, verbose_name="熔胶终止位置")
 
-    # --- 料筒温度参数 (10段) ---
-    brl_temp_stg = models.IntegerField(null=True, blank=True, verbose_name="料筒温度段数 1-10")
+    # --- 料筒温度参数（10 档：第 1 档喷嘴 + 料筒 1~9 段）---
+    brl_temp_stg = models.IntegerField(null=True, blank=True, verbose_name="料筒温度档数 1-10")
     noz_temp = models.FloatField(null=True, blank=True, verbose_name="喷嘴温度")
     brl_temp_1 = models.FloatField(null=True, blank=True, verbose_name="一段料筒温度")
     brl_temp_2 = models.FloatField(null=True, blank=True, verbose_name="二段料筒温度")

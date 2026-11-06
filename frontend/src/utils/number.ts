@@ -1,10 +1,5 @@
-/**
- * 格式化数字字符串，适用于输入过滤和最终显示
- * @param input 输入值（任意类型）
- * @param fixed 小数位数，默认 2
- * @param allowNegative 是否允许负数，默认 false
- * @param strict 严格模式（用于 blur/提交）：补零、移除孤立小数点
- */
+/** 格式化数字字符串，适用于输入过滤和最终显示：fixed 小数位数默认 2，allowNegative 默认 false，strict 严格模式（blur/提交时补零并移除孤立小数点） */
+
 export function formatNumber(
   input: any,
   fixed: number = 2,

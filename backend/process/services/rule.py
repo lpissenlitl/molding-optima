@@ -232,7 +232,7 @@ def add_rule_method(company_id, organization_id, **params):
         params["organization_id"] = organization_id
 
     # 自动识别缺陷信息：覆盖前端传入的 defect_label / defect_code
-    # （前端表单不再手填这两个字段，后端始终以 rule_description 为唯一来源）
+    # （前端表单不填这两个字段，后端始终以 rule_description 为唯一来源）
     defect_label, defect_code = _auto_extract_defect(
         params.get("rule_description", ""),
         company_id,
@@ -329,8 +329,19 @@ def get_rule_library(rule_library_id):
 
 
 @transaction.atomic
-def add_rule_library(company_id, organization_id, **params):
-    """新增规则库"""
+def add_rule_library(company_id, organization_id, is_superuser=False,
+                     target_company_id=None, **params):
+    """新增规则库
+
+    `target_company_id`（**仅超管**）= **代办建库**：把库直接建到指定租户名下。
+    - 不传 ⇒ 库建在调用者自己公司名下（租户自建 / 超管自建系统库）；
+    - 传了 ⇒ 库建在 `target_company_id` 名下，且**只能是租户级库**
+      （系统级库归平台，走「不传」路径即可）。
+
+    ⚠️ **代办是必要的**：不传时 `company_id` 强制 = 调用者公司，
+    超管建出来的 `owner_type='tenant'` 库会落在超管的公司（系统演示）名下，
+    对目标租户**永远不生效**（静默失效）。
+    """
     # 必填校验
     for field in ("library_code", "library_name", "owner_type", "library_type"):
         if not params.get(field):
@@ -344,37 +355,52 @@ def add_rule_library(company_id, organization_id, **params):
     if params["library_type"] not in ("expert", "fuzzy"):
         raise BizException(ERROR_ILLEGAL_ARGUMENT, "library_type 必须为 expert 或 fuzzy")
 
+    # --- 归属公司：默认调用者公司；超管可代办到指定租户 ---
+    if target_company_id:
+        if not is_superuser:
+            raise BizException(
+                ERROR_ACCESS_LIMIT, "仅平台超管可为指定租户创建规则库"
+            )
+        if params["owner_type"] != "tenant":
+            raise BizException(
+                ERROR_ILLEGAL_ARGUMENT,
+                "代办建库仅限租户级规则库（系统级库归平台，不指定归属租户）",
+            )
+        owner_company_id = target_company_id
+    else:
+        owner_company_id = company_id
+
     # 唯一性校验：同一公司内 library_code 不可重复
     exists = RuleLibrary.objects.filter(
-        company_id=company_id,
+        company_id=owner_company_id,
         library_code=params["library_code"],
         is_deleted=False,
     ).exists()
     if exists:
         raise BizException(ERROR_DATA_FOUND, f"规则库编码已存在: {params['library_code']}")
 
-    params["company_id"] = company_id
+    params["company_id"] = owner_company_id
     if organization_id:
         params["organization_id"] = organization_id
     return RuleLibrary.create_with_check(**params).to_dict()
 
 
 @transaction.atomic
-def update_rule_library(rule_library_id, company_id, **params):
-    """更新规则库（含归属校验：系统库仅平台可改）"""
+def update_rule_library(rule_library_id, company_id, is_superuser=False, **params):
+    """更新规则库（含归属校验：系统库仅平台超管可改）"""
     lib = RuleLibrary.objects.filter(
         id=rule_library_id, is_deleted=False,
     ).first()
     if not lib:
         raise BizException(ERROR_DATA_NOT_FOUND, "该规则库不存在")
 
-    # 跨租户隔离：不能改其他公司的库
-    if lib.company_id and lib.company_id != company_id:
+    # 跨租户隔离：不能改其他公司的库（超管不受限 —— 平台资产维护者）
+    if not is_superuser and lib.company_id and lib.company_id != company_id:
         raise BizException(ERROR_ACCESS_LIMIT, "无权操作该规则库")
 
-    # 系统库默认不允许租户修改
-    if lib.owner_type == "system":
-        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库不可修改")
+    # 系统库（平台公共大库）：**仅超管可改** —— 租户不得自助改公共资产
+    if lib.owner_type == "system" and not is_superuser:
+        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库仅平台超管可修改")
 
     # library_type 不可修改（类型决定库下数据语义：ExpertRule / RuleMethod）
     if "library_type" in params and params["library_type"] != lib.library_type:
@@ -394,16 +420,21 @@ def update_rule_library(rule_library_id, company_id, **params):
 
 
 @transaction.atomic
-def delete_rule_library(rule_library_id, company_id):
-    """删除规则库（软删除）"""
+def delete_rule_library(rule_library_id, company_id, is_superuser=False):
+    """删除规则库（软删除）
+    ⚠️ 系统级库（平台公共大库）**仅超管可删** —— 删了全平台就失去该库。
+    """
     lib = RuleLibrary.objects.filter(
         id=rule_library_id, is_deleted=False,
     ).first()
     if not lib:
         raise BizException(ERROR_DATA_NOT_FOUND, "该规则库不存在")
 
-    if lib.owner_type == "system":
-        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库不可删除")
+    if not is_superuser and lib.company_id and lib.company_id != company_id:
+        raise BizException(ERROR_ACCESS_LIMIT, "无权操作该规则库")
+
+    if lib.owner_type == "system" and not is_superuser:
+        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库仅平台超管可删除")
 
     # 级联软删除：库下所有规则方法 + 专家规则
     with transaction.atomic():
@@ -505,8 +536,13 @@ def get_expert_rule(expert_rule_id):
 
 
 @transaction.atomic
-def add_expert_rule(company_id, organization_id, rule_library_id, **params):
-    """新增专家规则（仅专家规则库允许）"""
+def add_expert_rule(company_id, organization_id, rule_library_id,
+                    is_superuser=False, **params):
+    """新增专家规则（仅专家规则库允许）
+
+    ⚠️ **系统级库（平台公共大库）** 的专家规则 **仅平台超管可维护** ——
+    公共大库是平台资产，由超管维护（租户不得自助塞入）。
+    """
     if not rule_library_id:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, "缺少必填字段: rule_library_id")
 
@@ -516,8 +552,10 @@ def add_expert_rule(company_id, organization_id, rule_library_id, **params):
     ).first()
     if not lib:
         raise BizException(ERROR_DATA_NOT_FOUND, "所属规则库不存在")
-    if lib.owner_type == "system":
-        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库不可新增专家规则")
+    if lib.owner_type == "system" and not is_superuser:
+        raise BizException(
+            ERROR_ACCESS_LIMIT, "系统级规则库下的专家规则仅平台超管可维护"
+        )
     if lib.library_type != "expert":
         raise BizException(
             ERROR_ILLEGAL_ARGUMENT,
@@ -540,8 +578,8 @@ def add_expert_rule(company_id, organization_id, rule_library_id, **params):
 
 
 @transaction.atomic
-def update_expert_rule(expert_rule_id, company_id, **params):
-    """更新专家规则"""
+def update_expert_rule(expert_rule_id, company_id, is_superuser=False, **params):
+    """更新专家规则（系统级库下仅平台超管可改）"""
     rule = ExpertRule.objects.filter(
         id=expert_rule_id, is_deleted=False,
     ).first()
@@ -550,16 +588,18 @@ def update_expert_rule(expert_rule_id, company_id, **params):
 
     # 通过 rule_library 反查归属
     lib = RuleLibrary.objects.filter(id=rule.rule_library_id).first()
-    if lib and lib.owner_type == "system":
-        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库下的专家规则不可修改")
+    if lib and lib.owner_type == "system" and not is_superuser:
+        raise BizException(
+            ERROR_ACCESS_LIMIT, "系统级规则库下的专家规则仅平台超管可修改"
+        )
 
     rule.update_info(**params)
     return rule.to_dict()
 
 
 @transaction.atomic
-def delete_expert_rule(expert_rule_id, company_id):
-    """删除专家规则（软删除）"""
+def delete_expert_rule(expert_rule_id, company_id, is_superuser=False):
+    """删除专家规则（软删除；系统级库下仅平台超管可删）"""
     rule = ExpertRule.objects.filter(
         id=expert_rule_id, is_deleted=False,
     ).first()
@@ -567,8 +607,10 @@ def delete_expert_rule(expert_rule_id, company_id):
         raise BizException(ERROR_DATA_NOT_FOUND, "该专家规则不存在")
 
     lib = RuleLibrary.objects.filter(id=rule.rule_library_id).first()
-    if lib and lib.owner_type == "system":
-        raise BizException(ERROR_ACCESS_LIMIT, "系统级规则库下的专家规则不可删除")
+    if lib and lib.owner_type == "system" and not is_superuser:
+        raise BizException(
+            ERROR_ACCESS_LIMIT, "系统级规则库下的专家规则仅平台超管可删除"
+        )
 
     rule.soft_delete()
 

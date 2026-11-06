@@ -1,5 +1,4 @@
-// MDI inline SVG（directive 不能使用 Vue 组件，直接 inline path）
-// fullscreen (mdi-fullscreen)
+// MDI inline SVG（directive 不能使用 Vue 组件，直接 inline path）：fullscreen (mdi-fullscreen)
 const FULLSCREEN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M5,14H7V17H10V19H5V14Z"/></svg>'
 // fullscreen-exit (mdi-fullscreen-exit, 还原按钮)
 const FULLSCREEN_EXIT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14,14H19V16H16V19H14V14M5,14H10V19H7.414L9,17.414L7,15.414L5,17.414V14M14,5V10H19V7H21V5H14M5,5V7H7V10H10V5H5Z"/></svg>'
@@ -65,8 +64,7 @@ export default {
         dragDom.style.left = `${l + styL}px`
         dragDom.style.top = `${t + styT}px`
 
-        //将此时的位置传出去
-        //binding.value({x:e.pageX,y:e.pageY})
+        // 将此时的位置传出去：binding.value({x: e.pageX, y: e.pageY})
       }
 
       document.onmouseup = function (e) {

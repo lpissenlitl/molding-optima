@@ -2,15 +2,15 @@
 ProcessInitializer 温度族 #19+#20 smoke test（独立运行，不依赖 Django）
 
 覆盖范围：
-  场景 A - PP 通用件（直通 + 5 段 + melt=230）→ 基准场景
-  场景 B - PA66 含水件（直通 + 5 段 + melt=280）→ I1 family_offset +5℃ 验证
-  场景 C - PVC 热敏（锁闭 + 5 段 + melt=190）→ I1 family_offset -5℃ + I2 decrement 5℃ 验证
-  场景 D - PC 高黏度（直通 + 5 段 + melt=300）→ I2 decrement 8℃ 验证
+  场景 A - PP 通用件（直通 + 4 段 + melt=230）→ 基准场景
+  场景 B - PA66 含水件（直通 + 4 段 + melt=280）→ I1 family_offset +5℃ 验证
+  场景 C - PVC 热敏（锁闭 + 4 段 + melt=190）→ I1 family_offset -5℃ + I2 decrement 5℃ 验证
+  场景 D - PC 高黏度（直通 + 4 段 + melt=300）→ I2 decrement 8℃ 验证
   场景 E - 8 段细颗粒（PP）→ I2 stages × 0.8 但上限 8℃ 验证
   场景 F - 边界钳制（F1 noz_temp 上限 / F2 段 N 下限 / F3 Tg 缺失兑底）
   场景 G - 直通 vs 锁闭对照（PP）→ nozzle_offset 修正验证
-  场景 H - HDPE 5 段（PE family 解析验证）
-  场景 I - 4 段 vs 10 段极端 stages 验证
+  场景 H - HDPE 4 段（PE family 解析验证）
+  场景 I - 4 档 vs 10 档极端 stages 验证
   场景 J - 幂函数非线性 k=1.2 vs 线性 k=1.0 对比
   场景 K - 材料手册钳制（min/max_melt_temp 触发）→ I5 钳制日志验证
   场景 L - 字段全缺失兑底链
@@ -23,6 +23,10 @@ ProcessInitializer 温度族 #19+#20 smoke test（独立运行，不依赖 Djang
 
 注：本文件是独立运行脚本（`verify_` 前缀 ⇒ 不被 pytest 收集）；
     断言走 `_failures` 收集器 + 退出码，不依赖 pytest 断言。
+
+⚠️ 档数口径：brl_temp_stg 是**总档数**（第 1 档 = 喷嘴），料筒段数 = 总档数 - 1。
+    默认 5 档 ⇒ 喷嘴 1 档 + 料筒 4 段（brl_temp_1..4）。
+    档数由**工艺设定集**传入（process_set['brl_temp_stg']），不从模具档案取。
 """
 
 import io
@@ -67,7 +71,7 @@ def _machine(power_method='液压机', nozzle_type='直通型'):
 
 
 def _base_mold(**overrides):
-    """基础 ABS mold（5 段料筒）"""
+    """基础 ABS mold（料筒档数走工艺设定集，不在模具里）"""
     m = {
         'product_weight': 50.0,
         'runner_weight': 0.0,
@@ -80,7 +84,6 @@ def _base_mold(**overrides):
         'gate_radius': 1.5,
         'gate_length': 1.5,
         'gate_width': 5.0,
-        'barrel_temperature_stage': 5,
     }
     m.update(overrides)
     return m
@@ -181,10 +184,10 @@ def _assert_le(actual, max_val, label):
         )
 
 
-# ========== 场景 A：PP 通用件（直通 + 5 段 + melt=230）基准场景 ==========
+# ========== 场景 A：PP 通用件（直通 + 4 段 + melt=230）基准场景 ==========
 
 def test_scenario_a_pp_baseline():
-    print("\n[场景 A] PP 通用件（直通 + 5 段 + melt=230）基准场景")
+    print("\n[场景 A] PP 通用件（直通 + 4 段 + melt=230）基准场景")
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -197,14 +200,14 @@ def test_scenario_a_pp_baseline():
     _assert_eq(noz_temp, 225.0, 'A noz_temp（直通-5+family0=225）')
     _assert_eq(stg, 5, 'A brl_temp_stg')
     # 幂函数 k=1.2, decrement=10, melt=230
-    # 预期 [230, 220, 207, 193, 177]
-    _assert_list_close(steps, [230.0, 220.0, 207.0, 193.0, 177.0], 'A brl_temp_steps (幂函数 k=1.2)')
+    # 预期 [230, 220, 207, 193]
+    _assert_list_close(steps, [230.0, 220.0, 207.0, 193.0], 'A brl_temp_steps (幂函数 k=1.2)')
 
 
-# ========== 场景 B：PA66 含水件（直通 + 5 段 + melt=280）I1 family_offset +5℃ 验证 ==========
+# ========== 场景 B：PA66 含水件（直通 + 4 段 + melt=280）I1 family_offset +5℃ 验证 ==========
 
 def test_scenario_b_pa66_family_offset():
-    print("\n[场景 B] PA66 含水件（直通 + 5 段 + melt=280）I1 family_offset +5℃ 验证")
+    print("\n[场景 B] PA66 含水件（直通 + 4 段 + melt=280）I1 family_offset +5℃ 验证")
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -216,13 +219,13 @@ def test_scenario_b_pa66_family_offset():
     # 推导：noz_offset_straight=-5 + family_offset[PA]=+5 → 280
     _assert_eq(noz_temp, 280.0, 'B noz_temp（直通-5+family+5=280）')
     # PA family_decrement=8
-    _assert_list_close(steps, [280.0, 272.0, 262.0, 250.0, 238.0], 'B brl_temp_steps (PA decrement=8)')
+    _assert_list_close(steps, [280.0, 272.0, 262.0, 250.0], 'B brl_temp_steps (PA decrement=8)')
 
 
-# ========== 场景 C：PVC 热敏（锁闭 + 5 段 + melt=190）I1 -5℃ + I2 5℃ 验证 ==========
+# ========== 场景 C：PVC 热敏（锁闭 + 4 段 + melt=190）I1 -5℃ + I2 5℃ 验证 ==========
 
 def test_scenario_c_pvc_thermal_sensitive():
-    print("\n[场景 C] PVC 热敏（锁闭 + 5 段 + melt=190）I1 -5℃ + I2 5℃ 验证")
+    print("\n[场景 C] PVC 热敏（锁闭 + 4 段 + melt=190）I1 -5℃ + I2 5℃ 验证")
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -235,13 +238,13 @@ def test_scenario_c_pvc_thermal_sensitive():
     # 推导：noz_offset_locking=0 + family_offset[PVC]=-5 → 185
     _assert_eq(noz_temp, 185.0, 'C noz_temp（锁闭0+family-5=185）')
     # PVC family_decrement=5 极平缓
-    _assert_list_close(steps, [190.0, 185.0, 178.0, 171.0, 164.0], 'C brl_temp_steps (PVC decrement=5)')
+    _assert_list_close(steps, [190.0, 185.0, 178.0, 171.0], 'C brl_temp_steps (PVC decrement=5)')
 
 
-# ========== 场景 D：PC 高黏度（直通 + 5 段 + melt=300）I2 8℃ 验证 ==========
+# ========== 场景 D：PC 高黏度（直通 + 4 段 + melt=300）I2 8℃ 验证 ==========
 
 def test_scenario_d_pc_high_viscosity():
-    print("\n[场景 D] PC 高黏度（直通 + 5 段 + melt=300）I2 8℃ 验证")
+    print("\n[场景 D] PC 高黏度（直通 + 4 段 + melt=300）I2 8℃ 验证")
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -253,7 +256,7 @@ def test_scenario_d_pc_high_viscosity():
     # 推导：noz_offset_straight=-5 + family_offset[PC]=0 → 295
     _assert_eq(noz_temp, 295.0, 'D noz_temp（直通-5+family0=295）')
     # PC family_decrement=8 平缓
-    _assert_list_close(steps, [300.0, 292.0, 282.0, 270.0, 258.0], 'D brl_temp_steps (PC decrement=8)')
+    _assert_list_close(steps, [300.0, 292.0, 282.0, 270.0], 'D brl_temp_steps (PC decrement=8)')
 
 
 # ========== 场景 E：8 段细颗粒（PP）stages × 0.8 但上限 8℃ 验证 ==========
@@ -261,14 +264,16 @@ def test_scenario_d_pc_high_viscosity():
 def test_scenario_e_8stages_fine_grain():
     print("\n[场景 E] PP 8 段细颗粒 stages × 0.8 但上限 8℃ 验证")
     noz_temp, stg, steps = _run(
-        mold=_base_mold(barrel_temperature_stage=8),
+        mold=_base_mold(),
         material=_base_material(
             abbreviation='PP', recommend_melt_temperature=230.0,
             min_melt_temp=200.0, max_melt_temp=280.0,
             glass_transition_temp=-10.0,
         ),
+        # 9 档 = 喷嘴 1 + 料筒 8 段（8 > 7 阈值 ⇒ 走细颗粒）
+        process_set={'brl_temp_stg': 9},
     )
-    _assert_eq(stg, 8, 'E brl_temp_stg')
+    _assert_eq(stg, 9, 'E brl_temp_stg（9 档 = 料筒 8 段）')
     # 8 段：decrement = min(10 × 0.8, 8) = 8
     # raw: [230, 222, 212, 200, 188, 175, 161, 150]
     # 段 8 钳制：Tg+30=20, melt-60=170, max(20, 170)=170
@@ -299,7 +304,7 @@ def test_scenario_f1_noz_temp_clamp_upper():
 
 def test_scenario_f2_segment_n_clamp():
     """F2: 段 N 低于 Tg+30 → 钳到 Tg+30"""
-    print("\n[场景 F2] 段 N 下限钳制（极端 PP 5 段，raw 段 N < Tg+30）")
+    print("\n[场景 F2] 段 N 下限钳制（极端 PP 4 段，raw 段 N < Tg+30）")
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -325,15 +330,15 @@ def test_scenario_f3_tg_missing_fallback():
             # glass_transition_temp 缺失
         ),
     )
-    # 5 段：raw [230, 220, 207, 193, 177]
-    # 段 N raw 177 vs melt-60=170, 177 > 170 → 不钳
-    _assert_eq(steps[-1], 177.0, 'F3 段 N 不触发钳制（Tg 缺失兑底 melt-60=170, 177>170）')
+    # 4 段：raw [230, 220, 207, 193]
+    # 段 N raw 193 vs melt-60=170, 193 > 170 → 不钳
+    _assert_eq(steps[-1], 193.0, 'F3 段 N 不触发钳制（Tg 缺失兑底 melt-60=170, 193>170）')
 
 
 # ========== 场景 G：直通 vs 锁闭对照（PP）==========
 
 def test_scenario_g_straight_vs_locking():
-    print("\n[场景 G] 直通 vs 锁闭喷嘴对照（PP 5 段）")
+    print("\n[场景 G] 直通 vs 锁闭喷嘴对照（PP 4 段）")
     noz_straight, _, _ = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -361,7 +366,7 @@ def test_scenario_g_straight_vs_locking():
 # ========== 场景 H：HDPE 5 段（PE family 解析）==========
 
 def test_scenario_h_hdpe_pe_family():
-    print("\n[场景 H] HDPE 5 段（_parse_family 把 HDPE→PE 验证）")
+    print("\n[场景 H] HDPE 4 段（_parse_family 把 HDPE→PE 验证）")
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -373,39 +378,41 @@ def test_scenario_h_hdpe_pe_family():
     # HDPE → PE → family_offset[PE]=0 → noz = 200 - 5 = 195
     _assert_eq(noz_temp, 195.0, 'H HDPE→PE 直通 noz_temp=195')
     # PE family_decrement=10
-    # raw [200, 190, 178, 163, 147]
-    # 段 N raw 147 vs Tg+30=-70 vs melt-60=140, max(-70, 140)=140, 147>140 → 不钳
-    _assert_list_close(steps, [200.0, 190.0, 177.0, 163.0, 147.0], 'H HDPE 5 段递减')
+    # raw [200, 190, 178, 163]
+    # 段 N raw 163 vs Tg+30=-70 vs melt-60=140, max(-70, 140)=140, 163>140 → 不钳
+    _assert_list_close(steps, [200.0, 190.0, 177.0, 163.0], 'H HDPE 4 段递减')
 
 
 # ========== 场景 I：4 段（min）vs 10 段（max）极端 stages ==========
 
 def test_scenario_i_extreme_stages():
-    print("\n[场景 I] 4 段（min）vs 10 段（max）极端 stages 验证")
-    # 4 段
+    print("\n[场景 I] 4 档（料筒 3 段）vs 10 档（料筒 9 段）极端 stages 验证")
+    # 4 档 ⇒ 料筒 3 段
     noz_4, stg_4, steps_4 = _run(
-        mold=_base_mold(barrel_temperature_stage=4),
+        mold=_base_mold(),
         material=_base_material(
             abbreviation='PP', recommend_melt_temperature=230.0,
             min_melt_temp=200.0, max_melt_temp=280.0,
             glass_transition_temp=-10.0,
         ),
+        process_set={'brl_temp_stg': 4},
     )
-    # 10 段（> 7 阈值走细颗粒）
+    # 10 档 ⇒ 料筒 9 段（> 7 阈值走细颗粒）
     noz_10, stg_10, steps_10 = _run(
-        mold=_base_mold(barrel_temperature_stage=10),
+        mold=_base_mold(),
         material=_base_material(
             abbreviation='PP', recommend_melt_temperature=230.0,
             min_melt_temp=200.0, max_melt_temp=280.0,
             glass_transition_temp=-10.0,
         ),
+        process_set={'brl_temp_stg': 10},
     )
-    _assert_eq(stg_4, 4, 'I4 stg=4')
-    _assert_eq(stg_10, 10, 'I10 stg=10')
-    # 4 段：decrement=10, raw [230, 220, 207, 193]
-    _assert_list_close(steps_4, [230.0, 220.0, 207.0, 193.0], 'I4 brl_temp_steps')
-    # 10 段：decrement=8（10×0.8），raw [230, 222, 212, 200, 188, 175, 161, 150, ...]
-    # 段 N 钳制：Tg+30=20, melt-60=170, 150 < 170 → 钳
+    _assert_eq(stg_4, 4, 'I4 stg=4 档（料筒 3 段）')
+    _assert_eq(stg_10, 10, 'I10 stg=10 档（料筒 9 段）')
+    # 3 段：decrement=10, raw [230, 220, 207]
+    _assert_list_close(steps_4, [230.0, 220.0, 207.0], 'I4 brl_temp_steps')
+    # 9 段：decrement=8（10×0.8），raw [230, 222, 212, 200, 188, 175, 161, 153, 144]
+    # 段 N 钳制：Tg+30=20, melt-60=170, 144 < 170 → 钳
     _assert_eq(steps_10[0], 230.0, 'I10 段 1 = melt（钳上限）')
     _assert_eq(steps_10[-1], 170.0, 'I10 段 N 钳到 max(Tg+30, melt-60)=170')
 
@@ -414,10 +421,10 @@ def test_scenario_i_extreme_stages():
 
 def test_scenario_j_power_function_vs_linear():
     print("\n[场景 J] 幂函数 k=1.2 非线性 vs 线性（间接验证）")
-    # 5 段 PP 230, decrement=10
-    # 线性 k=1.0 预期：[230, 220, 210, 200, 190]
-    # 幂函数 k=1.2 实际：[230, 220, 207, 193, 177]
-    # 段 3 差异最大：幂函数 193 vs 线性 200，差 7
+    # 4 段 PP 230, decrement=10
+    # 线性 k=1.0 预期：[230, 220, 210, 200]
+    # 幂函数 k=1.2 实际：[230, 220, 207, 193]
+    # i=3 差异最大：幂函数 193 vs 线性 200，差 7
     noz_temp, stg, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -427,8 +434,8 @@ def test_scenario_j_power_function_vs_linear():
         ),
     )
     # 幂函数 k=1.2
-    _assert_list_close(steps, [230.0, 220.0, 207.0, 193.0, 177.0], 'J 幂函数 k=1.2 验证')
-    # 段 3：幂函数 < 线性（k>1 加速递减）
+    _assert_list_close(steps, [230.0, 220.0, 207.0, 193.0], 'J 幂函数 k=1.2 验证')
+    # i=3（第 4 段）：幂函数 < 线性（k>1 加速递减）
     linear_step3 = 230 - 3 * 10
     _assert_lt = steps[3] < linear_step3
     if _assert_lt:
@@ -482,9 +489,9 @@ def test_scenario_l_all_fields_missing():
     # 兑底：min=melt-40=190, max=melt+40=270, Tg=-999
     # noz_offset=230-5=225, in [190-10, 270+10]=[180, 280], 不钳
     _assert_eq(noz_temp, 225.0, 'L 字段全缺失兑底链 noz_temp=225')
-    # 5 段：decrement=10, k=1.2, Tg=-999 兑底用 melt-60=170
-    # raw [230, 220, 207, 193, 177], 段 N 177 > 170 → 不钳
-    _assert_list_close(steps, [230.0, 220.0, 207.0, 193.0, 177.0], 'L brl_temp_steps 兑底链')
+    # 4 段：decrement=10, k=1.2, Tg=-999 兑底用 melt-60=170
+    # raw [230, 220, 207, 193], 段 N 193 > 170 → 不钳
+    _assert_list_close(steps, [230.0, 220.0, 207.0, 193.0], 'L brl_temp_steps 兑底链')
 
 
 # ========== 场景 M：brl_temp_steps 顺序（与 process_transformer 对齐）==========
@@ -495,6 +502,7 @@ def test_scenario_m_steps_order():
     #   flat["noz_temp"] = temp_sections[0]
     #   flat[f"brl_temp_{i}"] = temp_sections[i]   (i=1..9)
     # 所以 brl_temp_steps[0] = brl_temp_1（最热，紧邻喷嘴）
+    # ⚠️ brl_temp_steps **只含料筒段**（喷嘴单独走 noz_temp），长度 = 总档数 - 1
     _, _, steps = _run(
         mold=_base_mold(),
         material=_base_material(
@@ -515,7 +523,7 @@ def test_scenario_m_steps_order():
 # ========== 场景 N：与设计文档 §7 场景完全一致 ==========
 
 def test_scenario_n_design_doc_consistency():
-    print("\n[场景 N] 与设计文档 §7 场景验证（5 段/8 段全场景）")
+    print("\n[场景 N] 与设计文档 §7 场景验证（4 段全场景）")
     # §7.1 PP 通用件
     _, _, steps_a = _run(
         mold=_base_mold(),
@@ -553,18 +561,19 @@ def test_scenario_n_design_doc_consistency():
             glass_transition_temp=150.0,
         ),
     )
-    # 与设计文档 §7 完全一致（±1℃ 误差容差）
+    # 与设计文档 §7 一致（±1℃ 误差容差）
+    # ⚠️ §7 原表按 5 段料筒给出；现口径 5 档 = 料筒 4 段 ⇒ 取前 4 项
     # 注：4^1.2 ≈ 5.278（非线性幂函数），代码会经过 round(_,1) + round(_,0) 两层，
     # 另外 Python round 使用 banker's rounding（half-to-even）。
     # 例如：178.513 → round(_,1) → 178.5 → round(_,0) → 178.0（偶数方向）
-    # PP:    T[3] = 192.63 → 192.6 → 193；T[4] = 177.22 → 177.2 → 177
-    # PA66:  T[3] = 250.10 → 250.1 → 250；T[4] = 237.78 → 237.8 → 238
-    # PVC:   T[3] = 171.31 → 171.3 → 171；T[4] = 163.61 → 163.6 → 164
-    # PC:    T[3] = 270.10 → 270.1 → 270；T[4] = 257.78 → 257.8 → 258
-    _assert_list_close(steps_a, [230.0, 220.0, 207.0, 193.0, 177.0], 'N §7.1 PP 5 段', eps=0.5)
-    _assert_list_close(steps_b, [280.0, 272.0, 262.0, 250.0, 238.0], 'N §7.2 PA66 5 段', eps=0.5)
-    _assert_list_close(steps_c, [190.0, 185.0, 178.0, 171.0, 164.0], 'N §7.3 PVC 5 段', eps=0.5)
-    _assert_list_close(steps_d, [300.0, 292.0, 282.0, 270.0, 258.0], 'N §7.4 PC 5 段', eps=0.5)
+    # PP:    T[3] = 192.63 → 192.6 → 193
+    # PA66:  T[3] = 250.10 → 250.1 → 250
+    # PVC:   T[3] = 171.31 → 171.3 → 171
+    # PC:    T[3] = 270.10 → 270.1 → 270
+    _assert_list_close(steps_a, [230.0, 220.0, 207.0, 193.0], 'N §7.1 PP 4 段', eps=0.5)
+    _assert_list_close(steps_b, [280.0, 272.0, 262.0, 250.0], 'N §7.2 PA66 4 段', eps=0.5)
+    _assert_list_close(steps_c, [190.0, 185.0, 178.0, 171.0], 'N §7.3 PVC 4 段', eps=0.5)
+    _assert_list_close(steps_d, [300.0, 292.0, 282.0, 270.0], 'N §7.4 PC 4 段', eps=0.5)
 
 
 # ========== 主入口 ==========

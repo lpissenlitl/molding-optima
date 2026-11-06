@@ -206,7 +206,7 @@ def _resolve_mold_data_sources(mold_snapshot: Dict[str, Any]) -> Dict[str, Dict[
         source_model='Gate'         → snapshot['gating_system']['cavities'][0]['gates'][0]（多浇口取第一个）
 
     多腔/多浇口场景的子项选取（"取第一个"）由本函数统一封装，
-    _build_mold_info_from_snapshot 不再 hardcoded cavities[0] / gates[0]。
+    _build_mold_info_from_snapshot 不 hardcode cavities[0] / gates[0]。
     """
     sources: Dict[str, Dict[str, Any]] = {}
     sources['Mold'] = mold_snapshot.get('mold') or {}
@@ -469,6 +469,9 @@ class ParameterInitializeService:
                 machine_info=machine_info,
                 polymer_info=polymer_info,
                 process_set=process_set,
+                # 当前租户（**专家规则库的可见性上下文**）——
+                # 平台公共大库 + 该租户自己的专家私库（后者覆盖前者同名 key）
+                company_id=company_id,
             )
 
             # call_context：记录本次接口调用传了什么，审计/调试用
@@ -656,6 +659,7 @@ class ParameterInitializeService:
         machine_info: Dict[str, Any],
         polymer_info: Dict[str, Any],
         process_set: Optional[Dict[str, Any]] = None,
+        company_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """【Step 3】纯算法推理：4 维输入 → 4 维参数输出（不查 DB、不写 DB、不涉及 ID）
 
@@ -665,6 +669,11 @@ class ParameterInitializeService:
 
         Args:
             mold_info / machine_info / polymer_info / process_set: 4 维推理上下文
+            company_id: 当前租户（**专家规则库的可见性上下文**）——
+                平台公共大库（全平台共用）+ 该租户自己的专家私库；
+                私库**后加载 ⇒ 覆盖平台同名 key**（叶子级覆盖）。
+                None = **无租户上下文**（第三方集成 / 离线 runner / 烟测）
+                ⇒ 只用平台层（不过滤），保持现状。
 
         Returns:
             {
@@ -675,7 +684,7 @@ class ParameterInitializeService:
         """
         process_set = process_set or {}
         # 每次新建实例（不做类级缓存）—— 实测无性能问题（用户手动触发，低频）
-        rule_matcher = InitRuleMatcher()
+        rule_matcher = InitRuleMatcher(company_id=company_id)
 
         logger.info(
             "工艺参数推理: polymer=%s, gate_type=%s, weight=%s",
@@ -724,7 +733,7 @@ def _auto_condition_no(mold_id: int, shot_index: int) -> str:
 
 # --- 算法 nested 工艺参数 → flat 字段镜像（落库与 HTTP 响应共用）---
 #
-# 单一事实来源（D1 契约统一，2026-10-22 决策）：
+# 单一事实来源（契约统一）：
 #   落库（ProcessParameter ORM）与对外 HTTP 响应都走本函数
 #   ⇒ 落库的值与前端看到的值必然一致，不会出现「两处各拍一次」的语义漂移。
 #

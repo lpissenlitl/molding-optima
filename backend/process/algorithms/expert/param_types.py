@@ -96,7 +96,8 @@ class ProcessParams:
     met_end_pos: float = 0.0  # 熔胶终止位置
 
     # ========== 温度参数 ==========
-    brl_temp_stg: int = 5  # 料筒温度段数
+    # brl_temp_stg 是**总档数**（第 1 档 = 喷嘴）；料筒段数 = 总档数 - 1
+    brl_temp_stg: int = 5  # 料筒温度档数（1-10，第 1 档为喷嘴）
     noz_temp: float = 0.0  # 喷嘴温度 (℃)
     # 多级料筒温度 (℃)
     brl_temp_steps: List[float] = field(default_factory=list)

@@ -17,13 +17,6 @@
 - parameter 是子资源，必须依附 condition
 - 业务上 condition 一旦创建不轻易变更，变更 = 新建 condition
 - condition 内容允许重复（同样 mold+polymer+machine 可有多个 condition，标识不同试模事件）
-
-合并来源（2026-10-09）：
-- record.py（CRUD 子集）
-- parameter.py（CRUD 完整 + frontend 转换 + 列表）
-- parameter_transformer.py（frontend 字段转换）
-- optimization_advice.py（optimization CRUD + chain 调度；该文件已于本轮
-  合并完成后被进一步清理为 0 字节空文件并删除，仅留本条考古注脚）
 """
 import logging
 from datetime import datetime, date, time
@@ -36,13 +29,16 @@ from extensions.exceptions import (
     BizException, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT,
     ERROR_OPERATION_FAILED, ERROR_REQUIRED_FIELD,
 )
-from process.models import ProcessCondition, ProcessParameter, RuleMethod
+from process.models import (
+    ProcessCondition, ProcessParameter, RuleMethod, TuningRecord, Recommendation,
+)
 from masterdata.models import Mold, InjectionMoldingMachine, Polymer
 from utils.validation import validate_pk, validate_id_list
 from utils.db import build_filters, parse_ordering, paginate_queryset
 from utils.objects import safe_get
 from utils.code_generator import generate_unique_code
-from process.services.tuning import TuningService
+from process.services.tuning import TuningService, tuning_result_from_record
+from process.services.parameter_optimize import build_recommendation_suggestion
 
 _logger = logging.getLogger(__name__)
 
@@ -390,7 +386,6 @@ def _create_process_condition(company_id: int, organization_id: int, **kwargs):
     """创建 ProcessCondition（含 process_context_snapshot 构建）
 
     与 molding-expert 差异：
-    - 不再保存 injection_unit_id 字段（molding-optima 模型中无此字段）
     - 注射单元通过 injection_machine + injection_index 业务规则推导
     """
     mold_id = kwargs.get("mold_id")
@@ -525,13 +520,6 @@ def _get_process_condition_by_id(condition_id: int, company_id: int = None) -> P
 # ============================================================================
 # CRUD 基础服务
 # ============================================================================
-
-def _apply_parameter(condition, parameter: dict, parameter_id: int = None) -> None:
-    """DEPRECATED: 2026-10 迁到 services/parameter.py.update_parameter_in_condition
-
-    本函数保留仅为后向兼容, 2026-11 后删除。已无内部调用者。
-    """
-
 
 @transaction.atomic
 def create_condition(company_id: int, organization_id: int, **kwargs):
@@ -779,7 +767,7 @@ def get_condition_frontend(condition_id: int, company_id: int = None) -> dict:
 
 
 def get_condition_with_parameter_list(condition_id: int, company_id: int = None) -> dict:
-    """获取工艺条件 + 该条件下全部 parameter (平铺) - 2026-10-12 新增
+    """获取工艺条件 + 该条件下全部 parameter (平铺)
 
     业务 (records/<id>/parameter-list/ 端点支撑):
     - 响应: {condition, parameters[]}
@@ -804,7 +792,7 @@ def get_condition_with_parameter_list(condition_id: int, company_id: int = None)
 
 
 def get_condition_with_parameter_tree(condition_id: int, company_id: int = None) -> dict:
-    """获取工艺条件 + 该条件下全部 parameter (树形) - 2026-10-12 新增
+    """获取工艺条件 + 该条件下全部 parameter (树形)
 
     业务 (records/<id>/parameter-tree/ 端点支撑):
     - 响应: {condition, parameter_tree[]}
@@ -991,18 +979,56 @@ def get_condition_with_history(condition_id: int) -> dict:
     }
 
 
+def _build_tuning_payload(
+    record: Optional[TuningRecord],
+    parameter: Optional[ProcessParameter] = None,
+    recommendation: Optional[Recommendation] = None,
+) -> dict:
+    """单个 parameter 的回显 payload：该轮自身的试模反馈 + 该轮自身的算法建议
+
+    配对语义：界面上的「第 N 轮」= 参数(N) + 反馈(N) —— 反馈是该轮参数自身的试模结果，
+    因此一条 TuningRecord 只对应它自己那一个 parameter，不跨轮。
+
+    tuning_result 已从库内存储词反映射为前端枚举；pending 回 None（未评价）。
+
+    recommendation 同样按锚点语义归本轮：Recommendation 挂在它所属的 parameter 上，
+    重建为前端 Suggestion 结构（含 is_adopted 训练标签）。
+    """
+    if record is None:
+        payload = {
+            "tuning_result": None,
+            "result": None,
+            "defect_feedbacks": [],
+            "result_detail": None,
+        }
+    else:
+        payload = {
+            "tuning_result": tuning_result_from_record(record.result),
+            "result": record.result,
+            "defect_feedbacks": record.defect_feedbacks or [],
+            "result_detail": record.result_detail,
+        }
+
+    if recommendation is not None and parameter is not None:
+        payload["suggestion"] = build_recommendation_suggestion(recommendation, parameter)
+
+    return payload
+
+
 def get_condition_history(condition_id: int, company_id: int = None) -> dict:
     """获取某工艺的调机历史（时间线，按 created_at 倒序）
 
-    业务: 调机记录页的弹窗数据源 —— 一个 condition 下的全部调机轮次
+    业务: 调机记录页的弹窗数据源 + 智能调机页的历史轮次回显数据源
     (每个 parameter = 一轮调机), 按发生时间从新到旧排列。
+
+    每条记录附带 tuning 字段（该轮自身的试模反馈），见 _build_tuning_payload。
 
     Args:
         condition_id: 工艺条件 ID
         company_id: 租户 ID（不为 None 时按租户过滤，防跨租户读取）
 
     Returns:
-        {condition: {...}, count: n, history: [parameter.to_dict(), ...]}
+        {condition: {...}, count: n, history: [{..., tuning: {...}}, ...]}
     """
     condition = _get_process_condition_by_id(condition_id, company_id=company_id)
 
@@ -1010,7 +1036,32 @@ def get_condition_history(condition_id: int, company_id: int = None) -> dict:
         process_condition_id=condition_id,
         is_deleted=False,
     ).order_by("-created_at", "-id")
-    items = [h.to_dict() for h in history]
+
+    # 一次取回全部 TuningRecord（ProcessParameter ↔ TuningRecord 业务 1:1）后建索引，
+    # 避免逐轮查询的 N+1；同一 parameter 若有多条则取最新（created_at 升序遍历覆盖）
+    records: Dict[int, TuningRecord] = {}
+    for rec in TuningRecord.objects.filter(
+        process_parameter__in=history
+    ).order_by("created_at", "id"):
+        records[rec.process_parameter_id] = rec
+
+    # 同理取回 Recommendation（锚在它所属的那一轮 parameter 上）
+    recommendations: Dict[int, Recommendation] = {}
+    for rec in Recommendation.objects.filter(
+        process_parameter__in=history
+    ).order_by("created_at", "id"):
+        recommendations[rec.process_parameter_id] = rec
+
+    items = []
+    for h in history:
+        item = h.to_dict()
+        item["tuning"] = _build_tuning_payload(
+            record=records.get(h.id),
+            parameter=h,
+            recommendation=recommendations.get(h.id),
+        )
+        items.append(item)
+
     return {
         "condition": condition.to_dict(),
         "count": len(items),
@@ -1147,6 +1198,11 @@ def _build_optimization_context(
         "polymer_abbreviation": overrides.get("polymer_abbreviation"),
         "product_category": overrides.get("product_category"),
         "rule_library_code": overrides.get("rule_library_code"),
+        # 当前租户（**规则库可见性上下文**）—— 系统库对所有租户公用，
+        # 租户私库只对归属租户可见（判据在算法侧共用编排层）。
+        # ⚠️ **两条算法入口都要传**：只传一条 ⇒ 同一条规则在不同入口的
+        #    可见性不一致（不报错，只是结果悄悄不同）。
+        "company_id": getattr(condition, "company_id", None),
     }
 
 

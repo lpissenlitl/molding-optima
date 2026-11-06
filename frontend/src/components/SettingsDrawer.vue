@@ -1,10 +1,4 @@
-<!--
-  SettingsDrawer：系统设置侧拉抽屉
-  - 主题切换：light / dark / high-contrast
-  - 字号切换：default / large
-  - 侧边栏默认折叠：开 / 关
-  - 所有设置通过 settings store 管理，主题/字号在 main.ts 同步到 <html>
--->
+<!-- SettingsDrawer：系统设置侧拉抽屉（主题 light/dark/high-contrast、字号 default/large、侧边栏默认折叠）；所有设置通过 settings store 管理，主题/字号在 main.ts 同步到 <html> -->
 <template>
   <el-drawer
     v-model="visible"

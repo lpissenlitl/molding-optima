@@ -1,16 +1,5 @@
-﻿<!--
-  MoldList - 模具列表页
+﻿<!-- MoldList - 模具列表页：BaseTable（列定义/密度切换/列筛选/偏好持久化 view-name="mold_list"）+ 路由跳转编辑新建 + 跨模块入口 moldflow/trial/reservation/resume + 操作列编辑/删除 -->
 
-  设计要点：
-  - 表格使用 BaseTable（统一列定义、密度切换、列筛选、用户偏好持久化）
-  - 编辑/新建：路由跳转（与 ProjectList 风格一致）—— mold form 字段较多，独立页面空间更充足
-  - 跨模块链接：moldflow / trial / reservation / resume（通过路由跳转）
-  - 操作列：编辑（review_mold）、删除（delete_mold）
-  - 表格偏好（列显隐、密度、pageSize）通过 view-name="mold_list" 自动持久化
-
-  与 project/pages/ProjectList.vue 的差异：
-  - 跨模块入口多出 moldflow / trial / resume
--->
 <template>
   <div class="page-stack">
     <!-- 搜索表单 -->
@@ -163,13 +152,8 @@
 </template>
 
 <script setup lang="ts">
-/**
- * MoldList 数据流：
- * - 编辑/新建：router.push('/mold/new') 或 router.push('/mold/:id/edit')
- *   MoldForm 自身处理详情加载、保存提交、保存后 router.push('/mold/list') 返回
- *   列表通过 activated / onMounted 自动重新拉取（若需要可监听 $route）
- * - 列表字段顺序 / 列显隐 / 密度 / pageSize 通过 view-name="mold_list" 自动持久化
- */
+/** MoldList 数据流：编辑/新建走 router.push('/mold/new') 或 router.push('/mold/:id/edit')，MoldForm 自身处理详情加载、保存提交、保存后 router.push('/mold/list') 返回，列表通过 activated / onMounted 自动重新拉取；列表字段顺序 / 列显隐 / 密度 / pageSize 通过 view-name="mold_list" 自动持久化 */
+
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -178,18 +162,14 @@ import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import MoldSearchForm from '../components/MoldSearchForm.vue'
 import { moldMethod } from '@/api'
 
-// ============================================================================
 // 类型
-// ============================================================================
 
 interface ListData {
   total: number
   items: any[]
 }
 
-// ============================================================================
 // 状态
-// ============================================================================
 
 const router = useRouter()
 
@@ -210,10 +190,8 @@ const list_loading = ref(false)
 const table_size = ref<'small' | 'default' | 'large'>('default')
 const selected_rows = ref<any[]>([])
 
-// 列定义
-// - visible: true  → 默认显示
-// - visible: false → 默认隐藏（高级列，用户可手动打开列筛选启用）
-// - filterable: true  → 启用 BaseTable 列筛选（漏斗），从 BaseTableColumn.filterable 读取
+// 列定义：visible: true → 默认显示；visible: false → 默认隐藏（高级列，用户可手动打开列筛选启用）；filterable: true → 启用 BaseTable 列筛选（漏斗），从 BaseTableColumn.filterable 读取
+
 const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '模具编号', prop: 'mold_no', minWidth: 120, align: 'center', sortable: true, tooltip: false, filterable: false },
   { visible: true, label: '模具名称', prop: 'mold_name', minWidth: 200, align: 'left', header_align: 'center', sortable: false, tooltip: true, filterable: false },
@@ -238,11 +216,9 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '创建日期', prop: 'created_at', minWidth: 170, align: 'center', sortable: true, tooltip: true, filterable: false },
 ])
 
-// 抽屉控制已移除：编辑/新建走路由跳转（/mold/new 与 /mold/:id/edit）
+// 编辑/新建走路由跳转（/mold/new 与 /mold/:id/edit），不用抽屉
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 
 async function fetchList() {
   list_loading.value = true
@@ -279,9 +255,7 @@ function onReset() {
   fetchList()
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function goCreate() {
   router.push('/mold/new')
@@ -360,9 +334,7 @@ function goIssueResume(row: any) {
   router.push({ path: '/mold/resume/issue', query: { mold_id: row.id } })
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

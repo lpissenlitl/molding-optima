@@ -49,10 +49,10 @@ PROCESS_SET_FIELDS: Dict[str, Dict[str, Any]] = {
         'source_model': 'ProcessSet',
         'source': '前端用户输入（缺失时取 default）',
         'attr_name': 'brl_temp_stg',
-        'desc': '料筒温度段数（1-10）',
+        'desc': '料筒温度档数（1-10，第 1 档为喷嘴）',
         'type': int,
         'condition': '可选',
-        'default': 5,  # 行业标准：5 段温度
+        'default': 5,  # 行业标准：5 档（= 喷嘴 1 档 + 料筒 4 段）
     },
     'vps_mode': {
         'source_model': 'ProcessSet',
@@ -96,7 +96,7 @@ PROCESS_SET_FIELDS: Dict[str, Dict[str, Any]] = {
 #    - vps_mode：算法层有 Level-3 兑底（默认位置切换），且 Level-1(int) 与
 #      Level-2(字符串兼容) 是互斥分支 ⇒ 预填具体值会让字符串分支永久不可达
 # 2. 业务默认值（2 / 1 / 5 / 0）：走这个值业务上是合理的
-#    （如 hold_stg=2 是行业标准, met_stg=1 是单段计量, brl_temp_stg=5 是 5 段温度）
+#    （如 hold_stg=2 是行业标准, met_stg=1 是单段计量, brl_temp_stg=5 是 5 档 = 喷嘴 1 + 料筒 4）
 #    算法层没「自动推荐」逻辑时，必须保留业务默认（否则 `ps.get('hold_stg', 2)` 会因 None 漏洞返回 None）
 #
 # 为什么 inj_stg 要用 None 而 hold_stg/met_stg 不用：
@@ -110,7 +110,7 @@ PROCESS_SET_DEFAULTS: Dict[str, Any] = {
     'hold_stg': 2,  # 行业标准：保压 2 段
     'met_stg': 1,  # 行业标准：单段计量
     # 其他业务参数：保留业务默认
-    'brl_temp_stg': 5,  # 行业标准：5 段温度
+    'brl_temp_stg': 5,  # 行业标准：5 档（= 喷嘴 1 档 + 料筒 4 段）
     # VP 切换模式：sentinel（None = 走算法 Level-3 兑底）
     # ⚠️ 不能预填 0 —— 会让算法 Level-2 的字符串兼容分支（VP_switch_mode）永久不可达
     'vps_mode': None,

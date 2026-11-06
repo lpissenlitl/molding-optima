@@ -1,19 +1,12 @@
-/**
- * 创建一个用于校验 Element Plus 表单并自动聚焦到第一个错误字段的函数。
- * 适用于 Vue 2 或 Vue 3（需传入组件实例 vm）。
- *
- * @param vm - 当前 Vue 组件实例（用于调用 $nextTick）
- * @returns 返回一个异步校验函数
- */
+/** 创建一个用于校验 Element Plus 表单并自动聚焦到第一个错误字段的函数（需传入组件实例 vm 以调用 $nextTick），返回异步校验函数 */
+
 export function createValidateAndFocus(vm: any) {
   /**
-   * 校验指定的 el-form 表单，并在失败时自动聚焦到第一个出错的可交互元素。
-   *
-   * @param formRef - el-form 的 ref 引用（必须是通过 ref="xxx" 获取的真实 DOM 组件实例）
-   * @param options - 配置选项
-   * @param options.scrollToError - 是否自动滚动到错误字段，默认 true
-   * @param options.scrollOffset - 滚动时向上偏移的像素值（用于避开固定头部等），默认 100
-   * @returns Promise<boolean> - 校验是否通过
+   * 校验指定的 el-form 表单，并在失败时自动聚焦到第一个出错的可交互元素
+   * @param formRef el-form 的 ref（必须是 ref="xxx" 获取的真实 DOM 组件实例）
+   * @param options.scrollToError 是否自动滚动到错误字段，默认 true
+   * @param options.scrollOffset 滚动时向上偏移的像素值（避开固定头部等），默认 100
+   * @returns Promise<boolean> 校验是否通过
    */
   return function (
     formRef: any,
@@ -44,8 +37,7 @@ export function createValidateAndFocus(vm: any) {
             return
           }
 
-          // 在该表单项中查找可聚焦的输入元素
-          // 支持：普通 input、textarea、el-select、el-autocomplete、日期/时间选择器等
+          // 在该表单项中查找可聚焦的输入元素（普通 input、textarea、el-select、el-autocomplete、日期/时间选择器等）
           const focusable = firstErrorItem.querySelector(
             [
               "input:not([type=\"hidden\"]):not(:disabled)", // 普通输入框（排除隐藏和禁用）
@@ -79,32 +71,20 @@ export function createValidateAndFocus(vm: any) {
 }
 
 /**
- * FormItem 辅助函数
- *
- * 与 form-types.ts 配合使用：
- *   - 不抽 BaseFormItem 组件，但共享 helper 函数
- *   - 业务方在模板里写 v-else-if 链，调用 helper 生成 placeholder / disabled / precision
- *
- * 设计哲学：
- *   - 数据抽象（FormItem）抽 ✅
- *   - 渲染抽象（BaseFormItem）不抽 ❌
- *   - 辅助函数（helper）抽 ✅
+ * FormItem 辅助函数（与 form-types.ts 配合）
+ * - 不抽 BaseFormItem 组件，但共享 helper 函数
+ * - 业务方在模板里写 v-else-if 链，调用 helper 生成 placeholder / disabled / precision
+ * - 设计取向：数据抽象（FormItem）抽、渲染抽象（BaseFormItem）不抽、辅助函数（helper）抽
  */
 import type { FormItem } from './form-types'
 import { getCurrentInstance } from 'vue'
 
 /**
  * 自动生成 placeholder
- *
- * 规则：
- *   - item.placeholder 存在 → 返回它（优先级最高）
- *   - select / date / autocomplete → "请选择/选择日期/请输入 + label"
- *   - radio → 返回空（radio 不需要 placeholder）
- *   - 其他（input/textarea/number/integer）→ "请输入 + label"
- *
- * @example
- *   getPlaceholder({ type: 'input', label: '项目名称' }) // "请输入项目名称"
- *   getPlaceholder({ type: 'select', label: '流道类别' }) // "请选择流道类别"
+ * - item.placeholder 存在 → 返回它（优先级最高）
+ * - select / date / autocomplete → "请选择/选择日期/请输入 + label"
+ * - radio → 返回空（radio 不需要 placeholder）
+ * - 其他（input/textarea/number/integer）→ "请输入 + label"
  */
 export function getPlaceholder(item: FormItem): string {
   if (item.placeholder) return item.placeholder
@@ -127,16 +107,10 @@ export function getPlaceholder(item: FormItem): string {
 }
 
 /**
- * 解析 disabled（支持函数）
- *
- * 业务方可以传布尔或函数：
- *   { disabled: true }                          // 始终禁用
- *   { disabled: () => isEdit.value }             // 编辑模式禁用
- *   { disabled: (item) => item.prop === 'code' } // 动态判断
- *
- * @example
- *   getDisabled({ disabled: true })   // true
- *   getDisabled({ disabled: () => false }) // false
+ * 解析 disabled（支持布尔或函数）
+ * - { disabled: true }                          // 始终禁用
+ * - { disabled: () => isEdit.value }             // 编辑模式禁用
+ * - { disabled: (item) => item.prop === 'code' } // 动态判断
  */
 export function getDisabled(item: FormItem): boolean {
   if (typeof item.disabled === 'function') {
@@ -147,19 +121,8 @@ export function getDisabled(item: FormItem): boolean {
 
 /**
  * 获取数值类型的小数位数
- *
- * 规则：
- *   - integer → 默认 0
- *   - number → 默认 2
- *   - item.precision 存在 → 返回它（优先级最高）
- *
- * 配合 v-number 指令使用：
- *   <el-input v-number="getPrecision(item)" />
- *
- * @example
- *   getPrecision({ type: 'integer' })   // 0
- *   getPrecision({ type: 'number' })    // 2
- *   getPrecision({ type: 'number', precision: 4 })  // 4
+ * - integer → 默认 0；number → 默认 2；item.precision 存在 → 返回它（优先级最高）
+ * 配合 v-number 指令使用：<el-input v-number="getPrecision(item)" />
  */
 export function getPrecision(item: FormItem): number {
   if (typeof item.precision === 'number') return item.precision
@@ -168,36 +131,15 @@ export function getPrecision(item: FormItem): number {
 
 /**
  * 解析 autocomplete 的 fetch-suggestions 函数（辅助函数）
- *
  * 支持 query 两种形式：
- *   - object（如 { table, column }）：调用全局 mixin `$querySuggestions` 拉取后端建议
- *   - function：自定义查询函数（直接返回）
- *
- * 注意：
- *   - 在 <script setup> 中调用，通过 `getCurrentInstance().proxy` 访问 mixin
- *   - mixin 返回的函数会调用后端 `/selection-options` 接口（见 `data-fetcher.ts`）
- *   - 业务方在 FormItem.query 中定义数据源：
- *
- * @example
- *   ```ts
- *   // FormItem 定义
- *   {
- *     label: '塑料厂商',
- *     prop: 'manufacturer',
- *     type: 'autocomplete',
- *     query: { table: 'polymer', column: 'manufacturer' },
- *   }
- *
- *   // 模板里使用
- *   <el-autocomplete
- *     v-model="polymer_info[item.prop!]"
- *     :fetch-suggestions="querySuggestions(item.query)"
- *   />
- *   ```
- *
- * @param query - FormItem.query：object | function
- * @param options - 可选的 select options（用于后端返回 value 映射为 label）
- * @returns 返回符合 `el-autocomplete` `:fetch-suggestions` 签名的函数 (input, cb) => cb(suggestions)
+ * - object（如 { table, column }）：调用全局 mixin `$querySuggestions` 拉取后端建议
+ * - function：自定义查询函数（直接返回）
+ * 注意：在 <script setup> 中通过 `getCurrentInstance().proxy` 访问 mixin，
+ *   mixin 返回的函数会调用后端 `/selection-options` 接口（见 `data-fetcher.ts`）
+ * 业务方在 FormItem.query 中定义数据源
+ * @param query FormItem.query：object | function
+ * @param options 可选的 select options（用于后端返回 value 映射为 label）
+ * @returns 符合 `el-autocomplete` `:fetch-suggestions` 签名的函数 (input, cb) => cb(suggestions)
  */
 export function querySuggestions(
   query:
@@ -222,8 +164,7 @@ export function querySuggestions(
 
   // object 形式（如 { table, column }）：从全局 mixin 调用后端接口
   if (typeof query === 'object' && query !== null) {
-    // 在 <script setup> 中，getCurrentInstance() 返回的 instance 仅用于访问 mixin，
-    // 不保留引用（Vue 文档明确推荐用法）。
+    // 在 <script setup> 中，getCurrentInstance() 返回的 instance 仅用于访问 mixin，不保留引用
     const instance = getCurrentInstance()
     const mixinFn = (instance?.proxy as any)?.$querySuggestions
     if (typeof mixinFn === 'function') {

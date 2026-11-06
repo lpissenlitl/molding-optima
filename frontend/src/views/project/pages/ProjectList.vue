@@ -1,10 +1,5 @@
-﻿<!--
-  项目管理 - 列表页
-  - 搜索表单：复用 BaseSearchForm（与 mold 模块的 MoldSearchForm 风格统一）
-  - 列表（编号、状态、来源、名称、关联模具、客户、行业、量产地、项目经理、创建日期）
-  - 操作列：编辑、删除、新增关联模具
-  - 新建项目（跳转 /mold/project/new）
--->
+﻿<!-- 项目管理列表页：搜索复用 BaseSearchForm + 列表（编号/状态/来源/名称/关联模具/客户/行业/量产地/项目经理/创建日期）+ 操作列（编辑/删除/新增关联模具）+ 新建跳转 /mold/project/new -->
+
 <template>
   <div class="page-stack">
     <!-- 搜索表单（配置驱动，复用 BaseSearchForm） -->
@@ -115,9 +110,7 @@ import {
   projectSourceOptions,
 } from '@/constants/project-const'
 
-// ============================================================================
 // 列表数据
-// ============================================================================
 
 interface ListData {
   total: number
@@ -158,9 +151,7 @@ const table_columns = ref<BaseTableColumn[]>([
 
 const externalUniqueValues = ref<Record<string, any[]>>({})
 
-// ============================================================================
 // 标签映射
-// ============================================================================
 
 function statusTagType(value: string): 'success' | 'info' | 'warning' | 'danger' {
   const map: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
@@ -190,9 +181,7 @@ function sourceLabel(value: string): string {
   return projectSourceOptions.find((o) => o.value === value)?.label ?? value ?? '—'
 }
 
-// ============================================================================
 // API
-// ============================================================================
 
 async function fetchList() {
   list_loading.value = true
@@ -228,7 +217,6 @@ function onSearch() {
 
 function onReset() {
   // BaseSearchForm 已经把 query 字段重置为 initial 值
-  // 这里只需把 page_no 重置为 1 并刷新列表
   query.page_no = 1
   fetchList()
 }
@@ -250,9 +238,7 @@ function syncExternalUniqueValues() {
   }
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function goCreate() {
   router.push('/mold/project/new')
@@ -316,9 +302,7 @@ function goMoldCreate(row: any) {
   router.push({ path: '/mold/new', query: { project_id: row.id } })
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

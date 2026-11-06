@@ -174,7 +174,6 @@ class Filler(BusinessBaseModel):
     """
     填充物属性
     如：玻璃纤维、滑石粉、碳酸钙等
-    # TODO: 考虑moldflow 的填充物属性
     """
     name = models.CharField(
         null=True, 

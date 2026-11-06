@@ -1,8 +1,5 @@
-/**
- * molding-optima 登录认证相关 API
- *
- * 参考 molding-expert/molding-expert-web/src/api/login.ts
- */
+/** molding-optima 登录认证相关 API（参考 molding-expert-web/src/api/login.ts） */
+
 import request from "@/utils/request"
 
 // 登录

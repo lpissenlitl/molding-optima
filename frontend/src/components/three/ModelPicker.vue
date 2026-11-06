@@ -1,13 +1,4 @@
-<!--
-  ModelPicker - 3D 模型选点组件（缺陷反馈辅助）
-
-  职责：上传 STL 模型 → Three.js 渲染 → 单击模型表面 → 选点（输出 {x, y, z}）
-  数据流：v-model 向父组件传递选点坐标（不取代父级 position 字段，仅作补充）
-
-  设计：
-  - 单点模式（每次点击替换上一个点）
-  - 不做：体积/壁厚/投影面积等提取，参考 tkm-iprocess 的 STLPluginDrawer.vue 简化而来
--->
+<!-- ModelPicker - 3D 模型选点组件（缺陷反馈辅助）：上传 STL 模型 → Three.js 渲染 → 单击模型表面选点，输出 {x, y, z}；v-model 向父组件传递坐标（仅作补充，不取代父级 position 字段）。单点模式（每次点击替换上一个点），不做体积/壁厚/投影面积提取 -->
 <template>
   <div class="model-picker">
     <!-- 未上传：拖拽上传 -->

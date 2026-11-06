@@ -1,10 +1,5 @@
-<!--
-  Navbar：顶部栏
-  - 左侧：sidebar 折叠/展开按钮 + 面包屑
-  - 右侧：用户区（占位）
-  - sidebar 按钮用 Element Plus 的 Fold / Expand icon，语义直接
-  - 面包屑从 route.matched 自动生成
--->
+<!-- Navbar：顶部栏：左侧为 sidebar 折叠/展开按钮（Element Plus Fold / Expand icon）+ 面包屑（从 route.matched 自动生成），右侧为用户区（占位） -->
+
 <template>
   <div class="navbar">
     <div class="navbar__left">
@@ -128,9 +123,8 @@ const breadcrumbs = computed(() =>
     flex: 1;
   }
 
-  // ──────────────────────────────────────
-  // sidebar 折叠/展开按钮（用 Element Plus <Fold> / <Expand> icon）
-  // ──────────────────────────────────────
+  // sidebar 折叠/展开按钮（Element Plus <Fold> / <Expand> icon）
+
   &__hamburger {
     display: inline-flex;
     align-items: center;
@@ -155,15 +149,8 @@ const breadcrumbs = computed(() =>
     }
   }
 
-  // ──────────────────────────────────────
-  // 面包屑
-  // ──────────────────────────────────────
-  // ─────────────────────────────────────
-// 面包屑（Element Plus el-breadcrumb）
-// - 当前页（最后一级）：主色 + 加粗
-// - 中间路径：常规色 + hover 变主题色
-// - 分隔符：次要色 + 50% 透明
-// ─────────────────────────────────────
+  // 面包屑（当前页主色加粗；中间路径 hover 变主题色；分隔符次要色 50% 透明）
+
 &__breadcrumbs {
     :deep(.el-breadcrumb) {
       font-size: 14px;

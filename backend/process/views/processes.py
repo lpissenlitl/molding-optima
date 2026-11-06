@@ -11,25 +11,23 @@
 | algorithms    | 算法触发                       | 独立触发器 | /algorithms/... |
 | rules         | 规则主数据                      | 主数据 | /rules/... |
 
-设计原则 (2026-10-13):
+设计原则:
 - 业务对象 = 工艺记录 (records), 业务级 CRUD 走 records 段
 - conditions 段 = 数据级访问 (list + 独立创建 + 详情 + 业务身份锁修改)
   - 与 records 段并存: 业务级 vs 数据级, 两条入口各自适用不同场景
 - parameters 段 = 数据级 CRUD (URL 单段化, 独立对象)
-  - 2026-10-12 拆除双段嵌套: 旧 /conditions/<id>/parameters/... 改为 /parameters/...
   - condition_id 退化为可选 query 过滤条件, 不在 URL 重复表达 belongs_to
   - service 函数不带 _in_condition 后缀, 仅凭 parameter_id 定位 + 可选过滤
   - tuning-feedback / parameter-tree: view + service 保留, 路由暂不挂出, 需要时再加回
-- frontend/history/batch_delete 已移除: 都是冗余或低频
 - algorithms 段保持多个独立触发器 (initialize / optimize / transplant), 智能调机 optimize 不合并入 tunings
 
 业务区分:
-- records/<id>/parameter-list/  = 工艺记录完整视图平铺 ({condition, parameters[]})   - 2026-10-12 新增
-- records/<id>/parameter-tree/  = 工艺记录完整视图树形 ({condition, parameter_tree[]}) - 2026-10-12 新增
+- records/<id>/parameter-list/  = 工艺记录完整视图平铺 ({condition, parameters[]})
+- records/<id>/parameter-tree/  = 工艺记录完整视图树形 ({condition, parameter_tree[]})
 - 智能调机触发 = algorithms/optimize/  (algorithms 段, 独立算法触发)
-- 人工调机反馈 = parameters/<pid>/tuning-feedback/  (parameter 子资源, 反映真实归属, 2026-10-12 拆除双段)
+- 人工调机反馈 = parameters/<pid>/tuning-feedback/  (parameter 子资源, 反映真实归属)
 
-新增 records 段 (2026-10-12):
+records 段:
 - 业务对象 = 工艺记录 (condition + first parameter 整体), 区别于纯 condition 段
 - 仅 POST 录入端点, 其余接口服务待讨论
 - 与 POST /processes/conditions/ 区别:
@@ -39,6 +37,7 @@
 URL 路由见 process/urls.py (以上表格仅为起点汇总, 不维护详细路径)。
 """
 from django.utils.decorators import method_decorator
+from django.db import transaction
 
 from identity.decorators import require_login
 from extensions.decorators import validate_parameters
@@ -77,7 +76,7 @@ from process.services import (
 # 0. records 段 -- 业务对象 = 工艺记录 (condition + 最新 parameter 整体)
 # ============================================================
 #
-# 业务定位 (2026-10-12 新增):
+# 业务定位:
 # - 业务对象 = 工艺记录, 不接受"独立 parameter"业务
 # - 与 conditions 段并存: 业务级入口 vs 数据级访问, 两条入口各自适用不同场景
 # - 列表 view_type (GET): 'parameter' / 'optimization'
@@ -96,7 +95,7 @@ class ProcessRecordListView(BaseView):
     GET  /api/processes/records/    -- 列表 (按 view_type 区分)
     POST /api/processes/records/    -- 录入 (condition 必填, parameter 可选)
 
-    业务 (2026-10-12):
+    业务:
     - 业务名 = 工艺记录 (records)
     - 业务对象 = 工艺记录, 不接受"独立 parameter" 业务
     - 3 种 payload 场景 (POST):
@@ -137,7 +136,7 @@ class ProcessRecordListView(BaseView):
         """批量删除工艺记录（按 condition_id, 级联软删其下 parameter）
 
         参考 ProjectListView 风格: list 端点同时处理 batch_delete
-        URL: DELETE /api/processes/records/actions/batch-delete/  (与 BaseRequest 通用规则对齐, 2026-10-13)
+        URL: DELETE /api/processes/records/actions/batch-delete/  (与 BaseRequest 通用规则对齐)
         body: {"ids": [condition_id1, condition_id2, ...]}
         """
         return condition.batch_delete_condition(
@@ -154,7 +153,7 @@ class ProcessRecordDetailView(BaseView):
 
     参考 ProjectDetailView / ConditionDetailView 风格, 1 view class 处理 3 方法
 
-    业务 (2026-10-12):
+    业务:
     - 业务名 = 工艺记录 (records)
     - 业务对象 = 工艺记录 (condition + 最新 parameter 整体)
     - <int:condition_id> = condition_id (业务聚合根, latest parameter 由 service 内部识别)
@@ -189,9 +188,6 @@ class ProcessRecordDetailView(BaseView):
           - parameter: 可选 (NEST: {setting_process: {...}})
             - 不传 → 仅改 condition
             - 传    → 改 condition + condition 下"最新 parameter"
-
-        TODO: 待 service 层实现 update_record (业务身份锁 + 路由 condition/parameter 双写)
-              或在 view 层组合调用 condition.update_condition + parameter_service.update_parameter_in_condition
         """
         condition_data = cleaned_data.get("condition") or {}
         parameter_data = cleaned_data.get("parameter")
@@ -219,7 +215,7 @@ class ProcessRecordParameterListView(BaseView):
     GET /api/processes/records/<int:condition_id>/parameter-list/   -- 返回 {condition, parameters[]}
                                                     业务: 一次拿全部parameter (调机完整流水)
 
-    2026-10-12 新增: 一体化业务视图 (与 records/<id>/ 同样以 records 业务为接口入口)
+    一体化业务视图 (与 records/<id>/ 同样以 records 业务为接口入口)
     - records/<id>/             -> 摘要视图 (condition + 最新 1 条 parameter)
     - records/<id>/parameter-list/ -> 完整视图 (condition + 全部 parameter, 平铺)
     """
@@ -236,7 +232,7 @@ class ProcessRecordParameterTreeView(BaseView):
     GET /api/processes/records/<int:condition_id>/parameter-tree/   -- 返回 {condition, parameter_tree[]}
                                                     业务: 拿参数迭代树 (parameter 父子关系)
 
-    2026-10-12 新增: 一体化业务视图 (树形视图, 与 parameter-list 平级对称)
+    一体化业务视图 (树形视图, 与 parameter-list 平级对称)
     - conditions/<id>/parameter-tree/  -> 仅 parameter 树 (数据级视图)
     - records/<id>/parameter-tree/     -> condition + parameter 树 (业务级视图)
     """
@@ -272,7 +268,7 @@ class ProcessRecordHistoryView(BaseView):
 # 1. conditions 段 -- 业务粒度 = 纯 condition (数据级访问)
 # ============================================================
 #
-# 业务定位 (2026-10-13 反转, 恢复独立 CRUD 入口):
+# 业务定位:
 # - records 段    = 业务级入口 (condition + first parameter 整体, 创建/列表/软删/批量软删)
 # - conditions 段 = 数据级访问 (list + 独立创建 + 详情 + 业务身份锁修改)
 # - 软删入口走 records 段, 不在本段提供 (避免双口)
@@ -288,12 +284,12 @@ class ProcessRecordHistoryView(BaseView):
 
 
 class ConditionListView(BaseView):
-    """工艺条件列表 (GET) / 独立创建 (POST) - 数据级访问 (2026-10-13 反转)
+    """工艺条件列表 (GET) / 独立创建 (POST) - 数据级访问
 
     GET  /api/processes/conditions/   -- 条件列表 (按 view_type 区分, 与 records 段共享 schema)
     POST /api/processes/conditions/   -- 独立创建 (仅 condition, parameter 字段被忽略)
 
-    业务 (2026-10-13):
+    业务:
     - 与 records 段 ListView 共享 schema 和 service, 业务区别:
       - records 段: 业务级 (condition + first parameter 整体)
       - conditions 段: 数据级 (仅 condition, 不携带 parameter)
@@ -337,9 +333,9 @@ class ConditionDetailView(BaseView):
     GET    /api/processes/conditions/<condition_id>/  -- 纯 condition 详情 (不带 latest parameter)
     PUT    /api/processes/conditions/<condition_id>/  -- 业务身份锁修改 (仅 condition 字段)
 
-    业务 (2026-10-13 反转后保留):
+    业务:
     - 删除入口: 走 records 段 (DELETE /records/<id>/), 软删 + 级联 parameter
-    - 列表/创建入口: 走本段 ConditionListView (2026-10-13 新增)
+    - 列表/创建入口: 走本段 ConditionListView
     - PUT 业务身份锁: 锁定主关联 (mold/machine/polymer/shot/injection_index) + 身份字段 (origin_type/condition_no)
       允许: status / process_context
     - parameter 更新走独立子端点: PUT /parameters/<parameter_id>/ (ParameterDetailView)
@@ -371,7 +367,7 @@ class ConditionDetailView(BaseView):
 # 2. parameters 段 -- 业务对象 = ProcessParameter (数据级 CRUD)
 # ============================================================
 #
-# 设计原则 (2026-10-12 拆除双段嵌套):
+# 设计原则:
 # - parameter 是独立业务对象 (自带 ID, 自带 process_condition_id 外键)
 # - URL 单段化 (不嵌套 condition_id), 避免与数据库 FK 重复表达
 # - condition_id 退化为可选 query 过滤条件, 不在 URL 重复表达 belongs_to
@@ -386,7 +382,7 @@ class ConditionDetailView(BaseView):
 
 
 class ParameterListView(BaseView):
-    """parameter 列表 (GET) - 2026-10-12 URL 拆除双段嵌套
+    """parameter 列表 (GET)
 
     GET /api/processes/parameters/?condition_id=<id>&...    -- 列出 parameter (可选 condition_id 过滤)
 
@@ -394,7 +390,7 @@ class ParameterListView(BaseView):
     - tree 返回树形结构 (用于调机树展示)
     - 本端点返回平铺列表 (用于参数详情页列出全部版本)
 
-    支持过滤 (2026-10-12, 与 records list 风格一致):
+    支持过滤 (与 records list 风格一致):
     - condition_id:   过滤该 condition 下的 parameter (可选)
     - param_source:   参数来源 (manual / algorithm_init / system_inferred / ...)
     - seq_idx:        序列序号
@@ -413,16 +409,16 @@ class ParameterListView(BaseView):
 
 
 class ParameterDetailView(BaseView):
-    """parameter 单条 (GET) / 更新 (PUT) / 删除 (DELETE) - 2026-10-12 URL 拆除双段嵌套
+    """parameter 单条 (GET) / 更新 (PUT) / 删除 (DELETE)
 
     URL 单段端点 (仅凭 parameter_id 定位):
     - GET    /api/processes/parameters/<parameter_id>/   -- 参数详情
     - PUT    /api/processes/parameters/<parameter_id>/   -- 更新参数
     - DELETE /api/processes/parameters/<parameter_id>/   -- 软删参数
 
-    设计依据 (2026-10-12):
+    设计依据:
     - parameter 是独立业务对象 (自带 ID, 自带 process_condition_id 外键)
-    - URL 不再嵌套 condition_id, 避免与数据库 FK 重复表达
+    - URL 不嵌套 condition_id, 避免与数据库 FK 重复表达
     - service 仅凭 parameter_id 定位, belongs_to 由 parameter 自带字段表达
     """
 
@@ -443,13 +439,9 @@ class ParameterDetailView(BaseView):
 
 
 class ParameterTreeView(BaseView):
-    """工艺参数版本树 - 2026-10-12 URL 拆除双段嵌套
+    """工艺参数版本树
 
     GET /api/processes/parameter-tree/?condition_id=<id>   -- 参数版本树 (parent_param_id 递归属关系)
-
-    2026-10-12 URL 改造:
-    - 旧: /conditions/<id>/parameters/tree/ (双段)
-    - 新: /parameters/tree/ 独立段 (导出视图, condition_id 走 query)
     """
 
     @method_decorator(require_login)
@@ -463,11 +455,11 @@ class ParameterTreeView(BaseView):
 # 3. tunings 段 -- 业务 = 人工调机反馈 (动作 = feedback)
 # ============================================================
 #
-# 与 algorithms/optimize 的关系 (2026-10-12 决定):
+# 与 algorithms/optimize 的关系:
 # - algorithms/optimize  智能调机 (独立算法触发器, 不合并入本段)
 # - tunings/feedback     人工调机 (本段, 人工记录试模结果)
 #
-# 设计原则 (2026-10-12 拆除双段嵌套):
+# 设计原则:
 # - tuning 实际归属 parameter, 不挂 condition (避免李鬼归属)
 # - URL 单段化: 参数挂 parameter, 不嵌套 condition_id
 # - service 层校验 parameter.process_condition_id 等业务字段 (parameter 自带)
@@ -478,19 +470,18 @@ class ParameterTreeView(BaseView):
 
 
 class TuningFeedbackView(BaseView):
-    """人工调机反馈 (POST) - 2026-10-12 URL 拆除双段嵌套
+    """人工调机反馈 (POST)
 
     POST /api/processes/parameters/<parameter_id>/tuning-feedback/
-    body: {defect_feedbacks?, tuning_result?, result_detail?}
-
-    2026-10-12 URL 调整历史:
-    - v1: /conditions/<id>/tunings/feedback/ (tuning 实际属于 parameter, 挂 condition 是李鬼归属)
-    - v2: /conditions/<id>/parameters/<pid>/tuning-feedback/ (tuning 在 parameter 下面, 反映真实归属)
-    - v3: /parameters/<pid>/tuning-feedback/ (URL 单段化, parameter 是独立业务对象)
+    body: {defect_feedbacks?, tuning_result?, result_detail?, parameter?}
 
     业务区分:
     - 智能调机触发 = algorithms/optimize/  (algorithms 段, 独立算法)
     - 人工调机反馈 = parameters/<pid>/tuning-feedback/  (parameter 子资源, 人工记录)
+
+    「保存当前工艺」语义:
+    - 参数与评价**一起落库**（同一事务）：「我用了这组参数，试模结果是 X」
+    - parameter 省略时退化为「只写评价」（向后兼容）
 
     安全: service 层仍校验 parameter.process_condition_id 等业务字段 (parameter 自带)
     """
@@ -517,12 +508,27 @@ class TuningFeedbackView(BaseView):
                 f"无权访问其他公司的工艺参数: parameter_id={parameter_id}",
             )
 
-        record, created = TuningService.upsert_tuning_record(
-            parameter=parameter,
-            defect_feedbacks=cleaned_data.get("defect_feedbacks"),
-            tuning_result=cleaned_data.get("tuning_result"),
-            result_detail=cleaned_data.get("result_detail"),
-        )
+        # 「保存当前工艺」= 参数 + 评价**一起落库**（同一事务）：
+        # 两者必须同生共死，否则会出现「参数存了、评价没存」的错配
+        # （评价属于「该轮参数自身的试模结果」，参数变了评价就对不上了）。
+        parameter_payload = cleaned_data.get("parameter")
+        with transaction.atomic():
+            # ⚠️ 用真值判断而非 `is not None`：空 dict 传进来会让 update_parameter
+            #    报「parameter 不能为空」，而它的语义就是「没改参数，只写评价」
+            if parameter_payload:
+                # 部分更新：只写传了的字段（validate_parameters 已 exclude_none，
+                # 未传的字段保持原值）；parent_param / seq_idx 等版本关系字段受锁保护
+                parameter_service.update_parameter(
+                    parameter_id,
+                    parameter=parameter_payload,
+                )
+
+            record, created = TuningService.upsert_tuning_record(
+                parameter=parameter,
+                defect_feedbacks=cleaned_data.get("defect_feedbacks"),
+                tuning_result=cleaned_data.get("tuning_result"),
+                result_detail=cleaned_data.get("result_detail"),
+            )
 
         return {
             "tuning_record_id": record.id,
@@ -539,7 +545,7 @@ class TuningFeedbackView(BaseView):
 # 业务: 智能算法的触发 (initialize / optimize / transplant)
 #
 # - algorithms/initialize  从 masterdata 启动算法, 推导首条 parameter
-# - algorithms/optimize    智能调机 (条件内算法推理, 2026-10-12 决定不合并入 tunings 段)
+# - algorithms/optimize    智能调机 (条件内算法推理, 不合并入 tunings 段)
 # - algorithms/transplant  跨机器工艺参数移植
 # ============================================================
 
@@ -619,7 +625,7 @@ class AlgorithmsOptimizeView(BaseView):
     业务: 智能优化算法触发 (vs 人工反馈 = tunings/feedback/<condition_id>/)
     命名: optimize (优化) 而非 tuning (调机) -- 业内术语"工艺参数优化算法"。
 
-    2026-10-12 决定: 本端点保持独立, 不合并入 tunings 段 (独立算法触发器价值更高)
+    本端点保持独立, 不合并入 tunings 段 (独立算法触发器价值更高)
     """
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessOptimizeFromConditionSchema))

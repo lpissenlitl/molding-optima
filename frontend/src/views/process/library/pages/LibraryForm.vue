@@ -1,8 +1,4 @@
-<!--
-  ProcessParameterForm - 工艺参数表单（new / edit / detail 三模式共用）
-
-  数据模型：操作 Condition（试模上下文）+ Parameter（工艺参数）两块数据
--->
+<!-- ProcessParameterForm - 工艺参数表单（new / edit / detail 三模式共用） -->
 <template>
   <div class="process-condition-form">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder" />
@@ -29,33 +25,40 @@
             <span class="custom-form__title">工艺参数</span>
           </div>
         </template>
-        <SettingProcess
+        <LibraryParameterForm
           ref="parameterRef"
           :setting-process="form.parameter.setting_process"
           :machine-info="form.condition.machine_info ?? {}"
-          :disabled="mode === 'detail'"
+          :readonly="mode === 'detail'"
         />
       </el-card>
     </template>
 
-    <!-- 底部操作（全局 .form-actions） -->
-    <div v-if="mode !== 'detail' && loaded" class="form-actions">
-      <el-button @click="goBack">
-        <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
-        取消
+    <!-- 底部操作（全局 .form-actions）：详情态只提供「返回」 -->
+    <div v-if="loaded" class="form-actions">
+      <!-- 详情态：只读展示，无保存动作，只给返回 -->
+      <el-button v-if="mode === 'detail'" @click="goBack">
+        <AppIcon icon="mdi:arrow-left" style="margin-right: 4px; font-size: 14px;" />
+        返回
       </el-button>
-      <el-button v-if="mode === 'new'" @click="resetForm">
-        <AppIcon icon="mdi:refresh" style="margin-right: 4px; font-size: 14px;" />
-        重置
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="save_loading"
-        @click="onSubmit"
-      >
-        <AppIcon icon="mdi:content-save-outline" style="margin-right: 4px; font-size: 14px;" />
-        {{ mode === 'new' ? '保存' : '更新' }}
-      </el-button>
+      <template v-else>
+        <el-button @click="goBack">
+          <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
+          取消
+        </el-button>
+        <el-button v-if="mode === 'new'" @click="resetForm">
+          <AppIcon icon="mdi:refresh" style="margin-right: 4px; font-size: 14px;" />
+          重置
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="save_loading"
+          @click="onSubmit"
+        >
+          <AppIcon icon="mdi:content-save-outline" style="margin-right: 4px; font-size: 14px;" />
+          {{ mode === 'new' ? '保存' : '更新' }}
+        </el-button>
+      </template>
     </div>
   </div>
 </template>
@@ -66,13 +69,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ProcessCondition from '@/views/process/shared/ProcessCondition.vue'
-import SettingProcess from '../components/SettingProcess.vue'
+import LibraryParameterForm from '../components/LibraryParameterForm.vue'
 import { injectionProcessForm, settingProcessForm } from '@/constants/process-const'
 import { processRecordMethod } from '@/api'
 
-// ============================================================================
 // 路由
-// ============================================================================
 
 const route = useRoute()
 const router = useRouter()
@@ -84,9 +85,7 @@ const mode = computed<'new' | 'edit' | 'detail'>(() => {
   return 'new'
 })
 
-// ============================================================================
 // 状态
-// ============================================================================
 
 const form = reactive<{
   condition: any
@@ -97,11 +96,9 @@ const loaded = ref(false)
 const save_loading = ref(false)
 
 const conditionRef = ref<InstanceType<typeof ProcessCondition> | null>(null)
-const parameterRef = ref<InstanceType<typeof SettingProcess> | null>(null)
+const parameterRef = ref<InstanceType<typeof LibraryParameterForm> | null>(null)
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 
 async function loadForm() {
   loaded.value = false
@@ -147,9 +144,7 @@ function resetForm() {
   }
 }
 
-// ============================================================================
 // 提交
-// ============================================================================
 
 async function onSubmit() {
   // 校验工艺条件 5 项必填外键：模具 / 工艺射次 / 注塑机 / 射台 / 材料
@@ -191,13 +186,7 @@ async function onSubmit() {
   }
 }
 
-// 仅回传后端可识别的字段；condition.*_info 是前端缓存，不需要回传
-// - status / process_context / mold_id / shot_index / injection_machine_id / injection_index / polymer_id / origin_type
-//   这些字段后端都能识别，前端发整个 condition 对象方便
-// - process_context 由后端管理（前端 form 无此字段，不主动构造空 dict）
-// - 业务身份锁字段（mold_id/machine_id/polymer_id/shot_index/injection_index/origin_type）
-//   发到后端后由 service.update_condition 静默忽略（业务身份不变）
-// - 后端 DTO 要求顶层 *_id（不接 *_info 嵌套），从 *_info.id 推导平铺
+// 仅回传后端可识别的字段；condition.*_info 是前端缓存不需要回传（业务身份锁字段 mold_id/machine_id/polymer_id 等发到后端后由 service.update_condition 处理；process_context 由后端管理，前端不构造空 dict）
 function buildPayload() {
   return {
     condition: {
@@ -216,17 +205,13 @@ function buildPayload() {
   }
 }
 
-// ============================================================================
 // 导航
-// ============================================================================
 
 function goBack() {
   router.push('/process/library')
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   loadForm()

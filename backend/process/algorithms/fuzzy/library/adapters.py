@@ -88,6 +88,12 @@ class LibraryRecordAdapter:
 
     @staticmethod
     def to_record(library: Any) -> LibraryRecord:
+        """ORM `RuleLibrary` → `LibraryRecord`。
+
+        ⚠️ **归属字段（`owner_type` / `company_id`）也要带上**：可见性判据
+          落在共用编排层（`assembly.RuleAssembler`），而编排层零 ORM ⇒
+          归属信息必须一路带到 `LibraryRecord` 里。
+        """
         return LibraryRecord(
             library_code=getattr(library, 'library_code', None) or '',
             library_name=getattr(library, 'library_name', None) or '',
@@ -96,6 +102,8 @@ class LibraryRecordAdapter:
             is_active=bool(getattr(library, 'is_active', True)),
             library_id=getattr(library, 'id', None),
             source_ref=f'RuleLibrary:{getattr(library, "id", "")}',
+            owner_type=getattr(library, 'owner_type', None) or 'system',
+            company_id=getattr(library, 'company_id', None),
         )
 
     @staticmethod
@@ -103,8 +111,9 @@ class LibraryRecordAdapter:
         """dict（文件来源）→ `LibraryRecord`。纯转换器。
 
         ⚠️ **与 `to_record` 的字段口径逐条一致**（含 ``library_type`` 的
-          ``or ''`` 归一、``priority`` 的 ``or 0`` 归一）⇒ 两侧转出来的记录
-          **逐字段相等** ⇒ 选库与排序在两条路径下的结果必然相同。
+          ``or ''`` 归一、``priority`` 的 ``or 0`` 归一、``owner_type`` 的
+          ``or 'system'`` 归一）⇒ 两侧转出来的记录**逐字段相等**
+          ⇒ 选库与排序在两条路径下的结果必然相同。
         """
         return LibraryRecord(
             library_code=data.get('library_code') or '',
@@ -114,6 +123,8 @@ class LibraryRecordAdapter:
             is_active=bool(data.get('is_active', True)),
             library_id=data.get('library_id'),
             source_ref=data.get('source_ref') or '',
+            owner_type=data.get('owner_type') or 'system',
+            company_id=data.get('company_id'),
         )
 
 

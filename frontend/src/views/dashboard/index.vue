@@ -1,8 +1,4 @@
-<!--
-  Dashboard 数据总览（2026-09-23 重构）
-  - 横向铺满 / 高信息密度 / 紧凑
-  - 12 个并发 API（Promise.allSettled，部分失败不阻塞）
--->
+<!-- Dashboard 数据总览 -->
 <template>
   <div class="dashboard" v-loading="loading_all">
     <!-- ========== 标题区 ========== -->
@@ -106,11 +102,11 @@
                       <el-tag
                         v-if="item.status"
                         size="small"
-                        :type="item.status === 'active' ? 'success' : 'info'"
+                        :type="conditionStatusTagType(item.status)"
                         effect="plain"
                         class="activity-item__status"
                       >
-                        {{ statusLabel(item.status) }}
+                        {{ conditionStatusLabel(item.status) }}
                       </el-tag>
                     </div>
                     <div class="activity-item__meta">
@@ -181,11 +177,8 @@
 </template>
 
 <script setup lang="ts">
-/**
- * Dashboard 数据流：12 个并发 API + 后端响应统一格式（见 session-handoff）
- * 响应格式：{ status, msg, timestamp, data: ... }
- * 拦截器返回 response.data → 业务统一用 res.data 访问
- */
+/** Dashboard 数据流：12 个并发 API；后端响应统一格式 {status,msg,timestamp,data}，拦截器返回 response.data，业务侧统一用 res.data 访问 */
+
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -197,10 +190,9 @@ import TrendChart from './components/TrendChart.vue'
 import type { DashboardTrend } from './components/TrendChart.vue'
 import OriginPie from './components/OriginPie.vue'
 import type { DashboardOriginItem } from './components/OriginPie.vue'
+import { conditionStatusLabel, conditionStatusTagType } from '@/views/process/shared/condition-status'
 
-// ============================================================================
 // 路由 + 用户
-// ============================================================================
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -247,9 +239,7 @@ function go(path: string) {
   router.push(path)
 }
 
-// ============================================================================
 // 指标状态（统一管理 11 个指标的 loading + value）
-// ============================================================================
 
 interface StatItem {
   key: string
@@ -313,9 +303,7 @@ const kpi_cards = computed<KpiCardConfig[]>(() => [
   },
 ])
 
-// ============================================================================
 // 快捷入口（6 个高频操作）
-// ============================================================================
 
 const quick_actions = [
   { label: '新建工艺', icon: 'mdi:plus-circle-outline', path: '/process/library/new' },
@@ -326,9 +314,7 @@ const quick_actions = [
   { label: '材料库', icon: 'mdi:flask-outline', path: '/material/polymer/list' },
 ]
 
-// ============================================================================
 // 列表数据（最近活动 + 调机进行中）
-// ============================================================================
 
 interface ProcessItem {
   id: number
@@ -351,14 +337,6 @@ const loading_all = ref(true)
 const trend_data = ref<DashboardTrend>({ dates: [], counts: [] })
 const origin_data = ref<DashboardOriginItem[]>([])
 const trends = ref({ loading: true })
-
-const STATUS_MAP: Record<string, string> = {
-  active: '使用中',
-  archived: '已归档',
-}
-function statusLabel(s: string) {
-  return STATUS_MAP[s] ?? s
-}
 
 function formatTime(s: string | undefined): string {
   if (!s) return '-'
@@ -383,9 +361,7 @@ function goOptimization(_item: ProcessItem) {
   router.push('/process/optimization/history')
 }
 
-// ============================================================================
 // 数据加载（11 个并发）
-// ============================================================================
 
 async function safeCall<T>(fn: () => Promise<any>, fallback: T): Promise<T> {
   try {
@@ -416,7 +392,6 @@ async function loadAll() {
       .finally(() => (stat_today.value.loading = false)),
 
     // 大 KPI 3：待调机迭代（active 中 parameters_count > 1 的数量）
-    // 取足够多条 active 工艺（page_size=100），客户端筛 count > 1
     safeCall(
       () => processConditionMethod.get({ page_size: 100, status: 'active' }),
       { total: 0, items: [] },
@@ -483,10 +458,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-/*
- * Dashboard 总览页：看板风格、横向铺满、紧凑
- * 响应式断点：1440 / 1200 / 992 / 768
- */
+/* Dashboard 总览页：看板风格、横向铺满、紧凑 */
 
 .dashboard {
   display: flex;

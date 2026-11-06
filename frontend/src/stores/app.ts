@@ -42,9 +42,7 @@ export const useAppStore = defineStore('app', {
     },
     /*
      * 调用 /api/health/ 探测后端可用性
-     * - 直接用裸 axios，不走 @/utils/request：
-     *   1. request 拦截器在错误时会弹 ElMessage，health check 静默失败更合适
-     *   2. health 接口无需 token，request 会注入 token 反而冗余
+     * - 直接用裸 axios，不走 @/utils/request：request 拦截器在错误时会弹 ElMessage（health check 静默失败更合适），且 health 接口无需 token，注入 token 反而冗余
      * - 超时 5s（健康检查不应该长时间阻塞 UI）
      */
     async checkHealth() {

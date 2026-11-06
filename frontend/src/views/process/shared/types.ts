@@ -1,22 +1,9 @@
-/**
- * 工艺条件相关类型定义（从 ProcessCondition.vue 提取）
- *
- * 设计原则：
- * - 所有 interface 使用 export，方便子组件 + composable 引用
- * - 字段语义与后端 schema 对齐
- * - 用 [key: string]: any 兼容后端可能扩展的字段
- */
+/** 工艺条件相关类型定义（从 ProcessCondition.vue 提取） */
 import type { InjectionKey } from 'vue'
 
-// ============================================================================
 // 模型摘要
-// ============================================================================
 
-/**
- * 浇口特征（对应后端 Gate 模型）
- * - 与 preconditionForm gate_* 字段对齐
- * - 字段语义: 圆形/矩形 不同字段；通过 gate_shape 区分渲染
- */
+/** 浇口特征（对应后端 Gate 模型） */
 export interface GateSummary {
   id?: number
   /** 浇口形状：圆形 / 矩形 / 梯形 / 环形 */
@@ -42,11 +29,7 @@ export interface GateSummary {
   gap?: number | null
 }
 
-/**
- * 型腔摘要（对应后端 Cavity 模型）
- * - 每个 cavity 对应"一类制品",product 字段描述制品信息
- * - gates 是反向关联的浇口列表（1:N）
- */
+/** 型腔摘要（对应后端 Cavity 模型） */
 export interface CavitySummary {
   id?: number
   cavity_count_per_shot?: number | null
@@ -67,11 +50,7 @@ export interface CavitySummary {
   gates?: Array<GateSummary>
 }
 
-/**
- * 浇注系统摘要（对应后端 GatingSystem 模型）
- * - 每个 GatingSystem 对应一次注射(shot_index)
- * - 包含 cavities（1:N）→ 制品 + 浇口
- */
+/** 浇注系统摘要（对应后端 GatingSystem 模型） */
 export interface GatingSystemSummary {
   id?: number
   runner_type?: string
@@ -92,11 +71,7 @@ export interface GatingSystemSummary {
   cavities?: Array<CavitySummary>
 }
 
-/**
- * 注塑机射台摘要（对应后端 InjectionUnit 模型）
- * - 每个 InjectionUnit 对应一个射台(injection_index)
- * - 新增 unit_code 字段（对应 preconditionForm machine_serial_no）
- */
+/** 注塑机射台摘要（对应后端 InjectionUnit 模型） */
 export interface InjectionUnitSummary {
   /** 射台编号 */
   unit_code?: string
@@ -109,9 +84,7 @@ export interface InjectionUnitSummary {
   max_injection_weight?: number | null
 }
 
-// ============================================================================
 // 完整模型（detail API 返回，含嵌套关联）
-// ============================================================================
 
 export interface MoldInfo {
   id: number
@@ -147,44 +120,23 @@ export interface PolymerInfo {
   [key: string]: any
 }
 
-/**
- * 工艺条件主对象（前后端交互的核心结构）
- *
- * 索引说明：
- * - 后端 shot_index / injection_index / product_index 是 0 索引
- * - UI 显示 1 索引（用户友好），由 useConditionDerived 自动转换
- */
+/** 工艺条件主对象（前后端交互的核心结构） */
 export interface Condition {
   id?: number | null
   condition_no?: string | null
   status?: string | null
   origin_type?: string | null
-  /**
-   * 模具 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 mold_info.id 推导。
-   * 前端编辑期不写这个字段（恒为空），表单校验请用 prop="mold_info.id"。
-   */
+  /** 模具 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 mold_info.id 推导。 */
   mold_id?: number | null
   shot_index?: number | null
   /** 制品索引(0 索引,多 cavity 时用于切换显示哪个制品) */
   product_index?: number | null
-  /**
-   * 注塑机 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 machine_info.id 推导。
-   * 前端编辑期不写这个字段（恒为空），表单校验请用 prop="machine_info.id"。
-   */
+  /** 注塑机 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 machine_info.id 推导。 */
   injection_machine_id?: number | null
   injection_index?: number | null
-  /**
-   * 材料 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 polymer_info.id 推导。
-   * 前端编辑期不写这个字段（恒为空），表单校验请用 prop="polymer_info.id"。
-   */
+  /** 材料 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 polymer_info.id 推导。 */
   polymer_id?: number | null
-  /**
-   * 塑料简称 —— 【仅前端校验用】PolymerSection 输入框当前值的镜像。
-   * 用途：el-form-item 的校验目标必须落在 el-form 的 model 上，
-   * 而"简称输入框是否有值"只存在于 PolymerSection 的局部 ref ⇒ 镜像到此处才能被校验。
-   * 由 PolymerSection 的 watch(polymerAbbreviation) 单向写入；
-   * buildPayload 不挑此字段，不提交后端。
-   */
+  /** 塑料简称 —— 【仅前端校验用】PolymerSection 输入框当前值的镜像（校验目标必须落在 el-form 的 model 上）；由 PolymerSection 的 watch(polymerAbbreviation) 单向写入，buildPayload 不挑此字段，不提交后端。 */
   polymer_abbreviation?: string | null
   process_context?: Record<string, any>
   mold_info?: MoldInfo | null
@@ -193,27 +145,7 @@ export interface Condition {
   [key: string]: any
 }
 
-// ============================================================================
 // Vue Injection Keys（provide/inject 跨组件共享 condition）
-// ============================================================================
 
-/**
- * 工艺条件 InjectionKey
- *
- * 用法：
- * ```ts
- * // 父组件（ProcessCondition.vue）
- * import { provide } from 'vue'
- * provide(ConditionKey, condition)
- *
- * // 子组件（MoldSection / MachineSection / PolymerSection）
- * import { inject } from 'vue'
- * const condition = inject(ConditionKey)!
- * ```
- *
- * 设计动机：
- * - 子组件需要直接 mutate condition.xxx（如选择模具后写 mold_id）
- * - 用 InjectionKey 比 props/emit 更简洁：避免 prop drilling 和 emit 转发
- * - 用 InjectionKey 强类型：避免字符串 key 拼错、保证类型推断
- */
+/** 工艺条件 InjectionKey */
 export const ConditionKey: InjectionKey<Condition> = Symbol('condition')

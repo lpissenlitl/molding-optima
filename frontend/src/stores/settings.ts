@@ -2,10 +2,8 @@ import { defineStore } from 'pinia'
 
 /**
  * Settings Store — 用户级系统设置
- *
- * 与 app store 区分：app 是系统级（品牌/版本），settings 是用户级（个人偏好）
- * 持久化 localStorage，下次登录自动恢复
- * 主题/字号在 main.ts 启动时立即应用，避免 FOUC 闪烁
+ * - 与 app store 区分：app 是系统级（品牌/版本），settings 是用户级（个人偏好）
+ * - 持久化 localStorage，下次登录自动恢复；主题/字号在 main.ts 启动时立即应用，避免 FOUC 闪烁
  */
 
 export type Theme = 'light' | 'dark' | 'high-contrast'

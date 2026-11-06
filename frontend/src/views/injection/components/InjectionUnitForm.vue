@@ -1,16 +1,5 @@
-<!--
-  InjectionUnitForm - 注射单元子表单（被 InjectionMachineForm 引用）
+<!-- InjectionUnitForm - 注射单元子表单（被 InjectionMachineForm 引用）：props.injectionUnit 直接双向绑定，flat items + groupIntoRows 自动分行（4 列），单位系统从机器顶层同步并联动 9 个 HMI 面板参数，expose formRef 供父级统一验证，自实现渲染分支不引入 FormFieldRenderer，divider 支持 notice / description 扩展属性 -->
 
-  路由：无（子组件）
-
-  设计要点：
-  - 数据通过 props.injectionUnit 直接双向绑定（修改 reactive 对象属性即可同步到父级 injection_machine.injection_units）
-  - 字段定义：flat items 数组 + groupIntoRows 自动分行（4 列布局）
-  - 单位系统（压力/速度/位置/时间/背压/螺杆转速/温度）从机器顶层同步，9 个 HMI 面板参数联动对应单位
-  - 暴露 formRef 给父组件统一验证（通过 expose 替代原 Options API 的 this.$refs）
-  - 自实现渲染分支（不引入 mold 模块的 FormFieldRenderer）
-  - divider 支持 notice（独立 div 包裹，整组带背景）+ description（说明 alert）扩展属性（详见 form-types.ts）
--->
 <template>
   <el-form
     ref="formRef"
@@ -225,19 +214,13 @@ import {
   nozzleSphereRadiusOptions,
 } from '@/constants/machine-const'
 
-/**
- * props 数据双向绑定说明：
- * - props.injectionUnit 是 InjectionMachineForm.injection_machine.injection_units[i] 的引用（reactive 对象）
- * - 直接修改属性会同步到父级（v-model="(injectionUnit as any)[prop]" 生效）
- * - 子组件不创建本地 ref，保持单向数据流
- */
+/** props 数据双向绑定：props.injectionUnit 即父级 injection_machine.injection_units[i] 的 reactive 引用，直接改属性即同步到父级（v-model="(injectionUnit as any)[prop]"），子组件不创建本地 ref 保持单向数据流 */
+
 const props = defineProps<{
   injectionUnit: Record<string, any>
 }>()
 
-/**
- * 验证规则（与 InjectionMachineForm 一致：required 字段才校验）
- */
+/** 验证规则（与 InjectionMachineForm 一致：required 字段才校验） */
 const rules: FormRules = {
   unit_code: [
     { required: true, message: '射台编号不能为空!', trigger: 'blur' },
@@ -249,21 +232,8 @@ const rules: FormRules = {
 
 const formRef = ref<FormInstance>()
 
-/**
- * 字段定义（flat items，45 字段，4 列布局 → 自动分行 12 行）
- *
- * 5 个 divider 分组（全部 ≥ 4 字段，符合 3+ 规则）：
- *   - 喷嘴螺杆组件（10）
- *   - 控制系统能力（4）/ 界面单位信息（7）
- *   - 操作面板参数（界面显示上限）（9）/ 设备出厂参数（真实极限）（9，notice=true）
- *
- * 顶部 6 字段（无 divider 包装，作为开篇基础信息，射台编号 + 塑化/注射能力高频关注）：
- *   射台编号 / 塑化能力 / 最大注射行程 / 最大注射体积 / 最大注射重量 / 料筒加热功率
- *
- * 设备出厂参数 vs 操作面板参数（顺序逻辑：先易后难）：
- * - 操作面板参数（界面显示上限）：HMI 控制面板允许设定的最大值，从面板直接读取（90% 场景够用）
- * - 设备出厂参数（真实极限）：来自设备铭牌或厂家技术规格书（铭牌不一定有），单位固定为国际单位（工艺计算场景需要）
- */
+/** 字段定义（flat items，45 字段，4 列 → 自动分行 12 行）：顶部 6 个无 divider 的基础字段（射台编号/塑化能力/最大注射行程/最大注射体积/最大注射重量/料筒加热功率）+ 5 个 ≥4 字段的 divider 分组；操作面板参数＝HMI 允许设定的上限（90% 场景够用），设备出厂参数＝铭牌/技术规格书的真实极限（工艺计算用，国际单位） */
+
 const formItems: FormItem[] = [
   // 顶部：射台基础信息（6 字段平铺，高频关注：射台编号 + 塑化与注射能力）
   { label: '射台编号', prop: 'unit_code', type: 'input', placeholder: '射台标识（多射台时用于区分各注射部件）', required: true },
@@ -287,7 +257,6 @@ const formItems: FormItem[] = [
   { label: '增强比', prop: 'screw_enhancement_ratio', type: 'number', precision: 2 },
 
   // --- 控制系统能力（最大段数） ---
-  // 业务数据而非系统字典：允许创建超过 options 的值（后端 PositiveSmallIntegerField 无上限）
   { label: '控制系统能力（最大段数）', type: 'divider' },
   { label: '最大注射段数', prop: 'max_injection_stages', type: 'number-select', precision: 0, options: maxInjectionStagesOptions, allowCreate: true },
   { label: '最大保压段数', prop: 'max_holding_stages', type: 'number-select', precision: 0, options: maxHoldingStagesOptions, allowCreate: true },
@@ -305,7 +274,6 @@ const formItems: FormItem[] = [
   { label: '温度单位', prop: 'temperature_unit', type: 'select', options: temperatureUnitOptions, allowCreate: false },
 
   // --- 操作面板参数（界面显示上限）---
-  // HMI 控制面板允许设定的最大值，从面板直接读取（90% 场景够用，先放前面）
   { label: '操作面板参数（界面显示上限）', type: 'divider', description: 'HMI 控制面板允许设定的最大值，从面板直接读取。可能用 bar/%/Hz 等非标准单位，与设备真实极限不一定一致。' },
   { label: '最大注射压力', prop: 'max_set_injection_pressure', type: 'number', dynamicUnit: 'pressure_unit', precision: 2, placeholder: '面板显示上限' },
   { label: '最大注射速度', prop: 'max_set_injection_speed', type: 'number', dynamicUnit: 'speed_unit', precision: 2, placeholder: '面板显示上限' },
@@ -318,8 +286,6 @@ const formItems: FormItem[] = [
   { label: '最大松退速度', prop: 'max_set_decompression_speed', type: 'number', dynamicUnit: 'speed_unit', precision: 2, placeholder: '面板显示上限' },
 
   // --- 设备出厂参数（真实物理极限）---
-  // 来自设备铭牌或厂家技术规格书（铭牌不一定有），单位固定为国际单位（MPa/rpm/mm/s）
-  // notice=true：整组独立 div 包裹，加背景 + 左边框
   { label: '设备出厂参数（真实物理极限）', type: 'divider', notice: true, description: '设备出厂的真实物理极限，需联系厂家或查看技术规格书获取。单位固定为国际单位（MPa/rpm/mm/s）。' },
   { label: '最大注射压力', prop: 'max_injection_pressure', type: 'number', unit: 'MPa', precision: 2, placeholder: '实际值' },
   { label: '最大注射速度', prop: 'max_injection_speed', type: 'number', unit: 'mm/s', precision: 2, placeholder: '实际值' },
@@ -332,15 +298,8 @@ const formItems: FormItem[] = [
   { label: '最大松退速度', prop: 'max_decompression_speed', type: 'number', unit: 'mm/s', precision: 2, placeholder: '实际值' },
 ]
 
-/**
- * 拆分 formItems 为"普通段" + "notice 段"
- *
- * 设计要点（2026-09-09 简化）：
- * - 业务方仍按 flat items 顺序定义所有字段（含 notice 段）
- * - 渲染时自动拆分：notice=true 的 divider + 其后续所有字段 → noticeSection
- * - 普通段走原 el-row/el-col 网格，notice 段走独立 div（整组带背景）
- * - 相比之前用 :has() CSS 选择器，逻辑更直观，无需重构 grid 算法
- */
+/** 拆分 formItems 为"普通段" + "notice 段"：业务方仍按 flat items 顺序定义全部字段，渲染时把 notice=true 的 divider 及其后续字段拆到 noticeSection（独立 div 整组带背景），普通段走 el-row/el-col 网格 */
+
 const normalItems = computed<FormItem[]>(() => {
   const result: FormItem[] = []
   let inNotice = false
@@ -378,11 +337,7 @@ const noticeSection = computed<{ divider: FormItem; fields: FormItem[] } | null>
 // 自动分行（4 列布局：normalItems 36 字段 ÷ 4 列 ≈ 9 行）
 const normalRows = computed(() => groupIntoRows(normalItems.value, { columns: 4 }))
 
-/**
- * 暴露给父组件 InjectionMachineForm 统一验证
- * - 父组件通过 ref.checkFormDataValid() 调用
- * - 与 EjectionSystemForm / CoolingSystemForm 风格一致
- */
+/** 暴露给父组件 InjectionMachineForm 统一验证 */
 defineExpose({
   formRef,
   /** 兼容旧调用：父组件可能调用 checkFormDataValid() */

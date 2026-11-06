@@ -1,8 +1,4 @@
-<!--
-  SidebarLogo：layout 顶部 Logo 区
-  - 展开：图标 + 文字
-  - 折叠：仅图标（节省空间）
--->
+<!-- SidebarLogo：layout 顶部 Logo 区 -->
 <template>
   <div :class="['sidebar-logo', { 'sidebar-logo--collapsed': collapsed }]">
     <AppIcon icon="mdi:cube-outline" class="sidebar-logo__icon" />

@@ -1,8 +1,5 @@
-/**
- * BaseSearchForm 筛选项类型（供业务子表单复用）
- *
- * 字段说明见 BaseSearchForm.vue 的 items prop 注释
- */
+/** BaseSearchForm 筛选项类型（供业务子表单复用）；字段说明见 BaseSearchForm.vue 的 items prop 注释 */
+
 export interface SearchItem {
   label: string
   prop: string

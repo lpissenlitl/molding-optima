@@ -1,25 +1,4 @@
-<!--
-  RuleLibraryFormDrawer.vue - 规则库新建/编辑抽屉（共用子组件）
-
-  设计：
-  - 受控组件：父组件拥有 form 数据 / submitting 状态 / 提交逻辑
-  - 子组件只负责渲染抽屉 + 表单 UI + 表单校验（轻量）
-  - 父组件传 form，watch mode 变化时初始化表单
-  - 新建/编辑共用，编辑模式下"库编码 + 库类型"锁定
-
-  使用方：
-  - RuleLibraryTab.vue（列表页新建/编辑）
-  - RuleLibraryDetail.vue（详情页编辑）
-
-  字段：
-  - 库编码（创建必填，编辑只读）
-  - 库名称（必填）
-  - 归属（创建可改，编辑只读）
-  - 库类型（创建可改，编辑只读）
-  - 优先级（默认 100）
-  - 版本号（默认 1）
-  - 描述（可选）
--->
+<!-- RuleLibraryFormDrawer.vue - 规则库新建/编辑抽屉（共用子组件） -->
 <template>
   <el-drawer
     :model-value="visible"
@@ -60,6 +39,26 @@
           <el-radio value="tenant">租户级</el-radio>
           <el-radio value="system">系统级</el-radio>
         </el-radio-group>
+      </el-form-item>
+
+      <!-- 归属租户（仅平台超管代办建租户级库时出现） -->
+      <el-form-item v-if="showTenantCompany" label="归属租户" prop="target_company_id">
+        <el-select
+          v-model="form.target_company_id"
+          placeholder="选择该库归属的租户"
+          filterable
+          style="width: 100%"
+        >
+          <el-option
+            v-for="c in companyOptions"
+            :key="c.id"
+            :label="`${c.name}（${c.code}）`"
+            :value="c.id"
+          />
+        </el-select>
+        <div class="field-tip">
+          超管代办建库：租户级库必须挂到目标租户名下，否则该库对该租户不生效
+        </div>
       </el-form-item>
 
       <el-form-item label="库类型" prop="library_type">
@@ -115,13 +114,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { companyMethod } from '@/api'
 import type { LibraryType } from '@/types/rule'
 
-// ============================================================================
 // 表单数据结构（与父组件共享）
-// ============================================================================
 
 export interface RuleLibraryFormData {
   library_code: string
@@ -132,11 +130,11 @@ export interface RuleLibraryFormData {
   version: number
   is_active: boolean
   description: string
+  /** 归属租户（仅平台超管代办建租户级库时使用） */
+  target_company_id: number | null
 }
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 const props = defineProps<{
   /** 抽屉可见性（受控） */
@@ -147,6 +145,8 @@ const props = defineProps<{
   form: RuleLibraryFormData
   /** 提交中状态（父组件控制 loading） */
   submitting?: boolean
+  /** 是否超管理员：超管可为指定租户代办建库 */
+  isSuperuser?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -156,9 +156,7 @@ const emit = defineEmits<{
   submit: []
 }>()
 
-// ============================================================================
 // 表单引用 + 校验规则
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 
@@ -176,7 +174,53 @@ const formRules: FormRules<RuleLibraryFormData> = {
   library_type: [
     { required: true, message: '请选择库类型', trigger: 'change' },
   ],
+  target_company_id: [
+    {
+      validator: (_rule, value, callback) => {
+        if (showTenantCompany.value && !value) {
+          callback(new Error('请选择归属租户'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change',
+    },
+  ],
 }
+
+// --- 归属租户（超管代办）---
+
+/** 仅「超管 + 新建 + 租户级」才需要指定归属租户 */
+const showTenantCompany = computed(
+  () => props.mode === 'create' && !!props.isSuperuser && props.form.owner_type === 'tenant',
+)
+
+interface CompanyOption {
+  id: number
+  name: string
+  code: string
+}
+
+const companyOptions = ref<CompanyOption[]>([])
+
+async function loadCompanies() {
+  if (companyOptions.value.length) return
+  try {
+    const res: any = await companyMethod.get({ page_no: 1, page_size: 200 } as any)
+    const items = res?.data?.items || res?.items || []
+    companyOptions.value = items.map((c: any) => ({ id: c.id, name: c.name, code: c.code }))
+  } catch {
+    companyOptions.value = []
+  }
+}
+
+// 抽屉打开时按需拉取租户列表（超管代办才需要）
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible && showTenantCompany.value) loadCompanies()
+  },
+)
 
 async function handleSubmit() {
   if (!formRef.value) return

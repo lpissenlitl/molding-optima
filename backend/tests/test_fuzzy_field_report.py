@@ -1,15 +1,14 @@
 """字段体检（_build_field_context）测试
 
-覆盖 2026-10-22 引入的字段三态分类：
+覆盖字段三态分类：
   - authority : 有 RuleKeyword 权威元数据
   - guessed   : 无权威元数据，按实时值推测了一个论域（带 meta_source='guessed' 标记）
   - unknown   : 既无权威元数据也无实时值 ⇒ 规则少了一个门控条件，激活度偏高
 
 不依赖规则库数据：mock 掉 _load_keyword_profiles，只测分类与报告逻辑。
 
-⚠️ 2026-10-26：参数名不再由编排层从规则串里抠，而是由**第 4 层 filter**
-   （`fuzzy_core.rules_filter.build_rule_objects`）收好后交给 `_build_field_context`；
-   元数据清单也从裸 dict 换成了内核契约对象 `KeywordProfile`。
+⚠️ 参数名由**第 4 层 filter**（`fuzzy_core.rules_filter.build_rule_objects`）
+   收好后交给 `_build_field_context`；元数据清单是内核契约对象 `KeywordProfile`。
 
 运行：
   cd backend

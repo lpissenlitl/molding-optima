@@ -9,7 +9,9 @@
 3. **适用性闸门**：聚合物 / 产品两维由共用的 `matches_context` 判定；
 4. **选库**：**未指定 ⇒ 全量模糊库**（停用库 / 专家库不选）、显式指定 ⇒ 只用它、
    按优先级降序；
-5. **自动重载**：改了 JSON 立即生效（mtime 缓存）。
+5. **自动重载**：改了 JSON 立即生效（mtime 缓存）；
+6. **同码多库**：库编码跨租户可重复 ⇒ 同码多库是合法状态，
+   两个库各读各的规则文件（按库主键分文件）。
 """
 
 import json
@@ -171,11 +173,11 @@ def test_missing_library_file_is_empty(data_dir):
 # —— 3) 选库 ————————————————————————————————————————————————
 
 def test_select_libraries_without_code_loads_all_fuzzy_libraries(repo):
-    """**未指定库 ⇒ 全量模糊库**（2026-10-29 改造后的口径）。
+    """**未指定库 ⇒ 全量模糊库**。
 
-    ⚠️ **为什么不再是「只选 base」**：旧的「产品类别 → 库编码」映射表指向的
-      code 库里根本不存在 ⇒ 候选必然落空 ⇒ 永远只加载 base 通用库，
-      其余库从不参与推理。现在改为**全部加载**，适用性交由规则级判定
+    ⚠️ **不按「产品类别 → 库编码」映射表选库**：该映射表指向的 code
+      库里根本不存在 ⇒ 候选必然落空 ⇒ 只会加载 base 通用库。
+      口径是**全部加载**，适用性交由规则级判定
       （`matches_context` / `resolve_specificity`）。
 
     停用库（`off_lib`）与专家库（`expert_lib`）**不在**全量口径内。
@@ -188,7 +190,7 @@ def test_select_libraries_without_code_loads_all_fuzzy_libraries(repo):
 
 
 def test_select_libraries_explicit_code_uses_only_that_library(repo):
-    """**显式指定 ⇒ 只用它**（不再连带其它库）。"""
+    """**显式指定 ⇒ 只用它**（不连带其它库）。"""
     ctx = RuleQueryContext(defect_name='SHORTSHOT', defect_level='low',
                            rule_library_code='base')
     codes = [l.library_code for l in repo.select_libraries(ctx)]
@@ -313,3 +315,52 @@ def test_missing_data_dir_raises(data_dir):
     loader = FileLibraryLoader(root_dir=str(data_dir / 'nope'))
     with pytest.raises(FileNotFoundError):
         loader.load_libraries()
+
+
+# —— 8) 同码多库 ————————————————————————————————————————————
+
+def test_same_code_libraries_read_their_own_rule_file(tmp_path):
+    """**同码两库各读各的规则文件**（按库主键分文件）。
+
+    ⚠️ **业务规则**：库编码是业务分类编码，跨租户可重复 ⇒ 同码多库是合法状态。
+      若两个库读同一个 `<库码>.json` ⇒ 后写的覆盖先写的，
+      文件侧只剩一个库的规则（不报错，只是结果悄悄不同）。
+    """
+    (tmp_path / 'rules').mkdir()
+    (tmp_path / 'libraries.json').write_text(json.dumps({
+        'schema_version': 1,
+        'libraries': [
+            {'library_id': 11, 'library_code': 'rule_miner',
+             'library_name': '公司1挖掘库', 'library_type': 'fuzzy',
+             'priority': 0, 'is_active': True,
+             'owner_type': 'tenant', 'company_id': 1},
+            {'library_id': 12, 'library_code': 'rule_miner',
+             'library_name': '公司9挖掘库', 'library_type': 'fuzzy',
+             'priority': 0, 'is_active': True,
+             'owner_type': 'tenant', 'company_id': 9},
+        ],
+    }, ensure_ascii=False), encoding='utf-8')
+    for lib_id, action in ((11, 'add_1'), (12, 'add_2')):
+        (tmp_path / 'rules' / ('rule_miner__%s.json' % lib_id)).write_text(
+            json.dumps({
+                'schema_version': 1, 'library_code': 'rule_miner',
+                'library_id': lib_id,
+                'rules': [{'id': lib_id, 'defect_code': 'SHORTSHOT',
+                           'rule_description': 'IF SHORTSHOT_low THEN IV0_%s'
+                                               % action,
+                           'priority': 1, 'is_active': True}],
+            }, ensure_ascii=False), encoding='utf-8')
+
+    repo = FileResourceRepository(root_dir=str(tmp_path))
+    # ⚠️ 两个同码库都在索引里（不被去重掉）
+    libs = repo.select_libraries(RuleQueryContext(defect_name='SHORTSHOT'))
+    assert {(l.library_code, l.library_id) for l in libs} == {
+        ('rule_miner', 11), ('rule_miner', 12)}
+
+    # 各自只拿到自己那份规则（不串库）
+    d1 = {p.rule_description for p in repo.get_rules(
+        RuleQueryContext(defect_name='SHORTSHOT', company_id=1))}
+    d9 = {p.rule_description for p in repo.get_rules(
+        RuleQueryContext(defect_name='SHORTSHOT', company_id=9))}
+    assert d1 == {'IF SHORTSHOT_low THEN IV0_add_1'}
+    assert d9 == {'IF SHORTSHOT_low THEN IV0_add_2'}

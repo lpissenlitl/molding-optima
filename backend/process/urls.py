@@ -1,16 +1,18 @@
 """molding-optima process URL 路由
 
-URL 段架构 (2026-10-13):
+URL 段架构:
 - records/                   业务级入口 (condition + parameter 整体)
 - conditions/                数据级访问 (纯 condition 字段级, 含 list + 独立创建)
 - parameters/                数据级访问 (独立对象, 单段 URL)
 - algorithms/                算法触发器 (initialize / optimize / transplant)
 - rules/{keywords,methods,rule-libraries,expert-rules}/   规则主数据
+- rule-promotions/             规则晋升到公共库 (require_superuser)
+- mining-rules/                 候选规则审核流 (require_admin)
 
 设计原则:
 - 业务级 CRUD 走 records 段, 纯数据级 CRUD 走 conditions / parameters 段
 - parameter 是独立业务对象, URL 单段化, condition_id 退化为可选 query 过滤
-- tuning-feedback: view + service 保留, 路由暂不挂出, 需要时再加回
+- tuning-feedback: 人工调机反馈, 挂 parameters 段下
 - records 段子视图: parameter-list (平铺) / parameter-tree (树形) / history (调机时间线)
 """
 from django.urls import path
@@ -42,6 +44,13 @@ from .views.rules import (
     RuleLibraryDetailView,
     ExpertRuleListView,
     ExpertRuleDetailView,
+    RulePromotionView,
+)
+from .views.mining import (
+    MiningRuleListView,
+    MiningRuleDetailView,
+    MiningRuleApproveView,
+    MiningRuleRejectView,
 )
 
 
@@ -55,14 +64,14 @@ urlpatterns = [
     # 调机历史 (时间线视图: 全部调机轮次按 created_at 倒序)
     path("processes/records/<int:condition_id>/history/", ProcessRecordHistoryView.as_view()),
 
-    # conditions 数据级 (独立创建/查询, 2026-10-13 接入)
+    # conditions 数据级 (独立创建/查询)
     path("processes/conditions/", ConditionListView.as_view()),
     path("processes/conditions/<int:condition_id>/", ConditionDetailView.as_view()),
 
-    # parameters 数据级 (URL 单段化, condition_id 走 query 可选)
+    # parameters 数据级 (condition_id 走 query 可选)
     path("processes/parameters/", ParameterListView.as_view()),
     path("processes/parameters/<int:parameter_id>/", ParameterDetailView.as_view()),
-    # 人工调机反馈: tuning 业务上属于 parameter, 挂 parameter 段下 (2026-10-12 URL 单段化)
+    # 人工调机反馈: tuning 业务上属于 parameter, 挂 parameter 段下
     path("processes/parameters/<int:parameter_id>/tuning-feedback/", TuningFeedbackView.as_view()),
     # 参数版本树: view + service 保留, 路由暂不挂出, 需要时再加回
 
@@ -84,4 +93,12 @@ urlpatterns = [
     path("processes/expert-rules/<int:expert_rule_id>/", ExpertRuleDetailView.as_view()),
     path("processes/rule-libraries/", RuleLibraryListView.as_view()),
     path("processes/rule-libraries/<int:rule_library_id>/", RuleLibraryDetailView.as_view()),
+    # 规则晋升到公共库（平台超管专用：公共库是全平台资产）
+    path("processes/rule-promotions/", RulePromotionView.as_view()),
+
+    # mining 段（候选规则审核流, 全部 require_admin）
+    path("processes/mining-rules/", MiningRuleListView.as_view()),
+    path("processes/mining-rules/<int:mining_rule_id>/", MiningRuleDetailView.as_view()),
+    path("processes/mining-rules/<int:mining_rule_id>/approve/", MiningRuleApproveView.as_view()),
+    path("processes/mining-rules/<int:mining_rule_id>/reject/", MiningRuleRejectView.as_view()),
 ]

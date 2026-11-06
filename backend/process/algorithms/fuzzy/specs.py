@@ -8,18 +8,14 @@
 - 本契约的 target_key == ORM 字段名（max_set_injection_speed）。
   依据：本契约描述的是 machine_info / polymer_info / mold_info 三维上下文，
   它的 target_key 就是 ORM 字段名；service 侧按本契约的白名单
-  （`source_model` + `attr_name`）从 ORM 提取，不是直接
-  `_to_full_dict(InjectionUnit)`（那是旧做法，会把 ORM 元数据也传给算法）。
+  （`source_model` + `attr_name`）从 ORM 提取，不走 `_to_full_dict(InjectionUnit)`
+  （那会把 ORM 元数据也传给算法）。
 - ⚠️ 别把 process_parameter 也当成本契约的一部分：工艺参数走的是**另一套**
   命名空间——由算法侧命名契约 `field_names.to_algo_params` 翻译
   （业务 1-based → 算法 0-based，如 `inj_spd_1` → `IV0`），
   见 `process/algorithms/fuzzy/field_names.py`。
 
-设备设定上限（max_set_*）的定位（2026-10-27 二次修正 · 用户口径）：
-
-第一版把它们定位成「只是推荐值的物理天花板，标可选、不拦请求」，理由是
-「判级论域来自 RuleKeyword.range_min / range_max（权威元数据），engine.py 从不读
-machine_info 的 max_set_*」。**用户明确推翻这条口径**：
+设备设定上限（max_set_*）的定位（用户口径）：
 > 「从设备读取参数主要是为了用实际值补全参数的论域」
 > 「必须用设备值，设备值没有就报错」
 
@@ -30,7 +26,7 @@ machine_info 的 max_set_*」。**用户明确推翻这条口径**：
 - 判级论域 = **下界取 RuleKeyword.range_min（经验域）+ 上界取设备实测值**
   （engine 从 context['machine_info'] 取，映射见 PARAM_LIMIT_FIELDS）；
 - 仍兼作**推荐值物理天花板**（裁剪，见 PARAM_LIMIT_FIELDS）—— 两者同源，
-  不再是两套互不相干的数据。
+  不是两套互不相干的数据。
 
 ⚠️ 必填与替换**只对必填等级字段生效**（用户口径）：
 > 「我们定义必填的字段，必须校验并且替换，其余字段的论域可以用默认值」
@@ -44,7 +40,7 @@ machine_info 的 max_set_*」。**用户明确推翻这条口径**：
 「液压机必填」这一等级；缺失时按「非液压机」处理（计量类字段一律不要求，
 宽松放过 —— 宁可少一项要求，也不误伤液压机）。
 
-⚠️ **单位不在算法层考虑**（用户口径 2026-10-27）：
+⚠️ **单位不在算法层考虑**（用户口径）：
 > 「我们取的就是界面值，不需要关心单位，当然我们也有单位，但是并不需要在算法这里考虑」
 
 ⇒ 这里取的就是 **HMI 面板显示值**，算法侧**直接用**：不做单位换算、不做单位一致性
@@ -68,17 +64,16 @@ condition 的 5 个等级、「液压机必填」的驱动判定、condition_whe
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-# ⚠️ **层 0 反向依赖上层包**（2026-10-28 批 L-8 标注，**本轮不改**）：
+# ⚠️ **层 0 反向依赖上层包**：
 #   `specs.py` 属【层 0 对外契约】，却 `from ..field_contract import` ⇒
 #   层 0 反向依赖上层 `algorithms/` 包 ⇒ 打破「层 0 零依赖」的分层约定。
 #
-#   ⚠️ **为什么本轮不动**：拆开需要把 `audit_field_completeness` /
-#     `derive_required_fields` / `drive_system_to_power_method` 三个纯函数
-#     **下沉**到算法包内（或另起层 -1 公共契约模块），会牵动 `algorithms/` 下
-#     其它算法包（`empirical` 等同层使用者）⇒ 属**跨包重构**，另开一轮处理。
+#   拆分需把 `audit_field_completeness` / `derive_required_fields` /
+#   `drive_system_to_power_method` 三个纯函数下沉到算法包内，会牵动 `algorithms/`
+#   下其它算法包 ⇒ 属跨包重构。
 #
-#   ⚠️ **在解决前的定位**：这是**已知的分层瑕疵**，不是 bug —— 三个函数都是纯函数、
-#     无副作用、无循环依赖，运行时行为正确 ⇒ 不影响算法结果，只影响分层纯度。
+#   **当前定位**：已知的分层瑕疵，不是 bug —— 三个函数都是纯函数、无副作用、
+#   无循环依赖，运行时行为正确 ⇒ 不影响算法结果，只影响分层纯度。
 from ..field_contract import (
     audit_field_completeness,
     derive_required_fields,
@@ -179,7 +174,7 @@ OPTIMIZE_MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         "source": "InjectionUnit.max_set_decompression_pressure",
         "attr_name": "max_set_decompression_pressure",
         "desc": "最大可设定松退压力（HMI 界面值）；松退压力类**推荐值物理天花板**"
-                "（工艺侧无对应可调参数，本批不参与裁剪）"
+                "（工艺侧无对应可调参数，不参与裁剪）"
                 "；也不参与判级论域（无对应规则参数族）⇒ 保持可选",
         "type": float,
         "condition": "可选",
@@ -380,7 +375,7 @@ OPTIMIZE_FEEDBACK_FIELDS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def audit_feedback_defects(defects: Any) -> List[str]:
+def audit_feedback_defects(defects: Any, allow_empty: bool = False) -> List[str]:
     """缺陷反馈列表项的完整性 / 合法性审计（返回问题清单，空 = 通过）。
 
     与 `OptimizeDataValidator.validate` 的三个维度分开审计：**列表项维度**
@@ -388,10 +383,15 @@ def audit_feedback_defects(defects: Any) -> List[str]:
 
     ⚠️ 返回清单而不是抛异常 —— 对外文案（`BizException`）由 service 层决定，
     算法层不 import 业务异常（与 `OptimizeDataValidator` 的分工一致）。
+
+    Args:
+        defects: 缺陷列表。
+        allow_empty: 允许空列表 —— 无缺陷但有主反馈的场景（如产品已合格、
+            仍想继续做工艺优化）不应被拦在入口外。
     """
     issues: List[str] = []
     if not isinstance(defects, list) or len(defects) == 0:
-        return ['请填写缺陷反馈信息']
+        return [] if allow_empty else ['请填写缺陷反馈信息']
     for i, d in enumerate(defects, 1):
         if not isinstance(d, dict):
             issues.append(f"第 {i } 项缺陷格式错误：应为对象")
@@ -462,7 +462,7 @@ class OptimizeDataValidator:
 # 不另起一套——两处真相源必然分叉。
 #
 # ⚠️ 职责边界：接口层只负责「输入是不是合法档位词」，**不**负责
-#   「规则库有没有这一档」。缺陷档位**不再用于筛规则**
+#   「规则库有没有这一档」。缺陷档位**不用于筛规则**
 #   （library.rules.RuleService.match_defect_name 只比缺陷名，不比档位）——
 #   档位已作为**算法输入**进推理网络，由隶属度表达「越严重越激进」；
 #   very_low 在此语义上完全正确，接口层不该拦。
@@ -514,7 +514,7 @@ def is_valid_defect_level_word(word: Any) -> bool:
 
 
 # ============================================================================
-# 机台物理上限 → 推荐值裁剪（2026-10-27）
+# 机台物理上限 → 推荐值裁剪
 # ============================================================================
 # 映射表：算法参数**前缀**（不含段号）→ machine_info 里的机台上限字段名。
 #
@@ -544,7 +544,7 @@ _ALGO_PARAM_PATTERN = re.compile(r'^([A-Za-z]+)(\d+)$')
 
 # 「必填等级」的 condition 取值（与 field_contract 的等级语义一致）。
 # 这两级字段：缺失即报错（由 OptimizeDataValidator 拦），且判级论域上界
-# **必须**用设备实测值替换（用户口径 2026-10-27）。
+# **必须**用设备实测值替换（用户口径）。
 _REQUIRED_CONDITIONS = ('必填', '液压机必填')
 
 
@@ -564,7 +564,7 @@ def is_required_limit_field(field_name: str) -> bool:
 def resolve_domain_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
     """machine_info → {算法参数前缀: 判级论域上界}（**只含必填等级字段**）
 
-    用户口径（2026-10-27）：
+    用户口径：
     > 「我们定义必填的字段，必须校验并且替换，其余字段的论域可以用默认值」
 
     ⇒ 必填等级的设备上限：缺失 ⇒ 报错（OptimizeDataValidator），
@@ -676,15 +676,9 @@ def lookup_param_limit(
 #    （如 context["involved_params"]），再按本次是否涉及温度参数决定等级。
 #    ⚠️ 温度类**没有设备上限字段**（HMI 不提供料筒/喷嘴/模具温度的可设上限），
 #    所以它们的论域仍只能来自 RuleKeyword 权威元数据。
-# 2. ~~engine.py 的 keyword 兜底分支改为读本维度的 max_set_*~~ —— 2026-10-27 二次更正：
-#    **做**（用户口径：「从设备读取参数主要是为了用实际值补全参数的论域」+
-#    「必须用设备值，设备值没有就报错」）。此前"不做"的理由（同一套参数在不同
-#    机器上判出不同等级、规则命中行为漂移）已被用户接受为**预期行为** ——
-#    判级本来就该反映这台机的真实能力边界。
-#    max_set_* 同时承担两个角色（判级论域上界 + 推荐值物理天花板），同源不冲突。
-# 3. ~~FromCondition 侧 _extract_machine_unit 不含主表 drive_system~~ —— 已过时：
-#    `_extract_machine_info`（services/parameter_optimize.py）已按 source_model
-#    跨两张表合并（主表 drive_system + unit 的 max_set_*）。
+# 2. engine.py 的 keyword 兜底分支读本维度的 max_set_*：
+#    用户口径「必须用设备值，设备值没有就报错」；判级反映本机真实能力边界是预期行为。
+#    max_set_* 同时承担判级论域上界 + 推荐值物理天花板两个角色，同源不冲突。
 
 
 __all__ = [

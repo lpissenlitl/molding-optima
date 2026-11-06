@@ -20,8 +20,12 @@ class ProcessCondition(BusinessBaseModel):
     """
 
     # --- 状态信息 ---
-    # active: 使用中 | archived: 已归档
+    # draft: 草稿 | active: 使用中 | archived: 已归档
+    # 注：draft 是业务代码创建工艺条件时的默认状态
+    # （service 层 condition.create_condition / parameter_initialize 均写入 "draft"），
+    # 不可省略，否则 get_status_display() 与 admin 筛选会直接显示裸英文 draft。
     STATUS_CHOICES = [
+        ('draft', '草稿'),
         ('active', '使用中'),
         ('archived', '已归档'),
     ]

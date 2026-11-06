@@ -1,34 +1,19 @@
 """molding-optima 工艺记录 Schema 定义
 
 对应 URL 段: processes/records/  业务对象 ID: condition_id
+(具体路由见 process/urls.py 的 records 段)
 
-records 段业务: 工艺条件 CRUD + 工艺参数子资源 + 前端嵌套视图
+records 段业务: 工艺条件 CRUD + 工艺参数只读子视图 (parameter-list / parameter-tree)
+              + 调机历史 + 前端嵌套写入
 
-URL 列表 (按 B 方案拆分, condition_id 与 parameter_id 同时显式表达):
-- POST   /api/processes/records/                        创建 condition + 第一条 parameter (NEST)
-- GET    /api/processes/records/                        列表 (condition 视角)
-- GET    /api/processes/records/<condition_id>/         详情
-- PUT    /api/processes/records/<condition_id>/         更新 condition (仅 condition, 不含 parameter)
-- DELETE /api/processes/records/<condition_id>/         软删 condition (级联 parameter)
-- GET    /api/processes/records/<condition_id>/frontend/ 前端嵌套视图
-- GET    /api/processes/records/<condition_id>/history/  工艺参数修改历史
-- GET    /api/processes/records/<condition_id>/tree/     工艺参数版本树
-
-工艺参数子资源 (新增, B 方案核心):
-- GET    /api/processes/records/<condition_id>/parameter/             列出 condition 内所有 parameter
-- GET    /api/processes/records/<condition_id>/parameter/<parameter_id>/  parameter 详情
-- PUT    /api/processes/records/<condition_id>/parameter/<parameter_id>/  更新指定 parameter
-- DELETE /api/processes/records/<condition_id>/parameter/<parameter_id>/  软删指定 parameter
-
-批量:
-- DELETE /api/processes/records/batch-delete/           批量删除 condition
-
-独立 records service 契约:
+schema 契约:
 - ProcessRecordListSchema            列表 (继承 ProcessConditionListSchema, 视图维度 view_type="parameter")
 - ProcessConditionAndParameterSchema 创建 (POST /records/, condition + 可选 parameter)
 - ProcessConditionWriteSchema        更新 condition (PUT /records/<id>/, 仅 condition)
-- ProcessParameterUpdateSchema       更新 parameter (PUT /records/<id>/parameter/<id>/)
-- ProcessRecordBatchDeleteSchema     批量删除 (按 condition_id)
+- ProcessRecordBatchDeleteSchema     批量删除 (DELETE /records/actions/batch-delete/)
+
+注: parameter 的读写走 parameters 段 (单段 URL /api/processes/parameters/<parameter_id>/),
+    其写入契约见 parameter.py::ProcessParameterUpdateSchema。
 """
 from typing import Optional
 
@@ -95,7 +80,7 @@ class ProcessConditionWriteSchema(BaseSchema):
 
 
 class ProcessRecordListSchema(ProcessConditionListSchema):
-    """工艺记录列表查询条件 (2026-10-12)
+    """工艺记录列表查询条件
 
     继承 ProcessConditionListSchema (按 condition 字段过滤)。
     增加 view_type 字段区分业务视图:

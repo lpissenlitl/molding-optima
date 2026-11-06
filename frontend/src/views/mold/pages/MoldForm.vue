@@ -1,16 +1,5 @@
-<!--
-  MoldForm - 模具表单页（新建 + 编辑共用）
+<!-- MoldForm - 模具表单页（新建+编辑共用）：路由 /mold/new（?project_id=X 可预填项目上下文）与 /mold/:id/edit（自动加载详情），单文件处理 add / edit 两种模式（通过 useRoute 区分），5 个 section 顶层用 el-card 平铺（不折叠，避免信息被忽略），浇注系统 1:N（el-tabs 包裹），冷却/顶出 1:1（直接调用子组件），子组件双向绑定 props 传入的 reactive 对象 -->
 
-  路由（与 project 保持 RESTful 风格）：
-    - /mold/new              新建模式（?project_id=X 可预填项目上下文）
-    - /mold/:id/edit         编辑模式（自动加载详情）
-
-  设计要点：
-    - 单文件处理 add / edit 两种模式（通过 useRoute 区分）
-    - 5 个 section 顶层用 el-card 平铺（不折叠，避免信息被忽略）
-    - 浇注系统 1:N（el-tabs 包裹），冷却/顶出 1:1（直接调用子组件）
-    - 子组件双向绑定 props 传入的 reactive 对象
--->
 <template>
   <div class="mold-form">
     <!-- 编辑模式的加载占位 -->
@@ -19,11 +8,7 @@
     <!-- 5 个 section（el-card 平铺，始终可见，层次清晰） -->
     <div v-else class="mold-cards">
       <!-- ============ 1. 基本信息 ============ -->
-      <!--
-        架构：flat items 数组 + groupIntoRows 自动分行 + FormFieldRenderer 复用渲染
-        - cavity_layout 是特殊字段（带 tooltip），单独渲染
-        - 其余字段统一走 FormFieldRenderer（去重 ~50 行 v-else-if 链）
-      -->
+      <!-- 架构：flat items 数组 + groupIntoRows 自动分行 + FormFieldRenderer 复用渲染 -->
       <el-card class="custom-form__section" shadow="never">
         <template #header>
           <span class="custom-form__title">基本信息</span>
@@ -95,11 +80,8 @@
             :key="`gating_${idx}`"
             :name="String(idx)"
           >
-            <!--
-             * tab label 平级信息：
-             * - “第 N 射”（标识）+ 状态色（热/冷/混合/未选）
-             * - 纯文字+颜色，不加背景/边框/字号差（避免与主标签“争权重”）
-             -->
+            <!-- tab label 平级信息：左侧"第 N 射"标识 + 右侧状态色（热/冷/混合/未选），纯文字+颜色，不加背景/边框/字号差（避免与主标签"争权重"） -->
+
             <template #label>
               <span class="gating-tab-label">
                 <span class="gating-tab-label__index">第 {{ Number(idx) + 1 }} 射</span>
@@ -133,11 +115,7 @@
       </el-card>
 
       <!-- ============ 5. 其他参数 ============ -->
-      <!--
-        架构：flat items 数组 + groupIntoRows 自动分行 + FormFieldRenderer 复用渲染
-        - 所有字段均为常规字段（无特殊装饰），统一走 FormFieldRenderer
-        - 末尾 辅助装置 为领域知识 tooltip + 多选，独立渲染
-      -->
+      <!-- 架构：flat items 数组 + groupIntoRows 自动分行 + FormFieldRenderer 复用渲染 -->
       <el-card class="custom-form__section" shadow="never">
         <template #header>
           <span class="custom-form__title">其他参数</span>
@@ -240,9 +218,7 @@ import type { FormItem } from '@/utils/form-types'
 import { groupIntoRows } from '@/utils/form-layout'
 import { hasPermission } from '@/utils/permission'
 
-// ============================================================================
 // 路由（核心：通过 useRoute 区分新建/编辑模式，与 project 保持一致）
-// ============================================================================
 
 const route = useRoute()
 const router = useRouter()
@@ -262,25 +238,15 @@ const project_id_from_route = computed(() => {
   return pid ? Number(pid) : null
 })
 
-// ============================================================================
 // 响应式状态
-// ============================================================================
 
 const mold_info = ref<any>(structuredClone(moldInfoForm))
 const formRef = ref<FormInstance>()
-/**
- * 所有浇注系统子表单的引用数组（2026-09-08 引入）
- * - 每个 GatingSystemForm 暴露自己的 formRef
- * - 保存时遍历调用所有 formRef.validate()，实现跨表单统一验证
- */
+/** 所有浇注系统子表单的引用数组 */
 const gatingFormRefs = ref<any[]>([])
-/**
- * 冷却系统子表单引用（1:1）
- */
+/** 冷却系统子表单引用（1:1） */
 const coolingFormRef = ref<any>(null)
-/**
- * 顶出系统子表单引用（1:1）
- */
+/** 顶出系统子表单引用（1:1） */
 const ejectionFormRef = ref<any>(null)
 const loading = ref(false)
 const submitting = ref(false)
@@ -292,10 +258,7 @@ const cooling_system = computed(() => mold_info.value.cooling_system)
 /** 顶出系统（1:1 子组件 props） */
 const ejection_system = computed(() => mold_info.value.ejection_system)
 
-/**
- * 流道类型 → badge 文字颜色 class
- * 热流道→hot（红）/ 冷流道→cold（蓝）/ 热转冷→mixed（橙）/ 未选→empty（灰）
- */
+/** 流道类型 → badge 文字颜色 class */
 function getRunnerTypeClass(runnerType: string): 'hot' | 'cold' | 'mixed' | 'empty' {
   if (runnerType === '热流道') return 'hot'
   if (runnerType === '冷流道') return 'cold'
@@ -303,10 +266,7 @@ function getRunnerTypeClass(runnerType: string): 'hot' | 'cold' | 'mixed' | 'emp
   return 'empty'
 }
 
-/**
- * 流道类型 → badge 文字映射
- * - 未选时显示“未选”，不显示空 label
- */
+/** 流道类型 → badge 文字映射 */
 function getRunnerTypeLabel(runnerType: string): string {
   if (runnerType === '热流道') return '热流道'
   if (runnerType === '冷流道') return '冷流道'
@@ -330,9 +290,7 @@ const checked_assist_equipments = computed({
   },
 })
 
-// ============================================================================
 // 字段定义
-// ============================================================================
 
 // 硬编码分类 select：显式 allowCreate: false，禁止用户创建无意义的自定义值
 const basicItems: FormItem[] = [
@@ -346,8 +304,6 @@ const basicItems: FormItem[] = [
   { label: '目标成型周期', prop: 'target_cycle_time', type: 'number', unit: 's', precision: 2 },
   { label: '客户机吨位', prop: 'recommended_tonnage', type: 'number', unit: 'Ton', precision: 0 },
   // "总注射重量" 故意不展示：多射下不同材料相加无意义，重量已在 GatingSystem 按射维护
-  // 如需恢复：取消下一行注释
-  // { label: '总注射重量', prop: 'total_injection_weight', type: 'number', unit: 'g', precision: 2 },
   { label: '产品大类', prop: 'product_category', type: 'select', options: productMajorOptions, allowCreate: false },
   { label: '产品中类', prop: 'product_subcategory', type: 'select', options: [], allowCreate: false },  // 联动 mediumOptionsMap[product_category]
   { label: '产品小类', prop: 'product_model', type: 'select', options: [], allowCreate: false },  // 联动 minorOptionsMap[product_subcategory]
@@ -379,9 +335,7 @@ const structureItems: FormItem[] = [
 const basicRows = computed(() => groupIntoRows(basicItems, { columns: 4 }))
 const structureRows = computed(() => groupIntoRows(structureItems, { columns: 4 }))
 
-// ============================================================================
 // 验证规则
-// ============================================================================
 
 const rules: FormRules = {
   mold_no: [
@@ -389,9 +343,7 @@ const rules: FormRules = {
   ],
 }
 
-// ============================================================================
 // 联动：shot_count → gating_systems 数组
-// ============================================================================
 
 watch(
   () => mold_info.value.shot_count,
@@ -408,9 +360,7 @@ watch(
   }
 )
 
-// ============================================================================
 // 联动：product_category / product_subcategory → subcategory / model options
-// ============================================================================
 
 watch(
   () => mold_info.value.product_category,
@@ -433,9 +383,7 @@ watch(
   }
 )
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function goBack() {
   router.push('/mold/list')
@@ -504,9 +452,7 @@ async function handleSave() {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(async () => {
   // 从项目跳转创建 → 预填 project_id
@@ -542,11 +488,7 @@ async function loadDetail(id: number) {
 </script>
 
 <style scoped lang="scss">
-/*
- * mold-form 容器
- * - padding-bottom: 96px 预留底部 form-actions 空间（避免内容被遮挡）
- * - 全宽展示（工业软件充分利用屏幕宽度）
- */
+/* mold-form 容器 */
 .mold-form {
   padding: 16px 16px 96px;
   box-sizing: border-box;
@@ -556,23 +498,15 @@ async function loadDetail(id: number) {
   margin-bottom: 16px;
 }
 
-/*
- * 5 个 el-card 平铺布局
- * - display: flex + flex-direction: column：垂直堆叠
- * - gap: 16px：card 之间的间距（代替 margin-bottom，避免边界问题）
- */
+/* 5 个 el-card 平铺布局 */
 .mold-cards {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/*
- * 浇注系统 tabs 强化：
- * - tab bar 浅灰底+圆角，让“tab 通道”立体
- * - badge 纯文字+颜色，与主标签“第 N 射”同号同重（14px / 500），靠颜色区分状态
- * - 4 个状态用 BEM modifier：--hot / --cold / --mixed / --empty
- */
+/* 浇注系统 tabs 强化：tab bar 浅灰底+圆角，让"tab 通道"立体；badge 纯文字+颜色，与主标签"第 N 射"同号同重（14px / 500），靠颜色区分状态；4 个状态用 BEM modifier：--hot / --cold / --mixed / --empty */
+
 .gating-tabs {
   :deep(.el-tabs__nav-wrap) {
     background: var(--color-bg-page);

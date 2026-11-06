@@ -1,8 +1,6 @@
 """
 用户相关 Schema - Pydantic 版本
 
-版本历史：
-- v2.0.0 (2026-06-27) - 从 marshmallow 迁移到 Pydantic
 """
 from typing import Optional, List
 from datetime import datetime

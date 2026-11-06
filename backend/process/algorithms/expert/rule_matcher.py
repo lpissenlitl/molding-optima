@@ -7,7 +7,12 @@
     3. 内置 _BUILTIN_DEFAULTS（兜底）
 
 匹配逻辑：
-    - 按 priority 升序遍历（数字越小越优先）
+    - 按「层 → priority」排序遍历：
+      * **层优先于 priority**：平台层(0，系统级公共库) → 租户层(1，该租户私库)，
+        租户层后合并 ⇒ **同名 key 由租户覆盖平台**（叶子级覆盖：
+        租户只写要改的那个值，平台同组的其它值全部保留）；
+      * 层内按 priority 升序遍历，**后合并的覆盖先合并的**
+        （同 key 冲突时 priority 数字大的胜出）；
     - 条件数组 AND 关系，空条件表示默认规则
     - 多条匹配规则深度合并 coefficients
 """
@@ -18,6 +23,13 @@ from typing import Dict, Any, Optional, List
 from .rule_loader import InitRuleLoader
 
 logger = logging.getLogger(__name__)
+
+
+# ========== 规则层（加载与合并的先后） ==========
+#: 平台层：系统级专家库（公共大库）—— 全平台共用，是**基线**。
+LAYER_PLATFORM = 0
+#: 租户层：该租户自己的专家私库 —— **后加载 ⇒ 覆盖平台层同名 key**。
+LAYER_TENANT = 1
 
 
 # ========== 内置兜底默认值 ==========
@@ -145,7 +157,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'hold_time_quadratic_b': 0.6,
     },
     'cooling': {
-        # === 算法 #10：冷却参数物理化（v1.0：4 维物理化）===
+        # === 算法 #10：冷却参数物理化（4 维物理化）===
         # 推导公式：t_cool = max_thickness² × family_cool_factor × ΔT_factor × crystallinity_kick
         # 物理依据：Fourier 热扩散 t ∝ h²/α × ln((T_melt-T_mold)/(T_eject-T_mold))
         # 物理正交：与 #8 保压时间正交（局部 vs 整体）
@@ -171,13 +183,13 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'default_crystallinity_kick': 1.10,  # 未知 category 保守拉长
     },
     'metering': {
-        # v1.0 base_ratio（保留原有字段用于向后兼容）
+        # base_ratio（保留原有字段用于向后兼容）
         'meter_pres_ratio_straight': 0.55,
         'meter_pres_ratio_locking': 0.6,
-        # v1.0 钳制范围（同源数值，不假设 MPa）
+        # 钳制范围（同源数值，不假设 MPa）
         'meter_pres_min': 3.0,
         'meter_pres_max': 18.0,
-        # v1.0 family 黏度修正系数（相对比例，default=1.0）
+        # family 黏度修正系数（相对比例，default=1.0）
         # 物理依据：PP/PS/PVC 低黏度 < ABS/POM/PC 中黏度 < PA66/PA6 高黏度+吸湿
         'family_meter_viscosity': {
             # 低黏度结晶（推荐 5–8）
@@ -198,7 +210,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
             'PC+ABS': 1.0, 'PC/ABS': 1.0,
         },
         'default_family_meter_viscosity': 1.0,
-        # v1.0 喷嘴类型修正系数
+        # 喷嘴类型修正系数
         # 物理依据：锁闭喷嘴有止逆阀增加阻力，需更高油压
         'nozzle_factor': {
             '直通型': 1.00,
@@ -209,7 +221,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'meter_speed_temp_ratio_min': 0.3,
         'meter_speed_temp_ratio_max': 0.75,
         'screw_speed_factor': 60.0,
-        # v1.0 family 剪切敏感度修正系数（计量螺杆转速 #12）
+        # family 剪切敏感度修正系数（计量螺杆转速 #12）
         # 物理依据：不同材料剪切降解敏感度差异大
         # - PVC/POM：严重降解（HCl / 甲醛释放）→ 偏保守（0.50~0.65）
         # - PC/PA66：高黏度 → 偏保守（0.50~0.55）
@@ -230,7 +242,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
             'PC+ABS': 0.65, 'PC/ABS': 0.65,
         },
         'default_family_meter_shear_ratio': 1.0,
-        # v1.0 L/D 修正系数（计量螺杆转速 #12）
+        # L/D 修正系数（计量螺杆转速 #12）
         # 物理依据：螺杆长径比影响塑化路径长度与停留时间
         # - L/D < 18（short）：塑化路径短、停留时间不足 → 微升（1.05）
         # - 18 ≤ L/D ≤ 22（standard）：海天/震雄主流机型 → 基准 1.00
@@ -244,14 +256,14 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'default_ld_correction': 1.00,  # 字段缺失兜底（不修正）
     },
     'back_pressure': {
-        # v1.0 钳制范围（基于材料物理耐受度，非设备能力）
+        # 钳制范围（基于材料物理耐受度，非设备能力）
         # - 下限 0.5 MPa：PA66 下限 2.0 的 25% 安全余量（避免材料水解）
         # - 上限 30.0 MPa：PMMA 上限 28 的 7% 安全余量（避免剪切降解）
         'meter_back_pres_min': 0.5,
         'meter_back_pres_max': 30.0,
-        # v1.0 recommend_back_pressure 缺失兑底（行业中位 10.0 MPa）
+        # recommend_back_pressure 缺失兑底（行业中位 10.0 MPa）
         'default_recommend_back_pressure': 10.0,
-        # v1.0 family 排气需求修正系数（计量背压 #13）
+        # family 排气需求修正系数（计量背压 #13）
         # 物理依据：不同材料排气需求与物理耐受度差异巨大
         # - PMMA=1.50（高黏度需强排气）
         # - PA66=0.40（极易水解，不能高背压）
@@ -274,7 +286,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
             'PC+ABS': 1.10, 'PC/ABS': 1.10,
         },
         'default_family_back_pres_factor': 1.0,
-        # v1.0 螺杆转速联动修正系数（计量背压 #13）
+        # 螺杆转速联动修正系数（计量背压 #13）
         # 物理依据：转速越高 → 熔体停留时间越短 → 密度均匀性越差 → 需更高背压补偿
         # 公式：speed_factor = 1.0 + slope × (rpm_ratio - base)
         'speed_factor_base': 0.5,        # speed_factor=1.0 对应的 rpm_ratio 中位
@@ -283,7 +295,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'speed_factor_max': 1.15,        # 钉制上限
         'default_speed_factor': 1.0,     # rpm_ratio 缺失兑底（不修正）
     },
-    # 🆕 v1.1 松退参数族（#15-#18）：5 维物理化
+    # 松退参数族（#15-#18）：5 维物理化
     # - 压力 P：base_ratio × family × mode_factor × nozzle_factor（仅液压机）
     # - 距离 D：base_dist × family × nozzle × runner × gate（5 维）
     # - 速度 V：max_decomp_velo × family × nozzle（3 维）
@@ -294,7 +306,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'min_pressure': 1.0,            # MPa（液压机最小油压）
         'max_pressure': 5.0,            # MPa（业内实测上限）
         'min_dist': 1.0,                # mm
-        'max_dist': 12.0,               # mm（🆕 v1.1：6.0→12.0 覆盖热流道+针阀式）
+        'max_dist': 12.0,               # mm（覆盖热流道+针阀式）
         'min_velo': 3.0,                # mm/s（防拉丝下限）
         'max_velo': 50.0,               # mm/s（防爆上限）
         'min_time': 0.1,                # s
@@ -333,7 +345,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         },
         'default_family_velo_factor': 1.0,
 
-        # 🆕 v1.1：流道类别修正（与 #6 保压 runner_factor 方向相反）
+        # 流道类别修正（与 #6 保压 runner_factor 方向相反）
         # 松退关心"流道残余压力释放" → 热流道需更大吸回距离
         'runner_factor': {
             '冷流道':   1.00,    # 流道已凝固，松退只需处理喷嘴
@@ -342,7 +354,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         },
         'default_runner_factor': 1.0,
 
-        # 🆕 v1.1：浇口结构修正（仅热流道生效）
+        # 浇口结构修正（仅热流道生效）
         'gate_factor': {
             '针阀式点浇口': 1.70,    # 针阀关闭不彻底，残余压力最大
             '针阀式侧浇口': 1.70,    # 同上
@@ -382,9 +394,9 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'pst_decomp_mode': 1,
         'decomp_dist_ratio': 0.1,
         'decomp_dist_min': 2.0,
-        'decomp_dist_max': 12.0,        # 🆕 v1.1 同步更新
+        'decomp_dist_max': 12.0,        
     },
-    'nozzle': {                              # 🆕 v1.0 #19 喷嘴温度（2 维物理化：nozzle_offset + family_offset）
+    'nozzle': {                              # #19 喷嘴温度（2 维物理化：nozzle_offset + family_offset）
         'noz_offset_straight': -5.0,         # 直通喷嘴基准（防流诞）
         'noz_offset_locking':   0.0,         # 锁闭喷嘴基准（防阀芯冷凝）
         'family_offset': {                    # 17 family 差异化（PA +5℃、PET/PBT +3℃、PVC -5℃）
@@ -399,7 +411,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'family_offset_default': 0.0,
         'noz_temp_clamp_tolerance': 10.0,    # 钳制容差（±10℃）
     },
-    'barrel': {                              # 🆕 v1.0 #20 料筒温度分布（4 维物理化：family_decrement × stages × 幂函数k × 双层边界钳制）
+    'barrel': {                              # #20 料筒温度分布（4 维物理化：family_decrement × stages × 幂函数k × 双层边界钳制）
         'family_decrement': {                 # 17 family 递减梯度（PVC 5℃、PC/PMMA/POM/PA/PET/PBT 8℃、PP/PE/ABS/PS 10℃）
             'PVC':   5.0,                     # 极平缓防分解
             'PC':    8.0,  'PMMA': 8.0, 'POM': 8.0,  # 高黏度平缓防降解
@@ -421,12 +433,11 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'segment_N_lower_min_tg_plus': 30.0,  # 段 N 下限（Tg+30℃）
         'segment_N_upper_offset': -5.0,       # 段 N 上限（melt-5℃）
     },
-    # ⚠️ 2026-10-29：**不再**内置 mold_temp 表
-    #   原因：模温机温度的基线已改为**材料推荐值**（`recommend_mold_temperature`，
-    #   见 material_db.MATERIAL_DEFAULTS），而本表与它**重复且残缺**
-    #   （缺 PMMA/POM/PBT/PEEK/PTFE 及全部增强材料 ⇒ 一律落 default 50，
-    #   高温材料模温机温度被系统性低估 —— PEEK 应 170℃ 却得 50℃）。
-    #   `mold_temp` 系数块现在**只由 expert_rules 规则库提供** ⇒ 语义 = 「规则覆盖」，
+    # ⚠️ **不内置 mold_temp 表**：模温机温度的基线是**材料推荐值**
+    #   （`recommend_mold_temperature`，见 material_db.MATERIAL_DEFAULTS），
+    #   内置表与它**重复且残缺**（缺 PMMA/POM/PBT/PEEK/PTFE 及全部增强材料 ⇒
+    #   一律落 default 50，高温材料模温机温度被系统性低估 —— PEEK 应 170℃ 却得 50℃）。
+    #   `mold_temp` 系数块**只由 expert_rules 规则库提供** ⇒ 语义 = 「规则覆盖」，
     #   算法层优先级：**规则覆盖 > 材料推荐值 > 兜底**
     #   （见 algorithm_engine._derive_mold_temp）。
 }
@@ -435,14 +446,33 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
 class InitRuleMatcher:
     """初始化规则匹配器（数据库版）
 
+    ⚠️ **专家规则分两层加载**（平台公共大库 + 租户私有库）：
+
+    | 层 | 库 | 语义 |
+    |---|---|---|
+    | **平台层** | `owner_type='system'` 的专家库 | 公共大库，全平台共用，是**基线** |
+    | **租户层** | `owner_type='tenant'` 且属于当前租户的专家库 | 该租户自己的场景，**后加载 ⇒ 覆盖平台层同名 key** |
+
+    - **覆盖粒度 = 叶子级 key**：租户只写要改的那个值（如
+      `injection.inj_velo_ratio_thin`），平台同组的其它值全部保留。
+    - **无租户上下文**（`company_id=None`：第三方集成 / 离线 runner / 烟测）
+      ⇒ 只用平台层（不过滤），保持现状。
+    - `library_code` 是**可选的进一步过滤**（`None` = 不限编码，全部专家库）；
+      平台层与租户层口径一致 —— 库编码只是分组，不决定「哪些专家知识生效」。
+
     Usage:
-        matcher = InitRuleMatcher()
+        matcher = InitRuleMatcher(company_id=9)
         coeffs = matcher.match({'polymer': {...}, 'product': {...}})
         inj_pres = max_inj_pres * coeffs['injection']['inj_pres_ratio']
     """
 
-    def __init__(self, library_code: str = 'expert_rules'):
+    def __init__(
+        self,
+        library_code: Optional[str] = None,
+        company_id: Optional[int] = None,
+    ):
         self.library_code = library_code
+        self.company_id = company_id
         self._cached_rules: Optional[List[Dict[str, Any]]] = None
         # 最近一次 match 命中的规则代码列表（按 priority 顺序）
         self.last_matched_codes: List[str] = []
@@ -467,7 +497,7 @@ class InitRuleMatcher:
             }
 
         副作用：
-            self.last_matched_codes 被填充为本次命中规则代码列表（按 priority 升序）。
+            self.last_matched_codes 被填充为本次命中规则代码列表（按「层 → priority」升序）。
         """
         self.last_matched_codes = []
         rules = self._load_rules()
@@ -475,8 +505,16 @@ class InitRuleMatcher:
         if not rules:
             return self._build_fallback(context)
 
-        # 按 priority 升序排序
-        sorted_rules = sorted(rules, key=lambda r: r.get('priority', 9999))
+        # 按「层 → priority」排序
+        # ⚠️ **层优先于 priority**：租户层整体排在平台层之后 ⇒ 同名 key
+        #   由**租户覆盖平台**（叶子级覆盖：租户只写要改的那个值，
+        #   平台同组的其它值全部保留）。
+        #   平台层内部仍按 priority 升序 —— 与改造前逐条一致 ⇒ 现状行为不变。
+        sorted_rules = sorted(
+            rules,
+            key=lambda r: (r.get('layer', LAYER_PLATFORM),
+                           r.get('priority', 9999)),
+        )
 
         matched_coefficients: Dict[str, Any] = {}
 
@@ -533,18 +571,55 @@ class InitRuleMatcher:
             return []
 
         try:
-            library = RuleLibrary.objects.filter(
-                library_code=self.library_code,
-                is_active=True,
-            ).first()
-            if not library:
-                return []
+            from django.db.models import Q
 
-            qs = library.expert_rules.filter(is_active=True).values(
-                'rule_code', 'rule_name', 'priority', 'is_active',
-                'conditions', 'coefficients',
+            def _collect(libraries, layer):
+                """把一个库集合里的专家规则收成带层标记的规则列表。"""
+                collected = []
+                for library in libraries:
+                    qs = library.expert_rules.filter(is_active=True).values(
+                        'rule_code', 'rule_name', 'priority', 'is_active',
+                        'conditions', 'coefficients',
+                    )
+                    for row in qs:
+                        row['layer'] = layer
+                        collected.append(row)
+                return collected
+
+            rules: List[Dict[str, Any]] = []
+
+            # ---- 平台层（公共大库）：**全部**系统级专家库 ----
+            # ⚠️ `owner_type` 缺失/为空 **按 system 处理**（与模糊引擎同一口径，
+            #   见 `fuzzy/library/assembly.py::is_library_visible`）
+            #   —— 不因字段缺失而静默丢掉整库专家规则。
+            platform_qs = RuleLibrary.objects.filter(
+                library_type='expert',
+                is_active=True,
+                is_deleted=False,
+            ).filter(
+                Q(owner_type='system')
+                | Q(owner_type__isnull=True)
+                | Q(owner_type='')
             )
-            rules = list(qs)
+            if self.library_code:
+                platform_qs = platform_qs.filter(library_code=self.library_code)
+            rules += _collect(platform_qs.order_by('id'), LAYER_PLATFORM)
+
+            # ---- 租户层（该租户自己的专家私库）：**后加载 ⇒ 覆盖平台层** ----
+            # ⚠️ **无租户上下文 ⇒ 不加载私库**（第三方集成 / 离线 runner /
+            #   烟测）：保持现状全量，不静默改变结果。
+            if self.company_id is not None:
+                tenant_qs = RuleLibrary.objects.filter(
+                    library_type='expert',
+                    owner_type='tenant',
+                    company_id=self.company_id,
+                    is_active=True,
+                    is_deleted=False,
+                )
+                if self.library_code:
+                    tenant_qs = tenant_qs.filter(library_code=self.library_code)
+                rules += _collect(tenant_qs.order_by('id'), LAYER_TENANT)
+
             return rules
         except Exception as e:
             logger.warning(f"InitRuleMatcher: 数据库加载失败: {e}")

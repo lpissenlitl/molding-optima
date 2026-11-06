@@ -2,10 +2,10 @@
 verify_demo_machine_fields.py
 验证 init_demo 生成的注塑机/射台数据能通过两套算法入参契约的校验。
 
-背景（2026-10-20）：
-    init_demo 早期只给 InjectionUnit 填了 6 个基础字段（喷嘴/螺杆/直径/行程/
-    射胶量/塑化量），缺 max_set_*（HMI 可设定上限），
-    导致工艺推理（expert）与调优（fuzzy）的入参校验直接拦截，报错形如：
+背景：
+    init_demo 生成的 InjectionUnit 必须填满 6 个基础字段（喷嘴/螺杆/直径/行程/
+    射胶量/塑化量）+ max_set_*（HMI 可设定上限），
+    否则工艺推理（expert）与调优（fuzzy）的入参校验直接拦截，报错形如：
         machine_info.max_set_injection_pressure (最大可设定注射压力 [MPa]（HMI）)
         ... 共 8 项
 

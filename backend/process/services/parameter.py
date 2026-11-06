@@ -7,7 +7,8 @@
 业务模型：
 - parameter 是 condition 的子资源，必须依附 condition（ForeignKey）
 - parameter 之间通过 parent_param 自关联，构成版本树
-- seq_idx 在同一父节点下递增（全局自增也保留语义：condition 内创建顺序）
+- seq_idx 是模次序号（condition 内全局自增，存储形态是 list），用于指认「第几模」；
+  父子关系只由 parent_param 表达，不从 seq_idx 推导（树有分支，父未必是上一模）
 
 软删管理器约定（extensions.models.BaseModel）：
 - objects        = SoftDeleteManager，get_queryset() 已自动过滤 is_deleted=False
@@ -18,19 +19,13 @@
 - 例外：跨表 join 过滤（filter(related__field=...)）走 _base_manager（普通 Manager），
   不会自动排除软删，需显式写 related__is_deleted=False（见 condition.py 的用法）
 
-应用场景 (B 方案简化后, 2026-10-10):
-- 单段 GET 详情       按 parameter_id 查单条 (供前端只读使用)
-- 按 condition_id 查树  查 condition 下所有 parameter 的版本树
-- 双段写操作          update_parameter_in_condition / delete_parameter_in_condition
-                     (URL 含 condition_id + parameter_id, 校验 belongs_to)
+应用场景:
+- 按 parameter_id 查单条     (GET 详情)
+- 按 condition_id 查版本树    (condition_id 可选, 不传则查全表)
+- 写操作                     update_parameter / delete_parameter
 
-已删函数 (2026-10-10):
-- update_parameter / delete_parameter / batch_delete_parameter
-  (写操作必须走双段 + belongs_to 校验)
-
-设计原则：
-- 写操作 (update/delete) 统一走双段 service (XXX_parameter_in_condition)
-- 单段 API 只提供 GET 详情 (无副作用)
+设计原则:
+- 写操作仅凭 parameter_id 定位, 归属校验靠 parameter 自带的 process_condition_id
 - 关系字段（process_condition / parent_param / seq_idx）不允许通过本服务修改
 - 版本树查询不影响数据（只读）
 """
@@ -123,15 +118,13 @@ def _serializable_parameter_dict(parameter: ProcessParameter) -> dict:
 # ============================================================================
 
 def get_parameter_tree(condition_id: int = None) -> List[dict]:
-    """获取版本树（树形结构） - 2026-10-12 URL 拆除双段嵌套
+    """获取版本树（树形结构）
 
     业务: 工艺优化页 / 工艺详情页展示调机历史树。
 
-    2026-10-12 改造:
-    - 旧: get_parameter_tree(condition_id) (condition 必填)
-    - 新: get_parameter_tree(condition_id=None) (condition 退化为可选过滤)
-      - condition_id 传 -> 过滤该 condition 下的 parameter 构造树
-      - condition_id 不传 -> 查全表构造树 (后台 / 集成 API 场景)
+    condition_id 语义:
+      - 传 -> 过滤该 condition 下的 parameter 构造树
+      - 不传 -> 查全表构造树 (后台 / 集成 API 场景)
 
     Args:
         condition_id: 工艺条件 ID (可选)
@@ -192,8 +185,8 @@ def get_parameter_tree(condition_id: int = None) -> List[dict]:
 
 
 # ============================================================================
-# parameter 独立服务 (2026-10-12 URL 拆除双段嵌套)
-# parameter 是独立业务对象, URL 不再嵌套在 /conditions/<id>/parameters/ 之下
+# parameter 独立服务
+# parameter 是独立业务对象, URL 不嵌套在 /conditions/<id>/parameters/ 之下
 # - service 函数一律不带 _in_condition 后缀
 # - condition_id 退化为可选过滤条件 (列查询 / 树查询 场景)
 # - 单条 CRUD 仅凭 parameter_id 定位, 不需 condition_id
@@ -212,13 +205,11 @@ def list_parameters(
     page_no: int = None,
     page_size: int = None,
 ) -> Tuple[int, List[dict]]:
-    """列出 parameter (B 方案 GET 端点用, 2026-10-12 加过滤+分页)
+    """列出 parameter (B 方案 GET 端点用, 支持过滤+分页)
 
-    2026-10-12 改造:
-    - 旧: list_parameters_by_condition(condition_id) (condition 必填)
-    - 新: list_parameters(condition_id=None) (condition 退化为过滤条件, 可选)
-      - condition_id 传 -> 过滤该 condition 下的 parameter
-      - condition_id 不传 -> 查全表 (后台 / 集成 API 场景)
+    condition_id 语义:
+      - 传 -> 过滤该 condition 下的 parameter
+      - 不传 -> 查全表 (后台 / 集成 API 场景)
 
     与 get_parameter_tree 的区别:
     - 本函数返回平铺列表 (用于参数详情页列出全部版本)
@@ -289,9 +280,7 @@ def list_parameters(
 def get_parameter(parameter_id: int) -> dict:
     """获取指定 parameter (B 方案 GET 详情端点用)
 
-    2026-10-12 改造:
-    - 旧: get_parameter_in_condition(condition_id, parameter_id) (双段强校验)
-    - 新: get_parameter(parameter_id) (仅凭 ID 定位, parameter.process_condition_id 自带)
+    仅凭 parameter_id 定位（parameter.process_condition_id 自带归属）。
 
     区别于 condition.get_condition(condition_id)：
     - condition.get_condition 返回 condition + 最新 parameter
@@ -310,9 +299,7 @@ def get_parameter(parameter_id: int) -> dict:
 def update_parameter(parameter_id: int, parameter: dict) -> dict:
     """更新指定 parameter (B 方案 PUT 端点用)
 
-    2026-10-12 改造:
-    - 旧: update_parameter_in_condition(condition_id, parameter_id, parameter)
-    - 新: update_parameter(parameter_id, parameter)
+    仅凭 parameter_id 定位（parameter.process_condition_id 自带归属）。
 
     parameter 自适应两种格式, 由本函数智能识别:
     - 含 'setting_process' key → NEST (前端 UI 格式), 调 _frontend_to_condition_dict 转 FLAT
@@ -360,9 +347,7 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
 def delete_parameter(parameter_id: int) -> None:
     """软删指定 parameter (B 方案 DELETE 端点用)
 
-    2026-10-12 改造:
-    - 旧: delete_parameter_in_condition(condition_id, parameter_id)
-    - 新: delete_parameter(parameter_id)
+    仅凭 parameter_id 定位（parameter.process_condition_id 自带归属）。
 
     调机树完整性：存在未删除子节点时拒绝删除——否则子节点会被 get_parameter_tree
     当作孤儿“提根”，丢失其版本归属。需先删子节点。

@@ -86,8 +86,8 @@ export const machineInfoForm = {
   clamping_force_unit: "Ton",
   // 注射单元
   injection_units: [structuredClone(injectionUnitForm)],
-  // 模板参数
-  // 定模板
+  // 模板参数（定模板）
+
   fixed_platen_width: null,
   fixed_platen_height: null,
   fixed_platen_thickness: null,
@@ -422,8 +422,8 @@ export const nozzleSphereRadiusOptions = [
   { label: "90", value: 90 }
 ]
 
-// 最大注射段数（2026-09-09 扩展到 10 段）
-// 90% 场景 1-6 段；少数高端机 7-10 段；超过 10 段需 allow-create 输入
+// 最大注射段数：90% 场景 1-6 段；少数高端机 7-10 段；超过 10 段需 allow-create 输入
+
 export const maxInjectionStagesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
@@ -437,7 +437,7 @@ export const maxInjectionStagesOptions = [
   { label: "10", value: 10 },
 ]
 
-// 最大保压短时（2026-09-09 扩展到 10 段，覆盖罕见高端机）
+// 最大保压短时（覆盖罕见高端机）
 export const maxHoldingStagesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
@@ -451,7 +451,7 @@ export const maxHoldingStagesOptions = [
   { label: "10", value: 10 },
 ]
 
-// 最大储料段数（2026-09-09 扩展到 10 段）
+// 最大储料段数
 export const maxMeteringStagesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },
@@ -465,7 +465,7 @@ export const maxMeteringStagesOptions = [
   { label: "10", value: 10 },
 ]
 
-// 最大温控区域（2026-09-09 扩展到 16 段，覆盖极端场景）
+// 最大温控区域（覆盖极端场景）
 export const maxTempZonesOptions = [
   { label: "1", value: 1 },
   { label: "2", value: 2 },

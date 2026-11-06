@@ -1,17 +1,5 @@
-﻿<!--
-  PolymerForm - 聚合物表单（new / edit / copy 三模式共用）
+﻿<!-- PolymerForm - 聚合物表单（new/edit/copy 三模式共用）：9 个 section 拆成 basicCards（基本信息/推荐工艺，始终展示）+ 填充物组成 + simulationCards（PVT/流变/机械/收缩）两个开关组，仿真参数与填充物组成默认隐藏，4 列布局 divider 只保留 3+ 字段分组 -->
 
-  路由：
-    - /material/polymer/new         新建
-    - /material/polymer/:id/edit    编辑
-    - /material/polymer/:id/copy    复制（清空 id 和 grade）
-
-  架构（2026-09-08）：
-    - 9 个 section 拆为 3 个开关分组：basicCards（基本信息 / 推荐工艺，始终展示）+ 填充物组成（开关）+ simulationCards（PVT / 流变 / 机械 / 收缩，开关）
-    - 仿真参数 + 填充物组成默认隐藏，避免对普通用户造成填写负担
-    - 开关始终可见（独立 card），打开后对应 section 平铺
-    - 4 列布局，divider 仅保留 3+ 字段领域分组
--->
 <template>
   <div class="polymer-form">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
@@ -399,9 +387,7 @@ const filler_total_percentage = computed(() => {
   }, 0)
 })
 
-// ============================================================================
 // 填充物库加载
-// ============================================================================
 
 async function loadAvailableFillers() {
   if (available_fillers.value.length > 0) return // 缓存避免重复加载
@@ -454,9 +440,7 @@ watch(showFillerComposition, async (val) => {
   }
 })
 
-// ============================================================================
 // 字段定义
-// ============================================================================
 
 const basicItems: FormItem[] = [
   { label: '塑料简称', prop: 'abbreviation', type: 'select', options: polymerAbbreivationOptions, allowCreate: false, required: true },
@@ -471,7 +455,6 @@ const basicItems: FormItem[] = [
 ]
 
 // 推荐工艺参数：密度（材料本体）→ 温度 → 剪切 → 杂项 → 干燥
-// divider 仅保留：其他工艺参数（7 字段杂项）+ 塑料干燥参数（5 字段独立领域）
 const processItems: FormItem[] = [
   { label: '熔体密度', prop: 'melt_density', type: 'number', unit: 'g/cm³', precision: 4 },
   { label: '固体密度', prop: 'solid_density', type: 'number', unit: 'g/cm³', precision: 4 },
@@ -503,7 +486,6 @@ const processItems: FormItem[] = [
 ]
 
 // PVT 仿真参数：按物理相分类（熔体相 m → 固体相 s → 通用 Tait）
-// 13 字段一气呵成，不加 divider（用户重点是"看全 PVT 配方"）
 const pvtItems: FormItem[] = [
   { label: 'Tait b1m', prop: 'tait_b1m', type: 'number', unit: 'm³/kg', precision: 8 },
   { label: 'Tait b2m', prop: 'tait_b2m', type: 'number', unit: 'm³/kg-K', precision: 8 },
@@ -521,7 +503,6 @@ const pvtItems: FormItem[] = [
 ]
 
 // 流变仿真参数：仅保留 2 个领域分组（Cross-WLF 参数 + MFR 测试条件）
-// 删除冗余：粘度模型（1 字段）/ 接合点损失法（2 字段，label 已有前缀）/ 其他流变参数（2 字段）
 const rheologyItems: FormItem[] = [
   { label: '粘度模型', prop: 'model_type', type: 'select', options: [{ label: 'Cross-WLF', value: 'cross_wlf' }], allowCreate: false },
 
@@ -569,9 +550,7 @@ const shrinkageItems: FormItem[] = [
   { label: '最大垂直收缩率', prop: 'max_v_shrink', type: 'number', unit: '%', precision: 4 },
 ]
 
-// ============================================================================
 // formCards（始终展示 2 个，开关打开后追加 4 个仿真 section）
-// ============================================================================
 
 const basicCards: FormCard[] = [
   { title: '基本信息', items: basicItems },

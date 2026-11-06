@@ -1,21 +1,7 @@
-<!--
-  PreviousSuggestion - 上一轮调整建议（多模态卡片）
-
-  职责：展示上一轮算法/工艺员给出的调整建议，供本轮试模参考
-  数据：suggestion（来自上一轮 infer 响应，可能为 null）
-  位置：OptimizationCreate 中独立的 round-detail-block，位于"工艺参数"和
-       "缺陷反馈"之间（不在 DefectFeedback 内部）
-
-  设计约束：
-  - 不带 title / header（由父级 round-detail-block__title 提供"上一轮调整建议"）
-  - 类层级 ≤ 2：.previous-suggestion > .previous-suggestion__group / __item
-  - 浅色背景 + 左侧强调条（与 SettingProcess 风格呼应，但不引入新 CSS 类深度）
-  - 多模态内容：按 group 分类，每组可包含任意条建议
-  - 空状态：suggestion=null 或 groups 为空时显示占位文本
--->
+<!-- PreviousSuggestion - 调整建议（锚在该轮工艺参数上） -->
 <template>
   <div class="previous-suggestion">
-    <!-- 空状态：上一轮暂无调整建议（首轮 / 算法未返回） -->
+    <!-- 空状态：本轮暂无调整建议（首轮 / 算法未返回） -->
     <div v-if="!hasContent" class="previous-suggestion__empty">
       <AppIcon icon="mdi:lightbulb-on-outline" />
       <span>暂无调整建议（首轮或等待算法返回）</span>
@@ -59,13 +45,6 @@
 </template>
 
 <script setup lang="ts">
-/**
- * PreviousSuggestion - 上一轮调整建议
- *
- * Props：suggestion（来自上一轮的 infer 响应）
- *
- * 注意：此组件只负责展示，不修改父级数据
- */
 import { computed } from 'vue'
 import type { Suggestion, SuggestionDirection } from '@/types/optimization'
 
@@ -73,13 +52,7 @@ const props = defineProps<{
   suggestion?: Suggestion | null
 }>()
 
-/**
- * 是否展示内容（有 groups 且至少一个 group 有 items）
- * - 用 computed 而非 function：Vue 模板不会自动为函数名加 ()，
- *   若写成函数 + v-if="!hasContent"，Vue 会把函数引用取反为 false，
- *   导致永远走 v-else 分支，跳过空状态检查
- * - computed 会响应 props.suggestion 变化，模板中自动解包 .value
- */
+/** 是否有内容可展示（用 computed 而非 function：模板中 v-if 取函数引用恒为 false，会跳过空状态分支） */
 const hasContent = computed(() => {
   const sug = props.suggestion
   if (!sug || !sug.groups || sug.groups.length === 0) return false

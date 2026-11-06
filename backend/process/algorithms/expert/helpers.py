@@ -115,7 +115,7 @@ def parse_material_family(abbreviation: str) -> str:
     # - PET 必须在 PE 之前（否则 'PET'.startswith('PE') 误匹配）
     # - PBT 可放任意位置（不存在 PB 前缀冲突）
     # - PMMA 必须在 PM 子串前（暂无冲突）
-    # - 2026-07-05 #19+#20 温度族：补充 PVC / AS / HDPE / LDPE / LLDPE 5 个 family
+    # - 温度族补充 PVC / AS / HDPE / LDPE / LLDPE
     for family in (
         'PP', 'PBT', 'PET', 'PE',          # PE 匹配 PE/HDPE/LDPE/LLDPE
         'PS', 'ABS', 'AS',

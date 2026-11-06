@@ -103,7 +103,7 @@ class ProcessSetSchema(BaseSchema):
     hold_stg: Optional[int] = Field(1, ge=1, le=5, description="保压段数（1-5）")
     met_stg: Optional[int] = Field(1, ge=1, le=4, description="计量段数（1-4）")
     brl_temp_stg: Optional[int] = Field(
-        5, ge=1, le=10, description="料筒温度段数（1-10）",
+        5, ge=1, le=10, description="料筒温度档数（1-10，第 1 档为喷嘴）",
     )
 
     # 模式设置

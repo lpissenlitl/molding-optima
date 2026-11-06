@@ -1,8 +1,6 @@
 """
 文件中心相关 Schema 定义 - Pydantic 版本
 
-版本历史：
-- v2.0.0 (2026-06-27) - 从 marshmallow 迁移到 Pydantic
 """
 from typing import Optional
 from pydantic import Field

@@ -29,15 +29,27 @@ data/
 | 环节 | 导出时的处理 | 与数据库侧的对应 |
 |---|---|---|
 | 库 | 导出 `is_deleted=False` 的全部库（含停用库，带 `is_active` 标记） | `get_libraries_by_codes` 过滤 `is_active=True, is_deleted=False` |
-| 同码多库 | **只导出第一条**（按主键升序），其余记警告 | `qs.first()` 取第一条 |
+| 同码多库 | **全部导出**（库编码跨租户可重复 ⇒ 同码多库是合法状态） | `get_library_index` 同码**全保留** |
 | 规则 | 导出 `is_deleted=False` 的全部规则（含停用规则，带 `is_active` 标记） | `get_methods` 过滤 `is_active=True, is_deleted=False` |
 | 关键字 | **全部导出**（不带任何过滤，带 `is_deleted` 标记仅供查阅） | `RuleKeyword.objects.filter(keyword_name__in=...)` 不带过滤 |
+
+⚠️ **同码多库的规则文件按库主键分文件**（`<库码>__<库主键>.json`）：
+  库编码唯一时仍是 `<库码>.json`（历史命名，已导出的数据目录保持有效）。
+  同码时若还按编码写文件，两个库会互相覆盖 ⇒ 文件侧只剩一个库的规则
+  （不报错，只是结果悄悄不同）。
+
+⚠️ **归属字段（`owner_type` / `company_id`）必须一起导出**：推理层的可见性
+  判据（系统库全平台公用、租户私库只对归属租户可见）落在共用编排层，
+  而编排层零 ORM ⇒ 文件侧必须带上归属信息，两条来源才能给出**同一个**
+  可见集合（否则同一条规则在两条路径下的可见性不同 —— 不报错，
+  只是结果悄悄不同）。
 """
 
 import argparse
 import json
 import os
 import sys
+from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -78,23 +90,17 @@ def _write_json(path: str, payload: Dict[str, Any], indent: int = 2) -> None:
 # —— 导出：库 ————————————————————————————————————————————————
 
 def export_libraries() -> List[Dict[str, Any]]:
-    """导出规则库清单。
+    """导出规则库清单（**同码多库全部导出**）。
 
-    ⚠️ **同码多库只导第一条**（按主键升序）—— 与数据库来源
-      `get_libraries_by_codes` 的 ``qs.first()`` 口径一致 ⇒ 两条路径
-      选中的库**逐条相同**。
+    ⚠️ **不再只导第一条**：`library_code` 是业务分类编码、**跨租户可重复**
+      （`add_rule_library` 只校验「同公司内不重复」）⇒ 同码多库是合法状态。
+      只导第一条 ⇒ 别家的库在文件侧消失，两条来源的可见集合分叉
+      （不报错，只是结果不同）。
     """
     from process.models.rules import RuleLibrary
 
     rows: List[Dict[str, Any]] = []
-    seen: Dict[str, int] = {}
     for lib in RuleLibrary.objects.filter(is_deleted=False).order_by('id'):
-        if lib.library_code in seen:
-            print('  [警告] 库编码 %r 有多条记录，只导出第一条（id=%s），'
-                  '跳过 id=%s —— 与数据库来源的 qs.first() 口径一致'
-                  % (lib.library_code, seen[lib.library_code], lib.id))
-            continue
-        seen[lib.library_code] = lib.id
         rows.append({
             'library_id': lib.id,
             'library_code': lib.library_code,
@@ -102,6 +108,9 @@ def export_libraries() -> List[Dict[str, Any]]:
             'library_type': lib.library_type,
             'priority': lib.priority,
             'is_active': lib.is_active,
+            # 归属信息（可见性判据的输入）—— 两条来源必须对称
+            'owner_type': lib.owner_type,
+            'company_id': lib.company_id,
             'source_ref': 'RuleLibrary:%s' % lib.id,
         })
     return rows
@@ -204,19 +213,27 @@ def export_all(out_dir: str = DEFAULT_OUT_DIR, indent: int = 2) -> Dict[str, Any
             os.remove(os.path.join(rules_dir, name))
 
     total_rules = 0
+    # ⚠️ **同码多库 ⇒ 规则按库主键分文件**（库编码唯一时仍是 `<库码>.json`）：
+    #   同码时若还按编码写文件，两个库会互相覆盖 ⇒ 文件侧只剩一个库的规则。
+    code_counts = Counter(lib['library_code'] for lib in libraries)
     for lib in libraries:
-        rows = export_rules(lib['library_id'], lib['library_code'])
+        code = lib['library_code']
+        if code_counts[code] > 1:
+            filename = '%s__%s.json' % (code, lib['library_id'])
+        else:
+            filename = '%s.json' % code
+        rows = export_rules(lib['library_id'], code)
         total_rules += len(rows)
-        _write_json(os.path.join(rules_dir, '%s.json' % lib['library_code']), {
+        _write_json(os.path.join(rules_dir, filename), {
             'schema_version': SCHEMA_VERSION,
             'exported_at': exported_at,
-            'library_code': lib['library_code'],
+            'library_code': code,
             'library_name': lib['library_name'],
             'library_id': lib['library_id'],
             'rules': rows,
         }, indent=indent)
-        print('  规则 %-18s %4d 条 → rules/%s.json'
-              % (lib['library_code'], len(rows), lib['library_code']))
+        print('  规则 %-18s %4d 条 → rules/%s'
+              % (code, len(rows), filename))
 
     # 3) 关键字
     keywords = export_keywords()

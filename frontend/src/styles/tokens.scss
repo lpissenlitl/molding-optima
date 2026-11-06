@@ -3,11 +3,11 @@
  * 定义全局样式变量，支持主题切换和样式一致性
  *
  * @author MoldingX Team
- * @since 2026-06-05  初版（Element UI 时代）
- * @updated 2026-09-01  Vue 3 / Element Plus 适配：
- *                          - menu-active-text-color 改用 var(--theme-primary)
- *                          - 补充交互色（链接/焦点环/图标）
- *                          - 补充滚动条色
+ *
+ * 主题要点：
+ *   - menu-active-text-color 用 var(--theme-primary)
+ *   - 交互色（链接/焦点环/图标）
+ *   - 滚动条色
  *
  * 使用规范：
  *   1. 所有页面 / 组件只能用本文件的变量，不写硬编码色值

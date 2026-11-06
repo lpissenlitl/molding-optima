@@ -1,9 +1,4 @@
-<!--
-  OptimizationCreate - 智能调机（工作台）
-  - 智能调机 = 基于工艺条件 + 缺陷反馈，迭代推荐工艺参数
-  - 工艺条件复用 shared/ProcessCondition
-  - 工作台：入口单一，无返回按钮
--->
+<!-- OptimizationCreate - 智能调机（工作台） -->
 <template>
   <div class="optimization-create">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder" />
@@ -56,20 +51,20 @@
                     size="small"
                   />
                 </div>
-                <SettingProcess
+                <TuningParameterPanel
                   :setting-process="activeRound.parameter"
                   :original-process="originalParameter"
                   :readonly="isProcessReadonly"
                 />
               </div>
 
-              <!-- 详情区顺序：参数 → 上一轮建议 → 工艺实测 → 缺陷反馈；缺陷永远在最后 -->
+              <!-- 详情区顺序：参数 → 调整建议 → 工艺实测 → 缺陷反馈；缺陷永远在最后 -->
               <div class="round-detail-block">
                 <div class="round-detail-block__title">
                   <AppIcon icon="mdi:lightbulb-on-outline" />
-                  上一轮调整建议
+                  调整建议
                 </div>
-                <PreviousSuggestion :suggestion="previousSuggestion" />
+                <PreviousSuggestion :suggestion="activeRound.suggestion" />
               </div>
 
               <!-- 工艺实测：默认折叠（避免误导必填）+ 粘性状态（跨轮次保留） -->
@@ -121,6 +116,8 @@
                 </div>
                 <DefectFeedback
                   v-model="activeRound.feedback.defect"
+                  v-model:tuning-result="activeRound.feedback.tuning_result"
+                  :has-comparison="activeRound.type !== 'initial'"
                   :defect-keywords="defectKeywords"
                   :position-keywords="positionKeywords"
                   :keywords-loaded="keywordsLoaded"
@@ -152,6 +149,7 @@
         获取初始工艺
       </el-button>
       <el-button
+        v-if="!isQualifiedResult"
         type="warning"
         :loading="optimize_loading"
         :disabled="!hasAnyProcess"
@@ -186,6 +184,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { RefreshLeft, Check } from '@element-plus/icons-vue'
 import { settingProcessForm } from '@/constants/process-const'
@@ -195,7 +194,10 @@ import {
   processInitializationFromMasterdata,
   processOptimizationInfer,
   tuningFeedback,
+  processRecordHistory,
+  processConditionDetail,
 } from '@/api/index'
+import type { TuningRoundItem } from '@/api/index'
 import type { RuleKeyword } from '@/types/rule'
 import type { Suggestion } from '@/types/optimization'
 import {
@@ -205,7 +207,7 @@ import {
   createSessionStorageKey,
 } from '@/utils/storage-session'
 import ProcessCondition from '@/views/process/shared/ProcessCondition.vue'
-import SettingProcess from '@/views/process/shared/SettingProcess.vue'
+import TuningParameterPanel from '../components/TuningParameterPanel.vue'
 import RoundTimeline from '../components/RoundTimeline.vue'
 import DefectFeedback from '../components/DefectFeedback.vue'
 import ProcessActualFeedback from '../components/ProcessActualFeedback.vue'
@@ -214,11 +216,7 @@ import { parameterToFlat, parameterFromFlat, hasFlatParameterContent, isEmptyFla
 
 // sessionStorage 持久化（避免切页面后丢失未提交的工艺数据）
 
-/**
- * sessionStorage key（带软件版本号）
- * - 保存：form / conditionExpanded / observationExpanded
- * - 不保存：loaded / *_loading / defectKeywords / previousSuggestion（mock）
- */
+/** sessionStorage key（带软件版本号）；保存 form / conditionExpanded / observationExpanded */
 const STORAGE_KEY = createSessionStorageKey('optimization-create-draft')
 
 /** debounce 延迟（ms）；输入框每键都触发 reactive，节流到 300ms 足够实时 */
@@ -234,13 +232,7 @@ function schedulePersist() {
   }, PERSIST_DEBOUNCE_MS)
 }
 
-/**
- * 序列化并保存当前状态
- * - 走 JSON 序列化不走 structuredClone：Vue 3 的 reactive Proxy 在 Chrome 的
- *   structuredClone 路径上会抛 DataCloneError（form 嵌套了 mold_info / machine_info
- *   等 API 响应对象）。JSON 路径兼容性最好（足够处理表单数据）
- * - setSessionStorage 内部已 try-catch，失败静默
- */
+/** 序列化并保存当前状态（走 JSON 而非 structuredClone：Vue 3 reactive Proxy 在后者会抛 DataCloneError） */
 function persistDraft() {
   let plain: unknown
   try {
@@ -252,8 +244,8 @@ function persistDraft() {
   }
   setSessionStorage(STORAGE_KEY, {
     form: plain,
-    // 变更高亮的参照基准已改为「上一轮 round 的 parameter」派生（见 originalParameter），
-    // 由 rounds 决定 ⇒ 无需持久化（旧的「进入快照」语义已废弃）
+    // 变更高亮的参照基准由「上一轮 round 的 parameter」派生（见 originalParameter），
+    // 由 rounds 决定 ⇒ 无需持久化
     conditionExpanded: conditionExpanded.value,
     observationExpanded: observationExpanded.value,
   })
@@ -268,12 +260,7 @@ function flushPersist() {
   persistDraft()
 }
 
-/**
- * 从 sessionStorage 恢复草稿
- * - 恢复失败 / schema 异常 → 返回 false，调用方走默认初始化
- * - schema 校验：rounds 非空数组 + condition 为 plain object，防止 storage 中的
- *   过期 / 损坏数据引起崩溃
- */
+/** 从 sessionStorage 恢复草稿（失败或 schema 异常返回 false，由调用方走默认初始化） */
 function restoreDraft(): boolean {
   const cached = getSessionStorage<{
     form: typeof form
@@ -299,16 +286,7 @@ function restoreDraft(): boolean {
 
 // 状态
 
-/**
- * 创建一个调机轮次
- * - id/created_at 用时间戳避免重复
- * - parameter 深克隆 settingProcessForm，表数据 / max_stage 字段齐全
- * - feedback 初值：defect=空数组，tuning_result/observations=null；预留 mold_temp / hot_runner
- * - parameter_id：初始为 null，被【获取初始工艺】填充（后端 ProcessParameter.id）
- * - seq_idx：初始为 null，被【获取初始工艺】填充（业务编号，condition 内全局递增）
- *   下一次 infer 需传作 parent_seq_idx
- *   注：不在 parameter 内部存储，保持 settingProcessForm 纯度
- */
+/** 创建一个调机轮次（parameter 深克隆 settingProcessForm；parameter_id / seq_idx 初值 null，由【获取初始工艺】填充） */
 function makeRound(type: 'initial' | 'optimized' | 'manual' = 'initial') {
   const now = Date.now()
   return {
@@ -318,6 +296,8 @@ function makeRound(type: 'initial' | 'optimized' | 'manual' = 'initial') {
     parameter_id: null as number | null,
     seq_idx: null as number | null,
     parameter: structuredClone(settingProcessForm) as any,
+    // 该轮自身的算法建议（Recommendation 锚在该轮参数上；历史轮次回显时从后端还原）
+    suggestion: null as Suggestion | null,
     feedback: {
       defect: [] as any,
       tuning_result: null as any,
@@ -338,22 +318,14 @@ const activeRound = computed(() =>
 )
 
 /**
- * 当前活动轮次的高亮参照基准（传给 SettingProcess 的 original-process）
- *
- * 语义（2026-10-28 调整）：**参照上一轮的工艺参数**
- * - 第 N 轮（N ≥ 1）⇒ 参照第 N-1 轮的 parameter
- *   理由：本轮参数 = 上一轮基线 + 本轮调整（后端 `_apply_recommendations_to_baseline`
- *   同一语义），只有与上一轮比才能看出「这一轮调了什么」
- * - 第 0 轮（初始工艺）⇒ 没有上一轮 ⇒ 不参照 ⇒ null ⇒ 不高亮
- *   初始工艺是系统首次生成，不存在「变更」语义
- *
- * 为什么用 computed 派生，而不是 watch 维护 ref（旧实现）：
- * - 旧实现语义是「进入该 round 那一刻的 parameter 快照」，在「新建轮次」路径下
- *   必然等于显示值 —— getOptimizedProcess 先给 newRound 填 parameter 再切 active，
- *   watch 触发时拿到的已经是新值 ⇒ 优化轮永远零差异 ⇒ 不高亮
- * - 派生后：参照物完全由 rounds 决定 ⇒ 切轮次自动重算，不会与显示值错位
- * - 派生后也无需 sessionStorage 持久化（旧语义已废弃）
+ * 当前轮是否「合格」：合格态产品没有缺陷 ⇒ 不进入缺陷驱动的优化流程，
+ * 所以隐藏【获取优化工艺】。提交通道仍可用 ——【保存当前工艺】照常落库。
  */
+const isQualifiedResult = computed(
+  () => activeRound.value?.feedback?.tuning_result === 'qualified',
+)
+
+/** 当前活动轮次的高亮参照基准：第 N 轮参照第 N-1 轮的 parameter（第 0 轮不参照）；由 rounds 派生的 computed */
 const originalParameter = computed(() => {
   const idx = form.rounds.findIndex((r) => r.id === form.active_round_id)
   if (idx <= 0) return null
@@ -369,24 +341,13 @@ const hasConditionData = computed(() => {
   return Boolean(c.mold_id || c.injection_machine_id || c.polymer_id || c.condition_no)
 })
 
-/**
- * 工艺按钮启用状态（业务流互斥，2026-09-23 加）：
- * - hasInitialProcess：已创建初始工艺（condition_id 存在）。此时 [获取初始工艺]
- *   应 disabled，需走 [重置] 才能重调（避免覆盖已生成的 condition/parameter）
- * - hasAnyProcess：已有任意轮次落库（任意 round.parameter_id 存在）。此时
- *   [获取优化工艺] 可用 —— infer 需 parent_seq_idx，而 parent_seq_idx 必须
- *   有上一轮已落库的 parameter 才能反查
- */
+/** 工艺按钮启用状态：hasInitialProcess 禁用【获取初始工艺】，hasAnyProcess 启用【获取优化工艺】（infer 需 parent_seq_idx） */
 const hasInitialProcess = computed(() => Boolean(form.condition?.id))
 const hasAnyProcess = computed(() =>
   form.rounds.some((r) => r.parameter_id != null),
 )
 
-/**
- * 当前 active round 是否已绑定后端 ProcessParameter
- * - 控制【保存】按钮 disabled：未调过 infer / 被重置的 round 不能提交
- * - onSubmit 函数体内另有 warning toast 兜底（万一被通过其它路径触发）
- */
+/** active round 是否已绑定后端 ProcessParameter（控制【保存】按钮 disabled） */
 const hasActiveParameter = computed(() =>
   activeRound.value?.parameter_id != null,
 )
@@ -417,11 +378,7 @@ const conditionRef = ref<InstanceType<typeof ProcessCondition> | null>(null)
 
 // 缺陷 keyword 列表（DefectFeedback 需要）
 
-/**
- * 缺陷类 keyword 列表
- * - 后端 listRuleKeywords 未实现 category 过滤，前端拉全部后 filter
- * - TODO（后端支持后可改为参数过滤）
- */
+/** 缺陷类 keyword 列表（后端 listRuleKeywords 未支持 category 过滤，前端拉全量后 filter） */
 const defectKeywords = ref<RuleKeyword[]>([])
 const positionKeywords = ref<RuleKeyword[]>([])
 const keywordsLoaded = ref(false)
@@ -432,7 +389,9 @@ async function loadDefectKeywords() {
     // 兼容两种响应格式：{ status, msg, data: { total, items } } 或 res.items
     const res = await listRuleKeywords({ page_size: 500 }) as any
     const items: RuleKeyword[] = res?.data?.items ?? res?.items ?? []
-    defectKeywords.value = items.filter(k => k.category === 'defect')
+    defectKeywords.value = items.filter(
+      k => k.category === 'defect' && k.keyword_name !== DEFECTFREE_KEYWORD_NAME,
+    )
     positionKeywords.value = items.filter(k => k.category === 'defect_position')
   } catch {
     // 拦截器已统一 toast，这里只恢复兜底状态
@@ -443,13 +402,6 @@ async function loadDefectKeywords() {
   }
 }
 
-/**
- * 上一轮算法 / 工艺员调整建议；来源：上一轮 infer 接口的 suggestion.groups
- * - 初值为 null：调过 getOptimizedProcess 后由 infer 响应填充
- * - PreviousSuggestion 组件在 null 时显示「暂无调整建议」占位
- */
-const previousSuggestion = ref<Suggestion | null>(null)
-
 function toggleCondition() {
   // 走 v-model:expanded：父组件 toggle → 子组件 prop → 子组件 toggle → 卡片折叠
   conditionExpanded.value = !conditionExpanded.value
@@ -457,18 +409,93 @@ function toggleCondition() {
 
 // 数据加载
 
+/** 路由实例（读 query.condition_id） */
+const route = useRoute()
+
+/** 解析 URL 上的 condition_id（「继续调机」入口：/process/optimization?condition_id=123） */
+function resolveConditionId(): number | null {
+  const raw = route.query.condition_id
+  const id = Number(Array.isArray(raw) ? raw[0] : raw)
+  return Number.isInteger(id) && id > 0 ? id : null
+}
+
+/** 轮次类型推断：第 1 轮=初始；人工调整=手动；其余=优化 */
+function inferRoundType(item: TuningRoundItem, index: number): 'initial' | 'optimized' | 'manual' {
+  if (index === 0) return 'initial'
+  if (item.param_source === 'manual_adjusted') return 'manual'
+  return 'optimized'
+}
+
 /**
- * 加载表单：优先从 sessionStorage 恢复草稿，失败走默认初始化
- * - 静默恢复，符合「切页面自动接着填」的预期
- * - 不在 setup 顶部调 restoreDraft：form 还未定义；改为 loaded=false 阶段调
- * - restore 成功后才挂 watch，否则 setup 顶部 reactive 后立即 watch 会触发
- *   「初始写」覆盖 restoreDraft 读到的旧数据
+ * 从后端重建轮次（「继续调机」入口）
+ *
+ * 配对语义：第 N 轮 = 参数(N) + 反馈(N) —— 后端每轮自带自己的 tuning（缺陷 + 效果评价），
+ * 直接挂回该轮，不跨轮搬运。
+ *
+ * 与 sessionStorage 草稿的取舍：草稿含未提交的改动更完整，但换设备/清缓存就没了；
+ * 两者同源时用草稿，不同源时以 URL 指定的 condition 为准（用户明确意图）。
  */
+async function restoreFromServer(conditionId: number): Promise<boolean> {
+  const [detailRes, historyRes]: any[] = await Promise.all([
+    processConditionDetail(conditionId),
+    processRecordHistory(conditionId),
+  ])
+  const detail = detailRes?.data?.condition ?? {}
+  const historyData = historyRes?.data ?? {}
+  const history: TuningRoundItem[] = historyData.history ?? []
+  if (!history.length) return false
+
+  // condition：扁平字段（condition_no / id / *_id）取 history.condition，
+  // 嵌套结构（mold_info / machine_info / polymer_info）取 detail.condition。
+  // 先清空旧键再合并，避免草稿残留字段混进来（保持 form.condition 引用不变）
+  for (const key of Object.keys(form.condition)) {
+    delete (form.condition as Record<string, any>)[key]
+  }
+  Object.assign(form.condition, historyData.condition ?? {}, detail)
+
+  // 后端按 created_at 倒序返回 → 按 seq_idx 正序（第 1 轮在前）
+  const ordered = [...history].sort((a, b) => (a.seq_idx ?? 0) - (b.seq_idx ?? 0))
+  const rounds = ordered.map((item, index) => {
+    const t = item.tuning
+    return {
+      id: item.id,
+      type: inferRoundType(item, index),
+      created_at: item.created_at ?? new Date().toISOString(),
+      parameter_id: item.id,
+      seq_idx: item.seq_idx ?? null,
+      parameter: parameterFromFlat(item as any),
+      // 该轮自身的算法建议（后端 Recommendation 锚在该轮参数上，重建为前端 Suggestion 结构）
+      suggestion: item.tuning?.suggestion
+        ? {
+            source_round_id: item.id,
+            adopted: item.tuning.suggestion.adopted ?? null,
+            groups: item.tuning.suggestion.groups ?? [],
+          }
+        : null,
+      feedback: {
+        defect: (t?.defect_feedbacks ?? []) as any,
+        tuning_result: t?.tuning_result ?? null,
+        // 实测观察后端不落库（tuning-feedback schema 明确不存），回显为空
+        observations: [] as any,
+      },
+    }
+  })
+
+  form.rounds.splice(0, form.rounds.length, ...(rounds as any))
+  form.active_round_id = rounds[rounds.length - 1].id
+  return true
+}
+
+/** 加载表单：优先从 sessionStorage 恢复草稿，失败走默认初始化（restore 成功后才挂 watch，避免初始写覆盖旧数据） */
 async function loadForm() {
   loaded.value = false
   try {
+    const conditionId = resolveConditionId()
     const restored = restoreDraft()
-    if (!restored) {
+    if (conditionId != null && Number(form.condition.id) !== conditionId) {
+      // URL 指定了另一个 condition（草稿属于别的会话）→ 以服务端为准重建轮次
+      await restoreFromServer(conditionId)
+    } else if (!restored) {
       Object.assign(form, {
         condition: {},
         rounds: [makeRound('initial')],
@@ -487,16 +514,7 @@ async function loadForm() {
 
 // 操作
 
-/**
- * 重置表单（用户主动清空数据）
- * - 二次确认避免误操作
- * - flushPersist 清掉任何 pending debounce 写，避免覆盖重置结果
- *
- * 重要：不能替换 form.condition / form.rounds 的整个引用——
- *   - ProcessCondition.vue 在 setup 时 reactive(props.processCondition) 包装了**第一次**的引用
- *   - 后续替换 form.condition 不会重包装，子组件 UI 会停留在旧数据
- *   - 改用 mutate（delete / splice）保留引用，触发 reactive set/deleteProperty
- */
+/** 重置表单（用 mutate 而非替换 form.condition / form.rounds 引用：ProcessCondition.vue 只包装了首次引用，替换会导致子组件停留在旧数据） */
 async function resetForm() {
   try {
     await ElMessageBox.confirm(
@@ -530,7 +548,7 @@ async function resetForm() {
   form.active_round_id = form.rounds[0]?.id ?? null
 
   // activeRound watch 会自动 snapshot 新 round.parameter 到 originalParameter，
-  // 实现 SettingProcess 变更高亮同步重置（无需穿透调组件方法）
+  // 实现 TuningParameterPanel 变更高亮同步重置（无需穿透调组件方法）
 
   // 主动设置 conditionExpanded + 强制子组件同步，避免 watch 时序不一致
   // 导致「重置后 UI 仍折叠但按钮 label 已是『折叠工艺条件』」的 UI 错位
@@ -558,18 +576,7 @@ async function resetForm() {
 //   设计上所有写入集中在一个函数，不允许在调用点散落赋值，避免出现「cond
 //   已更新但 param 未更新」的中间状态。
 
-/**
- * 把后端推理响应原子地应用到前端表单
- *
- * 设计要点：
- *   - 全部字段在一个同步函数里赋值（JS 单线程，默认原子）
- *   - 缺字段跳过（如只拿到 condition_id 没拿到 parameter_id 不处理参数部分）
- *   - 不主动 throw（任何异常都让调用方 catch 统一处理）
- *   - 后端用 {status, msg, timestamp, data: ...} 包裹，axios 拦截器返回整个 body，
- *     所以这里从 result.data 取业务数据
- *
- * 依赖：调用方在赋值前确保 form / activeRound 已初始化。
- */
+/** 把后端推理响应原子地应用到前端表单（缺字段跳过、不主动 throw，业务数据从 result.data 取） */
 function applyInferResultToForm(result: any) {
   const data = result?.data
   if (!data) return
@@ -594,15 +601,7 @@ function applyInferResultToForm(result: any) {
   }
 }
 
-/**
- * 获取初始工艺：调用后端 /initialization/from-masterdata/ 生成初始参数
- *
- * 业务约束：
- * - 模具 / 注塑机 / 材料 / shot_index / injection_index 5 项必填
- *   （由 ProcessCondition.checkFormDataValid 统一校验）
- * - 响应写入 form.condition.id（condition_id）和 activeRound.parameter_id（parameter_id）
- * - 响应写入 activeRound.parameter（工艺参数嵌套结构，由 parameterFromFlat 从 flat 翻译而来）
- */
+/** 获取初始工艺：调用 /initialization/from-masterdata/ 生成初始参数（模具/注塑机/材料/shot_index/injection_index 5 项必填） */
 async function getInitialProcess() {
   const isValid = await conditionRef.value?.checkFormDataValid()
   if (!isValid) return
@@ -630,14 +629,12 @@ async function getInitialProcess() {
 }
 
 /**
- * 校验本轮缺陷反馈完整性（infer 前置校验）
+ * 校验本轮缺陷反馈完整性
  *
- * 业务约束：
- * - 缺陷数组至少 1 项（空数组 / 缺失都视为“未反馈”）
- * - 每项必须 keyword_id 有值（选了缺陷类型）
- * - 非 DEFECTFREE 项必须 level + position 有值（“无缺陷”不需要程度和位置）
- *
- * 返回 { ok, error? }；pure 函数无副作用，便于测试。
+ * 口径：**只有「合格」允许不带缺陷** ——
+ * 合格态产品没有缺陷，也不进入缺陷驱动的优化流程。
+ * 其余档位（不合格 / 改善 / 无变化 / 变差）都必须有缺陷，否则算法没有优化对象。
+ * （与后端 `_validate_feedback` 的 allow_empty 口径一致）
  */
 interface FeedbackValidation {
   ok: boolean
@@ -645,11 +642,15 @@ interface FeedbackValidation {
 }
 function validateFeedback(feedback: any): FeedbackValidation {
   const defects = feedback?.defect
-  if (!Array.isArray(defects) || defects.length === 0) {
+  const list = Array.isArray(defects) ? defects : []
+  if (!feedback?.tuning_result) {
+    return { ok: false, error: '请选择本轮工艺效果评价' }
+  }
+  if (list.length === 0 && feedback.tuning_result !== 'qualified') {
     return { ok: false, error: '请填写缺陷反馈信息' }
   }
-  for (let i = 0; i < defects.length; i++) {
-    const d = defects[i]
+  for (let i = 0; i < list.length; i++) {
+    const d = list[i]
     if (d?.keyword_name == null) {
       return { ok: false, error: `第 ${i + 1} 项缺陷未选择缺陷类型` }
     }
@@ -666,19 +667,7 @@ function validateFeedback(feedback: any): FeedbackValidation {
   return { ok: true }
 }
 
-/**
- * 获取优化工艺：调后端 /optimization/infer/ 生成新轮次
- *
- * 业务约束：
- * - 必须先调 getInitialProcess（前置依赖：form.condition.id + activeRound.seq_idx）
- * - 必须填写缺陷反馈（validateFeedback 校验完整性）
- * - infer 后创建新轮次（不替换当前轮次），保持调机树语义
- * - previousSuggestion 由 infer 响应的 suggestion.groups 填充
- *
- * 响应处理：
- * - new_parameter.parameter_id / seq_idx → 新轮次
- * - suggestion.groups → previousSuggestion.groups（供 UI 展示“上一轮调整建议”）
- */
+/** 获取优化工艺：调 /optimization/infer/ 生成新轮次（需先有初始工艺与完整缺陷反馈；infer 后新建轮次而非替换当前轮次） */
 async function getOptimizedProcess() {
   // 前置校验：必须先调过 getInitialProcess（依赖 condition.id + activeRound.seq_idx）
   if (!form.condition?.id) {
@@ -689,10 +678,21 @@ async function getOptimizedProcess() {
     ElMessage.warning('当前轮次缺少 seq_idx，请重置后重试')
     return
   }
+  // 合格态不进入缺陷驱动的优化流程（正常路径下按钮已隐藏，这里防御）
+  if (isQualifiedResult.value) {
+    ElMessage.info('产品已合格，无需进行工艺优化')
+    return
+  }
   // 缺陷反馈完整性校验（避免后端静默接收空 feedback 导致不报期望）
   const validation = validateFeedback(activeRound.value?.feedback)
   if (!validation.ok) {
     ElMessage.warning(validation.error!)
+    return
+  }
+
+  // 无缺陷时算法没有优化对象（后端会 fail-fast 报「推荐算法暂不可用」，对用户是误导）
+  if (!(activeRound.value?.feedback?.defect?.length)) {
+    ElMessage.warning('本轮未填写缺陷，暂无优化建议')
     return
   }
 
@@ -714,6 +714,13 @@ async function getOptimizedProcess() {
 
     const inferData = result?.data ?? result ?? {}
 
+    // 合格态短路响应（后端不跑 fuzzy、不建新轮次）——
+    // 正常路径下按钮已隐藏不会走到这，这里防御：别把空轮次塞进时间线
+    if (inferData.skipped) {
+      ElMessage.info(inferData.message || '本轮已记录，未进行工艺优化')
+      return
+    }
+
     // 响应有效性校验：new_parameter / suggestion.groups 缺失时不跳转下一轮
     // （后端算法不可用等场景，排查走服务端日志）
     const hasNewParameter = !!(
@@ -726,9 +733,6 @@ async function getOptimizedProcess() {
       ElMessage.error('推荐算法暂不可用，请稍后重试或联系管理员')
       return
     }
-
-    // 在切换 active 之前保存上一轮 round.id（source_round_id 语义）
-    const previousRoundId = activeRound.value?.id ?? null
 
     const newRound = makeRound('optimized')
     if (inferData.new_parameter) {
@@ -745,10 +749,12 @@ async function getOptimizedProcess() {
     form.rounds.push(newRound)
     form.active_round_id = newRound.id
 
-    // 上一轮调整建议：infer 响应的 suggestion.groups
+    // 调整建议：infer 响应里的 suggestion 即 Recommendation(参数N+1)，
+    // 锚点语义下属于【新轮次】本身（Recommendation 挂在它所属的 parameter 上），
+    // 因此挂到 newRound 而不是全局变量 —— 切回历史轮次时不会串到别的轮次。
     if (inferData.suggestion && Array.isArray(inferData.suggestion.groups)) {
-      previousSuggestion.value = {
-        source_round_id: previousRoundId,
+      newRound.suggestion = {
+        source_round_id: newRound.id,
         adopted: null,  // 未确认（待本轮填 effective/ineffective 后自动变更）
         groups: inferData.suggestion.groups,
       }
@@ -767,18 +773,7 @@ async function getOptimizedProcess() {
   }
 }
 
-/**
- * 提交当前轮次试模结果（TuningRecord 落库）
- *
- * 业务语义（区别于 getOptimizedProcess 的 infer 路径）：
- * - 用户在当前轮次填了实测 + 缺陷反馈，希望立即落库
- * - 不创建新 ProcessParameter / 不调算法 / 不污染 source_type
- * - 幂等：同一 parameter 重复提交 → 覆盖更新
- *
- * 关联：api/index.ts → tuningFeedback
- * 后端接口：POST /api/processes/parameters/<parameter_id>/tuning-feedback/
- * 2026-10-12 URL 单段化: parameter_id 从 URL 限定 (tuning 业务上属 parameter)
- */
+/** 提交当前轮次试模结果（TuningRecord 落库；幂等覆盖，不创建新 ProcessParameter） */
 async function onSubmit() {
   if (!activeRound.value) {
     ElMessage.warning('请先选择调机轮次')
@@ -792,10 +787,14 @@ async function onSubmit() {
   save_loading.value = true
   try {
     const feedback = activeRound.value.feedback || {}
+    // 工艺参数一并提交：后端在**同一事务**里写回参数 + 评价，
+    // 语义 = 「我用了这组参数，试模结果是 X」（参数没改则不传，退化为只写评价）
+    const flatParameter = parameterToFlat(activeRound.value.parameter)
     const res: any = await tuningFeedback(activeRound.value.parameter_id, {
       defect_feedbacks: feedback.defect ?? [],
       observations: feedback.observations ?? [],
       tuning_result: feedback.tuning_result ?? null,
+      parameter: isEmptyFlatParameter(flatParameter) ? undefined : flatParameter,
     })
     if (res?.status === 0) {
       const created = res.data?.created
@@ -969,10 +968,10 @@ onBeforeUnmount(() => {
   }
 
   /*
-   * 嵌入态：当块内嵌 SettingProcess 时让其外层 wrapper 透明化
+   * 嵌入态：当块内嵌 TuningParameterPanel 时让其外层 wrapper 透明化
    * - 避免外层 border 与 wrapper 的 box-shadow/padding 叠加形成三层视觉重量
-   * - 仅影响本页面嵌入场景；SettingProcess 默认态不变
-   * - 3 个 process-card 仍保留 border（作为 SettingProcess 内部状态分隔）
+   * - 仅影响本页面嵌入场景；TuningParameterPanel 默认态不变
+   * - 3 个 process-card 仍保留 border（作为 TuningParameterPanel 内部状态分隔）
    */
   &--embedded :deep(.process-settings-wrapper) {
     background-color: transparent;

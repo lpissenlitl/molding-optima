@@ -17,7 +17,7 @@
 - 配置开关：`settings.FUZZY_LIBRARY_SOURCE`（`'db'` / `'file'`），
   配 `settings.FUZZY_LIBRARY_FILE_DIR` 指定数据目录；
 - 显式注入：直接 `FuzzyEngine(repository=FileResourceRepository())`
-  —— 优先级高于配置（引擎已收到实例就不再看配置）。
+  —— 优先级高于配置（引擎已收到实例就不看配置）。
 """
 
 import logging

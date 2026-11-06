@@ -1,31 +1,4 @@
-/**
- * useConditionDerived - 工艺条件派生计算 composable
- *
- * 职责（从 ProcessCondition 中提取）：
- *   1. 索引计算：shot_index / injection_index / product_index（0 索引）
- *   2. 数量判断：shot_count / unit_count / cavity_count + 多射/多腔标识
- *   3. 实体存在性：hasMold / hasMachine / hasPolymer
- *   4. 派生对象：按索引从数据源（mold_info / machine_info）切片
- *      - gatingDerived: 当前射次的浇注系统
- *      - currentCavity: 当前制品（shot + product 索引）
- *      - currentGate: 当前浇口（cavity.gates[0]）
- *      - injectionUnitDerived: 当前射台
- *   5. 显示用 1 索引
- *
- * 用法：
- *   const condition = reactive<Condition>(props.processCondition ?? {})
- *   const { gatingDerived, currentCavity, ... } = useConditionDerived(condition)
- *
- * 设计原则：
- *   - 接受 reactive 对象（不是 Ref），内部用 condition.xxx 直接访问
- *   - 所有派生都是 computed，调用方在模板中直接用即可
- *   - 不缓存中间状态（避免响应性陷阱），全部走 computed 链
- *   - 容错：缺失索引/缺失数据 返回 undefined，由调用方决定如何降级
- *
- * 索引约定（与 ProcessCondition 内部一致）：
- *   - 后端 shot_index / injection_index / product_index 是 0 索引
- *   - UI 显示用 1 索引（更友好），由 shotIndexDisplay 等 computed 转换
- */
+/** useConditionDerived - 工艺条件派生计算 composable：接收 reactive condition（不是 Ref），派生全部走 computed 链不缓存中间状态；shot_index / injection_index / product_index 是 0 索引，UI 显示用 1 索引（由 shotIndexDisplay 等转换）；缺失数据返回 undefined 由调用方降级 */
 import { computed, type ComputedRef } from 'vue'
 import type {
   Condition,
@@ -101,8 +74,6 @@ export function useConditionDerived(condition: Condition): ConditionDerived {
   const hasMultipleProducts = computed<boolean>(() => cavities.value.length > 1)
 
   // === 当前浇口（cavity.gates[0]，取第一个浇口） ===
-  // 工艺上 cavity 可对应多个 gate（不同形状），但工艺条件展示通常用主浇口
-  // 如需扩展可加 gateIndex，类似 product_index
   const currentGate = computed<GateSummary | undefined>(() => {
     return currentCavity.value?.gates?.[0]
   })

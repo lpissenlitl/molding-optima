@@ -1,22 +1,5 @@
-/**
- * 规则中心 API 封装
- *
- * 后端路径前缀：/api/processes/
- * 路由表（按业务关联分组）:
- * - GET/POST    /api/processes/rule-libraries/                       规则库 (基础设施)
- * - GET/PATCH/DELETE /api/processes/rule-libraries/<id>/
- * - GET/POST    /api/processes/rules/keywords/                       规则关键词 (与 method 关联)
- * - GET/PUT/DELETE /api/processes/rules/keywords/<id>/
- * - GET/POST    /api/processes/rules/methods/                        规则方法 (引用 keyword, ?rule_library_id 过滤)
- * - GET/PATCH/DELETE /api/processes/rules/methods/<id>/
- * - GET/POST    /api/processes/expert-rules/                        专家规则 (独立, 不引用 keyword)
- * - GET/PATCH/DELETE /api/processes/expert-rules/<id>/
- *
- * 设计说明：
- * - 后端响应统一为 { status, msg, data: ... }
- * - request 拦截器只做认证和错误处理，不会剥离外层
- * - 调用方拿到的 res 是完整响应，使用 res.data 访问业务数据
- */
+/** 规则中心 API 封装：后端前缀 /api/processes/，覆盖 rule-libraries / rules.keywords / rules.methods / expert-rules 四组端点；后端响应统一 {status,msg,data}，拦截器不剥离外层，调用方用 res.data 取业务数据 */
+
 import request from '@/utils/request'
 import type {
   PageResult,
@@ -30,9 +13,8 @@ import type {
   ExpertRuleCreatePayload,
 } from '@/types/rule'
 
-// ============================================================================
-// RuleLibrary
-// ============================================================================
+// RuleLibrary（规则库）
+
 
 /** 规则库列表（卡片视图） */
 export function listRuleLibraries(params?: {
@@ -85,9 +67,8 @@ export function deleteRuleLibrary(id: number): Promise<void> {
   })
 }
 
-// ============================================================================
 // RuleKeyword（关键词，租户全局）
-// ============================================================================
+
 
 /** 关键词列表 */
 export function listRuleKeywords(params?: {
@@ -129,9 +110,8 @@ export function deleteRuleKeyword(id: number): Promise<void> {
   })
 }
 
-// ============================================================================
 // RuleMethod（规则方法，详情页 Tab 1）
-// ============================================================================
+
 
 /** 规则方法列表（?rule_library_id 过滤） */
 export function listRuleMethods(params?: {
@@ -186,9 +166,40 @@ export function deleteRuleMethod(id: number): Promise<void> {
   })
 }
 
-// ============================================================================
+/** 规则晋升结果（跳过项带原因，便于前端提示） */
+export interface RulePromotionResult {
+  /** 实际晋升条数 */
+  promoted_count: number
+  /** 晋升成功的规则 id */
+  promoted: number[]
+  /** 未晋升的项与原因 */
+  skipped: Array<{ rule_method_id: number; reason: string }>
+  /** 目标公共库档案 */
+  public_library: {
+    id: number
+    library_code: string
+    library_name: string
+    owner_type: string
+    company_id: number | null
+  } | null
+}
+
+/**
+ * 晋升规则到公共库（平台超管专用）
+ *
+ * 语义是「移动」：规则的所属库改指向公共库，原租户私库不再保留该规则；
+ * 规则的归属公司保留原值作溯源。
+ */
+export function promoteRuleMethods(ruleMethodIds: number[]): Promise<RulePromotionResult> {
+  return request({
+    url: '/api/processes/rule-promotions/',
+    method: 'post',
+    data: { rule_method_ids: ruleMethodIds },
+  })
+}
+
 // ExpertRule（专家规则，详情页 Tab 2）
-// ============================================================================
+
 
 /** 专家规则列表（?rule_library_id 过滤） */
 export function listExpertRules(params?: {

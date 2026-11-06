@@ -1,9 +1,5 @@
-<!--
-  UserFormDrawer - 用户表单抽屉（一体化组件：el-drawer + el-form + 提交逻辑）
-  - 使用方：v-model:visible 控制显示，:id 传编辑 id，@success 接收提交成功事件
-  - 新建：必填 username + password
-  - 编辑：username 只读
--->
+<!-- UserFormDrawer - 用户表单抽屉：v-model:visible 控制显隐、:id 传编辑 id、@success 接收提交成功；新建必填 username+password，编辑时 username 只读 -->
+
 <template>
   <el-drawer
     :model-value="visible"
@@ -114,9 +110,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { roleMethod, organizationMethod, userMethod, getOrganizationTree } from '@/api'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 interface Props {
   visible: boolean
@@ -142,20 +136,14 @@ function onVisibleChange(val: boolean) {
   emit('update:visible', val)
 }
 
-// ============================================================================
 // 表单数据
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const submitting = ref(false)
 
-/**
- * 密码输入框 readonly 控制
- * - 初始为 true：避免 Chrome/Edge 等浏览器自动填充其他已保存的密码
- * - 用户 focus 时改为 false：允许实际输入
- * - 配合 autocomplete="new-password" 双重保险
- */
+/** 密码输入框 readonly 控制：初始 true 防 Chrome/Edge 自动填充已存密码，focus 时改 false 允许实际输入，配合 autocomplete="new-password" 双重保险 */
+
 const password_readonly = ref(true)
 
 const form = reactive({
@@ -193,9 +181,7 @@ const rules: FormRules = {
   ],
 }
 
-// ============================================================================
 // 选项数据
-// ============================================================================
 
 const organizations = ref<any[]>([])
 const roles = ref<any[]>([])
@@ -252,9 +238,7 @@ async function loadUserDetail(userId: number) {
   }
 }
 
-// ============================================================================
 // 生命周期 + 模式切换
-// ============================================================================
 
 /** id 变化时重新初始化（外部切换 create/edit 模式） */
 watch(

@@ -53,7 +53,7 @@ def main():
     mold_info = {"product_category": "空调"}
     machine_info = {
         "drive_system": "hydraulic",
-        # 设备设定上限 = 判级论域上界的**必需来源**（2026-10-27 二次口径：
+        # 设备设定上限 = 判级论域上界的**必需来源**（用户口径：
         # 「必须用设备值，设备值没有就报错」）⇒ 缺任何一项都会被契约校验拒（400）。
         "max_set_injection_pressure": 180.0,
         "max_set_injection_speed": 300.0,
@@ -139,7 +139,7 @@ def main():
     print(f"[5/6] groups={len(groups)} groups, items={len(all_items)} 全部含 3 字段 OK")
 
     # ---- 6. 实例方法形态（保持与 view 层调用一致） ----
-    # 重调一次，直接通过 service 实例调（2026-10-15 二次调整后回归实例方法）
+    # 重调一次，直接通过 service 实例调
     with patch.object(
         _opt_mod,
         "_call_algorithms",

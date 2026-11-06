@@ -1,24 +1,5 @@
-<!--
-  ProjectForm - 项目表单页（新建 + 编辑共用）
+<!-- ProjectForm - 项目表单页（新建+编辑共用）：路由 /mold/project/new 与 /mold/project/:id/edit（自动加载详情），单文件处理两种模式（通过 useRoute().params.id 判断 id 是否存在），表单字段/验证规则/提交逻辑只写一次；每个 card 是一个独立区域，card.items 是 flat 数组，自动分行算法 groupIntoRows() 按 span 总和=24 自动换行（默认 columns=4 → span=6；span=12 跨 2 列；span=24 占满整行），添加新字段 = 在 items 里加一项，零模板改动 -->
 
-  路由：
-    - /mold/project/new           新建模式
-    - /mold/project/:id/edit      编辑模式（自动加载详情）
-
-  设计要点：
-    - 单文件处理两种模式（避免 create / edit 两份重复代码）
-    - 通过 useRoute().params.id 判断模式（id 存在 → 编辑，否则新建）
-    - 表单字段、验证规则、提交逻辑只写一次
-
-  架构：flat items 数组 + 自动分行（默认 4 列布局）
-    - 每个 card 是一个独立区域（Card 1：项目信息，Card 2：合同与备注）
-    - card.items 是 flat 数组（业务方只关心字段顺序 + 列宽）
-    - 自动分行算法 groupIntoRows()：按 span 总和=24 自动换行
-      · 默认 columns=4 → 默认 span=6（4 列紧凑布局）
-      · span=12 → 跨 2 列（适用于"项目名称"等长字段）
-      · span=24 → 占满整行（适用于 textarea、备注、分组标题 divider）
-    - 添加新字段 = 在 items 里加一项，零模板改动
--->
 <template>
   <div class="project-form">
     <el-form
@@ -41,10 +22,7 @@
           <span class="custom-form__title">{{ card.title }}</span>
         </template>
 
-        <!--
-          自动分行的 rows（由 computed cardRows 计算）
-          每个 row 是一个 el-row，内部 items 是 el-col
-        -->
+        <!-- 自动分行的 rows（由 computed cardRows 计算） -->
         <el-row
           v-for="(row, rIdx) in cardRows[cIdx].rows"
           :key="`row_${cIdx}_${rIdx}`"
@@ -64,11 +42,7 @@
               {{ item.label }}
             </el-divider>
 
-            <!--
-              常规字段：必须有 prop
-              用 v-else-if="item.prop" 让 TypeScript 在块内 narrow prop 为 string
-              （divider 不需要 prop，其他类型都要求 prop）
-            -->
+            <!-- 常规字段：必须有 prop -->
             <el-form-item
               v-else-if="item.prop"
               :label="item.label"
@@ -120,25 +94,8 @@
     <!-- 编辑模式的加载占位 -->
     <div v-else v-loading="true" class="loading-placeholder"></div>
 
-    <!--
-      操作按钮：移出 el-form，改为 project-form 的子元素
-      三个原因（从结构到 UX 逐层递进）：
+    <!-- 操作按钮：移出 el-form，改为 project-form 的子元素（三个原因从结构到 UX 逐层递进）：1 DOM 结构分离——el-form 只管表单内容、form-actions 只管底部操作，未来改 sticky/drawer 互不影响；2 CSS 加载顺序避免 FOUC——Vite dev 模式 CSS 异步注入，按钮在 el-form 内部时 CSS 加载前按 DOM 流渲染在 card 下方，移出后跳跃距离缩短到不可见（生产环境通过 <link> 阻塞渲染，理论上无 FOUC）；3 UX 一致性——加 v-if="loaded" 使加载时不出现"取消/创建"按钮，避免误以为可操作 -->
 
-      1. DOM 结构原因（关注点分离）
-         - el-form 只管表单内容，form-actions 只管底部操作
-         - 未来样式调整（如改 sticky / drawer）互不影响
-
-      2. CSS 加载顺序原因（避免 FOUC）
-         - Vite dev 模式 CSS 异步注入，组件渲染先于样式生效
-         - button 在 el-form 内部时，CSS 加载前按 DOM 流渲染在 card 下方
-         - 移到 el-form 外部后，DOM 流位置接近 fixed 后的位置，跳跃距离缩短到不可见
-         - 生产环境通过 <link> 阻塞渲染，理论上无 FOUC
-
-      3. v-if="loaded"（UX 一致性，非必需）
-         - 功能上 handleSubmit 有 if (!formRef.value) return 防御，不加也安全
-         - 加上的价值：加载时不出现“取消/创建”按钮，避免误以为可操作
-         - 与 el-form 的 v-if="loaded" 显隐同步，视觉一致
-    -->
     <div v-if="loaded" class="form-actions">
       <el-button @click="goBack">
               <AppIcon icon="mdi:close" style="margin-right: 4px; font-size: 14px;" />
@@ -166,9 +123,7 @@ import {
   importanceLevelOptions,
 } from '@/constants/project-const'
 
-// ============================================================================
 // 路由（核心：通过 useRoute 区分新建/编辑模式）
-// ============================================================================
 
 const route = useRoute()
 const router = useRouter()
@@ -209,9 +164,7 @@ const formCards: FormCard[] = [
   },
 ]
 
-// ============================================================================
 // 自动分行算法（已抽到 @/utils/form-layout，import 后直接使用）
-// ============================================================================
 
 /** 卡片 → 行（自动分行后的结构） */
 const cardRows = computed(() =>
@@ -221,9 +174,7 @@ const cardRows = computed(() =>
   }))
 )
 
-// ============================================================================
 // 表单状态
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -260,9 +211,7 @@ const rules = computed<FormRules>(() => {
   return result
 })
 
-// ============================================================================
 // 模板辅助函数
-// ============================================================================
 
 /** 解析 placeholder：默认根据 type 自动生成 */
 function getPlaceholder(item: FormItem, fallback?: string): string {
@@ -281,9 +230,7 @@ function getDisabled(item: FormItem): boolean {
   return !!item.disabled
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(async () => {
   if (is_edit.value && project_id.value !== null) {
@@ -314,9 +261,7 @@ async function loadDetail() {
   }
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function goBack() {
   router.push('/mold/project/list')
@@ -360,25 +305,12 @@ async function handleSubmit() {
 
 <style scoped lang="scss">
 .project-form {
-  /*
-   * padding-bottom: 96px 预留底部空间：
-   * - form-actions 是 fixed bottom，不占用布局空间
-   * - 96px = 操作栏高度 (48px) + 顶部呼吸间隔 (32px) + 16px 保险
-   * - 防止 form 末尾的字段（如备注 textarea）被 fixed 操作栏遮挡
-   */
+  /* padding-bottom: 96px 预留底部空间：form-actions 是 fixed bottom，不占用布局空间；96px = 操作栏高度 (48px) + 顶部呼吸间隔 (32px) + 16px 保险；防止 form 末尾的字段（如备注 textarea）被 fixed 操作栏遮挡 */
+
   padding: 16px 16px 96px;
   box-sizing: border-box;
 }
 
-/*
- * 表单内部样式（.custom-form / .custom-form__section / .custom-form__divider 等）
- * 已抽取到全局：src/styles/utilities/custom-form.scss
- * form 模板使用 class="custom-form" 即可继承所有样式
- */
-
-/*
- * 分组标题（divider 类型，左对齐 + 加粗）
- * - 用于 card 内再分组（如"基本信息"、"客户信息"等）
- * - 已抽取到全局：src/styles/utilities/custom-form.scss（.custom-form__divider）
- */
+/* 表单内部样式（.custom-form / .custom-form__section / .custom-form__divider 等） */
+/* 分组标题（divider 类型，左对齐 + 加粗） */
 </style>

@@ -22,6 +22,7 @@ molding-optima/
 │   ├── process/            # 工艺管理（工艺参数/优化引擎/调模/规则）
 │   ├── filecenter/         # 文件中心
 │   ├── reporting/          # 报表
+│   ├── analytic/           # 统计分析（仪表盘）
 │   └── bootstrap/          # 初始化脚本
 │
 ├── frontend/               # Vue 3 + Vite 5 + TS 前端
@@ -32,11 +33,7 @@ molding-optima/
 │   │   └── ...
 │   └── README.md           # 前端详细文档
 │
-├── docs/                   # 设计文档
-├── old/                    # 历史代码（重构前）
-├── prototype/              # 页面原型
-├── architecture.md         # 架构文档（含 ADR）
-└── 重构方案.md              # 重构方案
+└── architecture.md         # 架构文档（含 ADR）
 ```
 
 > 详见 [architecture.md](./architecture.md)（架构决策与模块划分）
@@ -113,9 +110,9 @@ npm run dev  # 默认端口 9527，自动代理 /api → 8200
 |---|---|---|---|
 | **用户管理** | `identity/` | `views/identity/` | 用户/组织/角色权限 |
 | **基础数据** | `masterdata/` | `views/masterdata/` | 模具/材料/设备 |
-| **工艺管理** | `process/` | `views/process/` | 工艺参数/优化引擎/调模/规则 |
+| **工艺管理** | `process/` | `views/process/` | 工艺参数/优化引擎/调模/规则（各算法落地状态见 architecture.md §3.6）|
 | **文件中心** | `filecenter/` | （融入各模块）| 文件上传/下载 |
-| **报表** | `reporting/` | （融入工艺模块）| 工艺参数导出 |
+| **报表** | `reporting/` | （融入工艺模块）| 工艺参数 / 列表数据 Excel 导出 |
 | **初始化** | `bootstrap/` | - | 数据库初始化/字典/默认账号 |
 
 ---
@@ -144,14 +141,12 @@ npm run dev  # 默认端口 9527，自动代理 /api → 8200
 
 | 文档 | 用途 |
 |---|---|
-| [architecture.md](./architecture.md) | **架构文档**（模块划分 + ADR 决策记录）|
-| [重构方案.md](./重构方案.md) | 重构方案与边界 |
+| [architecture.md](./architecture.md) | **架构文档**（模块划分 + ADR 决策记录 + 算法落地状态）|
 | [frontend/README.md](./frontend/README.md) | 前端详细文档 |
-| [docs/](./docs/) | 业务设计文档（如工艺调整设计）|
 
 ---
 
 ## 📝 版本
 
-**当前版本**：v0.5
-**最后更新**：2026-09-02
+**当前版本**：v0.6
+**最后更新**：2026-11-04

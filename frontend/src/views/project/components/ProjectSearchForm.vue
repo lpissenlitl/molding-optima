@@ -1,17 +1,5 @@
-<!--
-  ProjectSearchForm - 项目搜索表单（配置驱动）
+<!-- ProjectSearchForm - 项目搜索表单（配置驱动）：复用 BaseSearchForm，本组件只声明本模块 search_items 字段配置，query-detail prop 接收父组件 query，@search/@reset 回调；这种"配置驱动"的设计让 mold / project / equipment / polymer 等模块共用同一套搜索表单 UI，业务模块只关心"我有哪些搜索字段" -->
 
-  设计思路（与 mold 模块的 MoldSearchForm 一致）：
-  - 复用 BaseSearchForm 组件（公共）
-  - 本组件只声明本模块的搜索字段配置（search_items）
-  - 通过 query-detail prop 接收父组件的 query 对象
-  - 通过 @search / @reset 事件回调
-
-  风格：Composition API（Vue 3 + <script setup>，2026-09 统一升级）
-
-  这种"配置驱动"的设计让 mold / project / equipment / polymer 等模块
-  可以共用同一套搜索表单 UI，业务模块只关心"我有哪些搜索字段"。
--->
 <template>
   <BaseSearchForm
     :query="query_params"

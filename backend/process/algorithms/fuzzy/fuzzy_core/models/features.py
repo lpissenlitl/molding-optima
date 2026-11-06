@@ -67,7 +67,7 @@ class FuzzyFeature:
         self.f_level = f_level
         self.membership_dict = {}
 
-        # 类型白名单来自 macros.MEMBERSHIP_TYPES（声明与实现同源，不再各说各话）
+        # 类型白名单来自 macros.MEMBERSHIP_TYPES（声明与实现同源，不各说各话）
         if f_membership_type not in MEMBERSHIP_TYPES:
             raise ValueError(
                 f'不支持的隶属度函数类型: {f_membership_type}'
@@ -82,7 +82,7 @@ class FuzzyFeature:
         #   上游可能给出倒序论域 —— engine.py 缺权威元数据时按实时值推测论域
         #   （`max_val = 当前值 * 2`），当前值为负时区间倒挂。
         #   σ 若**带符号**，高斯只用 σ² ⇒ 取绝对后数值**逐位不变**；
-        #   对其余形状则是唯一自洽的定义（跨度非负）⇒ 倒序论域不再让内核抛错。
+        #   对其余形状则是唯一自洽的定义（跨度非负）⇒ 倒序论域不会让内核抛错。
         low, high = float(f_interval[0]), float(f_interval[1])
         span = abs(high - low)
         if high < low:

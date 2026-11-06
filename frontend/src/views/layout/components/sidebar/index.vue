@@ -1,9 +1,5 @@
-<!--
-  Sidebar：左侧菜单
-  - 数据源：router.options.routes（自动从 router 生成菜单）
-  - 过滤规则：hidden=true 的路由不显示
-  - 收敛规则：alwaysShow=false 且只有 1 个子菜单 → 父级隐藏，子菜单提升为顶级
--->
+<!-- Sidebar：左侧菜单：数据源 router.options.routes（自动从 router 生成），hidden=true 的路由不显示；alwaysShow=false 且只有 1 个子菜单时父级隐藏、子菜单提升为顶级 -->
+
 <template>
   <nav class="sidebar">
     <ul class="sidebar__menu">
@@ -22,6 +18,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import SidebarItem from './sidebarItem.vue'
+import { useUserStore } from '@/stores/user'
 
 interface MenuItem {
   path: string
@@ -39,17 +36,20 @@ withDefaults(
 
 const router = useRouter()
 
-/**
- * 递归解析路由为菜单项
- * - 过滤 hidden=true
- * - 计算完整路径（基于父级 basePath）
- * - 收敛规则：父级 alwaysShow=false 且只有 1 个子菜单 → 返回子菜单（隐藏父级）
- */
+/** 管理员标识（超管 || 租户管理员）：与后端 `require_admin` 判定一致 */
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.is_admin)
+
+/** 递归解析路由为菜单项：过滤 hidden=true 与 adminOnly（非管理员），按父级 basePath 计算完整路径，alwaysShow=false 且只有 1 个子菜单时返回子菜单（隐藏父级） */
+
 function parseMenu(routes: RouteRecordRaw[], basePath = ''): MenuItem[] {
   const items: MenuItem[] = []
 
   for (const route of routes) {
     if (route.meta?.hidden) continue
+    // ⚠️ **adminOnly 路由对非管理员直接隐藏**
+    //    （后端同一批接口也挂了 require_admin，前端隐藏只是避免用户点进去撞 403）
+    if (route.meta?.adminOnly === true && !isAdmin.value) continue
 
     const fullPath = resolvePath(basePath, route.path)
     const item: MenuItem = {

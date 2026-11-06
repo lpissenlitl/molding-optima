@@ -85,14 +85,14 @@ LEVEL_NUMBER_TO_BUCKET = {f'level{i}': i - 1 for i in range(1, 8)}
 # 要求接近论域上界，在 5 档字段上只要求高于中位。不是错误，但会影响
 # 跨级数字段的规则激活严格程度。
 #
-# ★ 口径（2026-10-28 与业务对齐）：**档位词是绝对词义** —— 规则写 `low`
+# ★ 口径（与业务对齐）：**档位词是绝对词义** —— 规则写 `low`
 #   就是「偏低」这一档，它落在向量的哪一格由**该字段切了几格**决定。
 #   5 档体系比 3 档体系多一个 `very_low` 在 `low` 之下 ⇒ `low` 自然上移一格
 #   （落桶 1 = 25% 分位）。**这是正确实现，不是缺陷、不是“语义漂移”。**
 #   ⇒ 规则**不需要**声明自己属于哪套档位体系，算法无需知道这件事。
 #   ⇒ 落格随字段档数变化**不列为风险**；规则**填不进**词表时的处理见
 #     `nets.py::_construct_numtskruleNet`（整条规则激活度 0，**不静默删条件**）。
-# ⚠️ **9 档已于 2026-11-03 移除**（与 RuleKeyword.FUZZY_LEVELS、前端 FuzzyLevel 3|5|7 对齐）：
+# 词表只覆盖 3|5|7 档（与 RuleKeyword.FUZZY_LEVELS、前端 FuzzyLevel 对齐）：
 #    9 档独有词 ultra_low / ultra_high 前端没有对应命名，字段一旦设成 9 档，
 #    前端 levelOptionsFor() 会静默兜底成 3 档 ⇒ 选出来的档位与论域对不上。
 LEVEL_WORDS_BY_LVL = {
@@ -127,7 +127,7 @@ LEVEL_WORD_SUFFIXES = tuple(sorted(
 ))
 
 # === 隶属度函数类型（内核**真正实现**的类型）===
-# 由 `memberships.MEMBERSHIP_SPECS` **派生**，不再手写：
+# 由 `memberships.MEMBERSHIP_SPECS` **派生**：
 # 「白名单 = 分派表的键」⇒ 新增一个形状只需加一行分派，类型白名单自动跟上，
 # 不会出现"声明了但没实现"或"实现了但没声明"。
 MEMBERSHIP_TYPES = tuple(MEMBERSHIP_SPECS.keys())
@@ -141,24 +141,20 @@ DEFAULT_MEMBERSHIP_TYPE = 'gauss'
 FUZZY_LEVELS = {lvl: list(words) for lvl, words in LEVEL_WORDS_BY_LVL.items()}
 
 # === 推理超参 ===
-# ⚠️ **阈值已拆分**（2026-10-28，批 P-4）：原先只有一个 `MIN_ACTIVATION_THRESHOLD = 0.01001`，
-#    被三处**量纲互不相同**的判据共用：
+# 三个阈值分列，因为对应的**量纲互不相同**（值相同）：
 #      ① Mamdani 输出侧 —— 结论隶属度之和（`np.sum(degree_values)`）
 #      ② TSK 输入侧   —— 规则绝对激活度（`min(各前件 μ)`）
 #      ③ TSK 相对量   —— 规则在所属输出参数组内的占比
-#    ⇒ 一个旋钮控三件正交的事，既没法单独调、也没法各自解释
-#      （旧代码注释曾自承「作用对象不同」）。
-#    现拆为三个**独立具名**常量，**值全部不变 ⇒ 零行为变化**；
-#    各自的判据 / 失效边界见 design §5.3.8「阈值清单」。
+#    ⇒ 一个旋钮控三件正交的事，既没法单独调、也没法各自解释。
 MIN_CONCLUSION_DEGREE = 0.01001        # ① Mamdani 输出侧：结论隶属度之和下限
 MIN_RULE_ACTIVATION = 0.01001         # ② TSK 输入侧：规则绝对激活度下限
 MIN_GROUP_SHARE = 0.01001             # ③ TSK 相对量：组内占比下限
 MAMDANI_SAMPLE_POINTS = 200            # Mamdani 输出值采样点
 EPSILON = 1e-7                         # 防除零
 
-# === M-1 门控三参数（design §5.3「门控状态机」）===
+# === M-1 门控三参数 ===
 #
-# ⚠️ 三者**性质不同**，各有各的指定规则（design §5.3.8 阈值清单）——
+# ⚠️ 三者**性质不同**，各有各的指定规则 ——
 #    **不可当成「三个可以一起调的旋钮」**，也不可把它们的区间合并后重取中点。
 #
 # ① GATE_TAU（τ）—— **结构量**（R1 推导优先，绝不标定）

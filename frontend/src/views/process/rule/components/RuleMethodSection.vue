@@ -1,11 +1,4 @@
-<!--
-  RuleMethodSection.vue - 模糊规则 section（RuleMethod 列表 + CRUD）
-
-  作为 RuleLibraryDetail 的子组件使用：
-  - 接收 libraryId prop
-  - 自包含：搜索、列表、分页、新建/编辑抽屉
-  - 通过 emit('changed') 通知父组件刷新 method_count
--->
+<!-- RuleMethodSection.vue - 模糊规则 section（RuleMethod 列表 + CRUD） -->
 <template>
   <div ref="sectionRef" class="section-container">
     <!-- 搜索区 -->
@@ -44,6 +37,16 @@
           <AppIcon icon="mdi:plus" :size="14" style="margin-right: 4px;" />
           新建规则方法
         </el-button>
+        <!-- 晋升入口：仅平台超管可见（后端 require_superuser 二次防护） -->
+        <el-button
+          v-if="canPromote"
+          type="warning"
+          :disabled="selectedMethods.length === 0"
+          @click="promoteSelected"
+        >
+          <AppIcon icon="mdi:upload" :size="14" style="margin-right: 4px;" />
+          晋升到系统库
+        </el-button>
       </el-form-item>
     </el-form>
     </div>
@@ -56,13 +59,19 @@
       :height="tableHeight"
       border
       stripe
+      @selection-change="onSelectionChange"
     >
+    <!-- 多选列：仅平台超管需要（批量晋升） -->
+    <el-table-column v-if="canPromote" type="selection" width="50" align="center" />
     <!-- 序号列：每页从 1 开始 -->
     <el-table-column type="index" label="#" width="60" align="center" />
-    <!-- 规则编号：业务标识 RM-{YYYYMM}-{NNNNN} -->
+    <!-- 规则编号：业务标识 RM-{YYYYMM}-{NNNNN}，点击跳只读详情 -->
     <el-table-column label="规则编号" prop="rule_no" width="150" align="center">
       <template #default="{ row }">
-        <span class="mono">{{ row.rule_no || '—' }}</span>
+        <el-link v-if="row.rule_no" type="primary" class="mono" @click="goMethodDetail(row)">
+          {{ row.rule_no }}
+        </el-link>
+        <span v-else class="mono">—</span>
       </template>
     </el-table-column>
     <!-- 规则描述：tooltip 透出 rule_explanation -->
@@ -111,8 +120,9 @@
         <el-tag>{{ sourceLabel(row.source) }}</el-tag>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="180" fixed="right" align="center">
+    <el-table-column label="操作" width="240" fixed="right" align="center">
       <template #default="{ row }">
+        <el-button link type="primary" @click="goMethodDetail(row)">详情</el-button>
         <el-button link type="primary" @click="openEditMethod(row)">编辑</el-button>
         <el-button link type="danger" @click="deleteMethod(row)">删除</el-button>
       </template>
@@ -134,11 +144,7 @@
     />
   </div>
 
-  <!--
-    规则方法抽屉（新建/编辑共用）
-    size=80% 以容纳结构化编辑 + 流程图预览
-    drawer 标题由 RuleMethodSection 控制，表单内容由 RuleMethodForm 组件负责
-  -->
+  <!-- 规则方法抽屉（新建/编辑共用） -->
   <el-drawer
     v-model="methodDialogVisible"
     :title="dialogMode === 'create' ? '新建规则方法' : '编辑规则方法'"
@@ -161,22 +167,23 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-// AppIcon 是 ComponentsPlugin 全局注册的组件，无需 import
 import RuleMethodForm from '@/views/process/rule/pages/RuleMethodForm.vue'
 import {
   listRuleMethods,
   deleteRuleMethod as apiDeleteRuleMethod,
+  promoteRuleMethods,
 } from '@/api/rule'
 import type { RuleMethod, RuleSource } from '@/types/rule'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 const props = defineProps<{
   libraryId: number
+  /** 平台超管标记（父组件根据库的归属类型决定是否传 true） */
+  isSuperuser?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -184,9 +191,18 @@ const emit = defineEmits<{
   changed: []
 }>()
 
-// ============================================================================
+// 晋升入口：仅平台超管可见
+// ⚠️ 后端 `require_superuser` 是硬门槛，前端只是隐藏入口（不隐藏也不安全）
+const canPromote = computed(() => props.isSuperuser === true)
+
+// 表格选中项（批量晋升用）
+const selectedMethods = ref<RuleMethod[]>([])
+
+function onSelectionChange(rows: RuleMethod[]) {
+  selectedMethods.value = rows
+}
+
 // 列表状态
-// ============================================================================
 
 const methods = ref<RuleMethod[]>([])
 const methodTotal = ref(0)
@@ -237,9 +253,7 @@ function onMethodSizeChange(s: number) {
   loadMethods()
 }
 
-// ============================================================================
 // 来源标签
-// ============================================================================
 
 const SOURCE_LABELS: Record<RuleSource, string> = {
   expert: '专家经验',
@@ -250,9 +264,7 @@ function sourceLabel(s: string) {
   return SOURCE_LABELS[s as RuleSource] || s
 }
 
-// ============================================================================
 // 抽屉（新建/编辑共用，80% 宽度，内嵌 RuleMethodForm 组件）
-// ============================================================================
 
 const methodDialogVisible = ref(false)
 const editingMethodId = ref<number | undefined>(undefined)
@@ -303,16 +315,57 @@ async function deleteMethod(row: RuleMethod) {
   }
 }
 
-// ============================================================================
-// 初始化：进入页面立即加载一次 + 动态计算表格高度
-// ============================================================================
-
 /**
- * 表格高度 = .table-wrapper 的真实 clientHeight（flex 容器已分配的空间）
- * - 不依赖 window.innerHeight 估算（避免顶部导航/库信息卡高度变动造成偏移）
- * - 首次 onMounted 后 flex 已完成布局，clientHeight 已是准确值
- * - resize 时 flex 重分配 → 高度同步更新
+ * 批量晋升到公共库（平台超管）
+ *
+ * ⚠️ **语义是「移动」**：晋升后规则移出本库，**对所有租户生效**；
+ *    原库的其它规则不受影响。
  */
+async function promoteSelected() {
+  if (selectedMethods.value.length === 0) return
+  const count = selectedMethods.value.length
+  try {
+    await ElMessageBox.confirm(
+      `确认将选中的 ${count} 条规则晋升到系统公共库？\n`
+        + `晋升后规则将移出本库，且对**所有租户**生效（不再只对本租户生效）。`,
+      '晋升到系统库',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const res: any = await promoteRuleMethods(selectedMethods.value.map(r => r.id))
+    const payload = res?.data || res
+    const promoted = payload?.promoted_count ?? 0
+    const skipped = payload?.skipped || []
+    if (skipped.length) {
+      ElMessage.warning(
+        `已晋升 ${promoted} 条，${skipped.length} 条未晋升：${skipped[0].reason}`,
+      )
+    } else {
+      ElMessage.success(`已晋升 ${promoted} 条规则到系统库`)
+    }
+    selectedMethods.value = []
+    await loadMethods()
+    // 通知父组件刷新 method_count（规则已移出本库）
+    emit('changed')
+  } catch {
+    /* 拦截器已提示 */
+  }
+}
+
+// 路由跳转
+
+const router = useRouter()
+
+/** 跳规则方法只读详情页 */
+function goMethodDetail(row: RuleMethod) {
+  router.push(`/process/rules/${props.libraryId}/methods/${row.id}/detail`)
+}
+
+// 初始化：进入页面立即加载一次 + 动态计算表格高度
+/** 表格高度 = .table-wrapper 的真实 clientHeight（flex 容器已分配的空间） */
 const sectionRef = ref<HTMLElement | null>(null)
 const tableHeight = ref<number>(400)
 
@@ -339,12 +392,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/*
- * Flex 布局：
- * - .section-container 是外层 flex 容器（垂直排列）
- * - .search-container / .pagination flex-shrink: 0 → 不被压衡
- * - .table-wrapper flex: 1 + min-height: 0 → 吃掉所有剩余空间
- */
+/* Flex 布局： */
 .section-container {
   display: flex;
   flex-direction: column;

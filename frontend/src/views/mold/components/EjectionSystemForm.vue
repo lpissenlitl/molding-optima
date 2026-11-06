@@ -1,15 +1,5 @@
-<!--
-  EjectionSystemForm - 顶出系统子表单（被 MoldForm 引用）
+<!-- EjectionSystemForm - 顶出系统子表单（被 MoldForm 引用）：单层无嵌套，由 MoldForm 包裹在 el-card 内，props.ejectionSystem 直接双向绑定，flat items + groupIntoRows 自动分行（6 字段 → 2 行），类型覆盖 input / number / select + radio（plan 准备就绪，当前无字段触发） -->
 
-  路由：无（子组件）
-
-  设计要点：
-  - 单层无嵌套（与 CoolingSystemForm 风格一致）
-  - 由 MoldForm 包裹在 el-card 内使用，故不含 page-header / form-actions / loaded
-  - 数据通过 props.ejectionSystem 直接双向绑定（修改 reactive 对象属性即可同步到 mold_info）
-  - 数据：flat items 数组 + groupIntoRows 自动分行（6 字段 → 2 行）
-  - 类型覆盖：input / number / select + radio（plan 准备就绪，当前无字段触发）
--->
 <template>
   <el-form
     :model="ejectionSystem"
@@ -59,31 +49,19 @@ import {
 } from '@/constants/mold-const'
 import FormFieldRenderer from './FormFieldRenderer.vue'
 
-/**
- * props 数据双向绑定说明：
- * - props.ejectionSystem 是 MoldForm.mold_info.ejection_system 的引用（reactive 对象）
- * - 直接修改属性会同步到 mold_info（v-model="ejectionSystem[prop]" 生效）
- * - 这是当前 MoldForm 现状，子组件不创建本地 ref，保持单向数据流
- */
+/** props 数据双向绑定：props.ejectionSystem 即 MoldForm.mold_info.ejection_system 的 reactive 引用，直接改属性即同步到 mold_info（v-model="ejectionSystem[prop]"），子组件不创建本地 ref 保持单向数据流 */
+
 const props = defineProps<{
   ejectionSystem: Record<string, any>
 }>()
 
-/**
- * 验证规则（与 GatingSystemForm / CoolingSystemForm 一致的架构：可被 MoldForm 统一验证）
- * - 当前未定义任何必填规则，后续按业务需求补充
- */
+/** 验证规则（与 GatingSystemForm / CoolingSystemForm 一致的架构：可被 MoldForm 统一验证） */
 const rules = {}
 
 const formRef = ref<FormInstance>()
 
-/**
- * 字段定义（flat items，6 个字段，4 列布局 → 自动分行 2 行）
- *
- * 注：原版有 3 个字段被注释（has_pre_ejection / pre_ejection_stroke / estimated_ejection_force）
- * - radio 类型已加到 v-else-if 链，未来启用时只需解开注释
- * - 保持与 mold-const.ts 中 ejectionSystemForm 默认值字段对齐
- */
+/** 字段定义（flat items，6 个字段，4 列 → 自动分行 2 行）：原版有 3 个字段被注释（has_pre_ejection / pre_ejection_stroke / estimated_ejection_force），radio 类型已加入 v-else-if 链，未来启用时解开注释即可，并保持与 mold-const.ts 中 ejectionSystemForm 默认值字段对齐 */
+
 const formItems: FormItem[] = [
   // --- 顶出配置 ---
   { label: '顶出类型', prop: 'ejection_type', type: 'select', options: ejectionTypeOptions },
@@ -94,9 +72,6 @@ const formItems: FormItem[] = [
   { label: '顶出行程', prop: 'ejection_stroke', type: 'number', unit: 'mm' },
 
   // --- 以下字段暂未启用（与原版保持一致，注释保留以备后续扩展）---
-  // { label: '是否有预顶出', prop: 'has_pre_ejection', type: 'radio' },
-  // { label: '预顶出行程', prop: 'pre_ejection_stroke', type: 'integer', unit: 'mm' },
-  // { label: '推荐顶出力', prop: 'estimated_ejection_force', type: 'integer', unit: 'kN' },
 ]
 
 // 自动分行（4 列布局：6 字段 ÷ 4 列 = 2 行）

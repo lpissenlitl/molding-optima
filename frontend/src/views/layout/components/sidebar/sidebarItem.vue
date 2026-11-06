@@ -1,22 +1,5 @@
-<!--
-  SidebarItem：递归菜单项
-  - 始终渲染为叶子节点（支持任意嵌套层级）
-  - alwaysShow=false + 单子菜单 → 自动收敛（父级被隐藏，子菜单提升为顶级）
-  - alwaysShow=true → 始终保留父级
+<!-- SidebarItem：递归菜单项：始终渲染为叶子节点（支持任意嵌套层级），alwaysShow=false + 单子菜单时自动收敛为顶级、alwaysShow=true 时保留父级；折叠态隐藏 title 改 icon-only、父级整体作为 popover trigger，展开态完整渲染 title+arrow+inline 子菜单 -->
 
-  折叠态（collapsed=true）：
-  - 叶子节点：title 隐藏，icon 居中显示（icon-only 模式）
-  - 父级节点：title + arrow 隐藏，整体作为 popover trigger
-    - 点击触发 popover，在右侧弹出子菜单列表（标准展开模式）
-
-  展开态（collapsed=false）：
-  - 完整渲染 title + arrow + 子菜单 inline 展开/折叠
-  - 动效：
-    - 箭头：单 icon (chevron-down) + transform rotate 切换方向
-    - 子菜单：<Transition> + max-height 展开/折叠
-    - 激活态：左侧色条 scaleY 动画 + 背景淡入
-    - hover：背景 + 文字淡入
--->
 <template>
   <!-- 叶子节点（无子菜单） -->
   <li v-if="!item.children || item.children.length === 0" class="sidebar-item">
@@ -144,10 +127,6 @@ const props = withDefaults(
 const route = useRoute()
 
 // 当前路由匹配：激活态判断
-// - 父菜单（带 children）：保留前缀匹配
-//   - 子菜单激活时父级也要高亮（提示"在哪个父级下"）
-// - 叶菜单（无 children）：精确匹配
-//   - 避免与兄弟路由同时高亮（例：/optimization 与 /optimization/history 路径有前缀关系）
 const isActive = computed(() => {
   const hasChildren = props.item.children && props.item.children.length > 0
   if (hasChildren) {
@@ -163,25 +142,19 @@ const isActive = computed(() => {
 const isOpen = ref(isActive.value)
 
 // 路由变化时，若当前菜单激活 → 自动展开父级
-// 这样用户即使之前手动折叠了父级，路由变化后也会自动展开
 watch(isActive, (val) => {
   if (val) isOpen.value = true
 })
 
 // 用户主动 toggle：完全自由（不受激活态限制）
-// 激活状态通过小圆点提示，不强制折叠状态
 const toggleOpen = () => {
   isOpen.value = !isOpen.value
 }
 </script>
 
 <style scoped lang="scss">
-// ──────────────────────────────────────
-// 子菜单展开/折叠过渡（柔和版）
-// - duration 0.5s + Standard 缓和曲线 = "全在柔和地带"
-//  - 只过渡 max-height + opacity，不动位移（减少视觉噪声）
-// - max-height 上限设大一些，确保动画时长始终饱满
-// ──────────────────────────────────────
+// 子菜单展开/折叠过渡（0.5s Standard 缓和曲线，只过渡 max-height + opacity，不动位移）
+
 .submenu-enter-active,
 .submenu-leave-active {
   transition: max-height 0.5s cubic-bezier(0.32, 0.72, 0, 1),
@@ -296,9 +269,6 @@ const toggleOpen = () => {
   }
 
   // 箭头：单 icon (chevron-down) + rotate
-  // 收起态：rotate(-90deg) → 视觉朝右
-  // 展开态：rotate(0deg)    → 视觉朝下
-  // 高亮态：isActive && !isOpen → 变亮白色 + 三层 drop-shadow 光晕（提示内有激活子项）
   &__arrow {
     font-size: 16px;
     color: rgba(255, 255, 255, 0.5);  // 默认浅灰色
@@ -310,7 +280,6 @@ const toggleOpen = () => {
                 filter 0.4s ease;
 
     // 折叠 + 激活：箭头变成亮白色 + 三层明显光晕
-    // 内圈锐利 → 中圈明显扩散 → 外圈远扩散，效果温润醒目
     &.has-active-child {
       color: #fff;
       font-size: 18px;  // 轻微放大（更醒目）
@@ -340,9 +309,8 @@ const toggleOpen = () => {
   }
 }
 
-// ──────────────────────────────────────
 // 折叠态 popover 子菜单样式（默认主题：白底黑字）
-// ──────────────────────────────────────
+
 .sidebar-submenu {
   &__title {
     font-size: 13px;
@@ -397,10 +365,7 @@ const toggleOpen = () => {
 }
 </style>
 
-<!--
-  Popover 内容被 teleport 到 body，scoped 样式不生效，需 unscoped 块定义
-  选择器限定在 .sidebar-submenu-popover 内，避免污染全局
--->
+<!-- Popover 内容被 teleport 到 body，scoped 样式不生效，需 unscoped 块定义 -->
 <style lang="scss">
 .sidebar-submenu-popover {
   padding: 8px 4px !important;

@@ -50,6 +50,14 @@ router.beforeEach((to, from, next) => {
       next({ path: '/' })
       return
     }
+    // ⚠️ **adminOnly 路由：仅管理员可进**
+    //    （侧边栏已隐藏入口，这里拦的是「直接输 URL / 收藏链接」；
+    //      后端同一批接口挂了 require_admin，前端拦截只是提前给出明确提示）
+    if (to.meta?.adminOnly === true && !userStore.is_admin) {
+      ElMessage({ message: '需要管理员权限', type: 'warning', duration: 2000 })
+      next('/404')
+      return
+    }
     next()
     return
   }

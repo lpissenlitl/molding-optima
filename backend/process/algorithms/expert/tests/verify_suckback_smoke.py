@@ -1,5 +1,5 @@
 ﻿"""
-ProcessInitializer 松退参数族（#15-#18）smoke test（v1.1，独立运行，不依赖 Django）
+ProcessInitializer 松退参数族（#15-#18）smoke test（独立运行，不依赖 Django）
 
 覆盖范围（设计文档 §7）：
   场景 A - PP 通用件（液压+直通+冷流道+侧浇口）→ P=3.32, D=3.32, V=50.0
@@ -252,11 +252,11 @@ def test_f_electric():
     _assert_close(proc.pst_met_decomp_spd, 20.0, 'V (electric_default_velo)')
 
 
-# ========== 场景 G：ABS 热流道+侧浇口（v1.1 runner_factor 验证）==========
+# ========== 场景 G：ABS 热流道+侧浇口（runner_factor 验证）==========
 # runner_factor=1.60, gate_factor=1.00（侧浇口不叠加）
 # P=3.85（同E）, D=3.5×1.00×1.10×1.60×1.00 = 6.16, V=40.0（同E）
 def test_g_hot_runner():
-    print("\n[场景 G] ABS 热流道+侧浇口（v1.1 runner_factor 验证）")
+    print("\n[场景 G] ABS 热流道+侧浇口（runner_factor 验证）")
     proc = _run(
         mold=_base_mold(runner_type='热流道', runner_weight=0, gate_type='侧浇口'),
         material=_base_material(abbreviation='ABS'),
@@ -267,11 +267,11 @@ def test_g_hot_runner():
     _assert_close(proc.pst_met_decomp_spd, 40.0, 'V')
 
 
-# ========== 场景 H：ABS 热流道+点浇口（v1.1 gate_factor 验证）==========
+# ========== 场景 H：ABS 热流道+点浇口（gate_factor 验证）==========
 # runner_factor=1.60, gate_factor=1.30
 # D=3.5×1.00×1.10×1.60×1.30 = 8.01
 def test_h_hot_runner_point_gate():
-    print("\n[场景 H] ABS 热流道+点浇口（v1.1 gate_factor 验证）")
+    print("\n[场景 H] ABS 热流道+点浇口（gate_factor 验证）")
     proc = _run(
         mold=_base_mold(runner_type='热流道', runner_weight=0, gate_type='点浇口'),
         material=_base_material(abbreviation='ABS'),
@@ -371,7 +371,7 @@ def main():
     logging.disable(logging.CRITICAL)
 
     print("=" * 70)
-    print("ProcessInitializer 松退参数族（#15-#18）smoke test v1.1")
+    print("ProcessInitializer 松退参数族（#15-#18）smoke test")
     print("=" * 70)
 
     test_a_pp()

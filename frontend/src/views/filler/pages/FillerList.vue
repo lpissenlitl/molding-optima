@@ -1,13 +1,5 @@
-﻿<!--
-  FillerList - 填充物列表（CRUD）
+﻿<!-- FillerList - 填充剂列表页（CRUD）：BaseTable + column.map 做 value→label 映射，行操作编辑/删除（text 按钮 + AppIcon），删除走 ElMessageBox.confirm -->
 
-  架构（2026-09-08 Phase 1）：
-    - BaseTable + Composition API（与 PolymerList 同款风格）
-    - 路由：/material/filler/list（在 material 父路由下，侧边栏自然聚合）
-    - 列定义：BaseTableColumn[] 类型化（用 column.map 实现 value→label）
-    - 行操作列：编辑 + 删除（text 按钮 + AppIcon）
-    - 删除确认：ElMessageBox.confirm
--->
 <template>
   <div class="page-stack">
     <FillerSearchForm

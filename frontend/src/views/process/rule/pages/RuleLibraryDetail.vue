@@ -1,18 +1,4 @@
-<!--
-  RuleLibraryDetail.vue - 规则库详情页（瘦身后的调度组件）
-
-  布局：
-  - 顶部：库元信息卡片
-  - 内容区：根据 library_type 渲染对应 section（RuleMethod / ExpertRule）
-  - 编辑规则库弹窗
-
-  路由：/process/rules/:libraryId
-
-  职责拆分：
-  - 本组件只负责：库元信息 + 调度子组件
-  - 模糊规则 section → RuleMethodSection.vue
-  - 专家规则 section → ExpertRuleSection.vue
--->
+<!-- RuleLibraryDetail.vue - 规则库详情页（瘦身后的调度组件） -->
 <template>
   <div class="rule-library-detail" v-loading="libraryLoading">
     <!-- 顶部导航 -->
@@ -65,13 +51,12 @@
       </el-descriptions>
     </el-card>
 
-    <!-- 内容区：根据库类型渲染对应的 section
-         用 v-if 直接分支渲染，避开 el-tabs 切换的复杂性。
-         （每个 library_type 仅对应一个 section，无需 Tab 切换） -->
+    <!-- 内容区：根据库类型渲染对应的 section（v-if 直接分支渲染，避开 el-tabs 切换；每个 library_type 仅对应一个 section） -->
     <div v-if="library" class="rule-content">
       <RuleMethodSection
         v-if="library.library_type === 'fuzzy'"
         :library-id="libraryId"
+        :is-superuser="canPromote"
         @changed="loadLibrary"
       />
       <ExpertRuleSection
@@ -109,24 +94,22 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-// ============================================================================
-// 角色判断
-// ============================================================================
-//
-// 专家规则（ExpertRule）属于平台级内部规则（工艺参数初始化系数），
-// 不向租户展示，只有超级管理员才能查看/编辑。
-// 后端 ExpertRuleListByLibraryView / ExpertRuleDetailView 已加 require_superuser 装饰器做二次防护。
+// 角色判断：专家规则属平台级内部规则，仅 superadmin 可见（后端已加 require_superuser 二次防护）
 const isSuperuser = computed(() => userStore.is_superuser)
 
-// ============================================================================
+// 晋升入口（仅平台超管 + 租户级私库的模糊规则）
+// ⚠️ **系统库里的规则本就是公共资产**，无需晋升；专家规则走另一条链路，也不支持
+const canPromote = computed(() =>
+  isSuperuser.value
+  && library.value?.owner_type === 'tenant'
+  && library.value?.library_type === 'fuzzy',
+)
+
 // 路由参数
-// ============================================================================
 
 const libraryId = computed(() => Number(route.params.libraryId))
 
-// ============================================================================
 // 规则库元信息
-// ============================================================================
 
 const library = ref<RuleLibrary | null>(null)
 const libraryLoading = ref(false)
@@ -157,6 +140,7 @@ const libraryForm = reactive<RuleLibraryFormData>({
   version: 1,
   is_active: true,
   description: '',
+  target_company_id: null,
 })
 
 function showEditLibraryDialog() {
@@ -221,9 +205,7 @@ function goBack() {
   router.push('/process/rules')
 }
 
-// ============================================================================
 // 初始化
-// ============================================================================
 
 onMounted(() => {
   loadLibrary()
@@ -235,11 +217,7 @@ onMounted(() => {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  /*
-   * 关键：高度 100% 让 flex 子项能撑开。
-   * 祖先链 .layout__content { flex: 1; min-height: 0; overflow: auto; }
-   * 是计算高度的源头。
-   */
+  /* 关键：高度 100% 让 flex 子项能撑开（祖先链 .layout__content { flex: 1; min-height: 0; overflow: auto; } 是计算高度的源头） */
   height: 100%;
 }
 
@@ -275,20 +253,12 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/*
- * 内容区容器：与原 .rule-tabs 视觉风格保持一致（白底 + padding + 圆角）
- * 搜索表单样式 .search-container / .search-form / .search-actions
- * 来自 src/styles/utilities/custom-form.scss（全局）
- */
+/* 内容区容器：与原 .rule-tabs 视觉风格保持一致（白底 + padding + 圆角） */
 .rule-content {
   background: #fff;
   padding: 16px;
   border-radius: 4px;
-  /*
-   * flex: 1 + min-height: 0 吃掉所有剩余空间
-   * 子组件（RuleMethodSection / ExpertRuleSection）会基于此高度
-   * 内部进一步 flex 分配（搜索 / 表格 / 分页）
-   */
+  /* flex: 1 + min-height: 0 吃掉所有剩余空间 */
   flex: 1;
   min-height: 0;
   overflow: hidden;

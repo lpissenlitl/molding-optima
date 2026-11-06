@@ -1,9 +1,5 @@
-<!--
-  ParentView：容器型路由占位
-  - 用于中间层路由（如 /process、/process/optimization）
-  - 这些路由没有自己的页面，只作为菜单分组容器
-  - 通过 <router-view> 渲染子路由
--->
+<!-- ParentView：容器型路由占位：用于 /process、/process/optimization 这类没有自有页面的中间层菜单分组路由，仅通过 <router-view> 渲染子路由 -->
+
 <template>
   <router-view />
 </template>

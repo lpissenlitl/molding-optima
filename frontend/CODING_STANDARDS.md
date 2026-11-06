@@ -1,9 +1,9 @@
 # MoldingX 前端代码规范
 
-> **版本**: 1.1.0  
-> **更新时间**: 2026-09-08  
+> **版本**: 1.2.0  
+> **更新时间**: 2026-11-04  
 > **适用范围**: molding-expert-web / molding-optima 项目  
-> **变更**: 1.1.0 合并原 `CODING_STANDARDS_QUICK_REF.md`，新增顶部「快速参考」区
+> **变更**: 1.2.0 重写「注释规范」章节 —— 按"该写什么 / 不该写什么"分级，明确禁止项
 
 ---
 
@@ -58,6 +58,17 @@ export function getMoldList(params) {
 | 可选属性 | `this.mold_info?.mold_name` | 长链 `&&` 判断 |
 | 定时器 | `beforeDestroy` 中清理 | 不清理导致内存泄漏 |
 | 常量管理 | `src/constants/mold-const.js` | 在组件中硬编码 |
+
+### 注释原则（一句话）
+
+> 注释写「为什么」和「坑」，不写「做了什么」；一行能说清就不写三行。
+
+| 场景 | 正确做法 | 错误做法 |
+|------|---------|---------|
+| 组件文件头 | 一行说明职责 | 多行 HTML 文档块 |
+| 简单函数 | 一行 `// 摘要` | 带 `@author` / `@version` 的 JSDoc |
+| 复杂逻辑 | 2~5 行要点 JSDoc | 逐行复述代码 |
+| 字段 / 枚举语义 | 完整保留 | 嫌啰嗦删掉 |
 
 ### ⚠️ 常见错误表
 
@@ -649,63 +660,98 @@ methods: {
 
 ### 6.1 组件注释
 
-```javascript
-/**
- * 模具搜索表单组件
- * @description 提供模具列表页面的搜索功能
- * @author MoldingX Team
- * @version 1.0.0
- */
-export default {
-  name: "MoldSearchForm",
-  // ...
-}
+组件文件顶部用**一行**说明职责即可，不写多行文档块。
+
+```vue
+<!-- BaseSearchForm - 通用搜索表单：配置驱动 + 可展开收起，业务组件只声明 search_items 配置 -->
+<script setup lang="ts">
 ```
+
+**禁止**在文件头写多行 HTML / JSDoc 文档块（路由说明、数据流、响应结构、设计要点罗列等）——这类内容靠人工维护必然过期，应沉淀到独立 Markdown 文档，代码里只留一句指针。
 
 ### 6.2 方法注释
 
-```javascript
-methods: {
-  /**
-   * 查询列表数据
-   * @param {boolean} reset - 是否重置查询条件
-   */
-  async queryListData(reset = false) {
-    if (reset) {
-      // 重置逻辑
-    }
-    this.$emit("search")
-  },
-  
-  /**
-   * 切换展开/收起状态
-   */
-  toggleExpand() {
-    this.is_expanded = !this.is_expanded
-  }
+简单方法用**一行摘要**，不罗列 `@param`：
+
+```typescript
+// ✅ 一行摘要
+const resetQuery = () => {
+  Object.assign(query_params, default_query)
+}
+```
+
+```typescript
+// ❌ 信息量与代码重复，还带无用的 @param
+/**
+ * 重置查询条件
+ * @param {boolean} reset - 是否重置查询条件
+ */
+```
+
+只有当参数语义**无法从签名和类型上看出来**时，才补 `@param`：
+
+```typescript
+/**
+ * 提交表单
+ * @param silent true 时不弹成功提示（用于自动保存场景）
+ */
+const submit = async (silent = false) => {
+  // ...
 }
 ```
 
 ### 6.3 复杂逻辑注释
 
-```javascript
-computed: {
-  /**
-   * 可见的筛选项
-   * - 基础项始终显示
-   * - 高级项仅在展开时显示
-   */
-  visible_items() {
-    if (!this.expandable) {
-      return this.search_items
-    }
-    
-    return this.search_items.filter(item => {
-      return item.level !== 'advanced' || this.is_expanded
-    })
-  }
-}
+逻辑绕、存在坑、有隐含约束时，用多行 JSDoc 列要点 —— **这是鼓励的写法**：
+
+```typescript
+/**
+ * 应用列筛选后的列表（纯前端过滤）
+ * - 筛选语义：include 非空 → 行值必须在 include 列表中；exclude 非空 → 行值不能在 exclude 列表中
+ * - 空值匹配：row 值为 null/undefined/"" 均视为空值，与后端 `isnull | empty` 匹配
+ */
+const filtered_data = computed(() => {
+  // ...
+})
 ```
+
+要点控制在 2~5 条，每条一行；写「为什么」和「边界」，不写「做了什么」。
+
+### 6.4 契约型注释（必须保留）
+
+以下内容属于「读代码推导不出来」的契约，**完整保留**，允许写得详细：
+
+| 类型 | 例子 |
+|------|------|
+| 字段语义表 | `FormItem` 的 label / prop / type / span 逐项含义 |
+| 枚举取值语义 | 状态枚举每个取值对应的业务含义 |
+| 外部接口约定 | 请求与响应的字段形态、兼容旧格式的说明 |
+| 兼容性约定 | 向后兼容旧 props、字段重命名映射关系 |
+| 框架踩坑记录 | 如 Element Plus `labelWidth='auto'` 卸载时触发宽度为 0 的警告 |
+
+判断标准：**删掉它，别人就写不对**——那就保留；删掉也不影响使用，那就删。
+
+### 6.5 禁止事项
+
+| 禁止 | 理由 |
+|------|------|
+| `@author` / `@version` / `@date` | 由 Git 记录，不写在代码里 |
+| `@example` 代码块 | 示例会过期，且示例代码本身也要维护 |
+| 变更历史 / 日期标记（如「2026-09-08 引入」） | 变更历史属于 Git commit |
+| 被注释掉的代码 | 直接删除，需要保留的历史由 Git 承担 |
+| 注释掉的 `console.log` | 改用日志级别控制或 debugger |
+| `// =====` 三行分隔块 | 用单行 `// 小节标题` 代替 |
+| 复述代码含义（如 `// i++ 自增`） | 代码本身已经说明 |
+| 注释与代码之间夹空行 | 注释紧贴所属代码 |
+
+### 6.6 注释密度参考
+
+| 位置 | 期望 |
+|------|------|
+| 文件头 | 0~1 行 |
+| 函数 / 属性 | 0~1 行 |
+| 复杂分支、约定、坑 | 2~5 行 JSDoc |
+| 常量表每一项 | 1 行 |
 
 ---
 

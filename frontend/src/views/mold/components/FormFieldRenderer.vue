@@ -1,19 +1,5 @@
-<!--
-  FormFieldRenderer - 通用表单字段渲染器
+<!-- FormFieldRenderer - 通用表单字段渲染器：抽离 input / number / integer / select / radio 的渲染逻辑，避免在 GatingSystemForm / GatingCavityPanel 等多处重复 v-else-if 链；由 :item（字段定义）+ :model（响应式数据对象）驱动，v-model 经 item.prop 索引到 model[prop] -->
 
-  路由：无（基础组件）
-
-  设计要点：
-  - 抽离 input / number / integer / select / radio 的渲染逻辑
-  - 避免在 GatingSystemForm / GatingCavityPanel 等多处重复 v-else-if 链
-  - 通过 :item（字段定义） + :model（响应式数据对象）控制
-  - 双向绑定：v-model 通过 item.prop 索引到 model[prop]
-
-  使用方式：
-    <FormFieldRenderer :item="item" :model="gate" />
-    <FormFieldRenderer :item="item" :model="cavity" />
-    <FormFieldRenderer :item="item" :model="gate" label-width="80px" />
--->
 <template>
   <el-form-item
     :label="item.label"
@@ -90,11 +76,7 @@ import type { FormItem } from '@/utils/form-types'
 defineProps<{
   item: FormItem
   model: Record<string, any>
-  /**
-   * el-form-item label 宽度（如 '80px'、'100px'）
-   * - 不传：继承父级 el-form 的 label-width
-   * - 嵌套表单场景下传小尺寸（如 gate 第三层传 80px）
-   */
+  /** el-form-item label 宽度（如 '80px'、'100px'） */
   labelWidth?: string
 }>()
 </script>

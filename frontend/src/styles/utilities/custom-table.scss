@@ -12,7 +12,7 @@
  *
  * 适用范围：
  *   10+ 个 List/Form 页（process/mold/project/polymer/injection/filler/admin/rule）
- *   已删除各文件 scoped 重复定义，统一从此处引用。
+ *   各页面统一从此处引用（不再各自 scoped 重复定义）。
  */
 
 .row-action-buttons {

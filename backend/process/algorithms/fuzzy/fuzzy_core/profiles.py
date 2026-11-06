@@ -115,8 +115,7 @@ class RuleProfile:
     source_ref : str
         溯源标识（可选）：数据库主键 / 文件路径 + 行号等。
         **不参与算法**，仅用于「这条建议来自哪条规则」这类排查与展示。
-        ⚠️ 这里放**字符串**而不是数据源对象 —— 放对象就等于把来源焊回契约
-        （旧实现里的 `method` 字段装 ORM 实例，正是这个问题）。
+        ⚠️ 这里放**字符串**而不是数据源对象 —— 放对象就等于把来源焊回契约。
     parsed : dict | None
         规则串的**拆解产物**（`fuzzy_core.parsing.parse_rule` 的返回值：
         ``{'preconditions': [...], 'solutions': [...]}``）。

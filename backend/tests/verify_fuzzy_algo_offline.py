@@ -240,7 +240,7 @@ if recs:
     # μ(medium 中心 0.5, low 中心 0.25) = exp(-0.5·((0.25)/0.125)²) = exp(-2)
     check_float('[实现语义] S2 幅度不变（delta 不含激活度）⇒ 推荐值仍 52.0',
                 r.recommended_value, 52.0)
-    # ⚠️ **M-1 落地后的口径变更**（2026-10-28，批 M-1）：
+    # ⚠️ **M-1 门控后的口径变更**：
     #   档位相邻 ⇒ 归属不一致（competition = μ_used − μ_alt = exp(−2) − 1.0 < 0）
     #   ⇒ β_p = clamp(competition/ε, β_min, 1) = β_min = 0.20
     #   ⇒ `raw_activation`（= activation × β）= exp(−2) × 0.20

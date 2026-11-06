@@ -79,7 +79,7 @@ class FuzzyEngine(AlgorithmBase):
                 编排层可以在没有数据库环境时被 import 和调用。
 
                 ⚠️ **显式注入优先于配置**：传了实例就只用它，
-                  不再看 `FUZZY_LIBRARY_SOURCE`。
+                  忽略 `FUZZY_LIBRARY_SOURCE`。
         """
         self._repo = repository
         # ⚠️ 诊断数据**不放实例属性** —— 本引擎是模块级单例（见文件末尾
@@ -169,7 +169,7 @@ class FuzzyEngine(AlgorithmBase):
         #   它回答的是「**进来的参数本身**合不合规」，与「本次有没有规则可推」无关 ——
         #   即使因为无缺陷 / 无规则而提前返回，越限这条事实也该被记录下来。
         #
-        # ⚠️ **只识别，不处理**（用户口径 2026-10-29：「首先要做到的点是能识别超限，
+        # ⚠️ **只识别，不处理**（用户口径：「首先要做到的点是能识别超限，
         #    再考虑别的问题」）：不告警、不拒绝、不改建议 ⇒ 对外输出零变化。
         #    不同参数类型的处理不一样（设定值类 = 设备安全红线；温度类 = 材料降解；
         #    时间类 = 无设备约束）⇒ **处理方式留待后续分层决策**，
@@ -194,8 +194,7 @@ class FuzzyEngine(AlgorithmBase):
             return []
 
         # 缺陷选取 —— **唯一真相源**（`process/algorithms/defect_selection.py`）。
-        # 选取逻辑（跳过哪些、依据什么）原先是隐式的，事后无从查证；
-        # 现在 selection 对象自带依据，这里顺手**留痕**（决策级，
+        # selection 对象自带选取依据，这里顺手**留痕**（决策级，
         # 与 `field_reports` / `diagnostics` 那两个规则级清单分开）。
         selection = select_defect(context)
         self._diag.selections.append(selection.to_trace())
@@ -223,6 +222,8 @@ class FuzzyEngine(AlgorithmBase):
             polymer_abbreviation=(context.get('polymer_info') or {}).get('abbreviation'),
             product_category=(context.get('mold_info') or {}).get('product_category'),
             rule_library_code=context.get('rule_library_code'),
+            # 当前租户（可见性上下文）—— 缺上下文（None）⇒ 不过滤
+            company_id=context.get('company_id'),
         )
         try:
             all_rules = repo.get_rules(query_ctx)
@@ -237,7 +238,7 @@ class FuzzyEngine(AlgorithmBase):
 
         # 3) 拆规则 —— 规则串只拆一次 → 分类 → 建对象
         #    拆解产物同时供「分类」「建对象」「收参数名」三处使用；
-        #    编排层因此不再自己分流、不再自己解析规则串。
+        #    编排层因此不做分流、不解析规则串。
         filtered = build_rule_objects(all_rules)
         if filtered.skipped:
             self._diag.diagnostics.append(
@@ -253,7 +254,7 @@ class FuzzyEngine(AlgorithmBase):
         }
         # ⚠️ 编排层**不传** `iteration_trend` ⇒ 恒为 'unknown' ⇒ 系数恒 1.0。
         #    该乘数策略已判定**业务上不成立**（历史趋势 ≠ 本次建议幅度），
-        #    故**刻意不接线** —— 理由与回归风险见评审文档 §3.4。
+        #    故**刻意不接线**。
         trend = context.get('iteration_trend', {}) or {}
         adjustment_factor = self._trend_to_factor(trend.get('trend', 'unknown'))
 
@@ -348,8 +349,7 @@ class FuzzyEngine(AlgorithmBase):
 
         # ⚠️ 编排层不传 `iteration_trend` ⇒ 该分支在 optimize 链**不生效**；
         #    condition 链会传（见 condition.py）⇒ 那里终态时 fuzzy 不参与 chain。
-        #    接线前必须先解决「终态无推荐 ⇒ fail-fast 报『算法暂不可用』」的问题
-        #    （评审文档 §3.4 ③）。
+        #    接线前必须先解决「终态无推荐 ⇒ fail-fast 报『算法暂不可用』」的问题。
         trend = context.get('iteration_trend', {}) or {}
         if trend.get('trend') == 'final':
             return False
@@ -423,8 +423,8 @@ class FuzzyEngine(AlgorithmBase):
     def _trend_to_factor(trend: str) -> float:
         """迭代趋势 → 调整系数。
 
-        ⚠️ **刻意未接线**（2026-10-27 复核）：编排层不传 `iteration_trend`
-        ⇒ 本函数实际恒返回 1.0。理由见评审文档 §3.4 —— 历史趋势反映的是
+        ⚠️ **刻意未接线**：编排层不传 `iteration_trend`
+        ⇒ 本函数实际恒返回 1.0。理由 —— 历史趋势反映的是
         **过去几轮整体走向**，拿它当**本次建议幅度**的全局乘数在业务上不成立
         （时间错配 / 手段错配 / 全局 vs 局部），且系数 0.5 / 1.2 无业务出处。
         保留函数与调用点只为不破坏既有结构；**不要**在未定义业务口径前接线。
@@ -580,7 +580,7 @@ class FuzzyEngine(AlgorithmBase):
                 '（设备能力 > 经验共识 ⇒ 论域被放宽；请核对该上限的录入值）',
                 profile.keyword, new_max, old_max)
         # step 按跨度**等比缩放**：保持「档位粒度 / 论域跨度」的比例不变，
-        # 换算后档位切分仍与原来一样均匀（否则缩放会让步长与论域不匹配）。
+        # 换算后档位切分仍保持均匀（否则缩放会让步长与论域不匹配）。
         if old_span > 0 and profile.step > 0:
             profile.step = profile.step * new_span / old_span
         else:
@@ -617,7 +617,7 @@ class FuzzyEngine(AlgorithmBase):
 
         Args:
             param_names: 本层用到的工艺参数名（**第 4 层 filter 收好**，
-                编排层不再自己从规则串里抠参数名）。
+                编排层不从规则串里抠参数名）。
             process_parameter: 当前工艺参数（字段名已归一化；不含设备/材料/模具信息）。
             layer: 层名（numeric / advisory），仅用于日志与清单归类。
             domain_limits: {算法参数前缀: 论域上界}（必填等级字段的设备实测值）。
@@ -702,7 +702,7 @@ class FuzzyEngine(AlgorithmBase):
         推荐结果里冒出 SHORTSHOT 这种非参数条目。
 
         ⚠️ 反馈里没有值的维度**不产出数值**（例如用户没填缺陷位置）⇒
-        对应维度不会被建论域 ⇒ 其前件不作为门控（与改造前行为一致）。
+        对应维度不会被建论域 ⇒ 其前件不作为门控。
         """
         inputs: Dict[str, float] = {}
         if not defect_profiles:
@@ -758,8 +758,8 @@ class FuzzyEngine(AlgorithmBase):
         # ---- 缺陷维度：论域元数据 + 反馈数值 ----------------------------
         # 先拉权威元数据，再把反馈里的缺陷程度/位置翻成数值，最后**只给本次
         # 反馈真的给出了数值的维度**建论域 ——
-        #   反馈没给数值的维度（如用户没填缺陷位置）不建论域 ⇒ 其前件不作门控，
-        #   与改造前行为一致（不会因空列把整类规则压成 EPSILON）。
+        #   反馈没给数值的维度（如用户没填缺陷位置）不建论域 ⇒ 其前件不作门控
+        #   （不会因空列把整类规则压成 EPSILON）。
         defect_profiles = self._load_defect_profiles(filtered.defect_param_names)
         defect_inputs = self._build_defect_inputs(defect_ctx, defect_profiles)
         defect_profiles = {
@@ -817,10 +817,10 @@ class FuzzyEngine(AlgorithmBase):
            就算不崩也算不出有意义的数值。
 
         2) 模糊等级结论（`X_add_low`）
-           → Mamdani 全模糊推理（历史路径，规则库当前没有这种结论）。
+           → Mamdani 全模糊推理（保留路径，规则库当前没有这种结论）。
 
         两类都已是**第 4 层 filter 的产物**：文本建议在 `filtered.advice_items`，
-        Mamdani 规则对象在 `filtered.mamdani_rules` —— 本层不再分流、不再解析。
+        Mamdani 规则对象在 `filtered.mamdani_rules` —— 本层只消费产物。
         """
         mamdani_rules = filtered.mamdani_rules
         if not filtered.advice_items and not mamdani_rules:

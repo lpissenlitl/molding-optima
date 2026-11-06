@@ -1,27 +1,4 @@
-<!--
-  SettingProcess - 工艺参数设定卡
-
-  业务含义：
-    - 注射（6 段：压力/速度/位置）+ VP 切换 + 保压（5 段：压力/速度/时间）
-    - 储料参数：熔胶（4 段：压力/螺杆转速/背压/位置）+ 松退（储前/储后）+ 终止位置
-    - 料筒温度（10 段：喷嘴 + 9 段料筒温度）
-
-  数据结构（与后端 process/services/process_transformer.py 严格对应）：
-    setting_process = {
-      injection: { stage, max_stage, table_data: [...], injection_time, delay_time, cooling_time },
-      vp_switch:  { mode, position, time, pressure, velocity },
-      holding:    { stage, max_stage, table_data: [...] },
-      metering:   { stage, max_stage, table_data: [...], decompress_table_data: [...], ... },
-      barrel_temperature: { stage, max_stage, table_data: [...] }
-    }
-
-  模式：
-    - 0 位置 / 1 时间 / 2 时间&位置 / 3 压力 / 4 速度（VP 切换）
-    - 0 否 / 1 距离 / 2 时间（松退）
-
-  单位系统（machine_info 传入）：
-    - pressure_unit / speed_unit / screw_rotation_unit / back_pressure_unit
--->
+<!-- LibraryParameterForm - 工艺参数录入表单（工艺库模板编辑用） -->
 <template>
   <!-- 工艺参数设定区：直接以 el-row 作为根，无外层 el-card 包装 -->
   <el-row :gutter="0">
@@ -45,6 +22,7 @@
                   v-model="injection.stage"
                   size="small"
                   style="width: 100%"
+                  :disabled="readonly"
                 >
                   <el-option
                     v-for="option in injection.max_stage"
@@ -71,7 +49,7 @@
                   v-number
                   size="small"
                   style="width: 100%"
-                  :disabled="col > injection.stage"
+                  :disabled="readonly || col > injection.stage"
                 />
               </template>
             </el-table-column>
@@ -84,6 +62,7 @@
                 style="width: 8rem"
                 v-model="injection.injection_time"
                 v-number
+                :disabled="readonly"
               >
                 <template #suffix>s</template>
               </el-input>
@@ -93,6 +72,7 @@
                 style="width: 8rem"
                 v-model="injection.delay_time"
                 v-number
+                :disabled="readonly"
               >
                 <template #suffix>s</template>
               </el-input>
@@ -102,6 +82,7 @@
                 style="width: 8rem"
                 v-model="injection.cooling_time"
                 v-number
+                :disabled="readonly"
               >
                 <template #suffix>s</template>
               </el-input>
@@ -111,18 +92,14 @@
           <!-- 区域 2：VP 切换 -->
           <div class="section-header">VP 切换</div>
 
-          <!--
-            VP 切换字段：5 个 inline 聚拢在一起
-            - 切换方式：模式选择器，决定后续字段启用状态
-            - 切换位置 / 切换时间 / 切换压力 / 切换速度：根据 mode 动态启用
-            - 不要硬换行（会让字段分散），让 inline 聚拢随容器宽度自动换行
-          -->
+          <!-- VP 切换字段：5 个 inline 聚拢在一起 -->
           <el-form size="small" :model="vp_switch" :inline="true">
             <el-form-item label="切换方式" prop="mode">
               <el-select
                 style="width: 8rem"
                 v-model="vp_switch.mode"
                 placeholder="请选择"
+                :disabled="readonly"
               >
                 <el-option
                   v-for="option in VPS_MODE_OPTIONS"
@@ -137,7 +114,7 @@
                 v-number
                 v-model="vp_switch.position"
                 style="width: 8rem"
-                :disabled="isSwitchModeDisabled('position')"
+                :disabled="readonly || isSwitchModeDisabled('position')"
               >
                 <template #suffix>mm</template>
               </el-input>
@@ -147,7 +124,7 @@
                 v-number
                 v-model="vp_switch.time"
                 style="width: 8rem"
-                :disabled="isSwitchModeDisabled('time')"
+                :disabled="readonly || isSwitchModeDisabled('time')"
               >
                 <template #suffix>s</template>
               </el-input>
@@ -157,7 +134,7 @@
                 v-number
                 v-model="vp_switch.pressure"
                 style="width: 8rem"
-                :disabled="isSwitchModeDisabled('pressure')"
+                :disabled="readonly || isSwitchModeDisabled('pressure')"
               >
                 <template #suffix>{{ pressure_unit }}</template>
               </el-input>
@@ -167,7 +144,7 @@
                 v-number
                 v-model="vp_switch.velocity"
                 style="width: 8rem"
-                :disabled="isSwitchModeDisabled('velocity')"
+                :disabled="readonly || isSwitchModeDisabled('velocity')"
               >
                 <template #suffix>{{ speed_unit }}</template>
               </el-input>
@@ -191,6 +168,7 @@
                   v-model="holding.stage"
                   size="small"
                   style="width: 100%"
+                  :disabled="readonly"
                 >
                   <el-option
                     v-for="option in holding.max_stage"
@@ -217,7 +195,7 @@
                   v-model="scope.row.sections[col_idx]"
                   size="small"
                   style="width: 100%"
-                  :disabled="col > holding.stage"
+                  :disabled="readonly || col > holding.stage"
                 />
               </template>
             </el-table-column>
@@ -245,6 +223,7 @@
                   v-model="metering.stage"
                   size="small"
                   style="width: 100%"
+                  :disabled="readonly"
                 >
                   <el-option
                     v-for="option in metering.max_stage"
@@ -269,7 +248,7 @@
                 <el-input
                   v-model="scope.row.sections[col_idx]"
                   v-number
-                  :disabled="col > metering.stage"
+                  :disabled="readonly || col > metering.stage"
                   size="small"
                   style="width: 100%"
                 />
@@ -283,6 +262,7 @@
               <el-select
                 v-model="metering.pre_decompress_mode"
                 style="width: 8rem"
+                :disabled="readonly"
               >
                 <el-option
                   v-for="(option, idx) in DECOMP_MODE_OPTIONS"
@@ -296,6 +276,7 @@
               <el-select
                 v-model="metering.post_decompress_mode"
                 style="width: 8rem"
+                :disabled="readonly"
               >
                 <el-option
                   v-for="(option, idx) in DECOMP_MODE_OPTIONS"
@@ -329,7 +310,7 @@
                   v-number
                   size="small"
                   style="width: 100%"
-                  :disabled="isDecompressDisabled(scope.$index, 'pressure')"
+                  :disabled="readonly || isDecompressDisabled(scope.$index, 'pressure')"
                 />
               </template>
             </el-table-column>
@@ -344,7 +325,7 @@
                   v-model="scope.row.velocity"
                   size="small"
                   style="width: 100%"
-                  :disabled="isDecompressDisabled(scope.$index, 'velocity')"
+                  :disabled="readonly || isDecompressDisabled(scope.$index, 'velocity')"
                 />
               </template>
             </el-table-column>
@@ -359,7 +340,7 @@
                   v-model="scope.row.distance"
                   size="small"
                   style="width: 100%"
-                  :disabled="isDecompressDisabled(scope.$index, 'distance')"
+                  :disabled="readonly || isDecompressDisabled(scope.$index, 'distance')"
                 />
               </template>
             </el-table-column>
@@ -374,7 +355,7 @@
                   v-model="scope.row.time"
                   size="small"
                   style="width: 100%"
-                  :disabled="isDecompressDisabled(scope.$index, 'time')"
+                  :disabled="readonly || isDecompressDisabled(scope.$index, 'time')"
                 />
               </template>
             </el-table-column>
@@ -387,6 +368,7 @@
                 v-model="metering.delay_time"
                 v-number
                 style="width: 8rem"
+                :disabled="readonly"
               >
                 <template #suffix>s</template>
               </el-input>
@@ -396,6 +378,7 @@
                 v-model="metering.ending_position"
                 v-number
                 style="width: 8rem"
+                :disabled="readonly"
               >
                 <template #suffix>mm</template>
               </el-input>
@@ -418,16 +401,17 @@
           >
             <el-table-column label="工艺参数" width="90" align="center">
               <template #header>
-                <div class="simple-table__stage-title">温度段数</div>
+                <div class="simple-table__stage-title">温度档数</div>
                 <el-select
                   v-model="barrel_temperature.stage"
                   size="small"
                   style="width: 100%"
+                  :disabled="readonly"
                 >
                   <el-option
                     v-for="option in barrel_temperature.max_stage"
                     :key="option"
-                    :label="option"
+                    :label="`${option}档`"
                     :value="option"
                   />
                 </el-select>
@@ -449,7 +433,7 @@
                   v-model="scope.row.sections[col_idx]"
                   size="small"
                   style="width: 100%"
-                  :disabled="col > barrel_temperature.stage"
+                  :disabled="readonly || col > barrel_temperature.stage"
                 />
               </template>
             </el-table-column>
@@ -460,19 +444,11 @@
 </template>
 
 <script setup lang="ts">
-/**
- * SettingProcess 工艺参数设定卡（Vue 3 Composition API 版）
- *
- * - props.settingProcess: 嵌套结构的工艺参数（与后端 _construct_setting_process_frontend 对应）
- * - props.machineInfo: 设备信息（用于单位系统）
- * - 单位系统同步：watch props.machineInfo → 更新 injection/holding/metering 的 table_data 单位
- */
+/** LibraryParameterForm 工艺参数录入表单（工艺库模板编辑用）：与 optimization/components/TuningParameterPanel.vue 是两套独立组件（本组件无变更高亮、支持只读预览）；props.settingProcess 为嵌套工艺参数，props.machineInfo 决定单位系统 */
 import { ref, computed, watch, reactive } from "vue";
 import { settingProcessForm } from "@/constants/process-const";
 
-// ============================================================================
 // 常量
-// ============================================================================
 
 const STG_HEADER: Record<number, string> = {
   1: "一段",
@@ -522,18 +498,16 @@ const DECOMP_MODE_OPTIONS = [
   { label: "时间", value: 2 },
 ];
 
-// ============================================================================
 // Props
-// ============================================================================
 
 const props = defineProps<{
   settingProcess: any;
   machineInfo?: any;
+  /** 只读模式：详情态下禁用全部可编辑控件 */
+  readonly?: boolean;
 }>();
 
-// ============================================================================
 // 响应式状态
-// ============================================================================
 
 const setting_process = reactive<any>(
   props.settingProcess ?? structuredClone(settingProcessForm),
@@ -549,18 +523,8 @@ const barrel_temperature = computed(() => setting_process.barrel_temperature);
 const pressure_unit = computed(() => machine_info.pressure_unit || "MPa");
 const speed_unit = computed(() => machine_info.speed_unit || "mm/s");
 
-// ============================================================================
 // 工具：判断输入是否禁用
-// ============================================================================
-
-/**
- * VP 切换：哪些字段在当前模式下不可用
- * - 0 位置：只有 position 可用
- * - 1 时间：只有 time 可用
- * - 2 时间&位置：position + time 可用
- * - 3 压力：只有 pressure 可用
- * - 4 速度：只有 velocity 可用
- */
+/** VP 切换：哪些字段在当前模式下不可用（0 位置 / 1 时间 / 2 时间&位置 / 3 压力 / 4 速度） */
 function isSwitchModeDisabled(keyword: string): boolean {
   const mode = vp_switch.value.mode;
   if ((mode === 0 || mode === 2) && keyword === "position") return false;
@@ -570,12 +534,7 @@ function isSwitchModeDisabled(keyword: string): boolean {
   return true;
 }
 
-/**
- * 松退：哪些字段在当前模式下不可用
- * - 0 否：所有都不可用
- * - 1 距离：distance 可用，time 不可用
- * - 2 时间：time 可用，distance 不可用
- */
+/** 松退：哪些字段在当前模式下不可用（0 否 / 1 距离 / 2 时间） */
 function isDecompressDisabled(index: number, type: string): boolean {
   const before = metering.value.pre_decompress_mode;
   if (index === 0) {
@@ -590,9 +549,7 @@ function isDecompressDisabled(index: number, type: string): boolean {
   return true;
 }
 
-// ============================================================================
 // 单位同步
-// ============================================================================
 
 function syncMachineUnit() {
   if (!machine_info) return;
@@ -622,9 +579,7 @@ function syncMachineUnit() {
   }
 }
 
-// ============================================================================
 // Watch
-// ============================================================================
 
 watch(
   () => props.machineInfo,
@@ -646,12 +601,7 @@ watch(
 
 <style scoped>
 /* ===== 表格 ===== */
-/*
- * 参考 shared/SettingProcess.vue 里的 .simple-table 样式
- * - 表格整体 12px（紧凑）
- * - 表头 8px padding + 600 字重（与其他表头一致）
- * - 表体 6px padding（让输入框紧凑）
- */
+/* 参考 optimization/components/TuningParameterPanel.vue 的 .simple-table：表格整体 12px、表头 8px padding + 600 字重、表体 6px padding */
 .simple-table {
   width: 100%;
   font-size: 12px;
@@ -668,36 +618,17 @@ watch(
   font-size: 12px;
 }
 
-/*
- * el-table 后面紧跟 el-form 时的间距
- * - 问题：之前清理 <br /> 后，注射表 / 松退表与下方的 form 紧贴在一起
- * - 解决：用相邻兄弟选择器只对“上一个兄弟元素是 .simple-table”的 form 生效
- * - 不影响其他场景：
- *   - 烙胶表后是 section-header（不是 form，不生效）
- *   - 保压表后无 form（不生效）
- */
+/* el-table 后面紧跟 el-form 时的间距：用相邻兄弟选择器只对"上一个兄弟是 .simple-table"的 form 生效，不影响其他场景 */
 .simple-table + .el-form {
   margin-top: 16px;
 }
 
-/*
- * section-header 后面紧跟 el-form 时的间距（VP 切换场景专用）
- * - 问题：VP 切换区域里 section-header 后面直接是 form，没有间距
- * - 解决：用相邻兄弟选择器只对“上一个兄弟元素是 .section-header”的 form 生效
- * - section-header 本身有 padding: 12px 16px 8px（下 8px），再加 4px 达 12px 总间距
- * - 不会影响其他场景：
- *   - 注射参数 / 储料参数 / 保压参数 / 料筒温度 后面都是 el-table，不是 form
- */
+/* section-header 后面紧跟 el-form 时的间距（VP 切换场景专用）：section-header 下 padding 8px，再加 4px 达总间距 12px */
 .section-header + .el-form {
   margin-top: 4px;
 }
 
-/*
- * 表头中的“段数”标题（如注射段数 / 保压段数 / 计量段数 / 温度段数）
- * - 原状是裸 div，无视觉重点
- * - 加上主题色 + 600 字重 + 4px 下边距，与下面的 el-select 拉开间距
- * - 字号 12px 与表头一致
- */
+/* 表头中的“段数/档数”标题（如注射段数 / 保压段数 / 计量段数 / 温度档数） */
 .simple-table__stage-title {
   font-size: 12px;
   font-weight: 600;
@@ -706,17 +637,7 @@ watch(
   line-height: 1.2;
 }
 
-/*
- * ===== 区域分组标题 =====
- *
- * 用于 box-card 内部区分不同区域（注射参数 / VP切换 / 保压参数 等）
- * - 参考 shared/SettingProcess.vue 的 .section-header 写法
- * - 与 shared/SettingProcess 一致：主题色竖条 + 浅灰背景 + 600 字重
- *
- * 响应式：
- * - 默认桌面：padding 12px 16px 8px（上下多一点以分隔区块）
- * - 移动端 (<=768px)：padding 8px 12px 6px（紧凑，避免窄屏占用过多空间）
- */
+/* ===== 区域分组标题 ===== */
 .section-header {
   font-size: 13px;
   font-weight: 600;

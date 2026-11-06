@@ -1,19 +1,5 @@
-<!--
-  PolymerSearchForm - 聚合物搜索表单（配置驱动）
+<!-- PolymerSearchForm - 聚合物搜索表单（配置驱动）：复用 BaseSearchForm，本组件只声明本模块 search_items 字段配置，query-detail prop 接收父组件 query，@search/@reset 回调；7 个搜索字段（厂商/简称/牌号/类别/数据来源/等级代码/供应商代码）全部 autocomplete 且 level: 'basic' -->
 
-  设计思路（与 mold / project 模块保持一致）：
-  - 复用 BaseSearchForm 组件（公共）
-  - 本组件只声明本模块的搜索字段配置（search_items）
-  - 通过 query-detail prop 接收父组件的 query 对象
-  - 通过 @search / @reset 事件回调
-
-  风格：Composition API（Vue 3 + <script setup>，2026-09 统一升级）
-
-  字段策略：
-  - 全部使用 autocomplete 类型，从后端拉取历史输入建议
-  - 7 个搜索字段（厂商 / 简称 / 牌号 / 类别 / 数据来源 / 等级代码 / 供应商代码）
-  - level: 'basic'（全部为基础字段，不过度展开）
--->
 <template>
   <BaseSearchForm
     :query="query_params"

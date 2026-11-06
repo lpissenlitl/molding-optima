@@ -1,8 +1,6 @@
 """
 参数验证装饰器 - Pydantic 版本
 
-版本历史：
-- v2.0.0 (2026-06-27) - 从 marshmallow 迁移到 Pydantic
 """
 from typing import Type
 from pydantic import BaseModel, ValidationError

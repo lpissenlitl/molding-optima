@@ -13,15 +13,14 @@
 
 **为什么在这一层**
 - 规则串**只拆一次**：拆解产物同时供「分类」「建对象」「收参数名」三处使用
-- 分类与建对象**同处一处**：编排层不再持有分流逻辑，也不再碰规则串
+- 分类与建对象**同处一处**：编排层不持有分流逻辑，也不碰规则串
 - 编排层因此**零解析**：它只负责把 Profile 列表交给本模块，再把产物交给 net
 
 **四段判定**（口径固定，不做"优化"）：
 
 0. **代数式结论** —— ``X=a*Y+b*Z``：**内核不支持**该形态，显式跳过并留痕。
-   （历史包袱：它无 action ⇒ 会被下面第 1 段判成 advisory ⇒ 默默进 Mamdani 层
-   当一条「无结论列」的空规则，不报错也不留痕；原 `NumTskRule` 里的
-   `parameter_vector` 分支则**永远执行不到**（代数式不会建 NumTskRule）。）
+   （它无 action ⇒ 会被下面第 1 段判成 advisory ⇒ 若不显式跳过，
+   会默默进 Mamdani 层当一条「无结论列」的空规则，不报错也不留痕。）
 1. **结论形态** —— 与规则层共用同一判定（`parsing.classify_conclusion_kind`）：
    只要有一个结论的动作不是 add/reduce ⇒ advisory；
    全是 add/reduce 时，至少一个结论值是数字 ⇒ numeric。
@@ -147,7 +146,7 @@ def _has_algebra_conclusion(solutions: List[Dict]) -> bool:
 def _collect_param_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None:
     """把一条规则的参数名并进集合（与 `parsing.is_param_name` 同口径）。
 
-    ⚠️ 走的是**已拆解产物**，不再重新拆规则串 ⇒ 第 4 层只拆一次。
+    ⚠️ 走的是**已拆解产物**，不重新拆规则串 ⇒ 第 4 层只拆一次。
     """
     for info in parsed['preconditions'] + parsed['solutions']:
         name = info.get('name')
@@ -166,7 +165,7 @@ def _collect_defect_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None
     "越严重越激进"），因此需要缺陷关键词的论域元数据
     （RuleKeyword.range / fuzzy_level）把档位词翻译成论域上的数值。
 
-    ⚠️ 走的是**已拆解产物**，不再重新拆规则串 ⇒ 第 4 层仍然只拆一次。
+    ⚠️ 走的是**已拆解产物**，不重新拆规则串 ⇒ 第 4 层仍然只拆一次。
     """
     for info in parsed['preconditions'] + parsed['solutions']:
         name = info.get('name')

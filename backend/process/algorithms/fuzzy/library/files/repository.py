@@ -87,7 +87,7 @@ class FileResourceRepository:
         """
         codes = RuleAssembler.library_code_candidates(context)
         index = self._loader.load_libraries()
-        return RuleAssembler.select_libraries(codes, index)
+        return RuleAssembler.select_libraries(codes, index, context)
 
     def get_rules(self, context: RuleQueryContext) -> List[RuleProfile]:
         """按上下文匹配拉出规则，组装成内核输入契约。
@@ -99,17 +99,21 @@ class FileResourceRepository:
         """
         codes = RuleAssembler.library_code_candidates(context)
         index = self._loader.load_libraries()
-        libraries = RuleAssembler.select_libraries(codes, index)
+        libraries = RuleAssembler.select_libraries(codes, index, context)
         if not libraries:
             logger.warning('[%s] 未找到任何可用规则库: %s',
                            self.SOURCE_LABEL, context)
             return []
 
-        methods_by_library: Dict[str, List] = {}
+        # ⚠️ **按库主键归档**（不按库编码）：库编码跨租户可重复 ⇒ 同码两库
+        #   按编码归档会互相覆盖（后取的那库顶掉前一个），
+        #   别家的规则被**静默张冠李戴**（不报错，只是结果不同）。
+        methods_by_library: Dict[int, List] = {}
         for lib in libraries:
-            methods_by_library[lib.library_code] = (
+            methods_by_library[lib.library_id] = (
                 self._loader.get_candidate_methods(
                     lib.library_code, context.defect_name,
+                    library_id=lib.library_id,
                 )
             )
 

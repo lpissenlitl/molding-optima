@@ -62,12 +62,12 @@
         </el-dropdown>
       </template>
 
-      <!-- 工艺条件编号列：可点击跳编辑 -->
+      <!-- 工艺条件编号列：可点击查看详情 -->
       <template #cell-condition_no="{ row }">
         <el-link
           v-if="row.condition_no"
           type="primary"
-          @click="goEdit(row)"
+          @click="goDetail(row)"
         >
           {{ row.condition_no }}
         </el-link>
@@ -78,10 +78,10 @@
       <template #cell-status="{ row }">
         <el-tag
           v-if="row.status"
-          :type="row.status === 'active' ? 'success' : 'info'"
+          :type="conditionStatusTagType(row.status)"
           size="small"
         >
-          {{ statusLabel(row.status) }}
+          {{ conditionStatusLabel(row.status) }}
         </el-tag>
         <span v-else style="color: #c0c4cc;">—</span>
       </template>
@@ -94,9 +94,13 @@
 
       <!-- 行操作列 -->
       <template #append-columns>
-        <el-table-column label="操作" width="180" align="center" fixed="right">
+        <el-table-column label="操作" width="220" align="center" fixed="right">
           <template #default="{ row }">
             <span class="row-action-buttons">
+              <el-button type="text" @click="goDetail(row)">
+                <AppIcon icon="mdi:eye-outline" style="margin-right: 4px; font-size: 14px;" />
+                详情
+              </el-button>
               <el-button type="text" @click="goEdit(row)">
                 <AppIcon icon="mdi:pencil-outline" style="margin-right: 4px; font-size: 14px;" />
                 编辑
@@ -121,25 +125,20 @@ import BaseTable, { type BaseTableColumn } from '@/components/BaseTable.vue'
 import ProcessSearchForm from '../components/ProcessSearchForm.vue'
 import { processRecordMethod, processExport, type ProcessExportTemplate } from '@/api'
 import { getReportDownloadUrl } from '@/utils/assert'
+import { conditionStatusLabel, conditionStatusTagType } from '@/views/process/shared/condition-status'
 
-// ============================================================================
 // 类型
-// ============================================================================
 
 interface ListData {
   total: number
   items: any[]
 }
 
-// ============================================================================
 // 路由
-// ============================================================================
 
 const router = useRouter()
 
-// ============================================================================
 // 状态
-// ============================================================================
 
 const query = reactive({
   page_no: 1,
@@ -158,9 +157,7 @@ const list_loading = ref(false)
 const table_size = ref<'small' | 'default' | 'large'>('default')
 const selected_rows = ref<any[]>([])
 
-// ============================================================================
 // 列定义
-// ============================================================================
 
 const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '工艺编号', prop: 'condition_no', minWidth: 160, align: 'center', sortable: true, tooltip: true, filterable: false },
@@ -177,15 +174,7 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '创建时间', prop: 'created_at', minWidth: 170, align: 'center', sortable: true, tooltip: true, filterable: false },
 ])
 
-// ============================================================================
 // 标签转换
-// ============================================================================
-
-const STATUS_MAP: Record<string, string> = {
-  draft: '草稿',
-  active: '使用中',
-  archived: '已归档',
-}
 
 const ORIGIN_MAP: Record<string, string> = {
   manual_creation: '手工新建',
@@ -197,17 +186,11 @@ const ORIGIN_MAP: Record<string, string> = {
   process_transplant: '工艺移植',
 }
 
-function statusLabel(s: string) {
-  return STATUS_MAP[s] ?? s
-}
-
 function originLabel(o: string) {
   return ORIGIN_MAP[o] ?? o
 }
 
-// ============================================================================
 // 数据加载
-// ============================================================================
 
 async function fetchList() {
   list_loading.value = true
@@ -245,12 +228,14 @@ function onReset() {
   fetchList()
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function goCreate() {
   router.push('/process/library/new')
+}
+
+function goDetail(row: any) {
+  router.push(`/process/library/${row.id}/detail`)
 }
 
 function goEdit(row: any) {
@@ -326,9 +311,7 @@ async function batchDelete() {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

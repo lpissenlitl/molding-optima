@@ -176,16 +176,9 @@ export const moldInfoForm = {
 export const moldTypeOptions = [
   { label: "注塑模具", value: "注塑模具" }, // en: injection
   { label: "冲压模具", value: "冲压模具" }, // en: stamping
-  // { label: "压铸模具", value: "压铸模具" }, // en: die_casting
-  // { label: "吹塑模具", value: "吹塑模具" }, // en: blow_molding
-  // { label: "挤出模具", value: "挤出模具" }, // en: extrusion
-  // { label: "压缩成型模具", value: "压缩成型模具" }, // en: compression
-  // { label: "传递模", value: "传递模" }, // en: transfer
-  // { label: "滚塑模具", value: "滚塑模具" }, // en: rotational
-  // { label: "热成型模具", value: "热成型模具" }, // en: thermoforming
-  // { label: "发泡模具", value: "发泡模具" }, // en: foam
-  // { label: "硅胶模具", value: "硅胶模具" }, // en: silicone
-  // { label: "其他", value: "其他" } // en: others
+  // 暂未启用的模具类型（预留）
+  // 压铸模具(die_casting) / 吹塑模具(blow_molding) / 挤出模具(extrusion) / 压缩成型模具(compression) / 传递模(transfer) / 滚塑模具(rotational) / 热成型模具(thermoforming) / 发泡模具(foam) / 硅胶模具(silicone) / 其他(others)
+
 ]
 
 // 模具类别

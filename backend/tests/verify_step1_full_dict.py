@@ -80,7 +80,7 @@ assert expected_included.issubset(set(result.keys())), (
 print(f"[3] ORM 元数据 / 业务字段 / 工艺字段都保留: OK ({len(expected_included)} 项都在)")
 
 
-# ---------- _serialize_parameter 已删除（Step 1 直接用 _to_full_dict）----------
+# ---------- 验证 _serialize_parameter 不存在（Step 1 直接用 _to_full_dict）----------
 from process.services import parameter_optimize as service_module
 
 assert not hasattr(service_module.ParameterOptimizeService, "_serialize_parameter"), (
@@ -89,7 +89,7 @@ assert not hasattr(service_module.ParameterOptimizeService, "_serialize_paramete
 print(f"[4] _serialize_parameter 已删除（Step 1 直接用 _to_full_dict）: OK")
 
 
-# ---------- _build_condition_data 已删除（build condition 职责移到 Step 2）----------
+# ---------- 验证 _build_condition_data 不存在（build condition 职责在 Step 2）----------
 assert not hasattr(service_module.ParameterOptimizeService, "_build_condition_data"), (
     "_build_condition_data 应已删除（build condition 移到 Step 2 _build_engine_context）"
 )

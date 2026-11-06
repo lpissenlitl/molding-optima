@@ -1,8 +1,4 @@
-﻿// 路由（Vue Router 4）
-// 设计原则：
-// - 路由是菜单的唯一真理之源（sidebar 自动从 router 生成）
-// - 默认 2 级菜单（视觉简洁），alwaysShow=true 可强制显示父级
-// - 中间层路由用 ParentView 占位（无真实页面）
+﻿// 路由（Vue Router 4）：路由是菜单的唯一真理之源（sidebar 自动从 router 生成）；默认 2 级菜单（视觉简洁），alwaysShow=true 可强制显示父级；中间层路由用 ParentView 占位（无真实页面）
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import ParentView from '@/views/layout/components/parentView.vue'
 
@@ -151,6 +147,19 @@ const routes: RouteRecordRaw[] = [
             name: 'process-rule-method-detail',
             component: () => import('@/views/process/rule/pages/RuleMethodForm.vue'),
             meta: { title: '规则方法详情', hidden: true, activeMenu: '/process/rules' },
+          },
+          // 规则挖掘审核台（仅管理员）
+          {
+            path: 'mining-rules',
+            name: 'process-mining-rules',
+            component: () => import('@/views/process/mining/pages/MiningRuleList.vue'),
+            meta: { title: '规则挖掘', icon: 'mdi:shovel', adminOnly: true },
+          },
+          {
+            path: 'mining-rules/:id(\\d+)',
+            name: 'process-mining-rule-detail',
+            component: () => import('@/views/process/mining/pages/MiningRuleDetail.vue'),
+            meta: { title: '候选规则详情', hidden: true, activeMenu: '/process/mining-rules', adminOnly: true },
           },
         ],
       },

@@ -49,11 +49,8 @@
 <script setup lang="ts">
 /**
  * TableSetting - 表格列设置弹窗
- *
- * @description 列显隐切换、列宽编辑、拖拽排序（基于 Sortable.js）
- * @author MoldingX Team
- *
- * 用法：v-model:show="..."
+ * - 列显隐切换、列宽编辑、拖拽排序（基于 Sortable.js）
+ * - 用法：v-model:show="..."
  */
 import { ref, computed, watch, nextTick } from 'vue'
 import Sortable from 'sortablejs'
@@ -86,10 +83,8 @@ const table_list = ref<Record<string, any>[]>([])
 
 /**
  * 同步父组件 props.tableData 到本地副本
- *
- * 关键设计：使用 in-place mutation（splice + push），保证 table_list 与
- * 父组件数组保持一致的数据来源（虽是不同数组，但内容相同）。
- * 用户编辑时只动 table_list，确认时通过 syncBackToParent 一次性回写到父组件。
+ * - 关键设计：使用 in-place mutation（splice + push），保证 table_list 与父组件数组内容一致
+ * - 用户编辑时只动 table_list，确认时通过 syncBackToParent 一次性回写到父组件
  */
 watch(
   () => props.tableData ?? [],
@@ -106,10 +101,7 @@ watch(
   { immediate: true, deep: true }
 )
 
-/**
- * 初始化 Sortable.js 拖拽排序
- * 监听 tbody 行拖动结束事件，splice 移动数据项
- */
+/** 初始化 Sortable.js 拖拽排序：监听 tbody 行拖动结束事件，splice 移动数据项 */
 function initSortable() {
   const tbody = document.querySelector('.setting-dialog .el-dialog__body tbody') as HTMLElement | null
   if (!tbody) return
@@ -124,10 +116,7 @@ function initSortable() {
   })
 }
 
-/**
- * 将本地编辑结果同步回 props.tableData（父组件数组引用）
- * 使用 Object.assign 进行 in-place mutation，Vue 响应式可正确追踪此次变更
- */
+/** 将本地编辑结果同步回 props.tableData（父组件数组引用）：用 Object.assign 做 in-place mutation，Vue 响应式可正确追踪 */
 function syncBackToParent() {
   const parent = props.tableData
   if (!parent) return

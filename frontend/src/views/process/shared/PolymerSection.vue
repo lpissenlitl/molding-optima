@@ -1,15 +1,4 @@
-<!--
-  PolymerSection - 材料区域子组件
-
-  职责：
-    1. 材料主选（简称 + 牌号，双 autocomplete）
-    2. 材料派生字段（基本信息）
-    3. 推荐工艺（成型温度 + 注塑速率/背压/剪切/滞留）
-
-  通信：通过 inject(ConditionKey) 获取共享的 reactive condition，直接 mutate
-
-  联动：牌号 fetch 自动按当前简称过滤；两个 autocomplete 可独立检索
--->
+<!-- PolymerSection - 材料区域子组件 -->
 <template>
   <div class="area-section">
     <!-- 选择区：双 autocomplete（独立检索 + 联动过滤） -->
@@ -191,12 +180,7 @@ const condition = inject(ConditionKey)!
 const polymerAbbreviation = ref<string>(condition.polymer_info?.abbreviation ?? '')
 const selectedGrade = ref<string>(condition.polymer_info?.grade ?? '')
 
-// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零
-// （局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）
-//
-// ⚠️ internalPolymerClear：内部主动清空 polymer_info（如改简称导致牌号失效）时置位。
-// condition.polymer_info 由有值变 null 会让本 watch 触发，若照常回填就把用户刚选的
-// 新简称一起清掉了 ⇒ 这种清空要跳过回填（消费标志位后 return）。
+// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零（局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）；⚠️ internalPolymerClear 是内部主动清空 polymer_info 的标志位，消费后须跳过回填，否则会把用户刚选的新简称一起清掉
 let internalPolymerClear = false
 
 watch(
@@ -214,14 +198,7 @@ watch(
   (val) => { selectedGrade.value = val ?? '' },
 )
 
-// 简称/牌号变空 → 自动重置材料派生信息
-// 覆盖两种清空路径:
-//   1. 点 X 按钮(@clear 触发 el-autocomplete 把 v-model 设为 '')
-//   2. 手动删空 input(@clear 不触发,只能靠 watch 兜底)
-// 同时把输入框状态镜像到 condition.polymer_abbreviation：
-// el-form-item 的校验目标必须落在 el-form 的 model 上，
-// 局部 ref 无法直接作为校验目标 ⇒ 镜像后由 prop="polymer_abbreviation" 校验。
-// immediate 保证初始值(编辑模式已有 polymer_info)也能镜像。
+// 简称/牌号变空 → 自动重置材料派生信息（覆盖点 X 按钮 @clear 与手动删空两条路径）；同时把输入框状态镜像到 condition.polymer_abbreviation，因为 el-form-item 的校验目标必须落在 el-form 的 model 上
 watch(
   polymerAbbreviation,
   (val) => {
@@ -332,8 +309,6 @@ async function onGradeSelect(item: any) {
     polymerAbbreviation.value = p.abbreviation
   }
   // 同步前置写入列表项（已含 id）：
-  // el-form-item 的 change 校验在 selectedGrade 变化的同一轮微任务里执行，
-  // 若等详情接口返回后才写 polymer_info，校验读到的仍是 null ⇒ 必填红字永久残留
   condition.polymer_info = p
   // 列表 API 不含 Moldflow 参数
   // 必须调详情 API 获取完整数据
@@ -363,8 +338,6 @@ function onGradeClear() {
 
 <style lang="scss" scoped>
 // 全局 .subsection-block* 定义在 src/styles/utilities/subsection-block.scss
-// 本组件私有：.selection-area（选择区容器）
-// 派生区内部所有 subsection-block 统一使用全局 card 风格（同源区块样式一致）
 
 .selection-area {
   margin-bottom: 0;

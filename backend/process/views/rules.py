@@ -6,10 +6,12 @@ URL 段 (4 类资源对称, 全部为 list + detail):
 - rule-methods/          规则方法 (缺陷→参数调整, query 过滤 library)
 - expert-rules/          专家规则 (初始化系数, superuser, query 过滤 library)
 - rules/by-defect/       按缺陷查规则 (业务功能)
+- rule-promotions/       规则晋升到公共库 (superuser, POST)
 
 权限:
 - keyword / library / method: require_login
 - expert_rule: require_superuser
+- rule_promotion: require_superuser（公共库是全平台资产，租户不得自助塞入）
 """
 from django.utils.decorators import method_decorator
 
@@ -18,7 +20,19 @@ from extensions.schemas import PaginationBaseSchema
 from extensions.views import BaseView, PaginationResponse
 from identity.decorators import require_login, require_superuser
 
-from process.services import rule
+from process.services import rule, rule_promotion
+
+
+def _operator_name(request) -> str:
+    """操作者标识（优先工程师姓名，其次用户名）—— 仅用于日志留痕。"""
+    user = getattr(request, 'user', None)
+    if user is None:
+        return ''
+    return (
+        getattr(user, 'engineer_name', None)
+        or getattr(user, 'username', '')
+        or ''
+    )
 
 
 # ----- 规则关键词 (rules/keywords) -----
@@ -80,6 +94,7 @@ class RuleLibraryListView(BaseView):
         return rule.add_rule_library(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
+            is_superuser=getattr(request.user, "is_superuser", False),
             **request.DATA,
         )
 
@@ -95,6 +110,7 @@ class RuleLibraryDetailView(BaseView):
         return rule.update_rule_library(
             rule_library_id,
             company_id=request.user.company_id,
+            is_superuser=getattr(request.user, "is_superuser", False),
             **request.DATA,
         )
 
@@ -102,6 +118,7 @@ class RuleLibraryDetailView(BaseView):
         rule.delete_rule_library(
             rule_library_id,
             company_id=request.user.company_id,
+            is_superuser=getattr(request.user, "is_superuser", False),
         )
 
 
@@ -177,6 +194,7 @@ class ExpertRuleListView(BaseView):
         return rule.add_expert_rule(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
+            is_superuser=getattr(request.user, "is_superuser", False),
             **request.DATA,
         )
 
@@ -192,6 +210,7 @@ class ExpertRuleDetailView(BaseView):
         return rule.update_expert_rule(
             expert_rule_id,
             company_id=request.user.company_id,
+            is_superuser=getattr(request.user, "is_superuser", False),
             **request.DATA,
         )
 
@@ -199,4 +218,30 @@ class ExpertRuleDetailView(BaseView):
         rule.delete_expert_rule(
             expert_rule_id,
             company_id=request.user.company_id,
+            is_superuser=getattr(request.user, "is_superuser", False),
+        )
+
+
+# ----- 规则晋升 (rule-promotions, 平台超管) -----
+# POST body: rule_method_ids  规则方法 id 列表（必填）
+
+@method_decorator(require_superuser, name="dispatch")
+class RulePromotionView(BaseView):
+    """规则晋升到公共库（平台超管专用）
+
+    ⚠️ **为什么只有平台超管能做**：公共库是**全平台资产** ——
+       规则一旦晋升进去，**所有租户**的试模推荐都会用上它。
+       若允许租户自助晋升，等于任何租户都能把任意规则扩散给所有租户。
+       ⇒ view 层 `require_superuser`，service 层再校验一次（双保险）。
+
+    ⚠️ **语义是「移动」不是「复制」**：规则的所属库改指向公共库，
+       原租户私库不再保留该规则；规则的 `company_id` 保留原租户值作溯源。
+    """
+
+    def post(self, request):
+        data = request.DATA or {}
+        return rule_promotion.promote_rules_to_public(
+            rule_method_ids=data.get('rule_method_ids') or [],
+            is_superuser=getattr(request.user, 'is_superuser', False),
+            operator=_operator_name(request),
         )

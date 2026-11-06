@@ -7,14 +7,8 @@ molding-optima analytic 视图（聚合分析）
 - /api/analytic/alarm-statistics/          → 报警趋势（待扩展）
 - /api/analytic/quality-statistics/        → 缺陷分布（待扩展）
 
-迁移记录：
-- 2026-10-08 从 process app 迁出
-  原 URL：/api/processes/statistics/dashboard/
-  原归属：process.views.processes.DashboardStatisticsView
-  中间站：dashboard.app（保留 1 小时，后改为 analytic）
-  现 URL：/api/analytic/process-statistics/
-  原因：analytic 是跨模块聚合分析，不属于工艺 CRUD 范畴；
-        无 -s 后缀符合项目命名习惯
+命名说明：app 名用 analytic —— 跨模块聚合分析，不属于工艺 CRUD 范畴；
+        避免与前端 UI 视图（views/dashboard）混淆；无 -s 后缀符合项目命名习惯。
 """
 from django.utils.decorators import method_decorator
 

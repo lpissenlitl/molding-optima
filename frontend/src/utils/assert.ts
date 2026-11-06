@@ -1,11 +1,5 @@
-/**
- * 文件/报表 URL 工具
- *
- * 历史版本：
- * - `getToken` 来自 `./auth`（Vuex 时代，现已移除）
- * - 2026-09：auth 模块已删除，token 迁移到 Pinia useUserStore().token
- *   （与 request.ts 的 token 来源一致）
- */
+/** 文件/报表 URL 工具；token 已从 Vuex 迁到 Pinia useUserStore().token（与 request.ts 一致） */
+
 import { useUserStore } from '@/stores/user'
 
 export function getFullFileUrl(assertRelativeUrl: string) {

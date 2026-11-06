@@ -57,15 +57,17 @@ class TuningRecord(BusinessBaseModel):
     # adjustments 是规范化训练样本，由系统计算 OLD vs NEW diff 生成
     # 字段名补充说明：取代原 note 字段
     # 用户不能定义其结构（保证格式一致）
+    # OLD 侧 = 父节点**派生时**的快照（previous_parameter），
+    # NEW 侧 = 本轮当前快照 ⇒ 变更始终表达为两个快照的差异
     # {
-    #     "defects": ["短射", "飞边"],
+    #     "defects": ["SHORTSHOT"],          # 本轮试模的缺陷名（词表名）
     #     "changes": [
     #         {
     #             "param": "inj_pres_1",
     #             "before": 50,
     #             "after": 60,
     #             "direction": "increase",
-    #             "rule_ref": "rule_001"
+    #             "rule_ref": null            # 不归因：变更未必来自某条推荐
     #         }
     #     ],
     #     "tuning_context": {
@@ -81,7 +83,9 @@ class TuningRecord(BusinessBaseModel):
     )
 
     # --- 试模结果（迭代状态）---
-    # 状态流转：待验证 → 有改善/恶化/无变化 → 合格/不合格
+    # 两组取值：绝对合格性（qualified/unqualified）/ 相对变化（improved/worse/unchanged）
+    # 前端按轮次取子集：首轮 qualified/unqualified，第 2 轮起 qualified + 相对变化三档
+    # 状态流转：待验证 → 有改善/变差/无变化 → 合格/不合格
     TRIAL_RESULT_CHOICES = [
         ('pending', '待验证'),        # 刚提交，等待试模
         ('improved', '有改善'),      # 参数调整后缺陷有所改善

@@ -1,13 +1,5 @@
-<!--
-  AuxiliaryEquipmentList - 辅助装置列表页
+<!-- AuxiliaryEquipmentList - 辅助装置列表页：搜索用 AuxiliarySearchForm（封装 BaseSearchForm），列表用 BaseTable（接管 el-table + el-pagination + 密度切换 + TableSetting，8 列），顶部 toolbar 添加辅机/导出列表/配置表格，行操作为编辑、删除（紧凑 text 按钮） -->
 
-  架构（参考 InjectionMachineList / PolymerList）：
-  - 搜索：AuxiliarySearchForm（封装 BaseSearchForm，配置驱动）
-  - 列表：BaseTable 组件（接管 el-table + el-pagination + 密度切换 + TableSetting）
-  - 列定义：8 列（名称/类型/规格/总数量/可用数量/备注/更新日期/创建日期）
-  - 顶部 toolbar：添加辅机、导出列表、配置表格
-  - 行操作列：编辑、删除（紧凑 text 按钮风格）
--->
 <template>
   <div class="auxiliary-equipment-list">
     <!-- 搜索表单 -->
@@ -95,9 +87,7 @@ import { auxiliaryMethod, exportListData } from '@/api'
 import { getReportDownloadUrl } from '@/utils/assert'
 import { hasPermission } from '@/utils/permission'
 
-// ============================================================================
 // 列表数据
-// ============================================================================
 
 interface ListData {
   total: number
@@ -120,9 +110,7 @@ const query = reactive({
   page_size: 100,
 })
 
-// ============================================================================
 // 列定义（8 列）
-// ============================================================================
 
 const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '设备名称', prop: 'equipment_name', minWidth: 160, align: 'left', header_align: 'center', sortable: false, tooltip: false },
@@ -135,9 +123,7 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '创建日期', prop: 'created_at', minWidth: 170, align: 'center', header_align: 'center', sortable: false, tooltip: false },
 ])
 
-// ============================================================================
 // API
-// ============================================================================
 
 async function fetchList() {
   list_loading.value = true
@@ -172,9 +158,7 @@ function refreshView() {
   fetchList()
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function toAddAuxiliary() {
   if (!hasPermission('add_auxiliary')) {
@@ -229,9 +213,7 @@ async function deleteAuxiliary(row: any) {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

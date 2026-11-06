@@ -1,11 +1,5 @@
-﻿<!--
-  公司管理 - 列表页
-  - 搜索（公司名称、所属行业、状态）
-  - 列表（公司名称、编码、行业、层级、状态、创建时间）
-  - 操作列：编辑、启用/禁用、删除、接管、释放
-  - 批量删除
-  - 新建/编辑公司（弹窗，含公司管理员子表单）
--->
+﻿<!-- 公司管理列表页：搜索（名称/行业/状态）+ 列表（名称/编码/行业/层级/状态/创建时间）+ 行操作（编辑/启停/删除/接管/释放）+ 批量删除 + 新建编辑弹窗（含公司管理员子表单） -->
+
 <template>
   <div class="page-stack">
     <!-- 搜索栏 -->
@@ -216,9 +210,7 @@ import {
 } from '@/api'
 import { useUserStore } from '@/stores/user'
 
-// ============================================================================
 // 列表数据
-// ============================================================================
 
 interface ListData {
   total: number
@@ -253,9 +245,7 @@ const table_columns = ref<BaseTableColumn[]>([
 /** 外部数据库唯一值（用于列筛选项） */
 const externalUniqueValues = ref<Record<string, any[]>>({})
 
-// ============================================================================
 // API 调用
-// ============================================================================
 
 async function fetchList() {
   list_loading.value = true
@@ -304,9 +294,7 @@ function syncExternalUniqueValues() {
   }
 }
 
-// ============================================================================
 // 弹窗 / 操作
-// ============================================================================
 
 const drawer_visible = ref(false)
 const is_create = ref(true)
@@ -407,17 +395,11 @@ async function batchDelete() {
   }
 }
 
-// ============================================================================
 // 接管 / 释放租户上下文（单一开关列控制，单选语义）
-// ============================================================================
 
 const userStore = useUserStore()
 
-/**
- * 切换接管状态
- * - enable=true  → 接管该公司（user.company_id = row.id）
- * - enable=false → 释放当前接管（user.company_id = null）
- */
+/** 切换接管状态 */
 async function toggleAssume(row: any, enable: boolean) {
   row._assume_loading = true
   const api = enable ? assumeCompanyApi : releaseCompanyApi
@@ -454,9 +436,7 @@ async function toggleAssume(row: any, enable: boolean) {
   }
 }
 
-// ============================================================================
 // 工具
-// ============================================================================
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -470,9 +450,7 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

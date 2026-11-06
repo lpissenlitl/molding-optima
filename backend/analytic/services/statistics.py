@@ -4,14 +4,8 @@ molding-optima analytic 聚合分析服务（按业务域拆分）
 业务域：
 - statistics: 工艺统计聚合（trend + origin）
 
-迁移记录：
-- 2026-10-08 从 process.services.statistics 迁出
-  原路径：process/services/statistics.py
-  原函数：get_dashboard_statistics
-  新函数：get_process_statistics（命名更明确"工艺"维度）
-
-- 2026-10-08 同步重命名 app：dashboard → analytic
-  原因：避免与前端 UI 视图（views/dashboard）混淆；无 -s 后缀符合命名习惯
+命名说明：app 名用 analytic —— 跨模块聚合分析，不属于工艺 CRUD 范畴；
+        避免与前端 UI 视图（views/dashboard）混淆；无 -s 后缀符合命名习惯。
 """
 from datetime import date, timedelta
 from typing import Any, Dict

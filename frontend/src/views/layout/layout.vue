@@ -1,12 +1,5 @@
-<!--
-  主布局：Sidebar + Navbar + AppMain
-  - 经典三段式布局（现代化包装）
-  - 支持 hamburger 折叠
-    - 桌面端（≥992px）：sidebar 缩窄到 60px
-    - 移动端（<992px）：sidebar 抽屉化（默认隐藏）
-  - 布局专用色硬编码在组件内（不在全局 tokens）
-  - 详见 architecture.md §ADR-004
--->
+<!-- 主布局：Sidebar + Navbar + AppMain：经典三段式布局，支持 hamburger 折叠（桌面端 ≥992px 缩窄到 60px，移动端 <992px 抽屉化默认隐藏），布局专用色硬编码在组件内（不在全局 tokens），详见 architecture.md §ADR-004 -->
+
 <template>
   <div :class="['layout', { 'layout--drawer-open': isMobile && !collapsed }]">
     <!-- 移动端遮罩（仅在抽屉打开时显示）-->
@@ -51,7 +44,6 @@ import AppMain from './components/appMain.vue'
 const settingsStore = useSettingsStore()
 
 // 折叠状态（true = 收起；移动端表示抽屉关闭）
-// 初始化时读取用户偏好（仅桌面端生效）
 const collapsed = ref(settingsStore.sidebarDefaultCollapsed)
 // 移动端判断（< 992px = 抽屉模式）
 const isMobile = ref(false)
@@ -88,37 +80,15 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 .layout {
   display: flex;
-  /*
-   * 锁死 100vh（不是 min-height） + overflow: hidden
-   *
-   * 原因：
-   * - 之前用 min-height: 100vh，layout 会被内容撑高
-   * - 当表单超长时，layout 超过视窗 → body 出现滚动条
-   * - 侧边栏作为 layout 的子元素，跟着页面一起滚
-   *   → 出现"下拉侧边栏菜单也被滚动"的 bug
-   *
-   * 修复后：
-   * - layout 始终 = 视窗高度，body 不可能滚动
-   * - 侧边栏和主内容区都在 layout 内部独立滚动
-   *   （侧边栏的 .sidebar overflow-y: auto 处理菜单过长）
-   *   （主内容区的 .layout__content overflow: auto 处理表单过长）
-   */
+  /* 锁死 100vh（不是 min-height） + overflow: hidden：min-height 会让 layout 被内容撑高，表单超长时 body 出现滚动条、侧边栏跟着一起滚；锁死后 layout 恒等于视窗高度，侧边栏与主内容区各自内部滚动 */
+
   height: 100vh;
   overflow: hidden;
   background: var(--color-bg-page);
-  /*
-   * 工业软件后台：最低 1024px 宽度。
-   * 低于此值出现水平滚动条，不重排。
-   * 这样表格/列筛选、批量操作不会在手机上被压缩错位。
-   */
+  /* 工业软件后台：最低 1024px 宽度。 */
   min-width: 1024px;
-  /*
-   * 侧边栏宽度变量（供子组件 fixed 元素定位使用）
-   * - 默认 220px（桌面端展开）
-   * - 折叠态 60px（is-collapsed-desktop）
-   * - 移动端 0px（抽屉化不占主内容空间）
-   * 子组件可用：left: var(--sidebar-width, 220px);
-   */
+  /* 侧边栏宽度变量（供子组件 fixed 元素定位）：默认 220px（桌面端展开）、折叠态 60px（is-collapsed-desktop）、移动端 0px（抽屉化不占主内容空间），子组件可用 left: var(--sidebar-width, 220px) */
+
   --sidebar-width: 220px;
 
   &__mask {
@@ -128,9 +98,8 @@ onBeforeUnmount(() => {
     z-index: 999;
   }
 
-  // ──────────────────────────────────────
   // Sidebar：桌面端默认 220px，可折叠到 60px
-  // ──────────────────────────────────────
+
   &__sidebar {
     width: 220px;
     background: var(--menu-bgcolor);  // 主题切换
@@ -153,10 +122,7 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    /*
-     * min-height: 0：flex 子项默认 min-height: auto，会被内容撑开
-     * 设为 0 后，子项可以收缩到比内容更小，overflow:auto 才会触发
-     */
+    /* min-height: 0：flex 子项默认 min-height: auto，会被内容撑开 */
     min-height: 0;
   }
 
@@ -171,19 +137,12 @@ onBeforeUnmount(() => {
     flex: 1;
     padding: 12px;
     overflow: auto;
-    /*
-     * min-height: 0：同上，flex 子项必须允许收缩
-     * overflow:auto 才会在内容超过可视区时出现滚动条
-     */
+    /* min-height: 0：同上，flex 子项必须允许收缩 */
     min-height: 0;
   }
 
-  // ──────────────────────────────────────
-  // 移动端：sidebar 抽屉化
-  // - 默认 transform: translateX(-100%) 隐藏在屏幕左侧
-  // - .is-drawer-open 时 transform: translateX(0) 显示
-  // - 桌面端折叠（is-collapsed-desktop）在移动端被覆盖（始终 220px）
-  // ──────────────────────────────────────
+  // 移动端：sidebar 抽屉化（默认 translateX(-100%) 隐藏，.is-drawer-open 显示；移动端覆盖桌面端折叠，恒 220px）
+
   @media (max-width: 991px) {
     &__sidebar {
       position: fixed;

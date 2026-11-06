@@ -1,4 +1,4 @@
-"""黄金快照比对：新快照 vs 基线快照（逐条 diff，2026-10-23）
+"""黄金快照比对：新快照 vs 基线快照（逐条 diff）
 
 用法：
     ..\.venv\Scripts\python.exe tests\fuzzy_kernel\_compare_golden.py tests\fuzzy_kernel\_golden_M1.json <新快照.json>

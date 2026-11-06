@@ -30,9 +30,6 @@ TEMPLATE_DETAIL = "detail"
 
 VALID_TEMPLATES = (TEMPLATE_COMPACT, TEMPLATE_DEFAULT, TEMPLATE_DETAIL)
 
-# 报告输出格式白名单（会拼进文件后缀，必须收敛）
-VALID_REPORT_FORMATS = ("pdf", "docx")
-
 
 # --- 固定头列（所有模板都含）---
 HEADER_FIELDS = [
@@ -58,7 +55,7 @@ COMPACT_FIELDS = [
     ("met_pres_1", "一段熔胶压力"),
     ("met_lim_t", "熔胶延时"),
     ("met_end_pos", "熔胶终止位置"),
-    ("brl_temp_stg", "料筒温度段数"),
+    ("brl_temp_stg", "料筒温度档数"),
     ("brl_temp_1", "一段料筒温度"),
     ("noz_temp", "喷嘴温度"),
 ]
@@ -300,58 +297,4 @@ def export_process_parameters(
         "count": row - 2,
         "template": template,
         "include_snapshots": include_snapshots,
-    }
-
-
-def generate_process_report(
-    company_id: int,
-    tenant_slug: str,
-    process_condition_id: int,
-    format: str = "pdf",
-    template: str = None,
-):
-    """
-    生成工艺报告（PDF/DOCX）。molding-optima 阶段 1 暂仅返回占位结构，
-    第二阶段将从 old/ 提炼报告生成逻辑。
-
-    Args:
-        company_id: 租户公司 ID（强制隔离）
-        tenant_slug: 租户标识（存储目录）
-        process_condition_id: 工艺条件 ID
-        format: 输出格式（pdf / docx）
-        template: 报告模板（预留）
-
-    Returns:
-        dict: {"url", "relative_path", "format", "template"}
-    """
-    from process.models import ProcessCondition
-
-    fmt = (format or "pdf").strip().lower()
-    if fmt not in VALID_REPORT_FORMATS:
-        raise BizException(
-            ERROR_ILLEGAL_ARGUMENT,
-            f"不支持的报告格式: {format!r}（可选 {', '.join(VALID_REPORT_FORMATS)}）",
-        )
-
-    condition = ProcessCondition.objects.filter(
-        id=process_condition_id,
-        company_id=company_id,
-        is_deleted=False,
-    ).first()
-
-    if not condition:
-        raise BizException(ERROR_DATA_NOT_FOUND, f"process condition not found: {process_condition_id}")
-
-    template_name = f"process_report_{process_condition_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    full_path, relative_path = build_export_list_path(tenant_slug, template_name, fmt)
-
-    # 阶段 1 占位：仅写入最小内容
-    with open(full_path, "wb") as f:
-        f.write(b"%PDF-1.4\n%Placeholder process report\n")
-
-    return {
-        "url": relative_path,
-        "relative_path": relative_path,
-        "format": fmt,
-        "template": template,
     }

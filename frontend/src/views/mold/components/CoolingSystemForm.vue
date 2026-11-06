@@ -1,15 +1,5 @@
-<!--
-  CoolingSystemForm - 冷却系统子表单（被 MoldForm 引用）
+<!-- CoolingSystemForm - 冷却系统子表单（被 MoldForm 引用）：单层无嵌套，由 MoldForm 包裹在 el-card 内（不含 page-header / form-actions / loaded），props.coolingSystem 直接双向绑定，flat items + groupIntoRows 自动分行，类型覆盖 input / integer / select / number-select + divider -->
 
-  路由：无（子组件）
-
-  设计要点：
-  - 单层无嵌套（与 GatingSystemForm 不同）
-  - 由 MoldForm 包裹在 el-card 内使用，故不含 page-header / form-actions / loaded
-  - 数据通过 props.coolingSystem 直接双向绑定（修改 reactive 对象属性即可同步到 mold_info）
-  - 数据：flat items 数组 + groupIntoRows 自动分行
-  - 类型覆盖：input / integer / select / number-select + divider
--->
 <template>
   <el-form
     :model="coolingSystem"
@@ -60,29 +50,18 @@ import {
 } from '@/constants/mold-const'
 import FormFieldRenderer from './FormFieldRenderer.vue'
 
-/**
- * props 数据双向绑定说明：
- * - props.coolingSystem 是 MoldForm.mold_info.cooling_system 的引用（reactive 对象）
- * - 直接修改属性会同步到 mold_info（v-model="coolingSystem[prop]" 生效）
- * - 这是当前 MoldForm 现状，子组件不创建本地 ref，保持单向数据流
- */
+/** props 数据双向绑定：props.coolingSystem 即 MoldForm.mold_info.cooling_system 的 reactive 引用，直接改属性即同步到 mold_info（v-model="coolingSystem[prop]"），子组件不创建本地 ref 保持单向数据流 */
+
 const props = defineProps<{
   coolingSystem: Record<string, any>
 }>()
 
-/**
- * 验证规则（与 GatingSystemForm 一致的架构：可被 MoldForm 统一验证）
- * - 当前未定义任何必填规则，后续按业务需求补充
- */
+/** 验证规则（与 GatingSystemForm 一致的架构：可被 MoldForm 统一验证） */
 const rules = {}
 
 const formRef = ref<FormInstance>()
 
-/**
- * 字段定义（flat items，按 span=6 自动分行）
- * - divider 自动 span=24，单独占一行
- * - type=integer → v-number=0；type=select → 普通下拉；type=number-select → select + v-number
- */
+/** 字段定义（flat items，按 span=6 自动分行） */
 const formItems: FormItem[] = [
   // --- 型腔（定模） ---
   { label: '前模（定模）', type: 'divider' },

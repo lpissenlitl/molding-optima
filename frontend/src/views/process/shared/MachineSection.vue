@@ -1,23 +1,10 @@
-<!--
-  MachineSection - 注塑机区域子组件
-
-  职责：
-    1. 注塑机主选（autocomplete）
-    2. 注塑机派生字段（基本信息）
-    3. 射台主选
-    4. 射台信息（当前射台的字段）
-
-  通信：通过 inject(ConditionKey) 获取共享的 reactive condition，直接 mutate
-
-  唯一性：注塑机 model 不唯一，显示 `${model} 「${device_no}」`
--->
+<!-- MachineSection - 注塑机区域子组件 -->
 <template>
   <div class="area-section">
     <div class="selection-area">
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :md="6">
-          <!-- prop 必须用 "machine_info.id"：顶层 injection_machine_id 是提交态平铺字段
-               （buildPayload 从 machine_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
+          <!-- prop 必须用 "machine_info.id"：顶层 injection_machine_id 是提交态平铺字段（buildPayload 从 machine_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
           <el-form-item label="选择注塑机" prop="machine_info.id">
             <el-autocomplete
               v-model="machineQuery"
@@ -174,11 +161,7 @@ const {
 } = useConditionDerived(condition)
 
 // 注塑机显示文本格式化（唯一性：model 不唯一，需要 model + device_no）
-/**
- * 注塑机显示文本：注塑机型号 「设备编号」
- * 与 fetchMachineSuggestions 中 items 的 value 字段保持一致
- * 这样 watch 同步、编辑模式初始化、下拉选择回填都用同一格式
- */
+/** 注塑机显示文本：注塑机型号 「设备编号」 */
 function formatMachineLabel(m: { model?: string; device_no?: string } | null | undefined): string {
   if (!m) return ''
   return m.device_no ? `${m.model} 「${m.device_no}」` : (m.model ?? '')
@@ -251,13 +234,9 @@ async function onMachineSelect(item: any) {
   if (!m) return
   const seq = ++machineDetailSeq
   // 切换注塑机后,射台序号统一重置为第 1 射台(避免前一台机器的射台选择残留)
-  // 前置到 await 之前：injection_index 的必填校验与 machineQuery 变化在同一轮触发，
-  // 放到详情返回之后会让"请选择射台"在用户已选机器后仍然报错
   condition.injection_index = 0
   injectionIndexStr.value = '1'
   // 同步前置写入列表项（已含 id）：
-  // el-form-item 的 change 校验在 machineQuery 变化的同一轮微任务里执行，
-  // 若等详情接口返回后才写 machine_info，校验读到的仍是 null ⇒ 必填红字永久残留
   condition.machine_info = m
   // 列表 API 不返回反向关联
   // 必须调详情 API 获取完整的 injection_units
@@ -282,8 +261,6 @@ function onMachineClear() {
 
 <style lang="scss" scoped>
 // 全局 .subsection-block* 定义在 src/styles/utilities/subsection-block.scss
-// 本组件私有：.selection-area（选择区容器）
-// 派生区内部所有 subsection-block 统一使用全局 card 风格（同源区块样式一致）
 
 .selection-area {
   margin-bottom: 0;

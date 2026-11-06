@@ -1,9 +1,4 @@
-<!--
-  ProcessCondition - 工艺条件卡（可折叠）+ 3 个 Section 协调器
-
-  职责：卡片框架 / 折叠 / 折叠态 summary / 校验钩子
-  通过 provide(ConditionKey, condition) 让子组件共享 reactive condition
--->
+<!-- ProcessCondition - 工艺条件卡（可折叠）+ 3 个 Section 协调器 -->
 <template>
   <el-card
     class="process-condition-card"
@@ -36,9 +31,9 @@
           <el-tag
             v-if="condition.status"
             size="small"
-            :type="STATUS_TAG_TYPE[condition.status]"
+            :type="conditionStatusTagType(condition.status)"
           >
-            {{ STATUS_MAP[condition.status] }}
+            {{ conditionStatusLabel(condition.status) }}
           </el-tag>
           <template v-if="hasMold">
             <el-divider direction="vertical" />
@@ -132,12 +127,7 @@
 </template>
 
 <script setup lang="ts">
-/**
- * ProcessCondition - 工艺条件卡协调壳
- *
- * 职责：提供 reactive condition、协调 3 个 Section、卡片折叠/校验
- * 父组件调用方式：await pcRef.value?.checkFormDataValid()
- */
+/** ProcessCondition - 工艺条件卡协调壳 */
 import { ref, reactive, watch, computed, provide, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -147,17 +137,9 @@ import PolymerSection from './PolymerSection.vue'
 import { useConditionDerived } from './composables/useConditionDerived.js'
 import { ConditionKey } from './types.js'
 import type { Condition } from './types.js'
+import { conditionStatusLabel, conditionStatusTagType } from './condition-status'
 
-// 状态枚举映射（与后端 STATUS_CHOICES 保持一致，禁止臆造）
-const STATUS_MAP: Record<string, string> = {
-  active: '使用中',
-  archived: '已归档',
-}
-
-const STATUS_TAG_TYPE: Record<string, 'success' | 'info' | 'warning'> = {
-  active: 'success',
-  archived: 'info',
-}
+// 状态枚举映射：统一由 shared/condition-status.ts 提供（与后端 STATUS_CHOICES 对齐）
 
 // Props
 const props = withDefaults(
@@ -194,10 +176,6 @@ const internalExpanded = ref<boolean>(
   isReadOnly.value ? false : (props.expanded ?? props.defaultExpanded),
 )
 // isReadOnly 强制折叠时，同步给父组件：emit update:expanded 让父 conditionExpanded 跟随
-// - 刷新页面场景：hasInitialProcess=true → isReadOnly=true → internalExpanded 被强制设为 false
-//   但 cached conditionExpanded=true → 按钮 label="折叠工艺条件"，UI 已折叠，不一致
-// - 解决：setup 同步 emit 让父组件 conditionExpanded 同步成 false，按钮 label 变为"展开工艺条件"
-// - 同步 emit 是必要的：内部 expand 受 props.disabled stale snapshot 影响（详见 expand 注释）
 if (isReadOnly.value && props.expanded) {
   emit('update:expanded', false)
 }
@@ -228,12 +206,7 @@ const {
 } = useConditionDerived(condition)
 
 const rules: FormRules = {
-  // 键名必须与 el-form-item 的 prop 完全一致（Element Plus 用 getProp(rules, prop) 取规则）
-  // ⚠️ 三类外键的 prop 一律用嵌套路径 "*_info.id"，不要写成顶层 "*_id"：
-  //    顶层 mold_id / injection_machine_id / polymer_id 是【提交态平铺字段】
-  //    （buildPayload 从 *_info.id 推导），前端编辑期恒为空 ⇒ 用它做校验目标会永远失败。
-  //    同理 rules 的键也必须是扁平字符串 "mold_info.id"：
-  //    getProp 在 rules 上按直接键取、在 model 上按嵌套路径取，两者互补。
+  // 键名必须与 el-form-item 的 prop 完全一致（Element Plus 用 getProp(rules, prop) 取规则）；⚠️ 三类外键的 prop 一律用嵌套路径 "*_info.id"，顶层 "*_id" 是提交态平铺字段（buildPayload 从 *_info.id 推导），编辑期恒为空，用它做校验目标会永远失败
   'mold_info.id': [{ required: true, message: '请选择模具', trigger: 'change' }],
   shot_index: [{ required: true, message: '请选择工艺射次', trigger: 'change' }],
   'machine_info.id': [{ required: true, message: '请选择注塑机', trigger: 'change' }],
@@ -243,11 +216,7 @@ const rules: FormRules = {
 }
 
 defineExpose({
-  /**
-   * 校验表单。返回 true 表示通过。
-   * 折叠态下强制展开，让用户看到/修改未通过校验的字段。
-   * 校验失败时定位到第一个错误字段（滚动 + 聚焦），便于用户直接修改。
-   */
+  /** 校验表单。返回 true 表示通过。 */
   async checkFormDataValid(): Promise<boolean> {
     if (!formRef.value) return false
     if (!internalExpanded.value) {
@@ -279,23 +248,7 @@ defineExpose({
   },
   /** 切换展开/折叠 */
   toggle,
-  /**
-   * 强制展开（父组件主动触发，不检查 isReadOnly）
-   *
-   * 为什么绕过 isReadOnly 检查：
-   * - expand 由父组件主动调用（目前仅 resetForm 使用），调用前父组件已
-   *   判断是否需要展开（例如已清空 form.condition.id）
-   * - isReadOnly 依赖子组件 props.disabled，props.disabled 是父 render 时的快照
-   * - 在 resetForm 同步代码中清除 form.condition.id 后，父 render effect
-   *   要到 microtask 才 flush，子 props.disabled 还是旧值（stale snapshot）
-   * - 此时 expand 中 isReadOnly 检查会错误返回 true，expand 被跳过
-   * - microtask flush 后 props.disabled 更新，但 props.expanded 没变化，
-   *   子 watch(props.expanded) 不被调度，UI 永远折叠
-   *
-   * 设计权衡：
-   * - toggle 仍检查 isReadOnly（用户主动折叠时 disabled 应阻止）
-   * - expand 不检查（父组件主动强制展开，由父组件负责判断）
-   */
+  /** 强制展开（父组件主动触发，不检查 isReadOnly）：因 props.disabled 是父 render 时的 stale snapshot，resetForm 同步清空后要到 microtask 才 flush，此时 isReadOnly 会误判为 true 导致 UI 永远折叠 */
   expand: () => {
     internalExpanded.value = true
     emit('update:expanded', true)
@@ -320,14 +273,7 @@ watch(
 </script>
 
 <style lang="scss" scoped>
-/*
- * 本组件私有样式：折叠 / 简要信息 / 过渡动画
- * 依赖全局 utility（不在此处定义）：
- * - .custom-form / .custom-form__section / .custom-form__title
- *   → src/styles/utilities/custom-form.scss
- * - .subsection-block / --nested / --deep-nested
- *   → src/styles/utilities/subsection-block.scss
- */
+/* 本组件私有样式：折叠 / 简要信息 / 过渡动画 */
 .process-condition-card {
   // 重置 el-card body 默认 padding，让折叠过渡能同步压缩到 0
   :deep(.el-card__body) {
@@ -390,11 +336,7 @@ watch(
     overflow: hidden;
   }
 
-  /*
-   * 内 card（模具 / 注塑机 / 材料）样式调整
-   * - 缩小 body padding 避免与外 card padding 叠加
-   * - header 加浅色背景 + 底部分隔线，与 body 区分
-   */
+  /* 内 card（模具 / 注塑机 / 材料）样式调整 */
   :deep(.custom-form__section--inner) {
     margin-bottom: 16px;
 
@@ -412,7 +354,7 @@ watch(
       margin-bottom: 0;
     }
 
-    // 去掉内 card 标题左边的主题色条（参考 SettingProcess.vue）
+    // 去掉内 card 标题左边的主题色条（参考 optimization/components/TuningParameterPanel.vue）
     .custom-form__title {
       padding-left: 0;
       border-left: none;
@@ -420,11 +362,7 @@ watch(
   }
 }
 
-/*
- * 折叠态简要信息项
- * - __value 用 max-width + ellipsis 防止某项过长挤出其他项
- * - min-width: 0 关键：flex 子项默认 min-width: auto 会阻止 ellipsis 生效
- */
+/* 折叠态简要信息项：__value 用 max-width + ellipsis 防某项过长挤出其他项（min-width: 0 是关键，flex 子项默认 min-width: auto 会阻止 ellipsis 生效） */
 .summary-item {
   display: inline-flex;
   align-items: center;
@@ -463,11 +401,7 @@ watch(
   }
 }
 
-/*
- * 折叠过渡动画
- * - 同时过渡 max-height / opacity / padding-top / padding-bottom
- * - 只过渡 max-height 会“留边”（el-card body padding 不会被压缩）
- */
+/* 折叠过渡动画 */
 .process-condition-collapse-enter-active,
 .process-condition-collapse-leave-active {
   transition:

@@ -1,7 +1,7 @@
 """
 verify_initialize_flat.py
 
-验证 initialize 响应的 flat 契约（D1 决策 2026-10-22）：
+验证 initialize 响应的 flat 契约：
 
 - initialize 的 result['process'] 与 optimize 的 new_parameter **同为 flat**
 - flat ↔ nested 的形态转换只在后端边界发生一次（process_params_to_flat），

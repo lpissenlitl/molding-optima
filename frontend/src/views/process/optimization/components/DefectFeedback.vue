@@ -1,11 +1,53 @@
-<!--
-  DefectFeedback - 缺陷反馈表单
-  - 默认显示 1 个缺陷卡；只有>1的卡显示"移除"按钮
-  - 无缺陷（DEFECTFREE）作为合法缺陷之一
-  - 数据：DefectFeedbackData[]
--->
+<!-- DefectFeedback - 缺陷反馈表单 -->
 <template>
   <div class="defect-feedback">
+    <!-- 工艺效果评价（整轮一个）：首轮只判合格性，后续轮可判合格性与相较上一轮的变化 -->
+    <div class="defect-feedback__tuning-result">
+      <span class="defect-feedback__tuning-label">
+        {{ hasComparison ? '工艺效果' : '产品是否合格' }}
+        <el-tooltip
+          placement="top"
+          :show-after="200"
+          :hide-after="0"
+        >
+          <template #content>
+            <template v-if="hasComparison">
+              本轮试模结果：产品是否合格、相较上一轮的变化<br>
+              写入本轮调参记录，作为算法的训练标签
+            </template>
+            <template v-else>
+              本轮试模结果：产品是否合格<br>
+              写入本轮调参记录，作为算法的训练标签
+            </template>
+          </template>
+          <AppIcon
+            icon="mdi:help-circle-outline"
+            class="defect-feedback__tuning-help"
+          />
+        </el-tooltip>
+      </span>
+      <el-radio-group
+        :model-value="tuningResult"
+        size="small"
+        @update:model-value="onTuningResultChange"
+      >
+        <el-radio-button value="qualified">合格</el-radio-button>
+        <template v-if="hasComparison">
+          <el-radio-button value="effective">改善</el-radio-button>
+          <el-radio-button value="unchanged">无变化</el-radio-button>
+          <el-radio-button value="ineffective">变差</el-radio-button>
+        </template>
+        <template v-else>
+          <el-radio-button value="unqualified">不合格</el-radio-button>
+        </template>
+      </el-radio-group>
+    </div>
+
+    <!-- 合格态：产品没有缺陷 ⇒ 缺陷区整体不渲染（下方缺陷卡片列表为空） -->
+    <div v-if="isQualified" class="defect-feedback__hint">
+      产品已合格，本轮无需填写缺陷信息
+    </div>
+
     <div
       v-for="(defect, idx) in defectList"
       :key="defect.__local_id"
@@ -48,7 +90,14 @@
         class="defect-feedback__form"
       >
         <el-form-item label="缺陷类型">
+          <span
+            v-if="isDefectFree(defect)"
+            class="defect-feedback__hint"
+          >
+            无缺陷（历史记录，已由「产品是否合格」取代）
+          </span>
           <el-select
+            v-else
             :model-value="defect.keyword_id"
             :disabled="!keywordsLoaded"
             :loading="!keywordsLoaded"
@@ -217,7 +266,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
 import type { RuleKeyword } from '@/types/rule'
-import type { DefectFeedbackData } from '@/types/optimization'
+import type { DefectFeedbackData, TuningResult } from '@/types/optimization'
 import { LEVEL_WORDS, DEFECT_LEVEL_LABELS } from '@/constants/rule-const'
 import { DEFECTFREE_KEYWORD_NAME } from '@/constants/special-keywords'
 import { sortDefectsByCommon } from '@/constants/defect-order'
@@ -228,32 +277,45 @@ const MAX_DEFECT_COUNT = 5
 /** 内部缺陷项：业务数据 + 本地 __local_id（用于 v-for key 与证据区映射） */
 type DefectItem = DefectFeedbackData & { __local_id: string }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue?: DefectFeedbackData[]
   defectKeywords?: RuleKeyword[]
   positionKeywords?: RuleKeyword[]
   /** 缺陷 keyword 是否已加载完成（控制 select 的 loading/disabled） */
   keywordsLoaded?: boolean
-}>()
+  /** 工艺效果评价（整轮一个） */
+  tuningResult?: TuningResult
+  /** 是否有对比基准（第 2 轮起才有）：true 时在「合格」外另提供「改善/无变化/变差」 */
+  hasComparison?: boolean
+}>(), {
+  hasComparison: true,
+})
 
 const emit = defineEmits<{
   (e: 'update:modelValue', val: DefectFeedbackData[]): void
+  (e: 'update:tuningResult', val: TuningResult): void
 }>()
 
 const defectList = ref<DefectItem[]>([])
+
+/**
+ * 是否「合格」：合格态产品没有缺陷 ⇒ 缺陷区整体隐藏并清空。
+ * ⚠️ 这里只隐藏**缺陷输入区**，上面的「工艺效果评价」单选必须保留 ——
+ *    用户正是通过它切到「合格」的。
+ */
+const isQualified = computed(() => props.tuningResult === 'qualified')
 
 /** 每个缺陷的 evidence tab 状态（独立维护，key=__local_id，默认值 'image'） */
 const evidenceTabMap = reactive<Record<string, 'image' | 'model'>>({})
 const imageMap = reactive<Record<string, UploadUserFile[]>>({})
 
-/**
- * 从 modelValue 重建本地列表
- * - 传入 [] → 默认显示 1 个空缺陷卡
- * - 传入 ≥1 → 按传入重建
- * - 不立即 emit 到父级（保持父级 modelValue 与本地可能存在的 1 个空卡的"分歧"）
- * - 同步初始化 evidenceTabMap[__local_id] = 'image'（默认激活"上传图片"）
- */
+/** 从 modelValue 重建本地列表（空数组 → 显示 1 个空缺陷卡；重建不立即 emit，保留与父级的"分歧"） */
 function rebuildFromProps(val: DefectFeedbackData[] | undefined) {
+  // 合格态：缺陷区整体隐藏 ⇒ 不建任何缺陷卡（否则会露出一张空白卡）
+  if (isQualified.value) {
+    defectList.value = []
+    return
+  }
   const incoming = val ?? []
   if (incoming.length === 0) {
     const item = makeEmptyDefect()
@@ -289,6 +351,23 @@ watch(
   { deep: true },
 )
 
+/**
+ * 合格态切换：合格 ⇒ 隐藏并清空缺陷区（含父级已填的）；
+ * 离开合格 ⇒ 按当前值重建（空 → 一张空缺陷卡）。
+ */
+watch(
+  () => props.tuningResult,
+  (val) => {
+    if (val === 'qualified') {
+      defectList.value = []
+      // 后端合格态也会丢弃缺陷，界面上更不该留着
+      emit('update:modelValue', [])
+    } else {
+      rebuildFromProps(props.modelValue)
+    }
+  },
+)
+
 /** 本地变化 → emit 到父级 */
 function syncToParent() {
   emit(
@@ -297,28 +376,27 @@ function syncToParent() {
   )
 }
 
-const sortedKeywords = computed<RuleKeyword[]>(() => {
-  const sorted = sortDefectsByCommon(props.defectKeywords ?? [])
-  sorted.sort((a, b) => {
-    if (a.keyword_name === DEFECTFREE_KEYWORD_NAME) return -1
-    if (b.keyword_name === DEFECTFREE_KEYWORD_NAME) return 1
-    return 0
-  })
-  return sorted
-})
+const sortedKeywords = computed<RuleKeyword[]>(() =>
+  sortDefectsByCommon(props.defectKeywords ?? []),
+)
+
+/** 是否「无缺陷」项：读数据自带 keyword_name，不依赖 keyword 列表（该类型已下线，列表里已过滤） */
+function isDefectFree(defect: DefectItem): boolean {
+  return defect.keyword_name === DEFECTFREE_KEYWORD_NAME
+}
+
+function onTuningResultChange(val: TuningResult) {
+  emit('update:tuningResult', val)
+}
 
 function getKeyword(defect: DefectItem): RuleKeyword | null {
   return props.defectKeywords?.find(k => k.id === defect.keyword_id) ?? null
 }
 
-function isDefectFree(defect: DefectItem): boolean {
-  return getKeyword(defect)?.keyword_name === DEFECTFREE_KEYWORD_NAME
-}
-
 function getItemTitle(defect: DefectItem, idx: number): string {
+  if (isDefectFree(defect)) return `缺陷 #${idx + 1}（无缺陷）`
   const kw = getKeyword(defect)
   if (!kw) return `缺陷 #${idx + 1}（未选）`
-  if (kw.keyword_name === DEFECTFREE_KEYWORD_NAME) return `缺陷 #${idx + 1}（无缺陷）`
   return `缺陷 #${idx + 1}：${kw.keyword_alias || kw.keyword_name}`
 }
 
@@ -410,6 +488,30 @@ function makeModelPickerHandler(defect: DefectItem) {
  * 每个缺陷独立卡片（__item），可堆叠多个
  */
 .defect-feedback {
+  &__tuning-result {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #f5f7fa;
+    border-radius: 4px;
+  }
+
+  &__tuning-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: #606266;
+  }
+
+  &__tuning-help {
+    color: #c0c4cc;
+    cursor: help;
+  }
+
   &__item {
     margin-bottom: 16px;
     padding: 12px 16px;

@@ -7,14 +7,12 @@
 （ORM 侧 `unique_together = (company, keyword_name)`），与规则的隔离维度不同，
 故分文件。
 
-⚠️ **转换类已迁出本模块**（2026-10-28）：
+⚠️ `RuleKeywordAdapter`（契约转换，零 ORM）**实际住在 `library/adapters.py`**，
+本模块只是**兼容导出**（`library.keywords.RuleKeywordAdapter` 路径不变）。
 
-- `RuleKeywordAdapter`（契约转换，零 ORM）→ `library/adapters.py`
-
-迁出的原因与规则侧一致：文件来源（`library/files/`）要用同一个转换器把
-本地 JSON 规约成内核契约，若转换器留在本模块，文件通道就得 import ORM
+放在 adapters 而非本模块的原因：文件来源（`library/files/`）要用同一个转换器把
+本地 JSON 规约成内核契约，若转换器留在本模块（依赖 ORM），文件通道就得 import ORM
 （依赖倒置的实质检验 = 高层不被低层实现拖住）。
-本模块保留**兼容导出**，既有引用路径（`library.keywords.RuleKeywordAdapter`）不变。
 """
 
 from typing import List

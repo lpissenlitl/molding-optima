@@ -1,18 +1,5 @@
-<!--
-  InjectionMachineForm - 注塑机表单（new / edit / copy 三模式共用）
+<!-- InjectionMachineForm - 注塑机表单（new/edit/copy 三模式共用）：路由 /equipment/injection/new|edit|copy（复制清空 id+unit_code），5 个 section（机器描述/注射单元 el-tabs/锁模单元/顶出单元/配套参数），4 列布局 divider 占满一行，单位系统（7 个）从机器顶层同步到所有注射单元 -->
 
-  路由：
-    - /equipment/injection/new         新建
-    - /equipment/injection/:id/edit    编辑
-    - /equipment/injection/:id/copy    复制（清空 id + unit_code）
-
-  架构（2026-09-09 重写）：
-    - 5 个 section：机器描述 / 注射单元（el-tabs）/ 锁模单元 / 顶出单元 / 配套参数
-    - 4 列布局（el-row + el-col + gutter:24），divider 占满一行
-    - 底部 form-actions（取消 / 保存）
-    - 单位系统（7 个）从机器顶层同步到所有注射单元（InjectionUnitForm）
-    - InjectionUnitForm 子组件用 Vue3 script setup，通过 ref.checkFormDataValid() 校验
--->
 <template>
   <div class="injection-machine-form">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
@@ -343,9 +330,7 @@ const route = useRoute()
 const router = useRouter()
 const instance = getCurrentInstance()
 
-// ============================================================================
 // 路由 / 模式
-// ============================================================================
 
 const is_edit = computed(() => !!route.params.id && route.name !== 'equipment-injection-copy')
 const is_copy = computed(() => route.name === 'equipment-injection-copy')
@@ -354,9 +339,7 @@ const machine_id = computed(() => {
   return id ? Number(id) : null
 })
 
-// ============================================================================
 // 状态
-// ============================================================================
 
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
@@ -372,9 +355,7 @@ function setUnitRef(el: any, idx: number) {
   }
 }
 
-// ============================================================================
 // 字段定义
-// ============================================================================
 
 // 字段定义（onChange 为本表单特有的 select 钩子，未在 FormItem 中定义，所以不用 FormItem 类型）
 type FieldItem = any
@@ -466,18 +447,14 @@ const supportingItems: FieldItem[] = [
   { label: '投产日期', prop: 'commissioning_date', type: 'date', placeholder: '首次正式投入生产日期' },
 ]
 
-// ============================================================================
 // 4 列布局行分组（divider 自动占满 24，span 4 字段默认）
-// ============================================================================
 
 const machineDescRows = computed(() => groupIntoRows(machineDescItems, { columns: 4 }))
 const clampingRows = computed(() => groupIntoRows(clampingItems, { columns: 4 }))
 const ejectionRows = computed(() => groupIntoRows(ejectionItems, { columns: 4 }))
 const supportingRows = computed(() => groupIntoRows(supportingItems, { columns: 4 }))
 
-// ============================================================================
 // 验证规则
-// ============================================================================
 
 const rules: FormRules = {
   model: [{ required: true, message: '设备型号不能为空!', trigger: 'blur' }],
@@ -485,9 +462,7 @@ const rules: FormRules = {
   max_clamping_force: [{ required: true, message: '最大锁模力不能为空!', trigger: 'blur' }],
 }
 
-// ============================================================================
 // 单位系统同步（机器顶层 → 所有注射单元）
-// ============================================================================
 
 const UNIT_FIELDS = [
   'pressure_unit',
@@ -511,9 +486,7 @@ for (const field of UNIT_FIELDS) {
   )
 }
 
-// ============================================================================
 // 射台数量变化 → 动态增删注射单元
-// ============================================================================
 
 function onUnitCountChanged(val: number | string) {
   const target = Number(val) || 1
@@ -529,9 +502,7 @@ function onUnitCountChanged(val: number | string) {
   active_tab_index.value = String(Math.max(0, target - 1))
 }
 
-// ============================================================================
 // 加载详情 / 保存 / 返回 / 重置
-// ============================================================================
 
 async function loadDetail(id: number) {
   try {
@@ -565,12 +536,8 @@ function goBack() {
   router.push('/equipment/injection/list')
 }
 
-/**
- * 打开单位换算抽屉
- * - 预填当前机器型号 + 当前激活 tab 对应的注射单元信息（螺杆直径等）
- * - drawer 顶部会显示"当前射台：注射部件-#N（射台编号 X）"，让用户清晰知道引用的是哪部分数据
- * - 用户在 drawer 内可手动覆盖螺杆直径
- */
+/** 打开单位换算抽屉：预填当前机器型号 + 当前激活 tab 对应的注射单元信息（螺杆直径等），抽屉顶部显示"当前射台：注射部件-#N（射台编号 X）"让用户清楚知道引用的是哪部分数据，用户可在抽屉内手动覆盖螺杆直径 */
+
 function openUnitConverter() {
   const idx = Number(active_tab_index.value) || 0
   const active_unit = injection_machine.value.injection_units?.[idx]
@@ -631,9 +598,7 @@ async function handleSave() {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(async () => {
   if (machine_id.value !== null) {
@@ -644,12 +609,8 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-/*
- * 页面样式（与 PolymerForm 对齐）
- * - 表单内部样式（.custom-form / .custom-form__title / .custom-form__divider 等）
- *   全部依赖全局统一样式：src/styles/utilities/custom-form.scss
- * - 本页仅保留页面容器 / page-header / loading-placeholder / 项目专属 tabs 样式
- */
+/* 页面样式：表单内部样式（.custom-form / .custom-form__title / .custom-form__divider 等）全部依赖全局 custom-form.scss，本页仅保留页面容器 / page-header / loading-placeholder / 项目专属 tabs 样式 */
+
 .injection-machine-form {
   padding: 16px 16px 96px;
   box-sizing: border-box;

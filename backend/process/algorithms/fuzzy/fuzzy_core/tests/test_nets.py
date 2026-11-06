@@ -63,8 +63,8 @@ def _assert_close(actual, expected, label, eps=1e-3):
 def _numtsk_net(rule_array, keywords, priorities):
     """按当前 net 契约构造数值层网络（规则对象 + KeywordProfile）。
 
-    ⚠️ net 不再吃裸 dict：规则串由调用方转成 `NumTskRule`，
-    优先级随规则档案走（不再单独传优先级数组）。
+    ⚠️ net 不吃裸 dict：规则串由调用方转成 `NumTskRule`，
+    优先级随规则档案走（不单独传优先级数组）。
     """
     rules = [
         NumTskRule(

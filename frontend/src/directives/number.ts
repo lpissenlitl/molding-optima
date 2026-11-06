@@ -2,8 +2,7 @@ import { formatNumber } from "@/utils/number"
 
 export default {
   mounted(el: any, binding: any, vnode: any) {
-    // 拿到 el 内部所有 input 元素（兼容 el-select / el-input 等包装组件）
-    // el-select 内部可能有多个 input（如隐藏的 multiple 勾选框）—— 跳过 type="hidden" / type="checkbox" / type="radio"
+    // 拿到 el 内部所有 input 元素（兼容 el-select / el-input 等包装组件）；el-select 内部可能有多个 input（如隐藏的 multiple 勾选框）—— 跳过 type="hidden" / type="checkbox" / type="radio"
     const getInputEls = (): HTMLInputElement[] => {
       const inputs: HTMLInputElement[] = []
       if (el.tagName === "INPUT") {
@@ -73,13 +72,11 @@ export default {
       const formatted = formatNumber(originalValue, options.fixed, options.allowNegative, false)
 
       // 🐛 修复递归：formatted === null 表示“空/全无效字符”状态
-      // - 此状态下若进入 if 块，target.value = null 会被浏览器转成 “null” 字符串
-      // - 下面的 dispatchEvent 会再触发一轮 handleInput
+      // - 此状态下若进入 if 块，target.value = null 会被浏览器转成 “null” 字符串，下面的 dispatchEvent 会再触发一轮 handleInput
       // - 新一轮 originalValue = "null"、formatted 仍为 null，二者仍不相等 -> 无限递归
       // - 直接 return，交由 Vue v-model 处理清空状态
       if (formatted === null) {
-        // ⚠️ el-select 场景下，浏览器显示的字符需要手动清空（v-model 已先于本函数写入）
-        // 用 patching 标志位防止 setSelectionRange/dispatchEvent 触发再次进入 handleInput
+        // ⚠️ el-select 场景下，浏览器显示的字符需要手动清空（v-model 已先于本函数写入）；用 patching 标志位防止 setSelectionRange/dispatchEvent 触发再次进入 handleInput
         if (!target._vNumberPatching && originalValue !== '') {
           target._vNumberPatching = true
           target.value = ''

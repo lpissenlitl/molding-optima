@@ -1,26 +1,18 @@
 """molding-optima 工艺参数 Schema 定义
 
-字段命名严格匹配 process/models/parameter.py。
-
-对应 Model：ProcessParameter
+字段命名严格匹配 process/models/parameter.py。对应 Model：ProcessParameter
 
 包含：注射参数（6 段）、VP 切换、保压参数（5 段）、冷却参数、熔胶参数（4 段）、
-      松退参数、料筒温度参数（10 段）。
+      松退参数、料筒温度参数（brl_temp_1..9）。
 
-独立 parameter service 的三类契约:
-- ProcessParameterSchema       入参（flat 92 字段, 算法/优化/移植用）
+三类契约:
+- ProcessParameterSchema       入参（flat 全字段, 算法/优化/移植用）
 - ProcessParameterListSchema   列表查询条件（按 parameter 字段过滤）
+- ProcessParameterUpdateSchema 更新 parameter (PUT /api/processes/parameters/<parameter_id>/)
 
-注 (2026-10-10): BatchDeleteParameterSchema 已删除, 批量删除 parameter 需求
-应走 /processes/records/batch-delete/ (级联软删 condition + parameter)
-
-UI 嵌套格式（前端 records 写入用, 独立于上面 92 字段 flat 契约）:
+UI 嵌套格式（前端 records 写入用, 独立于 flat 契约）:
 - SettingProcessSchema         嵌套结构 (5 段: injection/vp_switch/holding/metering/barrel_temperature)
-- ProcessParameterNestSchema   顶层包装 (parameter 业务容器, 当前含 setting_process, 未来可扩展)
-
-records 段子资源端点写入契约 (B 方案拆分后, condition_id 与 parameter_id 同在 URL):
-- ProcessParameterUpdateSchema     更新 parameter (PUT /records/<condition_id>/parameter/<parameter_id>/)
-                                 内部为 NEST 验证 (setting_process)
+- ProcessParameterNestSchema   顶层包装 (parameter 业务容器, 当前含 setting_process)
 
 注: ProcessParameterSchema (FLAT) 与 ProcessParameterNestSchema (NEST) 互不替代,
     分别服务算法 / 移植 (FLAT) 与前端 UI (NEST) 两个业务场景。
@@ -148,8 +140,8 @@ class ProcessParameterSchema(BaseSchema):
     met_lim_t: Optional[float] = Field(None, description="熔胶延时")
     met_end_pos: Optional[float] = Field(None, description="熔胶终止位置")
 
-    # --- 料筒温度参数 (10段) ---
-    brl_temp_stg: Optional[int] = Field(None, description="料筒温度段数 1-10")
+    # --- 料筒温度参数（10 档：第 1 档喷嘴 + 料筒 1~9 段）---
+    brl_temp_stg: Optional[int] = Field(None, description="料筒温度档数 1-10（第 1 档为喷嘴）")
     noz_temp: Optional[float] = Field(None, description="喷嘴温度")
     brl_temp_1: Optional[float] = Field(None, description="一段料筒温度")
     brl_temp_2: Optional[float] = Field(None, description="二段料筒温度")
@@ -165,9 +157,8 @@ class ProcessParameterSchema(BaseSchema):
 class ProcessParameterListSchema(PaginationBaseSchema):
     """工艺参数列表查询条件（按 parameter 字段过滤）
 
-    2026-10-12 改造:
-    - URL 不再嵌套 /conditions/<id>/parameters/, condition_id 变 query 参数
-    - condition_id 不传 -> 查全表 (后台 / 集成 API 场景)
+    condition_id 走 query 参数:
+    - 不传 -> 查全表 (后台 / 集成 API 场景)
     """
 
     condition_id: Optional[int] = Field(
@@ -185,9 +176,8 @@ class ProcessParameterListSchema(PaginationBaseSchema):
 class ProcessParameterTreeSchema(BaseSchema):
     """工艺参数版本树查询条件
 
-    2026-10-12 改造:
-    - URL 不再嵌套 /conditions/<id>/parameter-tree/, condition_id 变 query 参数
-    - condition_id 不传 -> 查全表 (后台 / 集成 API 场景)
+    condition_id 走 query 参数:
+    - 不传 -> 查全表 (后台 / 集成 API 场景)
     """
 
     condition_id: Optional[int] = Field(
@@ -196,22 +186,20 @@ class ProcessParameterTreeSchema(BaseSchema):
     )
 
 
-# BatchDeleteParameterSchema 已删除 (2026-10-10):
-# - 原用于 /processes/parameters/batch_delete/ 端点
-# - 该端点已废弃 (单段 /parameters/ 段不再提供写操作)
-# - 批量删除 parameter 需求应走 /processes/records/batch-delete/ (软删 condition, 级联 parameter)
-#   参数: BatchIdsSchema (extensions.schemas 通用)
+# 批量删除 parameter 走 /processes/records/actions/batch-delete/（软删 condition, 级联 parameter），
+# 参数: BatchIdsSchema (extensions.schemas 通用)
 
 
 class SettingProcessSchema(BaseSchema):
     """前端 UI 嵌套结构（setting_process 内部）
 
     对应前端的 settingProcessForm, 用于 UI 提交 records 写入。
-    service 内部通过 _frontend_to_condition_dict 转 130+ flat 字段写入 DB。
+    service 内部通过 _frontend_to_condition_dict 转 ProcessParameter 的 flat 字段写入 DB。
 
     设计选择: 内部字段用 dict (而非强类型子 schema), 因为:
     - table_data 是动态结构 `[{label, unit, sections: [n, ...]}, ...]`, 段数由 max_stage 决定
-    - 子结构由前端 SettingProcess 组件维护, 后端只透传
+    - 子结构由前端工艺参数组件维护（optimization 用 TuningParameterPanel，
+      library 用 LibraryParameterForm），后端只透传
     - 业务上 schema 只需保证 "五大段存在" 这层结构
     """
 
@@ -248,7 +236,7 @@ class ProcessParameterNestSchema(BaseSchema):
     当前含:
     - setting_process: 5 段嵌套 (NEST 强验证)
 
-    未来可扩展字段（直接平铺到本 schema, 不另起 schema）:
+    可扩展字段（直接平铺到本 schema, 不另起 schema）:
     - metadata: 参数元数据
     - algorithm_hint: 算法侧配置
     - 其他 parameter 业务相关字段
@@ -261,12 +249,12 @@ class ProcessParameterNestSchema(BaseSchema):
 
 
 class ProcessParameterUpdateSchema(BaseSchema):
-    """工艺参数更新（PUT /records/<condition_id>/parameter/<parameter_id>/ 写入契约, NEST 强验证）
+    """工艺参数更新（PUT /api/processes/parameters/<parameter_id>/ 写入契约, NEST 强验证）
 
-    URL 同时含 condition_id + parameter_id (B 方案拆分后),
-    业务上必校验 parameter_id belongs to condition_id (service 层负责)。
+    parameter 是独立业务对象（自带 ID 与 process_condition_id 外键），URL 不嵌套
+    condition_id；归属关系由 parameter 自带字段表达。
 
-    注: body 仅含 parameter 业务容器 (未来可扩展字段), 无 condition 字段 (URL 提供)。
+    注: body 仅含 parameter 业务容器 (可扩展字段), 无 condition 字段。
     """
 
     parameter: ProcessParameterNestSchema = Field(

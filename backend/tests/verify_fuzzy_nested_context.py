@@ -3,10 +3,10 @@ verify_fuzzy_nested_context.py
 验证 engine.recommend() 正确从嵌套对象 context['polymer'] / context['mold']
 取出 abbreviation / product_category 传给 RuleQueryContext。
 
-契约说明（2026-10-20 随 optimize 链路打通同步）：
+契约说明：
 - 缺陷名取 `feedback.defect[].keyword_name`（英文缺陷码，如 SHORTSHOT），
-  与 RuleMethod.defect_code / RuleKeyword.keyword_name 对齐；
-  旧的 `defect_name`（中文或 snake_case）已不再被读取
+  与 RuleMethod.defect_code / RuleKeyword.keyword_name 对齐
+  （`defect_name`（中文或 snake_case）不被读取）
 - process_parameter 是算法命名空间（IV0 / IP0 / ...，0-based）
 
 策略：spy ResourceRepository.get_rules（不 mock 返回值，只看传入的 RuleQueryContext 字段）。

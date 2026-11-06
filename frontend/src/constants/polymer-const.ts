@@ -38,9 +38,8 @@ export const polymerInfoForm = {
   drying_temp_max: null,
   drying_time_min: null,
   drying_time_max: null,
-  // 填充物组成（2026-09-08 Phase 2）
-  // - JSONField 类型，存储 [{filler_id, percentage, note}]
-  // - 开关控制：默认仅靠厂商信息；用户主动打开后详细配置
+  // 填充物组成：JSONField 类型，存储 [{filler_id, percentage, note}]；开关控制，默认仅靠厂商信息，用户主动打开后详细配置
+
   polymer_filler_compositions: [],
   // 流变属性
   rheology: {

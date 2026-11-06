@@ -1,10 +1,5 @@
-<!--
-  AppMain：layout 内容区
-  - 渲染 router-view（业务页面通过 router 嵌套进来）
-  - 路由切换淡入淡出（fade-only，不用带 translateX 的语义）
-    祖先：加了 transform 会导致子节点 position: fixed 失效（路由切换 200ms 内 .form-actions 会跳变）
-  - 路由级 loading：点击瞬间同步显示骨架屏，afterEach 后切回 router-view
--->
+<!-- AppMain：layout 内容区：渲染 router-view，路由切换用 fade-only 淡入淡出（不加 translateX——祖先加 transform 会让子节点 position: fixed 失效，导致切换 200ms 内 .form-actions 跳变），路由级 loading 在点击瞬间同步显示骨架屏 -->
+
 <template>
   <!-- 路由级 loading：点击瞬间立即触发，覆盖整个内容区 -->
   <div v-if="isRouteLoading" class="route-loading-overlay">

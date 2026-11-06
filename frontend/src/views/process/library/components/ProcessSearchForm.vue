@@ -1,15 +1,4 @@
-<!--
-  ProcessSearchForm - 工艺条件搜索表单
-
-  实际查询的是 ProcessCondition 表（包含模具/机器/材料上下文）。
-  - 状态：使用中 / 已归档（后端 ProcessCondition.STATUS_CHOICES）
-  - 起源：手工新建 / AI 推荐 / 实验设计 等（后端 ProcessCondition.ORIGIN_CHOICES）
-  - 模具/注塑机/材料：通过 autocomplete 远程拉取候选
-
-  数据流：
-    父组件 :query-detail="query" @search @reset
-    queryDetail 字段更新 → 父组件 fetchList()
--->
+<!-- ProcessSearchForm - 工艺条件搜索表单（查 ProcessCondition 表，含模具/机器/材料上下文） -->
 <template>
   <BaseSearchForm
     :query="queryDetail"
@@ -42,19 +31,12 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 工艺条件搜索表单（Vue 3 Composition API 版）
- *
- * - props.queryDetail 由父组件提供，作为初始查询条件
- * - 实际双向绑定通过 BaseSearchForm 内部完成
- * - 通过 emit('search') / emit('reset') 通知父组件触发查询
- */
+/** 工艺条件搜索表单：props.queryDetail 由父组件提供作为初始查询条件，双向绑定通过 BaseSearchForm 内部完成；emit('search') / emit('reset') 通知父组件触发查询 */
 import BaseSearchForm from '@/components/BaseSearchForm.vue'
 import type { SearchItem } from '@/types/search-item'
+import { CONDITION_STATUS_OPTIONS } from '@/views/process/shared/condition-status'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 interface QueryDetail {
   status?: string | null
@@ -76,14 +58,9 @@ const emit = defineEmits<{
   (e: 'reset'): void
 }>()
 
-// ============================================================================
 // 状态选项
-// ============================================================================
 
-const STATUS_OPTIONS = [
-  { label: '使用中', value: 'active' },
-  { label: '已归档', value: 'archived' },
-]
+const STATUS_OPTIONS = CONDITION_STATUS_OPTIONS
 
 const ORIGIN_OPTIONS = [
   { label: '手工新建', value: 'manual_creation' },
@@ -95,9 +72,7 @@ const ORIGIN_OPTIONS = [
   { label: '工艺移植', value: 'process_transplant' },
 ]
 
-// ============================================================================
 // 搜索项配置
-// ============================================================================
 
 // BaseSearchForm 通过 v-model="query[prop]" 直接绑定父组件的 reactive 对象
 // 所以这里直接传 props.queryDetail，不做包装
@@ -138,8 +113,6 @@ const search_items: SearchItem[] = [
     query: { table: 'polymer', column: 'abbreviation' },
   },
   // 日期范围占位
-  // - type: 'slot' → BaseSearchForm 走自定义插槽分支，不渲染默认控件
-  // - label / prop 仅为满足 SearchItem 结构要求，实际文案与绑定由插槽内部负责
   {
     label: '录入日期',
     prop: 'start_date',
@@ -149,9 +122,7 @@ const search_items: SearchItem[] = [
   },
 ]
 
-// ============================================================================
 // 事件
-// ============================================================================
 
 function emitSearch() {
   emit('search')

@@ -1,6 +1,6 @@
 """
 molding-optima reporting 视图（精简）
-仅保留工艺相关的导出与报告生成入口，以及列表导出/下载入口。
+仅保留工艺参数导出、列表导出与导出文件下载入口。
 """
 import os
 
@@ -11,7 +11,7 @@ from identity.decorators import require_login
 from extensions.decorators import validate_parameters
 from extensions.views import BaseView
 
-from reporting.schemas import ExportListSchema, ProcessExportSchema, ProcessReportGenerateSchema
+from reporting.schemas import ExportListSchema, ProcessExportSchema
 from reporting.services import process_export_service
 from reporting.services import list_export_service
 from reporting.utils import resolve_export_list_file
@@ -27,18 +27,6 @@ class ProcessExportView(BaseView):
     def post(self, request, cleaned_data):
         """工艺参数导出（Excel）"""
         return process_export_service.export_process_parameters(
-            company_id=request.user.company_id,
-            tenant_slug=request.user.company.tenant_slug,
-            **cleaned_data,
-        )
-
-
-class ProcessReportGenerateView(BaseView):
-    @method_decorator(require_login)
-    @method_decorator(validate_parameters(ProcessReportGenerateSchema))
-    def post(self, request, cleaned_data):
-        """工艺报告生成（PDF/DOCX）"""
-        return process_export_service.generate_process_report(
             company_id=request.user.company_id,
             tenant_slug=request.user.company.tenant_slug,
             **cleaned_data,

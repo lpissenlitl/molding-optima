@@ -1,13 +1,5 @@
-<!--
-  DashboardTrendChart.vue - 近 30 天工艺创建趋势（折线图）
+<!-- DashboardTrendChart.vue - 近 30 天工艺创建趋势（折线图）：ECharts 5 按需加载（gzip 约 80KB，比全量引入省 ~700KB），props.data 为 {dates:string[],counts:number[]}，自动 resize（监听窗口与父容器尺寸变化），主题色 #254373 -->
 
-  设计要点：
-  - ECharts 5 按需加载（gzip 后约 80KB，比全量引入省 ~700KB）
-  - 接收 props.data（DashboardSeries 类型）{dates: string[], counts: number[]}
-  - 自动 resize（监听窗口 + 父容器尺寸变化）
-  - 加载/空数据优雅降级
-  - 项目主题色（#254373）作为线条主色
--->
 <template>
   <div ref="chartRef" class="trend-chart" v-loading="loading" />
 </template>
@@ -25,9 +17,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, TitleComponent, CanvasRenderer])
 
-/**
- * Dashboard 趋势数据（与后端 statistics_service.py 对齐）
- */
+/** Dashboard 趋势数据（与后端 statistics_service.py 对齐） */
 export interface DashboardTrend {
   dates: string[]
   counts: number[]
@@ -108,7 +98,6 @@ function buildOption() {
 function renderChart() {
   if (!chartRef.value) return
   // 防御：layout 仍为 0 时跳过 init（避免 ECharts "Can't get DOM width or height" warning）
-  // 下一次 resize / data 变化时会再尝试
   if (chartRef.value.clientWidth === 0 || chartRef.value.clientHeight === 0) return
   if (!chart) {
     chart = echarts.init(chartRef.value, undefined, { renderer: 'canvas' })
@@ -120,14 +109,8 @@ function handleResize() {
   chart?.resize()
 }
 
-/*
- * 渲染时机：使用 requestAnimationFrame 而非 nextTick
- * - nextTick 是 microtask，触发时机早于浏览器 layout，此时 DOM 节点存在但
- *   clientWidth/Height 仍为 0，echarts.init() 会触发 "Can't get DOM width or height" warning
- * - requestAnimationFrame 在浏览器 paint 前回调，到那时 layout 已计算完毕
- *   （ECharts 5 官方建议在 window.onload 或 RAF 回调中初始化）
- * - 双重防御：renderChart 内仍检查容器尺寸（0 时跳过，下一次 resize/data 变化会重试）
- */
+/* 渲染时机：使用 requestAnimationFrame 而非 nextTick —— nextTick 是 microtask，早于浏览器 layout，此时 DOM 节点存在但 clientWidth/Height 仍为 0，echarts.init() 会触发 "Can't get DOM width or height" warning；RAF 在 paint 前回调时 layout 已计算完毕（ECharts 5 官方建议在 onload 或 RAF 回调中初始化），renderChart 内再检查容器尺寸作二次防御 */
+
 onMounted(() => {
   requestAnimationFrame(() => {
     renderChart()

@@ -1,9 +1,5 @@
 r"""推荐结果层（`fuzzy/recommendations.py`）合并逻辑测试
 
-由 `process/algorithms/fuzzy/sanity_check.py` CASE 3 迁移而来（E19；**该文件已删除**）。
-迁移原因同 `fuzzy_core/tests/test_inference_gates.py`：sanity_check 是与 pytest
-并行的第二套测试体系，而 `recommendations` / `engine` 正在重构中。
-
 覆盖「方案 B：同层聚合 + 跨层覆盖」的全部规则：
   1. 数值层的调整量裸累加到同参数上（不做折算）
   2. 提示层的数值结论：若该参数数值层已命中 ⇒ 只记为 `advisory_reference`

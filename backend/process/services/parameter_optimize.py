@@ -1,23 +1,22 @@
 """工艺优化 infer 服务（调用链路编排层，不含算法实现）
 
-对应接口：
-- FromCondition：POST /api/processes/algorithms/optimize/
-- FromProvided：POST /api/processes/algorithms/optimize-from-provided/
+对外入口：
+- infer(condition_id, parent_seq_idx, ...)  → POST /api/processes/algorithms/optimize/
+- infer_from_provided(parameter, feedback, 三维上下文) —— 纯推理（不查库、不落库），
+  **尚无 HTTP 路由**，目前仅测试与脚本直接调用
 
-职责：Step 0 校验 feedback → Step 1 装配推理上下文（只读）
-      → Step 2 纯推理 → Step 3 原子落库（仅 FromCondition）
+调用链（infer）：
+Step 0 校验 feedback → Step 0.5 提取评价 → Step 1 装配上下文（只读）
+→ Step 1b 合格态短路（只落库、不推理）→ Step 0b 入参契约校验
+→ Step 2 纯推理 → Step 3 原子落库 → Step 4 组装响应
 
 设计要点：
-- infer 只处理算法优化（人工调整走 manual-adjust 接口）
-- 算法侧是接口契约：输入 context，输出 List[AlgorithmRecommendation]，算法实现对本服务透明
-- 3 场景调用逻辑一致（基本调参/自动回撤/手动修改），仅 feedback 内容不同
 - is_adopted 自动维护：下一轮 ineffective 时改 False
-- FromCondition 落库，FromProvided 纯推理（无 DB 读写，与 initialize.infer_from_provided 同构）
-- **写库只在 Step 3**：用户手改的工艺参数写回父记录，也放在 Step 3 的事务里，
-  与新建轮次同生共死（详见 _sync_user_modified_parameter）
+- 写库点有两处：Step 1b（合格态：只写评价 + 手改参数）与 Step 3（正常轮次：全量落库）；
+  用户手改的工艺参数写回父记录，与新建轮次同生共死（详见 _sync_user_modified_parameter）
 
-代码组织：helper 全部为模块顶层函数（不依赖 self），类内只保留
-infer / infer_from_provided 两个公开入口 + __init__。
+代码组织：helper 全部为模块顶层函数（不依赖 self），类内只有 infer /
+infer_from_provided 两个公开入口 + 静态方法 _infer_kernel（两个入口共用）。
 """
 import logging
 from typing import Dict, Any, List, Optional, Tuple, TypedDict
@@ -28,6 +27,7 @@ from extensions.exceptions import (
     BizException,
     ERROR_DATA_INVALID,
     ERROR_DATA_NOT_FOUND,
+    ERROR_ILLEGAL_ARGUMENT,
     ERROR_OPERATION_FAILED,
     ERROR_REQUIRED_FIELD,
 )
@@ -48,40 +48,33 @@ from process.algorithms.fuzzy.specs import (
     OPTIMIZE_MACHINE_INFO_FIELDS,
     OPTIMIZE_POLYMER_INFO_FIELDS,
     OPTIMIZE_MOLD_INFO_FIELDS,
-    audit_feedback_defects,  # 缺陷反馈审计（契约层：字段字典 + 机制）
-    OptimizeDataValidator,  # 入参契约校验器（2026-10-27 接线）
+    audit_feedback_defects,  # 缺陷反馈校验（契约层）
+    OptimizeDataValidator,  # 入参契约校验器
     resolve_param_limits,  # 机台物理上限 → {参数族: 上限}
 )  # 算法入参契约（字段字典）—— service 层按此白名单提取，不传全量 ORM 字段
+from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数快照/训练样本组装（均为唯一真相源）
+    NON_SNAPSHOT_FIELDS,
+    TUNING_RESULT_MAP,
+    build_adjustments,
+    is_qualified_result,
+    snapshot_parameter,
+)
 
 _logger = logging.getLogger(__name__)
 
 
-# ⚠️ **引擎注册不再在本模块重复做**（2026-10-28 清理 C10）：
-#   `fuzzy` / `empirical` 两个引擎的**唯一注册点**是各自的引擎模块本身
-#   （`fuzzy/engine.py` 与 `empirical/empirical_algorithm.py` 的模块级
-#   `AlgorithmRegistry.register(...)`），由 `process/algorithms/__init__.py`
-#   的显式 import 触发。
-#
-#   本模块顶层已经 `from process.algorithms.base import AlgorithmRegistry`
-#   ⇒ `process/algorithms/__init__.py` 必然被完整执行 ⇒ 两个引擎必然已注册。
-#
-#   ⚠️ **为什么原来那段是死代码**：`from process.algorithms.fuzzy import FuzzyEngine`
-#     这条 import 语句本身就会执行 `fuzzy/__init__.py` ⇒ `from .engine import FuzzyEngine`
-#     ⇒ `engine.py` 模块级注册 ⇒ **注册早已完成**；
-#     后面的 `if not AlgorithmRegistry.get_algorithm("fuzzy")` 恒为 False
-#     ⇒ `register(...)` 那行永远不执行（`empirical` 同理）。
-#   ⇒ 保留它只会让人误以为「注册在这里」。
+# 引擎在各算法模块内注册（`fuzzy/engine.py` / `empirical/empirical_algorithm.py`），
+# 由 `process/algorithms/__init__.py` 的 import 链自动触发。
 
 
-# --- 算法接口契约（AlgorithmContext schema） ---
-#
-# 算法侧 recommend 接受 Dict[str, Any]（不限严格 schema），但 Step 2 → Step 3
-# 之间需要明确契约，否则字段缺失只能运行时发现。TypedDict 保留 Dict 调用风格
-# + 提供类型提示 + 0 运行成本。
 class AlgorithmContext(TypedDict):
     """算法引擎输入 context 的标准格式
 
     由 Step 2 _compose_algorithm_context 构造，Step 3 _call_algorithms 使用。
+
+    算法侧 recommend 接受 Dict[str, Any]（不限严格 schema），但 Step 2 → Step 3
+    之间需要明确契约，否则字段缺失只能运行时发现。TypedDict 保留 Dict 调用风格
+    + 提供类型提示 + 0 运行成本。
 
     字段语义（均为子对象，避免平铺字符串的语义丢失）：
     - machine_info: 设备信息（按 specs 白名单从 InjectionMoldingMachine + 选中的 InjectionUnit 提取）
@@ -140,24 +133,16 @@ def _direction_from_delta(before: Optional[float], after: Optional[float]) -> Op
     return 'hold'
 
 
-# --- snapshot 字段排除集（用于 _snapshot_parameter） ---
-_NON_SNAPSHOT_FIELDS = frozenset({
-    # 元数据
-    "id", "created_at", "updated_at", "deleted", "deleted_at", "is_deleted",
-    # 业务字段（snapshot 外另行处理）
-    "parameter_no",
-    "param_source",
-    "seq_idx",
-})
+# 快照字段排除集（NON_SNAPSHOT_FIELDS）与快照函数（snapshot_parameter）已移至
+# .tuning —— 与训练样本组装（build_adjustments）同属一个真相源，
+# 避免两处各拍一份快照而口径漂移。
 
 
 # --- ORM 序列化 + 字段命名翻译 helper ---
 #
-# 字段命名翻译（业务名 ↔ 算法名）**不在本层实现**：
-# 契约在算法侧（process/algorithms/fuzzy/field_names.py），本层只调用。
-# 历史上这里有一份平行的正向实现（_normalize_field_name_by_spec），
-# 重复实现 ⇒ 改了契约不改这里（或反之）就会出现两套口径。
-# 翻译规则见 field_names.to_algo_name / field_names.to_algo_params。
+# 字段命名翻译（业务名 ↔ 算法名）的契约在算法侧
+# （process/algorithms/fuzzy/field_names.py），本层只调用，避免两套口径。
+# 规则见 field_names.to_algo_name / field_names.to_algo_params。
 def _to_full_dict(instance: Any) -> Dict[str, Any]:
     """ORM → 完整 dict（仅排除 ORM 关系字段）"""
     if instance is None:
@@ -204,7 +189,7 @@ def _validate_feedback(feedback: Dict[str, Any]) -> None:
     """Step 0 —— feedback 防御性校验（与前端 validateFeedback 是同一套约束镜像）
 
     校验口径与**算法的消费口径对齐**（每一条都有算法侧的理由）：
-    - defect 非空、每项是对象            —— 结构，算法要遍历
+    - defect 每项是对象                  —— 结构，算法要遍历
     - keyword_name 必填                  —— 查规则的唯一键，缺了必然查不到规则
     - level 必填且是合法档位词            —— 决定命中哪一套调整方案（三档是三套方案，不能混用）；
                                         非法值放行会导致该缺陷的规则被全过滤，
@@ -214,14 +199,21 @@ def _validate_feedback(feedback: Dict[str, Any]) -> None:
 
     DEFECTFREE（无缺陷）是例外：前端不展示程度/位置输入框，这两项免校验。
 
+    ⚠️ **缺陷列表可以为空**，前提是给了「合格」（tuning_result=qualified）——
+       合格态产品没有缺陷，不带缺陷信息。其余评价档位仍要求缺陷列表非空。
+
     ⚠️ 校验口径落在**算法契约层**（`fuzzy.specs.OPTIMIZE_FEEDBACK_FIELDS` +
        `fuzzy.specs.audit_feedback_defects`），本函数只负责把问题清单转成
-       BizException —— 口径不再手写第二遍，改契约即同步。
+       BizException —— 口径不手写第二遍，改契约即同步。
 
     Raises:
         BizException(ERROR_REQUIRED_FIELD): 字段缺失或取值不合法
     """
-    issues = audit_feedback_defects((feedback or {}).get("defect"))
+    feedback = feedback or {}
+    issues = audit_feedback_defects(
+        feedback.get("defect"),
+        allow_empty=is_qualified_result(feedback.get("tuning_result")),
+    )
     if issues:
         raise BizException(ERROR_REQUIRED_FIELD, issues[0])
 
@@ -232,11 +224,10 @@ def _validate_optimize_inputs(
     polymer_info: Dict[str, Any],
     mold_info: Dict[str, Any],
 ) -> None:
-    """Step 0b —— 调优入参契约校验（`OptimizeDataValidator` 接线）
+    """Step 0b —— 调优入参契约校验（`OptimizeDataValidator`）
 
     校验器是**算法层的对外契约**（`process/algorithms/fuzzy/specs.py`），
-    但它此前**从未被任何生产代码调用**（只有单测引过）⇒ 契约形同虚设。
-    现由 service 层接上，校验失败 ``ValueError`` 转 ``BizException``（400）。
+    校验失败 ``ValueError`` 转 ``BizException``（400）。
 
     ⚠️ **为什么在 service 层调**：算法层不 import 业务异常（`BizException`），
     保持 fuzzy 包零业务耦合；错误码与文案由 service 层决定。
@@ -244,7 +235,6 @@ def _validate_optimize_inputs(
     ⚠️ **当前实际拦截面**：三份字段字典里只有 ``machine_info.drive_system``
     标了「必填」，其余全是「可选 / 推荐」⇒ 本校验目前**只拦**
     「机台没填驱动方式」这一件事。
-    （实测：44/44 个 ProcessCondition 的 drive_system 均已填 ⇒ 线上不被拦。）
 
     Raises:
         BizException(ERROR_REQUIRED_FIELD): 入参缺失必填字段
@@ -374,7 +364,7 @@ def _resolve_baseline(
     if user_parameter is not None:
         allowed = {
             f.name for f in base_param_orm._meta.fields
-            if not f.is_relation and f.name not in _NON_SNAPSHOT_FIELDS
+            if not f.is_relation and f.name not in NON_SNAPSHOT_FIELDS
         }
         for key, value in user_parameter.items():
             if value is None:
@@ -386,21 +376,6 @@ def _resolve_baseline(
             setattr(base_param_orm, key, value)
             changed_fields[key] = value
     return _to_full_dict(base_param_orm) or {}, changed_fields
-
-
-def _snapshot_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
-    """从 ProcessParameter 取标量工艺字段（排除元数据与业务字段）"""
-    snapshot: Dict[str, Any] = {}
-    for field in parameter._meta.fields:
-        name = field.name
-        if name in _NON_SNAPSHOT_FIELDS:
-            continue
-        if field.is_relation:
-            continue
-        value = getattr(parameter, name, None)
-        if value is not None:
-            snapshot[name] = value
-    return snapshot
 
 
 # --- Step 3：算法调用与上下文构造 ---
@@ -419,7 +394,7 @@ def _select_algorithm_result(
 ) -> List[Dict[str, Any]]:
     """Step 3b —— 汇总后选优：最终建议集只取优先级最高的那个有产出的引擎。
 
-    业务约定（2026-10-28）：**经验推理只作兜底**。
+    业务约定：**经验推理只作兜底**。
     - 模糊推理有产出 ⇒ 最终建议集完全取自模糊推理，经验推理整体让位
       （否则同一参数会在建议列表里出现「模糊数值建议 + 经验方向建议」两条：
        工艺员看到的是重复项；若两者方向相反，更是自相矛盾）
@@ -512,17 +487,12 @@ def _extract_context_overrides(condition_orm: ProcessCondition) -> Dict[str, Any
     """取工艺条件里保存的**上下文覆盖项**（建档时人工指定的精度旋钮）。
 
     目前真正影响选库的只有 `rule_library_code`（显式指定用哪个规则库）：
-    - **不指定 ⇒ 全量模糊库**（2026-10-29 改造）—— 旧的「产品类别 → 库编码」
-      映射表指向的 code 在库里根本不存在（packaging / auto_parts / medical …）
-      ⇒ 候选必然落空 ⇒ 9 个补充库共 1058 条规则（占全库 64%）从不参与推理；
-      现在改为**加载全部模糊库**，由规则自身标注的材料 / 产品维度判定适用性
+    - **不指定 ⇒ 全量模糊库**，适用性交由规则自身标注的材料 / 产品维度判定
       （`RuleService.matches_context` + `resolve_specificity`）；
     - **显式指定 ⇒ 只用它**（引擎 `engine.py` 读 `context['rule_library_code']`）——
       用户已圈定范围时尊重用户的指定。
 
     ⚠️ 取不到就返回空 dict ⇒ 调用方按「未指定」处理（= 全量模糊库）。
-
-    详见评审文档 §3.6。
     """
     snapshot = getattr(condition_orm, 'process_context_snapshot', None) or {}
     if not isinstance(snapshot, dict):
@@ -539,6 +509,7 @@ def _compose_algorithm_context(
     parameter: Dict[str, Any],
     feedback: Dict[str, Any],
     rule_library_code: Optional[str] = None,
+    company_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Step 2 核心 —— 装成 AlgorithmContext（Port-Adapter 模式）
 
@@ -546,9 +517,11 @@ def _compose_algorithm_context(
     - 字段名翻译（业务命名 → 算法命名，规则见算法侧契约 field_names.to_algo_params）
     - 上下文组装
 
-    `rule_library_code`：显式指定规则库（None = 由算法侧按上下文自动解析）。
-    ⚠️ 自动解析目前**必然落空**（映射表指向的 code 库里不存在）⇒ 要用补充库
-    必须显式指定 —— 详见评审文档 §3.6。
+    `rule_library_code`：显式指定规则库（None = 全部模糊库，适用性交由规则级判定）。
+
+    `company_id`：当前租户（**规则库可见性上下文**）—— 系统库对所有租户公用，
+    租户私库只对归属租户可见（判据在算法侧共用编排层）。
+    None = **无租户上下文** ⇒ 不过滤（保持现状全量）。
     """
     algorithm_params = field_names.to_algo_params(parameter)
     return {
@@ -558,6 +531,7 @@ def _compose_algorithm_context(
         'process_parameter': algorithm_params,
         'feedback': feedback,
         'rule_library_code': rule_library_code,
+        'company_id': company_id,
     }
 
 
@@ -633,7 +607,7 @@ def _guard_blocking_over_limits(
 ) -> None:
     """越限守卫 —— **设备安全红线**命中即拒绝（400）
 
-    判定时机（2026-10-29 用户口径）：**recommendations 产出之后**。
+    判定时机（用户口径）：**recommendations 产出之后**。
     「参数是否合理」要以结论为参照 ⇒ 不能在推理前就下判断；
     本守卫跑在 `_call_algorithms` 之后，与 fail-fast 同属 recommendations 阶段。
 
@@ -890,6 +864,46 @@ _DIRECTION_CN = {
 }
 
 
+def build_recommendation_suggestion(recommendation, parameter) -> dict:
+    """Recommendation → 前端 Suggestion 结构（历史轮次回显用）
+
+    锚点语义：Recommendation 挂在它所属的那一轮参数上（FK process_parameter），
+    因此该轮的建议就属于该轮、显示在该轮详情区。
+
+    Recommendation.recommendations 存的是【已规范化】的扁平推荐列表
+    （业务字段名 + 中文文案 + 已丢弃零变化项），需按业务字段分类重组成前端要的 groups。
+    baseline 用该轮参数字段还原 —— 与落库时 _build_suggestion_payload 的过滤口径一致
+    （只保留参数表里真实存在的字段）。
+
+    Args:
+        recommendation: Recommendation 实例
+        parameter: 该建议所属的 ProcessParameter（用于还原 baseline）
+
+    Returns:
+        {source_type, groups, adopted}
+    """
+    recs = recommendation.recommendations or []
+    source_type = recommendation.source_type or "none"
+    if not recs:
+        return {
+            "source_type": source_type,
+            "groups": [],
+            "adopted": recommendation.is_adopted,
+        }
+
+    baseline = {
+        f.name: getattr(parameter, f.name, None)
+        for f in parameter._meta.fields
+        if not f.is_relation
+    }
+    payload = _build_suggestion_payload(recs, {}, baseline)
+    return {
+        "source_type": source_type,
+        "groups": payload.get("groups", []),
+        "adopted": recommendation.is_adopted,
+    }
+
+
 def _normalize_recommendations(
     algorithm_recommendations: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -1018,7 +1032,17 @@ def _update_previous_tuning_record(
     defect_feedbacks: List[Dict[str, Any]],
     tuning_result: Optional[str],
 ) -> None:
-    """更新上一轮 TuningRecord（缺陷反馈 + 试模结果；取最新一条）"""
+    """更新被评价轮次的 TuningRecord（缺陷反馈 + 试模结果；取最新一条）
+
+    ⚠️ **参数名容易误读**：parent_param 是【本次提交反馈的那一轮】（第 N 轮），
+    不是“上一轮已完成的轮次”。infer 请求里的 parent_seq_idx 就是当前活动轮的 seq_idx，
+    所以这里的 parent_param 即第 N 轮本身。
+
+    配对语义：界面上的「第 N 轮」= 参数(N) + 反馈(N)，反馈属于该轮参数自身的试模结果，
+    因此缺陷与效果标签都写到 parent_param 自己的 TuningRecord 上，不写到它的父轮。
+
+    tuning_result：首轮 qualified/unqualified，第 2 轮起 qualified + effective/unchanged/ineffective
+    """
     previous_record = (
         TuningRecord.objects
         .filter(process_parameter=parent_param)
@@ -1032,14 +1056,24 @@ def _update_previous_tuning_record(
         )
         return
 
-    if defect_feedbacks:
+    # 合格态：产品无缺陷 ⇒ 缺陷信息一律丢弃。
+    # ⚠️ 必须**显式置空**（而不是靠 `if defect_feedbacks:` 守卫跳过）：
+    #    守卫会让空数组不写入，于是「先填过缺陷、后改判合格」时历史缺陷会残留。
+    if is_qualified_result(tuning_result):
+        previous_record.defect_feedbacks = []
+    elif defect_feedbacks:
         previous_record.defect_feedbacks = defect_feedbacks
 
-    if tuning_result in ("effective", "ineffective"):
-        previous_record.result = {
-            "effective": "improved",
-            "ineffective": "worse",
-        }[tuning_result]
+    # 映射表共用 tuning.TUNING_RESULT_MAP（唯一真相源）
+    # 未命中（如 null）⇒ 保持原值不动，避免误写
+    mapped_result = TUNING_RESULT_MAP.get(tuning_result) if tuning_result else None
+    if mapped_result:
+        previous_record.result = mapped_result
+
+    # 规范化训练样本：变更（两快照差异）+ 本轮缺陷 + 上下文
+    # ⚠️ previous_record 是从库里查的，其 process_parameter 会重新读库
+    #    ⇒ 拿到的是本轮最新值
+    previous_record.adjustments = build_adjustments(previous_record)
 
     previous_record.save()
 
@@ -1076,11 +1110,11 @@ def _create_new_parameter(
     parameters_dict 来自 baseline（_to_full_dict 全量快照），含父记录的
     id / created_at / param_source / seq_idx 等系统字段，直接展开会与
     create() 的显式入参冲突（multiple values for keyword argument），
-    故按 _NON_SNAPSHOT_FIELDS 过滤后再落库。
+    故按 NON_SNAPSHOT_FIELDS 过滤后再落库。
     """
     writable = {
         k: v for k, v in parameters_dict.items()
-        if k not in _NON_SNAPSHOT_FIELDS
+        if k not in NON_SNAPSHOT_FIELDS
     }
     # 租户归属继承父记录（同 condition 内必一致）
     writable["company_id"] = parent_param.company_id
@@ -1097,13 +1131,19 @@ def _create_new_parameter(
 def _create_new_tuning_record(
     new_param: ProcessParameter,
     parent_param: ProcessParameter,
-    defect_feedbacks: List[Dict[str, Any]],
 ) -> TuningRecord:
-    """Step 5.4 —— 创建新 TuningRecord（pending 状态）"""
-    previous_parameter_snapshot = _snapshot_parameter(parent_param)
+    """Step 3.5 —— 创建新 TuningRecord（pending 状态，等待该轮自身试模反馈）
+
+    ⚠️ **不写入 defect_feedbacks**（固定为空）：新轮次尚未试模，没有属于它自己的缺陷。
+    配对语义：界面上的「第 N 轮」= 参数(N) + 反馈(N)，二者同属一轮试模；
+    参数(N) 的缺陷与效果标签只能落在参数(N) 自己的 TuningRecord 上。
+    父轮的缺陷已由 _update_previous_tuning_record 写入父轮自己的 TuningRecord，
+    不在此处复制到子轮（否则子轮会挂上不属于它的缺陷，回显时串轮）。
+    """
+    previous_parameter_snapshot = snapshot_parameter(parent_param)
     return TuningRecord.objects.create(
         process_parameter=new_param,
-        defect_feedbacks=defect_feedbacks,
+        defect_feedbacks=[],
         result="pending",
         previous_parameter=previous_parameter_snapshot,
     )
@@ -1129,12 +1169,9 @@ class ParameterOptimizeService:
 
     设计约束：
     - 算法侧是接口契约：本服务只负责编排，不实现具体推理
-    - 所有 Step 在一个原子事务内完成（避免半成品落库）
-    - 公开入口：infer / infer_from_provided（调用形式与 view 层一致）
-
-    ⚠️ 本类**不需要**在 `__init__` 里触发引擎注册 —— 引擎由
-    `process/algorithms/__init__.py` 的显式 import 链在**模块 import 时**
-    就已完成注册（见文件头的说明）。
+    - 落库各自成事务：Step 1b（合格态）与 Step 3（正常轮次）各自 atomic，
+      Step 3 内的多次写在一个事务内完成（避免半成品落库）
+    - 公开入口：infer / infer_from_provided
     """
 
     def infer(
@@ -1169,6 +1206,10 @@ class ParameterOptimizeService:
         # Step 0: feedback 防御性校验
         _validate_feedback(feedback)
 
+        # Step 0.5: 从 feedback 一次性提取本轮评价（贴近使用方，不跨步重复解析）
+        tuning_result = feedback.get("tuning_result")
+        defect_feedbacks = feedback.get("defect", []) or []
+
         # ---------- Step 1: 装配推理上下文（只读 DB，不落库）----------
         ctx = _assemble_context(
             condition_id=condition_id,
@@ -1181,6 +1222,32 @@ class ParameterOptimizeService:
         machine_info = ctx["machine_info"]
         polymer_info = ctx["polymer_info"]
         mold_info = ctx["mold_info"]
+
+        # ---------- Step 1b: 合格态短路（不跑 fuzzy、不建新轮次）----------
+        # 产品已合格 ⇒ 没有缺陷可驱动优化 ⇒ 当前这套缺陷驱动的流程没有意义。
+        # 但本轮评价**仍要落库**（写回手改参数 + 写合格标签 + 丢弃缺陷），
+        # 提交通道保持可用，为「合格状态下的优化需求」预留扩展点。
+        if is_qualified_result(tuning_result):
+            with db_transaction.atomic():
+                # 1b.1 写回用户手改的参数（DB 与用户实际在用的参数保持一致）
+                _sync_user_modified_parameter(
+                    parent_param=parent_param_orm,
+                    changed_fields=ctx["user_changed_fields"],
+                )
+                # 1b.2 写本轮评价（合格标签 + 丢弃缺陷）
+                _update_previous_tuning_record(
+                    parent_param=parent_param_orm,
+                    defect_feedbacks=defect_feedbacks,
+                    tuning_result=tuning_result,
+                )
+            return {
+                "new_parameter": None,
+                "suggestion": None,
+                "skipped": True,
+                "skip_reason": "qualified",
+                "message": "产品已合格，本轮仅记录评价，未进行工艺优化",
+            }
+
         # Step 0b: 入参契约校验（论域上界缺失 → 判级失真，提前拒）
         _validate_optimize_inputs(machine_info, polymer_info, mold_info)
         # 建档时人工指定的上下文覆盖项（目前只有 rule_library_code 有效）
@@ -1195,12 +1262,11 @@ class ParameterOptimizeService:
             feedback=feedback,
             interface_tag=f"infer(condition_id={condition_id}, parent_seq_idx={parent_seq_idx})",
             rule_library_code=overrides.get('rule_library_code'),
+            # 当前租户（规则库可见性）—— 取自工艺条件的归属公司
+            company_id=condition_orm.company_id,
         )
 
         # ---------- Step 3: 原子事务落库 ----------
-        # Step 3 入口一次性从 feedback 提取（贴近使用方，不跨步共享）
-        defect_feedbacks = feedback.get("defect", []) or []
-        tuning_result = feedback.get("tuning_result")
         with db_transaction.atomic():
             # 3.1 写回用户手改的参数（DB 与用户实际在用的参数保持一致）
             _sync_user_modified_parameter(
@@ -1228,11 +1294,10 @@ class ParameterOptimizeService:
                 parameters_dict=new_parameter_dict,
             )
 
-            # 3.5 创建新 TuningRecord（pending 状态，等待下次反馈）
+            # 3.5 创建新 TuningRecord（pending 状态，等待该轮自身试模反馈）
             _create_new_tuning_record(
                 new_param=new_param,
                 parent_param=parent_param_orm,
-                defect_feedbacks=defect_feedbacks,
             )
 
             # 3.6 创建新 Recommendation
@@ -1279,6 +1344,13 @@ class ParameterOptimizeService:
         feedback = feedback or {}
         # Step 0: feedback 防御性校验（与 infer() 同套约束镜像）
         _validate_feedback(feedback)
+        # Step 0a: 合格态不支持纯推理 —— 本入口是「按缺陷算一版新参数」，
+        # 合格态没有缺陷可驱动，硬跑会落到 fail-fast 报「推荐算法暂不可用」（误导）
+        if is_qualified_result(feedback.get("tuning_result")):
+            raise BizException(
+                ERROR_ILLEGAL_ARGUMENT,
+                "产品已合格，无需进行工艺优化",
+            )
         # Step 0b: 入参契约校验（三维由调用方直传，同样要过契约）
         _validate_optimize_inputs(machine_info, polymer_info, mold_info)
 
@@ -1291,6 +1363,9 @@ class ParameterOptimizeService:
             baseline=parameter,
             feedback=feedback,
             interface_tag="infer_from_provided",
+            # ⚠️ **无租户上下文**（第三方集成 / 算法试算 / 烟测）
+            #    ⇒ 不过滤（保持现状全量），不改变既有行为
+            company_id=None,
         )
 
         return {
@@ -1309,6 +1384,7 @@ class ParameterOptimizeService:
         feedback: Dict[str, Any],
         interface_tag: str,
         rule_library_code: Optional[str] = None,
+        company_id: Optional[int] = None,
         fail_fast_message: str = "推荐算法暂不可用，请稍后重试或联系管理员",
     ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
         """【Step 3+4 纯算法内核】5 维 dict → (new_parameter, suggestion, algorithm_recommendations)
@@ -1324,6 +1400,8 @@ class ParameterOptimizeService:
             feedback: 缺陷反馈
             interface_tag: fail-fast 日志前缀
             fail_fast_message: BizException 文案
+            company_id: 当前租户（**规则库可见性上下文**）—— None = 无租户
+                上下文 ⇒ 不过滤（保持现状全量）。
 
         Returns:
             (new_parameter_dict, suggestion_payload, algorithm_recommendations)
@@ -1342,6 +1420,7 @@ class ParameterOptimizeService:
             parameter=baseline,
             feedback=feedback,
             rule_library_code=rule_library_code,
+            company_id=company_id,
         )
 
         algorithm_result = _call_algorithms(algorithm_context)

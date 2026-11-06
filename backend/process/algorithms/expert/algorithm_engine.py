@@ -197,11 +197,11 @@ class AlgorithmEngine:
         # ====== 第 3 级：默认值（兜底）======
         return c_inj.get('default_shrink_rate', 0.030), 'default'
 
-    # ========== 计量压力算法（#11，v1.0）==========
+    # ========== 计量压力算法（#11）==========
 
     def _compute_meter_pres(self, mach: Dict[str, Any], abbreviation: str, c_met: Dict[str, Any]) -> float:
         """
-        v1.0 计量压力计算（3 维物理化 + 动力源分支）
+        计量压力计算（3 维物理化 + 动力源分支）
 
         物理背景：
             - 计量压力 = 液压机液压油缸推动螺杆后退的油压（液压机油路）
@@ -324,18 +324,18 @@ class AlgorithmEngine:
             return nozzle_map[nozzle_type], level
         return nozzle_map.get('直通型', c_met.get('default_nozzle_factor', 1.00)), 'default'
 
-    # ========== 计量螺杆转速算法（#12，v1.0）==========
+    # ========== 计量螺杆转速算法（#12）==========
 
     def _compute_meter_speed(self, mach: Dict[str, Any], mat: Dict[str, Any], abbreviation: str, c_met: Dict[str, Any]) -> float:
         """
-        v1.0 计量螺杆转速计算（family 修正 + L/D 修正）
+        计量螺杆转速计算（family 修正 + L/D 修正）
 
         物理背景：
             螺杆旋转表面线速度 = π × D × N / 60
             反推 N = 60 × v_surface / (π × D)
             转速比 = N / max_screw_speed = 60 × v_surface / (π × D × max_screw_speed)
 
-            v1.0 修正：
+            修正：
             - 维度 1：family 修正（必选，17 family × 0.50~1.10）
             - 维度 2：L/D 修正（条件性启用，字段缺失 → 1.00 兜底）
             - 不分支动力源（全电机/液压机走同一公式）
@@ -461,13 +461,13 @@ class AlgorithmEngine:
         else:                                                                # 18 ≤ L/D ≤ 22
             return ld_map.get('standard', 1.00), 'standard'
 
-    # ========== 计量背压算法（#13，v1.0）==========
+    # ========== 计量背压算法（#13）==========
 
     def _compute_meter_back_pres(self, mach: Dict[str, Any], mat: Dict[str, Any],
                                   abbreviation: str, meter_speed: float,
                                   c_back: Dict[str, Any]) -> float:
         """
-        v1.0 计量背压计算（family 排气需求修正 + 螺杆转速联动修正）
+        计量背压计算（family 排气需求修正 + 螺杆转速联动修正）
 
         物理背景：
             背压在塑化阶段压缩熔体、排除空气、提升密度均匀性。
@@ -476,7 +476,7 @@ class AlgorithmEngine:
             - PA66 极易水解 → 不能高背压（family_factor=0.40，防摩擦生热水解）
             - PVC 剪切敏感 → 不能高背压（family_factor=0.50，防 HCl 释放）
 
-            v1.0 修正：
+            修正：
             - 维度 1：family 排气需求修正（必选，17 family × 0.40~1.50）
             - 维度 2：螺杆转速联动修正（条件性启用，rpm_ratio 缺失 → 1.0 兑底）
             - 不分支动力源（全电机/液压机走同一公式，与 #12 对称）
@@ -1077,7 +1077,7 @@ class AlgorithmEngine:
         # ====== 第 4 级：默认不修正 ======
         return 1.00, 'default'
 
-    # ========== 松退参数族辅助函数（#15-#18，v1.1）==========
+    # ========== 松退参数族辅助函数（#15-#18）==========
 
     def _get_suckback_runner_factor(
         self,
@@ -1180,7 +1180,7 @@ class AlgorithmEngine:
         c_suck: Dict[str, Any],
     ) -> Tuple[float, Dict[str, Any]]:
         """
-        计算松退距离（v1.1 5 维物理化推导）
+        计算松退距离（5 维物理化推导）
 
         推导公式：
             D = base_dist × family_dist_factor × nozzle_dist_factor
@@ -1228,12 +1228,12 @@ class AlgorithmEngine:
             c_suck.get('default_nozzle_dist_factor', 1.0),
         )
 
-        # 3. 流道距离因子（v1.1 新增，与 #6 保压压力方向相反）
+        # 3. 流道距离因子（与 #6 保压压力方向相反）
         runner_factor, runner_level = self._get_suckback_runner_factor(
             runner_type, runner_weight, c_suck,
         )
 
-        # 4. 浇口距离因子（v1.1 新增，仅热流道生效）
+        # 4. 浇口距离因子（仅热流道生效）
         gate_factor, gate_applied = self._get_suckback_gate_factor(
             runner_type, gate_type, c_suck,
         )
@@ -1272,7 +1272,7 @@ class AlgorithmEngine:
         c_suck: Dict[str, Any],
     ) -> Tuple[float, Dict[str, Any]]:
         """
-        计算松退压力（v1.1，液压机专属 / 全电机为 0）
+        计算松退压力（液压机专属 / 全电机为 0）
 
         推导公式：
             P = max_set_metering_pressure × base_ratio × family_factor
@@ -1372,7 +1372,7 @@ class AlgorithmEngine:
         mach: Optional[Dict[str, Any]] = None,
     ) -> Tuple[float, Dict[str, Any]]:
         """
-        计算松退速度（v1.1，3 维物理化推导）
+        计算松退速度（3 维物理化推导）
 
         推导公式：
             V = max_set_decompression_velocity × family_velo_factor × nozzle_velo_factor
@@ -1487,7 +1487,7 @@ class AlgorithmEngine:
             'note': '派生：T = D / V',
         }
 
-    # ========== 温度族辅助函数（#19+#20，v1.0）==========
+    # ========== 温度族辅助函数（#19+#20）==========
 
     def _get_noz_family_offset(
         self,
@@ -1632,7 +1632,7 @@ class AlgorithmEngine:
 
         Args:
             recommend_melt_temp: 推荐熔体温度
-            stages: 段数
+            stages: 料筒段数（**不含喷嘴**；总档数 = stages + 1）
             family: 材料大类
             c_brl: barrel 分组合并系数
             glass_transition_temp: 玻璃化转变温度（可选）
@@ -1886,7 +1886,7 @@ class AlgorithmEngine:
         })
         return max_map.get(family, c_hold.get('default_hold_time_max', 300.0))
 
-    # ========== 冷却参数辅助（v1.0：算法 #10）==========
+    # ========== 冷却参数辅助（算法 #10）==========
 
     @staticmethod
     def _get_delta_temp_factor(
@@ -2000,8 +2000,8 @@ class AlgorithmEngine:
         c_met = self._coeffs.get('metering', {})
         c_back = self._coeffs.get('back_pressure', {})
         c_decomp = self._coeffs.get('decompression', {})
-        c_noz = self._coeffs.get('nozzle', {})              # 🆕 v1.0 #19 喷嘴温度
-        c_brl = self._coeffs.get('barrel', {})               # 🆕 v1.0 #20 料筒温度分布
+        c_noz = self._coeffs.get('nozzle', {})              # #19 喷嘴温度
+        c_brl = self._coeffs.get('barrel', {})               # #20 料筒温度分布
         c_temp = {'nozzle': c_noz, 'barrel': c_brl}          # 向后兼容（可兑底）
 
         # ========== 基础计算 ==========
@@ -2023,7 +2023,7 @@ class AlgorithmEngine:
         a_screw = compute_screw_cross_area(screw_diameter)
         total_len = compute_total_injection_length(total_weight, melt_density, screw_diameter)
 
-        # 【重构】length_ratio 基于实际保压推进需求反推，不再按总重量三档硬分
+        # length_ratio 基于实际保压推进需求反推
         # 推导链：质量守恒 → PVT压缩 → 圆柱几何 → 螺杆推进距离 → 反推 ratio
         # 数据源：3 级兜底（精确值 / 大类典型值 / 默认值）
         shrink_rate, shrink_level = self._get_shrink_rate(c_inj)
@@ -2037,7 +2037,7 @@ class AlgorithmEngine:
         length_ratio = max(0.0, min(1.0, 1.0 - replenish_len / total_len))
         inj_len = total_len * length_ratio
 
-        # 【重构】cushion_len（料垫）由机器物理参数推导，不再取拍脑袋中间值 12mm
+        # cushion_len（料垫）由机器物理参数推导
         # 公式：cushion_len = max(ceil(D / 4), cushion_min_abs)
         # 依据：D / 4 与海天（8–12mm）、Fanuc（10–15mm）经验值高度吻合
         cushion_len = compute_cushion_length(screw_diameter)
@@ -2288,7 +2288,7 @@ class AlgorithmEngine:
         proc.hold_time_steps = [hold_time]
         proc.hold_limit_spd = HSO_PACK_VELOCITY
 
-        # ========== 冷却参数（v1.0：4 维物理化）==========
+        # ========== 冷却参数（4 维物理化）==========
         # 推导公式：t_cool = max_thickness² × family_cool_factor × ΔT_factor × crystallinity_kick
         # 物理依据：Fourier 热扩散 t ∝ h²/α × ln((T_melt-T_mold)/(T_eject-T_mold))
         # 物理正交：与 #8 保压时间正交（保压时间=浇口凝固局部，冷却时间=制品整体冷到 ejection_temp）
@@ -2338,7 +2338,7 @@ class AlgorithmEngine:
         )
 
         # ========== 计量参数 ==========
-        # v1.0 物理化：3 维公式 + 全电机分支
+        # 物理化：3 维公式 + 全电机分支
         # - 液压机：max × base_ratio × family_factor × nozzle_factor，再钳制 [min, max]
         # - 全电机：无油缸 → meter_pres = 0（HMI 不显示“计量压力”输入栏）
         # 注意：传原始 abbreviation（如 PA66/PVC），内部会先精确匹配再 fallback 到 family
@@ -2353,7 +2353,7 @@ class AlgorithmEngine:
         )
 
         max_screw_speed = mach['max_set_screw_rotation_speed']  # 必填，audit 兑底
-        # v1.0 物理化：family 修正（必须） + L/D 修正（条件性启用）
+        # 物理化：family 修正（必须） + L/D 修正（条件性启用）
         # 不分支动力源（全电机/液压机走同一公式）
         # 60 = s→min 单位换算因子（v_surface × 60 / (π × D) = rpm）
         meter_speed = self._compute_meter_speed(mach, mat, abbreviation, c_met)
@@ -2375,7 +2375,7 @@ class AlgorithmEngine:
             f"final={meter_back_pres}"
         )
         # ========== 算法 #14：计量位置 (meter_posi) ==========
-        # v1.0 推导公式（物理意义清晰，无需算法化）
+        # 推导公式（物理意义清晰，无需算法化）
         #
         # 物理含义：螺杆储料回退到位时的目标位置（距离机械零点＝马达侧零点的距离）
         #   meter_posi = cushion_len + total_len
@@ -2398,7 +2398,7 @@ class AlgorithmEngine:
         proc.met_back_pres_steps = [meter_back_pres]
         proc.met_pos_steps = [meter_posi]
 
-        # ========== 松退参数（#15-#18，v1.1：5 维物理化推导）==========
+        # ========== 松退参数（#15-#18：5 维物理化推导）==========
         # 推导链：
         #   #15 模式决策（3 级兑底：用户输入 → DEFAULT 规则 → 默认）
         #   #16+#17 参数推导（液压机/全电机分支）
@@ -2507,11 +2507,14 @@ class AlgorithmEngine:
         proc.noz_temp = round(noz_temp, 1)
 
         # #20 料筒温度分布（4 维物理化：family_decrement × stages × 幂函数k × 双层边界钳制）
-        # 算法内部字段（不在 spec 里），未填兑 5
-        proc.brl_temp_stg = prod.get('barrel_temperature_stage') or 5
+        # ⚠️ brl_temp_stg 是**总档数**（第 1 档 = 喷嘴），料筒段数 = 总档数 - 1
+        #    （与前端口径一致：温度表列 = 喷嘴 + 料筒 1..9）
+        # ⚠️ 来源是**工艺设定集**（ProcessSet），不是模具档案：
+        #    字段契约见 process_set.PROCESS_SET_FIELD_SPEC，缺失时 fill_defaults 兜 5
+        proc.brl_temp_stg = ps.get('brl_temp_stg') or 5
         brl_temp_steps, brl_info = self._compute_brl_temp_steps(
             recommend_melt_temp=recommend_melt_temp,
-            stages=proc.brl_temp_stg,
+            stages=proc.brl_temp_stg - 1,
             family=family,
             c_brl=c_brl,
             glass_transition_temp=glass_transition_temp,
@@ -2539,18 +2542,18 @@ class AlgorithmEngine:
     def _derive_mold_temp(self, params: ProductionParams):
         """推导模温机工艺参数
 
-        口径（2026-10-29）：**规则覆盖 > 材料推荐值 > 兜底**
+        口径：**规则覆盖 > 材料推荐值 > 兜底**
         1. 规则覆盖：`_coeffs['mold_temp']` 里该材料的键命中
-           （该系数块只可能来自 expert_rules 规则库 —— 内置默认表已移除，
+           （该系数块只可能来自 expert_rules 规则库，
            规则库是「按材料改写模温」的唯一口子）
         2. 材料推荐值：`recommend_mold_temperature`
            （spec key；必填 + MaterialDatabase 按材料族兜底 ⇒ 有材料就有值）
         3. 兜底：规则里的 `default`（缺省 50）
 
-        ⚠️ 2026-10-29 修正：此前读 `recommended_mold_temp`（**ORM 字段名**），
-           而算法层 dict 用的是 **spec key**（`recommend_mold_temperature`，
-           见 specs.POLYMER_INFO_FIELDS 的 key ↔ attr_name 映射）
-           ⇒ 恒为 None ⇒ 恒走系数表 ⇒ 用户主数据与高温材料
+        ⚠️ **注意 key 口径**：算法层 dict 用的是 **spec key**
+           （`recommend_mold_temperature`，见 specs.POLYMER_INFO_FIELDS 的
+           key ↔ attr_name 映射），**不是** ORM 字段名 `recommended_mold_temp` ——
+           用错则恒为 None ⇒ 恒走系数表 ⇒ 用户主数据与高温材料
            （PEEK 应 170℃ / PTFE 应 200℃）全被系统性低估到 default 50。
         """
         mat = self.material

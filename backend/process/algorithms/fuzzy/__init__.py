@@ -18,7 +18,7 @@ algorithm_type='optimization'，由 condition service 通过 AlgorithmRegistry �
 命名约定：`specs` = 对外接口格式（与 expert 包同名同层）；`profiles` = 内核输入契约；`field_names` = 字段**名**映射（与 `specs` 的字段**规格**互补）；`engine` = 模糊推理引擎（与类名 `FuzzyEngine` 对应）；`recommendations` = 推理结果 → 对外推荐契约（与 `base.AlgorithmRecommendation` 同词根）。
 
 ⚠️ `recommendations` 产出的具体类型是 **`FuzzyRecommendation`**（`base.AlgorithmRecommendation` 的**子类**）——
-比基类多挂一个 `conflict` 视图（design §5.5，2026-10-28 批 N）：
+比基类多挂一个 `conflict` 视图：
 **同参数命中规则方向相反时**非空，用来显式暴露「多条规则互相抵消」这种静默失败。
 **只加标记、不改数值**（建议值 / 方向 / 置信度一字未变）；
 基类 `to_dict()` 的键集合**一字未改** ⇒ llm / empirical 两个算法的输出**逐位不变**。

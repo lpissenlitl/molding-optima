@@ -1,17 +1,7 @@
 <!--
-  AccountDrawer - 账户中心
-  - 顶部：头像 + 用户名 + 角色标签
-  - 三个区块：个人信息（可编辑）/ 修改密码 / 账户信息（只读）
-  - 底部：退出登录
-
-  数据：
-  - GET  /api/profile/              → getInfoApi()
-  - PUT  /api/profile/              → updateProfileApi() (只能改 engineer_name/email/phone)
-  - PUT  /api/profile/reset-password/ → userStore.updatePassword() (改密后会自动注销)
-
-  注意事项：
-  - username/role 不可改（后端白名单）
-  - 改密码成功后必须跳回 /login（后端会注销所有 token）
+  AccountDrawer - 账户中心：顶部头像 + 用户名 + 角色标签；三个区块（个人信息可编辑 / 修改密码 / 账户信息只读）；底部退出登录。
+  数据：GET /api/profile/ → getInfoApi()；PUT /api/profile/ → updateProfileApi()（只能改 engineer_name/email/phone）；PUT /api/profile/reset-password/ → userStore.updatePassword()（改密后自动注销）。
+  注意：username/role 不可改（后端白名单）；改密码成功后必须跳回 /login（后端会注销所有 token）
 -->
 <template>
   <el-drawer
@@ -247,9 +237,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 
-// ============================================================================
 // Props / Emits
-// ============================================================================
 
 const props = defineProps<{
   modelValue: boolean
@@ -264,9 +252,7 @@ const visible = computed({
   set: v => emit('update:modelValue', v),
 })
 
-// ============================================================================
 // 状态
-// ============================================================================
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -291,9 +277,7 @@ const passwordForm = reactive({
   confirm_password: '',
 })
 
-// ============================================================================
 // 派生
-// ============================================================================
 
 /** 头像首字母（中文取末字首字母，英文取首字母） */
 const avatarText = computed(() => {
@@ -333,9 +317,7 @@ const expiresAtSoon = computed(() => {
   return ts >= Date.now() && ts - Date.now() < 30 * 24 * 60 * 60 * 1000
 })
 
-// ============================================================================
 // 表单规则
-// ============================================================================
 
 const profileRules: FormRules = {
   engineer_name: [
@@ -389,9 +371,7 @@ const passwordRules: FormRules = {
   ],
 }
 
-// ============================================================================
 // 副作用：抽屉打开时刷新数据
-// ============================================================================
 
 watch(visible, async (open) => {
   if (!open) return
@@ -413,9 +393,7 @@ async function loadProfile() {
   }
 }
 
-// ============================================================================
 // 动作：保存个人信息
-// ============================================================================
 
 async function saveProfile() {
   if (!profileFormRef.value) return
@@ -446,9 +424,7 @@ async function saveProfile() {
   }
 }
 
-// ============================================================================
 // 动作：修改密码
-// ============================================================================
 
 async function savePassword() {
   if (!passwordFormRef.value) return
@@ -476,9 +452,7 @@ async function savePassword() {
   }
 }
 
-// ============================================================================
 // 动作：退出登录
-// ============================================================================
 
 async function handleLogout() {
   try {
@@ -491,9 +465,7 @@ async function handleLogout() {
   router.push('/login')
 }
 
-// ============================================================================
 // 工具
-// ============================================================================
 
 function formatDate(iso?: string): string {
   if (!iso) return ''

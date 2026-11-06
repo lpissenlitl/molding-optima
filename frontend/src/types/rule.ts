@@ -1,17 +1,8 @@
-/**
- * 规则中心类型定义
- *
- * 与后端 process/models/rules.py 字段对齐。
- * 4 个模型：
- * - RuleLibrary    规则库（卡片视图）
- * - RuleKeyword    关键词（Section 2 表格）
- * - RuleMethod     规则方法（详情页 Tab 1）
- * - ExpertRule     专家规则（详情页 Tab 2）
- */
+/** 规则中心类型定义：与后端 process/models/rules.py 字段对齐，4 个模型 RuleLibrary（卡片视图）/ RuleKeyword（Section 2 表格）/ RuleMethod（详情页 Tab 1）/ ExpertRule（详情页 Tab 2） */
 
-// ============================================================================
+
 // 通用
-// ============================================================================
+
 
 export type OwnerType = 'system' | 'tenant'
 
@@ -64,9 +55,8 @@ export interface PageResult<T> {
   items: T[]
 }
 
-// ============================================================================
 // RuleLibrary（规则库）
-// ============================================================================
+
 
 export interface RuleLibrary {
   id: number
@@ -100,11 +90,17 @@ export interface RuleLibraryCreatePayload {
   priority?: number
   is_active?: boolean
   version?: number
+  /**
+   * 归属租户（**仅平台超管代办建库时传**）= 库实际挂到哪家公司名下。
+   * 不传 ⇒ 挂到调用者自己公司名下（租户自建 / 超管自建系统库）。
+   * ⚠️ 超管建「租户级」库时必须传 —— 否则库落在超管的公司名下，
+   * 对目标租户永远不生效（静默失效）。
+   */
+  target_company_id?: number | null
 }
 
-// ============================================================================
 // RuleKeyword（关键词）
-// ============================================================================
+
 
 export interface RuleKeyword {
   id: number
@@ -144,9 +140,8 @@ export interface RuleKeywordCreatePayload {
   parameter_kind: ParameterKind
 }
 
-// ============================================================================
 // RuleMethod（规则方法）
-// ============================================================================
+
 
 export interface RuleMethod {
   id: number
@@ -181,9 +176,8 @@ export interface RuleMethodCreatePayload {
   source?: RuleSource
 }
 
-// ============================================================================
 // ExpertRule（专家规则）
-// ============================================================================
+
 
 export interface ExpertRule {
   id: number

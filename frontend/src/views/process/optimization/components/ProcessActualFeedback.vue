@@ -1,12 +1,4 @@
-<!--
-  ProcessActualFeedback - 工艺实测表单
-  - 4 项观察项，按 OBSERVATION_ITEMS 顺序渲染，自适应列数
-  - 单位：通过 `<template #suffix>` 渲染在 el-input 内部右侧（Element Plus 原生插槽）
-    注意：不用 `<span slot="suffix">`（这是 Element UI/Vue 2 语法，Vue 3 下动态内容可能渲染不出）
-    也不必 `<template #append>`（项目规范中单位用 #suffix，输入框内右侧）
-  - 单位解析：机器值 > STANDARD_UNITS 兜底（undefined / null / 空串均兜底）
-  - v-model 双向同步 CycleObservation[]（含去重避免循环）
--->
+<!-- ProcessActualFeedback - 工艺实测表单 -->
 <template>
   <div class="process-actual-feedback">
     <el-form
@@ -41,11 +33,7 @@ import { computed, reactive, watch } from 'vue'
 import type { CycleObservation } from '@/types/optimization'
 import { OBSERVATION_ITEMS, STANDARD_UNITS } from '@/constants/observation-order'
 
-/**
- * 机器单位信息子集（只取 ProcessActualFeedback 需要的部分）
- * - 完整结构见 constants/machine-const.ts 的 machineInfoForm
- * - 父组件按需传入；缺字段时回退 constants/observation-order.ts 的 STANDARD_UNITS
- */
+/** 机器单位信息子集（完整结构见 constants/machine-const.ts，缺字段回退 STANDARD_UNITS） */
 type UnitType = keyof typeof STANDARD_UNITS
 type MachineUnitMap = Partial<Record<UnitType, string>>
 
@@ -60,12 +48,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', val: CycleObservation[]): void
 }>()
 
-/**
- * 预计算所有 item 的单位（computed map）
- * - 顺序：机器单位 > 标准单位（STANDARD_UNITS）兜底
- * - 机器值为 undefined / null / 空字符串 一律视为未提供 → 兜底标准单位
- * - 避免在模板里调用函数，提高渲染效率，同时让响应式追踪更明确
- */
+/** 预计算各观察项单位（机器单位优先，undefined/null/空串视为未提供并回退标准单位） */
 const resolved_units = computed<Record<string, string>>(() => {
   const map = props.machine_unit ?? {}
   const result: Record<string, string> = {}
@@ -79,18 +62,12 @@ const resolved_units = computed<Record<string, string>>(() => {
   return result
 })
 
-/**
- * 内部 map 形态：{ param_key: value }
- * 渲染时直接 v-model；emit 时再转换回 CycleObservation[]
- * 初始化时所有 key 都为 null（避免 undefined 报错）
- */
+/** 内部 map 形态 { param_key: value }（渲染直接 v-model，emit 时转回 CycleObservation[]） */
 const local_map = reactive<Record<string, number | null>>(
   Object.fromEntries(OBSERVATION_ITEMS.map(i => [i.key, null])),
 )
 
-/**
- * 比较两个 CycleObservation[] 是否等价（避免 v-model 循环）
- */
+/** 比较两个 CycleObservation[] 是否等价（避免 v-model 循环） */
 function isSameList(
   a: CycleObservation[],
   b: CycleObservation[] | null | undefined,

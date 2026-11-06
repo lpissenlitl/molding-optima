@@ -1,14 +1,5 @@
-<!--
-  FillerForm - 填充物表单（new / edit / copy 三模式共用）
+<!-- FillerForm - 填充物表单（new/edit/copy 三模式共用）：路由 /material/filler/new|edit|copy（复制清空 id 和 name），单 card 设计 11 字段平铺、4 列布局由 groupIntoRows 自动分行（3 行可见） -->
 
-  路由：
-    - /material/filler/new         新建
-    - /material/filler/:id/edit    编辑
-    - /material/filler/:id/copy    复制（清空 id 和 name）
-
-  架构（2026-09-08）：
-    - 单 card 设计：11 字段平铺，4 列布局，groupIntoRows 自动分行（3 行可见）
--->
 <template>
   <div class="filler-form">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder"></div>
@@ -126,9 +117,7 @@ const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const loaded = ref(false)
 
-// ============================================================================
 // 字段定义（11 字段平铺，4 列布局自动分行）
-// ============================================================================
 
 const items: FormItem[] = [
   { label: '名称', prop: 'name', type: 'input', required: true, placeholder: '如：玻璃纤维、碳酸钙' },

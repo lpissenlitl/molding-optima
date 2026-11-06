@@ -145,7 +145,7 @@ class RuleKeyword(BusinessBaseModel):
 
     # --- 模糊参数 ---
     # ⚠️ 档位集合与前端 types/rule.ts::FuzzyLevel（3 | 5 | 7）**严格对齐**。
-    #    9 档已于 2026-11-03 移除：前端没有 9 档命名（ultra_low / ultra_high），
+    #    不提供 9 档：前端没有 9 档命名（ultra_low / ultra_high），
     #    后端留着 9 档选项只会让前端 levelOptionsFor() 静默兜底成 3 档。
     FUZZY_LEVELS = [(3, '3级'), (5, '5级'), (7, '7级')]
     fuzzy_level = models.IntegerField(choices=FUZZY_LEVELS, default=5, verbose_name="模糊级别")

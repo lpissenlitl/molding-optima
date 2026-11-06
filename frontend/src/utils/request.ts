@@ -1,13 +1,5 @@
-/**
- * axios 请求封装
- *
- * - 认证：X-Auth-Token header（与后端 @require_login 装饰器对齐），来源是 useUserStore().token
- * - 后端响应：{ status, msg, data }
- * - dev 用相对路径，由 vite devServer.proxy 自动转发到 :8200
- * - 错误处理：拦截器默认 toast 所有错误，调用方可传 errorMessageMode: 'none' 关闭默认 toast
- *   用于表单内联展示等场景
- * - 后端是 msg owner：拦截器直接 toast responseData.msg，信任后端文案
- */
+/** axios 请求封装：X-Auth-Token header（与后端 @require_login 对齐，token 来自 useUserStore().token），后端响应 {status,msg,data}，dev 走 vite devServer.proxy 转发到 :8200；拦截器默认 toast 全部错误（errorMessageMode: 'none' 可关闭），错误文案以端 msg 为准 */
+
 import axios, { type AxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
@@ -18,10 +10,9 @@ declare module 'axios' {
   export interface AxiosRequestConfig {
     /**
      * 错误提示模式
-     * - 'message'（默认）：拦截器 toast
-     * - 'none'：关闭默认 toast，调用方自行处理
-     * - 'modal'：预留弹窗模式（暂未启用）
+     * - 'message'（默认）：拦截器 toast；'none'：关闭默认 toast，调用方自行处理；'modal'：预留弹窗模式（暂未启用）
      */
+
     errorMessageMode?: 'message' | 'none' | 'modal'
   }
 }

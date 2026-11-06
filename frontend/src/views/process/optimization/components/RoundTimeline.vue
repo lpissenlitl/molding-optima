@@ -1,12 +1,4 @@
-<!--
-  RoundTimeline - 调机过程时间线（左侧）
-
-  职责：展示工艺优化的所有轮次，支持点击切换 active_round
-  数据：form.rounds 数组 + form.active_round_id
-
-  每轮次节点信息：
-    - 轮次号 / 类型（初始/优化/手动）/ 创建时间 / 缺陷摘要
--->
+<!-- RoundTimeline - 调机过程时间线 -->
 <template>
   <div class="round-timeline">
     <div class="round-timeline__header">
@@ -46,12 +38,6 @@
 
 <script setup lang="ts">
 import dayjs from 'dayjs'
-/**
- * RoundTimeline - 调机过程时间线
- *
- * Props：rounds 数组（每轮次含 id/type/created_at/summary）
- * Emits：update:activeId（v-model:activeId 接收当前激活轮次）
- */
 defineProps<{
   rounds?: Array<{
     id: number | string
@@ -82,12 +68,7 @@ const TYPE_TAG: Record<string, 'success' | 'warning' | 'info'> = {
   manual: 'info',
 }
 
-/**
- * 把 round.created_at（ISO 8601 字符串，如 "2026-10-14T01:25:49.458Z"）按浏览器本地时区格式化显示。
- * - 后端 DB 字面值是 Asia/Shanghai 系统时刻，前端 makeRound 写入的是 ISO 8601 UTC 字符串
- * - 两者表示同一时刻，浏览器本地区别只是时区
- * - 避免直接显示 ISO 原始串（如 "2026-10-14T01:25:49.458Z"）让用户看到 UTC 时刻
- */
+/** 把 round.created_at（ISO 8601）按浏览器本地时区格式化（后端 DB 字面值与前端 UTC 串代表同一时刻） */
 function formatLocalTime(iso: string): string {
   if (!iso) return ''
   const d = new Date(iso)

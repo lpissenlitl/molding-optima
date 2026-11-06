@@ -119,7 +119,6 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 // 进入登录页时立即探测后端可用性，用于状态指示器展示
-// 用户在未登录前就能看到"系统正常/停服"，避免启服务失败时盲目登录
 onMounted(() => {
   appStore.checkHealth()
 })
@@ -175,8 +174,8 @@ const handleLogin = async () => {
   background: #f5f7fa;
   color: #1f2937;
   position: relative;
-  /* 横向裁剪但不做滚动容器：clip 不会把 overflow-y 的 visible 降级为 auto，
-     纵向仍由 body 整页滚动（不会出现内层滚动条），横向不产生滚动条 */
+  /* 横向裁剪但不做滚动容器：clip 不会把 overflow-y 的 visible 降级为 auto，纵向仍由 body 整页滚动（不会出现板内滚动条），横向不产生滚动条 */
+
   overflow-x: clip;
 }
 
@@ -311,9 +310,7 @@ const handleLogin = async () => {
   min-width: 0;
 }
 
-/* 移动端品牌标识：仅单栏布局显示，替代被隐藏的左侧品牌区
-   - 垂直堆叠居中：Logo → 产品名 → 副标题，视觉重心明确
-   - 不与下方左对齐的表单标题争抢同一层级，单独作为顶部品牌头 */
+/* 移动端品牌标识：仅单栏布局显示，替代被隐藏的左侧品牌区 */
 .mobile-brand {
   display: none;
   flex-direction: column;
@@ -435,13 +432,8 @@ const handleLogin = async () => {
   border-top: 1px solid #e5e7eb;
 }
 
-/* 系统状态指示器：
-   - 颜色随 status 变化（normal=绿/degraded=黄/down=红）
-   - 气泡带呼吸动画，三种状态节奏不同：
-     normal   2.0s 舒缓，传达稳定
-     degraded 1.5s 偏快，传达轻微预警
-     down     1.0s 急促，传达严重告警
-*/
+/* 系统状态指示器：颜色随 status 变化（normal=绿/degraded=黄/down=红），气泡带呼吸动画且三种状态节奏不同（normal 2.0s 舒缓=稳定，degraded 1.5s 偏快=轻微预警，down 1.0s 急促=严重告警） */
+
 .status {
   display: inline-flex;
   align-items: center;
@@ -475,13 +467,8 @@ const handleLogin = async () => {
 }
 
 /* ============== 响应式 ============== */
-/* 中小屏（<1024px）：单栏布局
-   - 隐藏左侧品牌区，登录卡片水平居中（保持 360px 上限，不被拉宽）
-   - margin: auto 实现垂直居中；内容高于视口时 auto 归零，
-     保证顶部不被裁切、整页由 body 滚动（无内层滚动条）
-   - 断点用 1024px（md），因为两栏布局的最小可用宽度约为
-     品牌区 560px + 表单区 460px = 1020px
-*/
+/* 中小屏（<1024px）：单栏布局：隐藏左侧品牌区，登录卡片水平居中（保持 360px 上限不被拉宽）；margin:auto 实现垂直居中，内容高于视口时 auto 归零，保证顶部不被裁切、整页由 body 滚动（无内层滚动条）；断点取 1024px 因两栏最小可用宽度约为品牌区 560px + 表单区 460px = 1020px */
+
 @include breakpoint-down(md) {
   .login-page {
     flex-direction: column;

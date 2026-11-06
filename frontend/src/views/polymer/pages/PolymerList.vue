@@ -1,13 +1,5 @@
-﻿<!--
-  PolymerList - 聚合物列表页
+﻿<!-- PolymerList - 聚合物列表页：BaseTable 封装（分页/选择/大小/列配置统一管理），顶部 toolbar 新建/批量/导出/配置表格，行操作编辑/复制/删除（text 紧凑风格） -->
 
-  设计要点：
-    - 与 ProjectList / MoldList 保持统一规范
-    - Composition API + <script setup>
-    - BaseTable 组件封装（分页/选择/大小/列配置统一管理）
-    - 顶部 toolbar 插槽（新建 + 批量操作 + 导出 + 配置表格）
-    - 行操作：编辑 + 复制 + 删除（el-button type="text" 紧凑风格）
--->
 <template>
   <div class="page-stack">
     <!-- 搜索表单（配置驱动，复用 PolymerSearchForm） -->
@@ -136,9 +128,7 @@ import PolymerSearchForm from '../components/PolymerSearchForm.vue'
 import { polymerMethod, exportListData } from '@/api'
 import { getReportDownloadUrl } from '@/utils/assert'
 
-// ============================================================================
 // 列表数据
-// ============================================================================
 
 interface ListData {
   total: number
@@ -189,9 +179,7 @@ const table_columns = ref<BaseTableColumn[]>([
 
 const externalUniqueValues = ref<Record<string, any[]>>({})
 
-// ============================================================================
 // API
-// ============================================================================
 
 async function fetchList() {
   list_loading.value = true
@@ -247,9 +235,7 @@ function syncExternalUniqueValues() {
   }
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function goCreate() {
   router.push('/material/polymer/new')
@@ -336,9 +322,7 @@ function refreshView() {
   fetchList()
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

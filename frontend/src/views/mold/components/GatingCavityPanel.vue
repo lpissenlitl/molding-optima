@@ -1,43 +1,15 @@
-<!--
-  GatingCavityPanel - 单个 Cavity 的折叠面板（被 GatingSystemForm 引用）
+<!-- GatingCavityPanel - 单个 Cavity 的折叠面板（被 GatingSystemForm 引用）：单文件封装 1 个 Cavity + 1:N Gates，props.cavity 直接双向绑定，字段数组由 GatingSystemForm 传入，Gate 折叠状态用本地 ref（不放数据对象上，避免被序列化到后端），删除 Cavity 通过 emit('remove') 通知父级（父级要同步 activeCavityMap） -->
 
-  路由：无（子组件）
-
-  设计要点：
-  - 单文件封装 1 个 Cavity + 1:N Gates 的渲染
-  - 数据通过 props.cavity 直接双向绑定（修改 reactive 对象属性即可同步到 mold_info）
-  - 字段数组由 GatingSystemForm 传入（cavityItems / gateBaseItems / 矩形 / 圆形 / 环形）
-  - Gate 折叠状态用本地 ref（不放数据对象上，避免被序列化到后端）
-  - v-else-if 链渲染（与 GatingSystemForm 保持一致风格）
-  - 删除 Cavity 通过 emit('remove') 通知父级（父级要同步 activeCavityMap）
-
-  结构：
-    el-collapse-item (Cavity #N)
-      ├─ 标题：产品 #N + 浇口数 tag
-      ├─ Cavity 字段（el-row + el-col）
-      ├─ el-collapse (Gate 内层)
-      │   └─ el-collapse-item (Gate #N)
-      │       ├─ Gate 基础字段
-      │       └─ Gate 尺寸字段（按 gate_shape 条件显示）
-      └─ 添加 Gate 按钮
--->
 <template>
-  <!--
-    cavity 块：边框 + 浅背景色，与其他 cavity 块视觉分隔
-    - 标题行：产品 #N + 删除按钮（条件显示）
-    - 单 cavity 时只有一个块，视觉简洁
-    - 多 cavity 时多个块平铺，方便横向对比
-  -->
+  <!-- cavity 块：边框 + 浅背景色与其他 cavity 块视觉分隔，标题行为产品 #N + 条件显示的删除按钮；单 cavity 时只一块保持简洁，多 cavity 时平铺便于横向对比 -->
+
   <div class="cavity-block">
     <div class="cavity-block__header">
       <span class="cavity-block__title">
         <AppIcon icon="mdi:cube-outline" />
         #{{ Number(cavityIndex) + 1 }}
-        <!--
-          产品名称：有值时正常显示，未填写时显示灰色"未命名"占位
-          - 多 cavity 场景下最关键的区分信息（家族模具的多个产品）
-          - 单 cavity 场景下也展示，让用户看到自己填了啥
-        -->
+        <!-- 产品名称：有值时正常显示，未填写时显示灰色"未命名"占位 —— 多 cavity 场景下最关键的区分信息（家族模具的多个产品），单 cavity 场景也展示让用户看到自己填了啥 -->
+
         <span
           :class="[
             'cavity-block__name',
@@ -83,10 +55,8 @@
         :key="`gate_${gIdx}`"
         class="gate-block"
       >
-        <!-- Gate 标题行：编号 + 形状图标 + 形状文字 + 右上角删除
-         * 几何图标按形状区分（替代 el-tag，降低视觉权重）
-         * 未选形状时图标和文字都用 is-placeholder 灰斜体
-         -->
+        <!-- Gate 标题行：编号 + 形状图标 + 形状文字 + 右上角删除，几何图标按形状区分（替代 el-tag 以降低视觉权重），未选形状时图标和文字都用 is-placeholder 灰斜体 -->
+
         <div class="gate-block__header">
           <span class="gate-block__title">
             <AppIcon
@@ -196,12 +166,8 @@
 </template>
 
 <script setup lang="ts">
-/**
- * props 数据双向绑定说明：
- * - props.cavity 是 gatingSystem.cavities[cIdx] 的引用（reactive 对象）
- * - gates 是 cavity.gates 数组，通过 push / splice 增删
- * - 子组件不创建本地 ref 镜像，保持单向数据流
- */
+/** props 数据双向绑定：props.cavity 即 gatingSystem.cavities[cIdx] 的 reactive 引用，gates 是 cavity.gates 数组，通过 push / splice 增删，子组件不建本地 ref 镜像，保持单向数据流 */
+
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormItem } from '@/utils/form-types'
@@ -216,18 +182,10 @@ const props = defineProps<{
   gateCircleItems: FormItem[]
   gateAnnulusItems: FormItem[]
   gateTrapezoidItems: FormItem[]
-  /**
-   * 是否显示"删除产品"按钮
-   * - true：多 cavity 时（父组件传入 gatingSystem.cavities.length > 1）
-   * - false：单 cavity 时（默认）
-   * - 注：用户明确要求"删除按钮条件出现"，不做自动判断以外的逻辑
-   */
+  /** 是否显示"删除产品"按钮：多 cavity 时（父组件传入 gatingSystem.cavities.length > 1）为 true，单 cavity 时为 false（默认）；用户明确要求"删除按钮条件出现"，不做自动判断以外的逻辑 */
+
   showRemove?: boolean
-  /**
-   * Cavity 索引（用于标题显示"产品 #N"）
-   * - 父组件传入 Number(cIdx)
-   * - 不传时显示 #1（单 cavity 场景下视觉一致）
-   */
+  /** Cavity 索引（用于标题显示"产品 #N"） */
   cavityIndex?: number
 }>()
 
@@ -235,35 +193,22 @@ const emit = defineEmits<{
   remove: []
 }>()
 
-/**
- * Cavity 索引（用于标题显示"产品 #N"）
- * - 可选 prop，不传时退化为显示 #1（单 cavity 场景下无所谓）
- * - 父组件传入 Number(cIdx)
- */
+/** Cavity 索引：父组件未传入时兜底为 0，用于标题显示"产品 #N" */
+
 const cavityIndex = computed(() => props.cavityIndex ?? 0)
 
-/**
- * 是否显示"删除浇口"按钮
- * - gate > 1：true（多浇口时显示删除）
- * - gate == 1：false（必须保留至少一个浇口，gate 是 cavity 的强制依赖）
- * - 子组件内部计算（与 cavity 删除不同：cavity 删除要 emit 通知父级，gate 删除内部 splice）
- */
+/** 是否显示"删除浇口"按钮：gate > 1 时为 true（多浇口才显示删除），gate == 1 时为 false（必须保留至少一个浇口，gate 是 cavity 的强制依赖）；子组件内部计算（与 cavity 删除不同：cavity 删除要 emit 通知父级，gate 删除内部 splice） */
+
 const showGateRemove = computed(() => props.cavity.gates.length > 1)
 
-/**
- * 添加浇口（gate 是 cavity 的强制依赖，可无限添加）
- */
+/** 添加浇口（gate 是 cavity 的强制依赖，可无限添加） */
 function addGate() {
   props.cavity.gates.push(structuredClone(gateForm))
   ElMessage.success('已添加浇口')
 }
 
-/**
- * 删除浇口
- * - 守卫：gate <= 1 时拒绝删除（最少保留一个浇口）
- * - 守卫由 showGateRemove computed 在 UI 层面控制（按钮不出现）
- * - 这里再加一道保险，防止 v-if 误判
- */
+/** 删除浇口：守卫 gate <= 1 时拒绝删除（最少保留一个浇口），守卫由 showGateRemove computed 在 UI 层面控制（按钮不出现），这里再加一道保险防止 v-if 误判 */
+
 function removeGate(gIdx: number) {
   if (props.cavity.gates.length <= 1) {
     ElMessage.warning('至少保留一个浇口')
@@ -273,11 +218,7 @@ function removeGate(gIdx: number) {
   ElMessage.success('已删除浇口')
 }
 
-/**
- * Gate 形状 → Material Design Icon
- * - 用于 gate-block__title 图标，按形状视觉区分
- * - 默认 mdi:circle-medium（未选形状时占位）
- */
+/** Gate 形状 → Material Design Icon */
 function shapeIcon(shape?: string): string {
   switch (shape) {
     case '矩形': return 'mdi:rectangle-outline'
@@ -290,11 +231,7 @@ function shapeIcon(shape?: string): string {
 </script>
 
 <style scoped lang="scss">
-/*
- * cavity 块样式：边框 + 浅背景色，与其他 cavity 块视觉分隔
- * - 与 GatingSystemForm 的 .cavity-list（gap:12px）配合，块间留空
- * - 多 cavity 场景下像一叠卡片，单 cavity 场景下视觉简洁
- */
+/* cavity 块样式：边框 + 浅背景色，与其他 cavity 块视觉分隔 */
 .cavity-block {
   border: 1px solid var(--color-border-light, #e4e7ed);
   border-radius: 6px;
@@ -317,11 +254,7 @@ function shapeIcon(shape?: string): string {
     color: var(--el-text-color-primary, #303133);
   }
 
-  /*
-   * 产品名称：主信息，字重中等
-   * - 与编号（主）、腔数（次）形成层次
-   * - 未填写时用 is-placeholder 类变灰，不影响布局
-   */
+  /* 产品名称：主信息，字重中等 */
   &__name {
     font-size: 14px;
     font-weight: 500;
@@ -335,11 +268,7 @@ function shapeIcon(shape?: string): string {
     }
   }
 
-  /*
-   * meta 信息（如"· 4 腔"）：次要颜色、正常字重
-   * - 与编号形成层次：编号是主信息，腔数是补充信息
-   * - 单腔场景（1 腔）仍显示，让用户知道这个字段存在
-   */
+  /* meta 信息（如"· 4 腔"）：次要颜色、正常字重 */
   &__meta {
     font-size: 13px;
     font-weight: 400;
@@ -347,24 +276,14 @@ function shapeIcon(shape?: string): string {
     margin-left: 2px;
   }
 
-  /*
-   * cavity 内的 divider text 背景覆盖（局部）
-   * - Element Plus divider text 默认 var(--el-bg-color, #fff)
-   * - cavity-block 背景是 var(--color-bg-overlay, #f5f7fa)，白底突兀
-   * - 用 :deep() 局部覆盖（不影响 cavity 外的白底页面）
-   * - 这里写 background-color: var(--color-bg-overlay) 而不是 inherit
-   *   因为 inherit 在 Element Plus divider 上无效（text 直接父级 .el-divider 是 transparent）
-   */
+  /* cavity 内的 divider text 背景覆盖（局部）：Element Plus divider text 默认 var(--el-bg-color, #fff)，cavity-block 背景是 var(--color-bg-overlay, #f5f7fa)，白底突兀，用 :deep() 局部覆盖（不影响 cavity 外的白底页面）；这里写 background-color: var(--color-bg-overlay) 而不是 inherit，因为 inherit 在 Element Plus divider 上无效（text 直接父级 .el-divider 是 transparent） */
+
   :deep(.custom-form__divider .el-divider__text) {
     background-color: var(--color-bg-overlay, #faf5f6);
   }
 }
 
-/*
- * Gate 列表容器
- * - 与 cavity-list 一致风格：gap 分隔
- * - gate 块比 cavity 块小（内嵌在 cavity 内）
- */
+/* Gate 列表容器 */
 .gate-list {
   display: flex;
   flex-direction: column;
@@ -372,12 +291,7 @@ function shapeIcon(shape?: string): string {
   margin: 12px 0;
 }
 
-/*
- * gate 块：边框 + 浅背景色
- * - 与 cavity-block 一致的设计语言（嵌套卡片）
- * - 视觉权重比 cavity 轻（border 颜色稍浅、padding 略小）
- * - 背景 #fff（cavity 背景是 #f5f7fa，gate 在 cavity 内层所以白底反差更分明）
- */
+/* gate 块：边框 + 浅背景色 */
 .gate-block {
   border: 1px solid var(--color-border-lighter, #ebeef5);
   border-radius: 4px;
@@ -400,10 +314,7 @@ function shapeIcon(shape?: string): string {
     color: var(--el-text-color-primary, #303133);
   }
 
-  /*
-   * gate 元信息（"未选择形状"）：次要颜色、正常字重
-   * - 与 cavity-block__meta 一致
-   */
+  /* gate 元信息（"未选择形状"）：次要颜色、正常字重 */
   &__meta {
     font-size: 13px;
     font-weight: 400;
@@ -416,11 +327,7 @@ function shapeIcon(shape?: string): string {
     }
   }
 
-  /*
-   * 形状文字标签（如"矩形""梯形""圆形""环形"）
-   * - 替代 el-tag，视觉权重与 cavity 标题字色一致
-   * - 与 __title 中的 AppIcon 配合：图标 + 文字双标识形状
-   */
+  /* 形状文字标签（如"矩形""梯形""圆形""环形"） */
   &__shape {
     font-size: 13px;
     font-weight: 500;
@@ -434,10 +341,8 @@ function shapeIcon(shape?: string): string {
     }
   }
 
-  /*
-   * 尺寸字段容器（rect / trapezoid / circle / annulus）
-   * - 与基础字段用 dashed border 隔开，视觉分组
-   */
+  /* 尺寸字段容器（rect / trapezoid / circle / annulus）：与基础字段用 dashed border 隔开，视觉分组 */
+
   &__subsection {
     padding-top: 16px;
     border-top: 1px dashed var(--color-border-lighter, #ebeef5);

@@ -115,7 +115,6 @@ def create_company(
             is_active=True,
             description="公司管理员角色",
             company_id=company.id,
-            # TODO: 初始化公司管理员权限
             permission_codes=permission_codes
         )
         # 创建公司管理员用户

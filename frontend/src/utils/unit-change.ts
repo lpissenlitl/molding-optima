@@ -47,7 +47,7 @@ export function conversion(original_unit: string, converted_unit: string, origin
             }
         } else if (original_unit == "%" && converted_unit == "mm/s") {
             // 最大开模/合模/顶进/顶退速度 单位是mm/s
-            // console.log("转前{original_unit} 转后{converted_unit} 最大速度{max_open_velocity} 当前值{original_value}")
+
             if(convert_type == "opening") {
                 return caculatePercentToValue(original_value, injector_info.max_mold_opening_velocity, "开模速度", VALID_NUMBER)
             }
@@ -121,12 +121,11 @@ export function conversion(original_unit: string, converted_unit: string, origin
 
         } else if (original_unit == "cm/s" && converted_unit == "rpm" && getScrewCircumference(injector_info)) {
             // 螺杆转速,需要用到螺杆周长
-            // console.log("转前"+original_unit+" 转后"+converted_unit+"转后的数值"+original_value/getScrewCircumference(injector_info)*10*60)
+
             return (original_value / getScrewCircumference(injector_info) * 10 * 60).toFixed(VALID_NUMBER)
         } else if (original_unit == "cm/s" && converted_unit == "%") {
             // 最大可设定螺杆转速线速度 单位 是cm/s
-            // console.log(injector_info.max_screw_linear_velocity)
-            // console.log(injector_info.max_screw_rotation_speed)
+
             if(injector_info.max_screw_linear_velocity) {
                 return (original_value / injector_info.max_screw_linear_velocity * 100).toFixed(VALID_NUMBER + 1)
             }else if(injector_info.max_screw_rotation_speed) {
@@ -135,8 +134,7 @@ export function conversion(original_unit: string, converted_unit: string, origin
             }
         }else if (original_unit == "%" && converted_unit == "cm/s") {
             // 最大可设定螺杆转速线速度 单位 是cm/s
-            // console.log(injector_info.max_screw_linear_velocity)
-            // console.log(injector_info.max_screw_rotation_speed)
+
             if(injector_info.max_screw_linear_velocity) {
                 return (original_value * injector_info.max_screw_linear_velocity / 100).toFixed(VALID_NUMBER + 1)
             }else if(injector_info.max_screw_rotation_speed) {
@@ -273,10 +271,8 @@ export function getPressureCoefficient(injector_info: any, convert_type: string)
 }
 
 export function pressureConversion(original_unit: string, converted_unit: string, original_value: number, injector_info: any, convert_type?:string) {
-    // 压力转换
-    // 1kg/cm2 =14.223psi
-    // 1bar=14.5psi
-    // 1MPa=145psi
+    // 压力转换：1kg/cm2 = 14.223psi，1bar = 14.5psi，1MPa = 145psi
+
     let VALID_NUMBER = 2
     if (original_unit == "PSI" && converted_unit == "kgf/cm²") {
         return (14.223 * original_value).toFixed(VALID_NUMBER)

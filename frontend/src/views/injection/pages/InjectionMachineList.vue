@@ -1,13 +1,5 @@
-﻿<!--
-  InjectionMachineList - 注塑机列表页
+﻿<!-- InjectionMachineList - 注塑机列表页：搜索包装 BaseSearchForm + 列表 BaseTable（16 列，嵌套单元字段用 cell 插槽渲染），顶部 toolbar 添加/导出，行操作编辑/删除 -->
 
-  架构（2026-09-09 重写）：
-    - 搜索：InjectionSearchForm（保留 Options API 风格，封装 BaseSearchForm）
-    - 列表：BaseTable 组件（接管 el-table + el-pagination + change-table-size + TableSetting）
-    - 列定义：16 列，注射单元嵌套字段用 cell 插槽渲染（formatLabel 无法访问 row）
-    - 顶部 toolbar：添加机器、导出列表
-    - 行操作列：编辑、删除
--->
 <template>
   <div class="page-stack">
     <!-- 搜索表单 -->
@@ -106,9 +98,7 @@ import { machineMethod, exportListData } from '@/api'
 import { getReportDownloadUrl } from '@/utils/assert'
 import { hasPermission } from '@/utils/permission'
 
-// ============================================================================
 // 列表数据
-// ============================================================================
 
 interface ListData {
   total: number
@@ -133,9 +123,7 @@ const query = reactive({
   page_size: 100,
 })
 
-// ============================================================================
 // 列定义（16 列）
-// ============================================================================
 
 const table_columns = ref<BaseTableColumn[]>([
   // 基础字段
@@ -161,22 +149,16 @@ const table_columns = ref<BaseTableColumn[]>([
   { visible: true, label: '更新日期', prop: 'updated_at', minWidth: 170, align: 'center', header_align: 'center', sortable: false, tooltip: false },
 ])
 
-// ============================================================================
 // 工具函数
-// ============================================================================
 
-/**
- * 一对多字段格式化：数组 → "/"-拼接字符串
- * 兼容 undefined / 空数组 / 字段缺失
- */
+/** 一对多字段格式化：数组 → "/"-拼接字符串，兼容 undefined / 空数组 / 字段缺失 */
+
 function formatOneToMany(items: any[] | undefined, field: string, sep = '/'): string {
   if (!Array.isArray(items)) return ''
   return items.map((it) => it?.[field]).filter(Boolean).join(sep)
 }
 
-// ============================================================================
 // 路由 & API
-// ============================================================================
 
 const router = useRouter()
 
@@ -208,9 +190,7 @@ function onReset() {
   fetchList()
 }
 
-// ============================================================================
 // 操作
-// ============================================================================
 
 function toAddMachine() {
   if (!hasPermission('add_machine')) {
@@ -265,9 +245,7 @@ async function deleteMachine(row: any) {
   }
 }
 
-// ============================================================================
 // 生命周期
-// ============================================================================
 
 onMounted(() => {
   fetchList()

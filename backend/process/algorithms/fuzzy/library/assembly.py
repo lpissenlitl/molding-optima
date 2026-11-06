@@ -25,6 +25,7 @@ from process.algorithms.fuzzy.fuzzy_core.profiles import (
 )
 from process.algorithms.fuzzy.library.adapters import RuleAdapter
 from process.algorithms.fuzzy.library.contracts import (
+    LibraryIndex,
     LibraryRecord,
     RuleQueryContext,
     RuleRecord,
@@ -53,18 +54,12 @@ class RuleAssembler:
            `RuleService.matches_context`（冲突硬排除）
            + `RuleService.resolve_specificity`（特异级打分）。
 
-        ⚠️ **为什么不再按产品类别挑库**（2026-10-29 改造）：
-           旧实现用 `RuleService.product_to_library_codes` 把产品类别映射成
-           库编码候选，但那张映射表指向的编码（`packaging` / `auto_parts` /
-           `medical`）**在库里根本不存在**（实际库码是 `base` 与
-           `R2023*`/`R2024*` 这类编号）⇒ 候选必然落空 ⇒ 未显式指定库时
-           **永远只加载 base 库**，其余库（占全库 64%）从不参与推理。
-
-           更根本的问题是**职责错位**：产品类别与规则是否匹配，本来就是
-           **规则与上下文的关系**，应当由算法按规则自身的材料/产品标注判断
-           （这正是 `specs.py` 对 `product_category` 的原始定义：
-           「规则库精确筛选键（specificity 1/3）… 填了能命中高特异级规则，
-           不填退到默认规则」）。用一张写死的映射表把判断提前做掉，
+        ⚠️ **为什么不按产品类别挑库**：
+           产品类别与规则是否匹配，本来就是**规则与上下文的关系**，应当由算法
+           按规则自身的材料/产品标注判断（这正是 `specs.py` 对
+           `product_category` 的原始定义：「规则库精确筛选键
+           （specificity 1/3）… 填了能命中高特异级规则，不填退到默认规则」）。
+           用一张写死的「产品类别 → 库编码」映射表把判断提前做掉，
            既是「逻辑写死」，又让规则库无法按产品灵活增删。
 
         ⚠️ **不查库**，只产出编码候选 —— 由来源侧拿候选去取库；
@@ -75,9 +70,51 @@ class RuleAssembler:
         return None
 
     @staticmethod
+    def is_library_visible(
+        lib: LibraryRecord,
+        company_id: Optional[int],
+    ) -> bool:
+        """库可见性判据（**唯一定义处** —— 数据库来源与文件来源共用）。
+
+        业务策略：**系统库全平台公用；租户私库只对归属租户可见**。
+
+        ```
+        库可见 ⟺ owner_type == 'system'
+               OR (owner_type == 'tenant' AND company_id == 当前租户)
+        ```
+
+        ⚠️ **`company_id` 取不到 ⇒ 不过滤**（返回 True）：第三方集成
+          （`infer_from_provided`）、离线 runner、examples 导出脚本都
+          **没有租户上下文** ⇒ 缺上下文时**不改变行为**（保持现状全量）。
+
+        ⚠️ **按「库归属」判定，不按「规则归属」**：规则的 `company_id`
+          保留原租户值作溯源（晋升后仍记着来自哪家租户的经验），
+          **不影响可见性** ⇒ 隔离只看库归属。
+
+        ⚠️ **归属类型缺失 ⇒ 按系统库处理**（`or 'system'`）：不因字段缺失
+          而静默踢掉整库规则（那会直接让某个租户的推荐全空）。
+
+        Args:
+            lib: 库档案（`LibraryRecord`）。
+            company_id: 当前租户公司主键（None = 无租户上下文）。
+
+        Returns:
+            该库对当前租户是否可见。
+        """
+        if company_id is None:
+            # 无租户上下文 ⇒ 不过滤（保持现状）
+            return True
+        if (lib.owner_type or 'system') == 'system':
+            # 系统库：全平台公用
+            return True
+        # 租户私库：只有归属租户可见
+        return lib.company_id is not None and lib.company_id == company_id
+
+    @staticmethod
     def select_libraries(
         candidates: Optional[List[str]],
-        index: Dict[str, LibraryRecord],
+        index: LibraryIndex,
+        context: Optional[RuleQueryContext] = None,
     ) -> List[LibraryRecord]:
         """选库（**未指定 ⇒ 全量模糊库**；指定 ⇒ 按候选 + 通用兜底库）。
 
@@ -87,7 +124,8 @@ class RuleAssembler:
           `is_active` 且 `library_type == 'fuzzy'` 的库
           （专家库不是模糊规则库，不参与）；
         - `candidates` 有值 ⇒ 沿用原口径：
-          - 候选编码按顺序取库，**重复的编码只取一次**；
+          - 候选编码按顺序取库，**同一编码的多条记录全取**
+            （同码多库是合法状态：库编码跨租户可重复）；
           - 停用的库（`is_active=False`）不取；
           - 候选库**不按库类型过滤**（用户可能显式指定任意库）；
           - 通用兜底库 `base` 追加在最后，且**要求 `library_type == 'fuzzy'`**
@@ -96,10 +134,22 @@ class RuleAssembler:
         两种口径最后都按 `priority` **降序**稳定排序（同 priority 时候选顺序
         决定先后）。
 
+        ⚠️ **可见性过滤在本方法收口**（`is_library_visible`）：谓词只在
+          这里实现一次，两条来源共用 ⇒ 不会出现「数据库来源过滤了、文件来源
+          没过滤」的分叉（那会让同一批规则在两条路径下的命中集合不同，
+          而且**不报错**，只是结果悄悄不同）。
+
+        ⚠️ **同码多库靠可见性裁决**：索引里同码的多个库（各租户的同名私库）
+          不会被丢掉 —— 谁该被看到由 `is_library_visible` 判（租户私库只对
+          归属租户可见）⇒ 不会串库，也不会让别家的库静默消失。
+
         Args:
             candidates: 候选库编码（`library_code_candidates` 产出；
                 `None` = 未指定 ⇒ 全量）。
-            index: `library_code` → `LibraryRecord` 的索引（由来源侧提供）。
+            index: `library_code` → **同码全部** `LibraryRecord` 的索引
+                （由来源侧提供）。
+            context: 查询上下文（提供 `company_id` = 当前租户；
+                None = 无租户上下文 ⇒ 不过滤）。
 
         Returns:
             选中的库（按 priority 降序）。
@@ -107,26 +157,37 @@ class RuleAssembler:
         libraries: List[LibraryRecord] = []
         if candidates is None:
             # 未指定 ⇒ 全量模糊库（适用性交由规则级判定，见上）
-            for lib in index.values():
-                if not lib.is_active or lib.library_type != 'fuzzy':
-                    continue
-                if lib not in libraries:
-                    libraries.append(lib)
+            for records in index.values():
+                for lib in records:
+                    if not lib.is_active or lib.library_type != 'fuzzy':
+                        continue
+                    if lib not in libraries:
+                        libraries.append(lib)
         else:
             for code in candidates:
-                lib = index.get(code)
-                if lib is None or not lib.is_active:
-                    continue
-                if lib not in libraries:
-                    libraries.append(lib)
+                for lib in index.get(code, []):
+                    if not lib.is_active:
+                        continue
+                    if lib not in libraries:
+                        libraries.append(lib)
 
             # 通用兜底库（必须存在）
-            base = index.get('base')
-            if (base is not None and base.is_active
-                    and base.library_type == 'fuzzy' and base not in libraries):
-                libraries.append(base)
+            for lib in index.get('base', []):
+                if (lib.is_active and lib.library_type == 'fuzzy'
+                        and lib not in libraries):
+                    libraries.append(lib)
 
-        return sorted(libraries, key=lambda l: -l.priority)
+        # 可见性过滤（**唯一定义处**：RuleAssembler.is_library_visible）
+        tenant_id = context.company_id if context is not None else None
+        visible = [lib for lib in libraries
+                   if RuleAssembler.is_library_visible(lib, tenant_id)]
+        hidden = len(libraries) - len(visible)
+        if hidden:
+            logger.info(
+                '[RuleAssembler] 租户隔离：%d 个库对当前租户不可见（可见 %d 个）',
+                hidden, len(visible))
+
+        return sorted(visible, key=lambda l: -l.priority)
 
     # —— 组装 ————————————————————————————————————————————————
 
@@ -134,7 +195,7 @@ class RuleAssembler:
     def assemble(
         libraries: List[LibraryRecord],
         context: RuleQueryContext,
-        methods_by_library: Dict[str, List[RuleRecord]],
+        methods_by_library: Dict[int, List[RuleRecord]],
     ) -> List[RuleProfile]:
         """把各库取回的方法组装成内核规则档案。
 
@@ -162,7 +223,10 @@ class RuleAssembler:
         Args:
             libraries: 选中的库（`select_libraries` 产出，已按优先级降序）。
             context: 查询上下文。
-            methods_by_library: `library_code` → 该库的规则记录列表。
+            methods_by_library: **库主键** → 该库的规则记录列表。
+                ⚠️ **按主键归档，不按库编码归档**：库编码跨租户可重复
+                  （同码多库是合法状态）⇒ 按编码归档会让同码两库互相覆盖
+                  （后取的那库顶掉前一个），别家的规则被静默张冠李戴。
 
         Returns:
             内核规则档案列表。
@@ -171,7 +235,7 @@ class RuleAssembler:
         dropped = 0
 
         for lib in libraries:
-            for record in methods_by_library.get(lib.library_code, []):
+            for record in methods_by_library.get(lib.library_id, []):
                 # 适用性闸门（匹配谓词的唯一口径）
                 if not RuleService.matches_context(
                     record.polymer_abbreviation, record.product_category,

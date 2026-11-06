@@ -1,18 +1,4 @@
-<!--
-  RuleLibraryCard.vue - 单个规则库卡片（Section 1 网格中的一项）
-
-  展示字段（按重要性排序）：
-  - 顶部图标 + 库名称
-  - 归属标签（系统级/租户级）
-  - 库编码 + 描述（截断 2 行）
-  - 底部统计：规则方法数 / 专家规则数 / 版本号 / 优先级
-  - 状态指示器
-
-  交互：
-  - 卡片整体点击 → 触发 @click（进入详情）
-  - 右上角编辑/删除按钮 → 触发 @edit / @delete（系统库禁用）
-  - 系统库：owner_type=system 时只读，不响应整体点击
--->
+<!-- RuleLibraryCard.vue - 单个规则库卡片：展示图标+名称、归属标签（系统级/租户级）、库编码+描述（截断 2 行）、底部统计（规则方法数/专家规则数/版本号/优先级）与状态指示器；卡片整体点击进详情，右上角编辑/删除按钮触发 @edit/@delete（系统库禁用且不响应整体点击） -->
 <template>
   <div
     class="rule-library-card"
@@ -119,17 +105,9 @@ import type { RuleLibrary } from '@/types/rule'
 const props = withDefaults(
   defineProps<{
     library: RuleLibrary
-    /**
-     * 当前用户是否为超级管理员
-     * - true：显示「专家规则」统计项（平台级内部数据仅超管可见）
-     * - false：隐藏「专家规则」统计项（租户用户不可见）
-     */
+    /** 当前用户是否为超级管理员 */
     isSuperuser?: boolean
-    /**
-     * 是否只读（系统库 + 非超管 = 只读）
-     * - true：卡片只读，禁用编辑/删除按钮，但整体点击仍可进入详情查看
-     * - false：正常可编辑/删除
-     */
+    /** 是否只读（系统库 + 非超管 = 只读） */
     isReadonly?: boolean
   }>(),
   {

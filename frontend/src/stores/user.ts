@@ -1,11 +1,8 @@
 /**
  * User Store — 当前登录用户
- *
- * - 字段全用 snake_case（对齐后端，零转换）
+ * - 字段全用 snake_case（对齐后端，零转换）；getters 用 snake_case，actions 用 camelCase
  * - 持久化整个 store（含 token），刷新页面不丢登录态
- * - getters 用 snake_case，actions 用 camelCase
- *
- * 后端对齐：backend/identity/services/user_service.py:213-227
+ * - 后端对齐：backend/identity/services/user_service.py:213-227
  */
 import { defineStore } from 'pinia'
 import {
@@ -130,10 +127,7 @@ export const useUserStore = defineStore('user', {
       await resetMyPasswordApi(payload)
     },
 
-    /**
-     * 用户登出
-     * - 通知后端吊销 token（best-effort，失败也不阻塞清空）
-     */
+    /** 用户登出：通知后端吊销 token（best-effort，失败也不阻塞清空） */
     async logout(): Promise<void> {
       try {
         await logoutApi()
