@@ -206,7 +206,9 @@ const {
 } = useConditionDerived(condition)
 
 const rules: FormRules = {
-  // 键名必须与 el-form-item 的 prop 完全一致（Element Plus 用 getProp(rules, prop) 取规则）；⚠️ 三类外键的 prop 一律用嵌套路径 "*_info.id"，顶层 "*_id" 是提交态平铺字段（buildPayload 从 *_info.id 推导），编辑期恒为空，用它做校验目标会永远失败
+  // 键名必须与 el-form-item 的 prop 完全一致（Element Plus 用 getProp(rules, prop) 取规则）
+  // ⚠️ 三类外键的 prop 一律用嵌套路径 "*_info.id"：顶层 "*_id" 是提交态平铺字段（buildPayload
+  //    从 *_info.id 推导），编辑期恒为空，用它做校验目标会永远失败
   'mold_info.id': [{ required: true, message: '请选择模具', trigger: 'change' }],
   shot_index: [{ required: true, message: '请选择工艺射次', trigger: 'change' }],
   'machine_info.id': [{ required: true, message: '请选择注塑机', trigger: 'change' }],
@@ -248,7 +250,9 @@ defineExpose({
   },
   /** 切换展开/折叠 */
   toggle,
-  /** 强制展开（父组件主动触发，不检查 isReadOnly）：因 props.disabled 是父 render 时的 stale snapshot，resetForm 同步清空后要到 microtask 才 flush，此时 isReadOnly 会误判为 true 导致 UI 永远折叠 */
+  /** 强制展开（父组件主动触发，不检查 isReadOnly）
+   *  因 props.disabled 是父 render 时的 stale snapshot，resetForm 同步清空后要到 microtask 才 flush，
+   *  此时 isReadOnly 会误判为 true 导致 UI 永远折叠 */
   expand: () => {
     internalExpanded.value = true
     emit('update:expanded', true)
@@ -362,7 +366,8 @@ watch(
   }
 }
 
-/* 折叠态简要信息项：__value 用 max-width + ellipsis 防某项过长挤出其他项（min-width: 0 是关键，flex 子项默认 min-width: auto 会阻止 ellipsis 生效） */
+/* 折叠态简要信息项：__value 用 max-width + ellipsis 防某项过长挤出其他项
+   （min-width: 0 是关键，flex 子项默认 min-width: auto 会阻止 ellipsis 生效） */
 .summary-item {
   display: inline-flex;
   align-items: center;

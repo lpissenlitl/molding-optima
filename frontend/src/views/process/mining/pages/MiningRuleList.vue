@@ -1,4 +1,5 @@
-<!-- MiningRuleList.vue - 候选规则审核台：规则挖掘产出的候选规则列表（通过 / 驳回入口）；仅管理员可见（前端 adminOnly 过滤 + 后端 require_admin 二次防护） -->
+<!-- MiningRuleList.vue - 候选规则审核台：规则挖掘产出的候选规则列表（通过 / 驳回入口）
+     仅管理员可见（前端 adminOnly 过滤 + 后端 require_admin 二次防护） -->
 <template>
   <div class="mining-rule-list">
     <!-- 搜索卡片 -->

@@ -4,7 +4,7 @@
     <div class="two-column-layout">
       <!-- 左侧卡片：注射 + VP切换 + 保压 -->
       <el-card class="process-card injection-card">
-        <!-- 1. 注射段 -->
+        <!-- 注射段 -->
         <div class="section-header">
           注射参数
         </div>
@@ -345,7 +345,7 @@
 
       <!-- 右侧卡片：储料/计量 -->
       <el-card class="process-card metering-card">
-        <!-- 4. 储料/计量段 -->
+        <!-- 储料/计量段 -->
         <div class="section-header">
           计量参数
         </div>
@@ -697,17 +697,14 @@ export default {
       type: Object,
       default: () => structuredClone(settingProcessForm)
     },
-    // 当前工艺数据
     settingProcess: {
       type: Object,
       required: true
     },
-    // 机器信息
     machineInfo: {
       type: Object,
       default: () => structuredClone(machineInfoForm)
     },
-    // 只读模式
     readonly: {
       type: Boolean,
       default: false
@@ -778,19 +775,15 @@ export default {
       },
       immediate: true
     },
-    // 监听注射段数变化
     "setting_process.injection.stage"() {
       this.adjustTableData("injection")
     },
-    // 监听保压段数变化
     "setting_process.holding.stage"() {
       this.adjustTableData("holding")
     },
-    // 监听计量段数变化
     "setting_process.metering.stage"() {
       this.adjustTableData("metering")
     },
-    // 监听料筒温度档数变化
     "setting_process.barrel_temperature.stage"() {
       this.adjustTableData("barrel_temperature")
     }
@@ -833,9 +826,8 @@ export default {
 
       const current_value = this.getNestedValue(this.setting_process, path)
       const original_value = this.getNestedValue(this.original_process, path)
-      // 空值归一化：null / undefined / '' 互为"空"
-      // - 业务语义：input 清空后 v-model 值为 ''，与初始 null 同义
-      // - 双向绑定 input 的常见"空"表示（v-number 不 emit，el-input 已被 Vue 设为 ''）
+      // 空值归一化：null / undefined / '' 互为“空”
+      // - input 清空后 v-model 值为 ''（v-number 不 emit，el-input 由 Vue 设为 ''），与初始 null 同义
       // - 0 / 0.0 不视为空（数值字段 0 有意义）
       if (this.isEmptyValue(current_value) && this.isEmptyValue(original_value)) return false
       if (this.isEmptyValue(current_value) !== this.isEmptyValue(original_value)) return true

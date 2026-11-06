@@ -108,7 +108,7 @@ export interface ProcessParameterFlat {
 /** 嵌套 settingProcessForm 的类型别名（避免本文件依赖具体常量） */
 type SettingProcessForm = typeof settingProcessForm
 
-/** 注入类段 字段名常量（保留以备未来按前缀动态展开）*/
+/** 注入类段 字段名常量 */
 const PRES = ['inj_pres', 'hold_pres', 'met_pres']
 const SPD = ['inj_spd', 'hold_spd', 'met_rot_spd']
 const POS = ['inj_pos', 'met_pos']
@@ -233,7 +233,8 @@ export function parameterToFlat(nested: SettingProcessForm | null | undefined): 
   return flat
 }
 
-/** flat → 嵌套 settingProcessForm：以 settingProcessForm 为模板底，缺失字段填 null 不补默认值；barrel_temperature sections[0]=喷嘴、[1..9]=料筒，与 parameterToFlat 互逆 */
+/** flat → 嵌套 settingProcessForm：以 settingProcessForm 为模板底，缺失字段填 null 不补默认值
+ *  barrel_temperature sections[0]=喷嘴、[1..9]=料筒，与 parameterToFlat 互逆 */
 export function parameterFromFlat(flat: ProcessParameterFlat | null | undefined): SettingProcessForm {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const f: any = flat || {}

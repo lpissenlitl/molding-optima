@@ -31,7 +31,8 @@
 </template>
 
 <script setup lang="ts">
-/** 工艺条件搜索表单：props.queryDetail 由父组件提供作为初始查询条件，双向绑定通过 BaseSearchForm 内部完成；emit('search') / emit('reset') 通知父组件触发查询 */
+/** 工艺条件搜索表单：props.queryDetail 由父组件提供作为初始查询条件，双向绑定通过 BaseSearchForm 内部完成
+ *  emit('search') / emit('reset') 通知父组件触发查询 */
 import BaseSearchForm from '@/components/BaseSearchForm.vue'
 import type { SearchItem } from '@/types/search-item'
 import { CONDITION_STATUS_OPTIONS } from '@/views/process/shared/condition-status'

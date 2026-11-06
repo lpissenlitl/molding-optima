@@ -101,7 +101,7 @@
         {{ row.product_category || '不限' }}
       </template>
     </el-table-column>
-    <!-- 状态：高频筛选维度，提到“优先级”之前，提升扫表焦点 -->
+    <!-- 状态：高频筛选维度，置于「优先级」之前以提升扫表焦点 -->
     <el-table-column label="状态" prop="is_active" width="80" align="center">
       <template #default="{ row }">
         <el-tag :type="row.is_active ? 'success' : 'info'">

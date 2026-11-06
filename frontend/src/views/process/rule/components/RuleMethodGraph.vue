@@ -1,4 +1,5 @@
-<!-- RuleMethodGraph.vue - 模糊规则流程图预览：三列布局（左 IF 条件列 / 中 AND 聚合节点 / 右 THEN 动作列），采用聚合节点模式替代笛卡尔积全连接；节点点击 emit('node-click') 让父组件滚动到对应行并高亮 -->
+<!-- RuleMethodGraph.vue - 模糊规则流程图预览：三列布局（左 IF 条件列 / 中 AND 聚合节点 / 右 THEN 动作列） -->
+<!-- 采用聚合节点模式替代笛卡尔积全连接；节点点击 emit('node-click') 让父组件滚动到对应行并高亮 -->
 <template>
   <el-card
     header="流程图预览"
@@ -109,7 +110,8 @@
 </template>
 
 <script setup lang="ts">
-/** 模糊规则流程图预览：节点颜色/图标按 keyword.category 决定；连线分两段（输入汇聚到 AND 节点、AND 节点发散到各动作）避免笛卡尔积；坐标按 DOM 实时计算 */
+/** 模糊规则流程图预览：节点颜色/图标按 keyword.category 决定
+ *  连线分两段（输入汇聚到 AND 节点、AND 节点发散到各动作）避免笛卡尔积；坐标按 DOM 实时计算 */
 import { ref, onMounted, onBeforeUnmount, nextTick, watch as watchRef, computed } from 'vue'
 import type { RuleKeyword } from '@/types/rule'
 

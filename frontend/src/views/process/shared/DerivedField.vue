@@ -1,4 +1,5 @@
-<!-- DerivedField - 派生字段展示组件（只读 description list 风格）：替换 "form-item + disabled el-input" 的伪只读模式，接受数字/字符串/布尔，null/undefined 自动转 "—" 占位，数字 + unit 自动拼接，可选 tooltip 承载领域知识；纯展示不参与 el-form 校验 -->
+<!-- DerivedField - 派生字段展示组件（只读 description list 风格）：替换 "form-item + disabled el-input" 的伪只读模式 -->
+<!-- null/undefined 自动转 "—" 占位，数字 + unit 自动拼接，可选 tooltip 承载领域知识；纯展示不参与 el-form 校验 -->
 <template>
   <div class="derived-field">
     <span class="derived-field__label">{{ label }}</span>

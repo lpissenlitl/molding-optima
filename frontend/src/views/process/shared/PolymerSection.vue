@@ -180,7 +180,8 @@ const condition = inject(ConditionKey)!
 const polymerAbbreviation = ref<string>(condition.polymer_info?.abbreviation ?? '')
 const selectedGrade = ref<string>(condition.polymer_info?.grade ?? '')
 
-// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零（局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）；⚠️ internalPolymerClear 是内部主动清空 polymer_info 的标志位，消费后须跳过回填，否则会把用户刚选的新简称一起清掉
+// 反向同步：父组件 resetForm 或外部条件被清空时，输入框显示值也清零（局部 ref 只在 setup 初始化一次，不 watch condition 就会停留在旧值）
+// ⚠️ internalPolymerClear 是内部主动清空 polymer_info 的标志位，消费后须跳过回填，否则会把用户刚选的新简称一起清掉
 let internalPolymerClear = false
 
 watch(
@@ -198,7 +199,8 @@ watch(
   (val) => { selectedGrade.value = val ?? '' },
 )
 
-// 简称/牌号变空 → 自动重置材料派生信息（覆盖点 X 按钮 @clear 与手动删空两条路径）；同时把输入框状态镜像到 condition.polymer_abbreviation，因为 el-form-item 的校验目标必须落在 el-form 的 model 上
+// 简称/牌号变空 → 自动重置材料派生信息（覆盖点 X 按钮 @clear 与手动删空两条路径）
+// 同时把输入框状态镜像到 condition.polymer_abbreviation，因为 el-form-item 的校验目标必须落在 el-form 的 model 上
 watch(
   polymerAbbreviation,
   (val) => {

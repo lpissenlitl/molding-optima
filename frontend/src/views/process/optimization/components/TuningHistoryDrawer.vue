@@ -49,7 +49,6 @@
           </el-scrollbar>
         </aside>
 
-        <!-- 右：全量只读详情 -->
         <main class="history-drawer__detail">
           <el-empty
             v-if="!current_item"

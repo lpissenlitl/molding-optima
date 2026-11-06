@@ -136,7 +136,8 @@ export interface Condition {
   injection_index?: number | null
   /** 材料 id —— 【仅提交态】顶层平铺字段，由 buildPayload 从 polymer_info.id 推导。 */
   polymer_id?: number | null
-  /** 塑料简称 —— 【仅前端校验用】PolymerSection 输入框当前值的镜像（校验目标必须落在 el-form 的 model 上）；由 PolymerSection 的 watch(polymerAbbreviation) 单向写入，buildPayload 不挑此字段，不提交后端。 */
+  /** 塑料简称 —— 【仅前端校验用】PolymerSection 输入框当前值的镜像（校验目标必须落在 el-form 的 model 上）
+   *  由 PolymerSection 的 watch(polymerAbbreviation) 单向写入，buildPayload 不挑此字段，不提交后端。 */
   polymer_abbreviation?: string | null
   process_context?: Record<string, any>
   mold_info?: MoldInfo | null

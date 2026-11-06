@@ -1,4 +1,5 @@
-<!-- RuleKeywordTab.vue - 关键词 tab 内容：父组件 RuleLibraryList 用 v-show 控制显示（保持组件存活），接收 activeTab + isSuperuser，自行 watch activeTab 决定是否加载数据；复用全局 custom-form.scss 样式，不写 scoped -->
+<!-- RuleKeywordTab.vue - 关键词 tab 内容：父组件用 v-show 控制显示（保持组件存活），自行 watch activeTab 决定是否加载数据 -->
+<!-- 复用全局 custom-form.scss 样式，不写 scoped -->
 <template>
   <div class="tab-panel">
     <!-- 搜索卡片 -->
@@ -222,7 +223,7 @@ import {
 const props = defineProps<{
   /** 当前激活的 tab key（来自父组件）*/
   activeTab: 'libraries' | 'keywords'
-  /** 是否超级管理员（保留字段，便于未来按角色控制关键词）*/
+  /** 是否超级管理员 */
   isSuperuser: boolean
 }>()
 
@@ -275,7 +276,6 @@ const ALL_UNIT_OPTIONS: { value: string; label: string }[] = [
 ]
 const currentUnitOptions = computed(() => {
   if (!keywordForm.keyword_type) {
-    // 未选 keyword_type：展示所有常用单位，避免选项为空
     return ALL_UNIT_OPTIONS
   }
   return UNIT_OPTIONS_BY_TYPE[keywordForm.keyword_type as KeywordType] || []

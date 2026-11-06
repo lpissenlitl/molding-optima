@@ -348,7 +348,9 @@
 </template>
 
 <script setup lang="ts">
-/** 模糊规则方法编辑表单：new / edit / detail 三模式由 route 切换；结构化字段（preconditions + actions）自动生成 rule_description / rule_explanation（不允许直接编辑规则文本）；字典一次性加载后按 category 分组；流程图随字段实时刷新 */
+/** 模糊规则方法编辑表单：new / edit / detail 三模式由 route 切换
+ *  - 结构化字段（preconditions + actions）自动生成 rule_description / rule_explanation（不允许直接编辑规则文本）
+ *  - 字典一次性加载后按 category 分组；流程图随字段实时刷新 */
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -371,7 +373,8 @@ import {
   PARAMETER_LEVEL_LABELS,
 } from '@/constants/rule-const'
 
-/** 根据当前条件的 keyword 选填合适的 LEVEL_LABELS（parameter → PARAMETER_LEVEL_LABELS，defect / defect_position → DEFECT_LEVEL_LABELS）。 */
+/** 根据当前条件的 keyword 选填合适的 LEVEL_LABELS（parameter → PARAMETER_LEVEL_LABELS，
+ *  defect / defect_position → DEFECT_LEVEL_LABELS）。 */
 function levelLabelsFor(cond: ConditionItem): Record<string, string> {
   const kw = allKeywords.value.find(k => k.keyword_name === cond.keyword)
   return kw?.category === 'parameter' ? PARAMETER_LEVEL_LABELS : DEFECT_LEVEL_LABELS
@@ -469,7 +472,8 @@ function aliasOf(keywordName: string): string {
 }
 
 // 表单数据
-/** 前置条件：keyword（首项限缺陷类别）+ level（按 keyword.fuzzy_level 取档位）；条件侧是纯模糊集词，不需要运算符，生成格式 IF keyword level AND ... */
+/** 前置条件：keyword（首项限缺陷类别）+ level（按 keyword.fuzzy_level 取档位）
+ *  条件侧是纯模糊集词，不需要运算符，生成格式 IF keyword level AND ... */
 interface ConditionItem {
   keyword: string
   level: string
@@ -478,7 +482,8 @@ interface ConditionItem {
 interface ActionItem {
   keyword: string
   action: string
-  /** action 调整量：el-input，接受任意文本（数值或模糊量词）。前端不做任何限制、不预设下拉——后端按 value 内容自动分发到 NumTskRuleNet（数值结论，主路径）或 FuzzyRuleNet（Mamdani 模糊量词）。 */
+  /** action 调整量：el-input，接受任意文本（数值或模糊量词）。前端不做任何限制、不预设下拉
+   *  ——后端按 value 内容自动分发到 NumTskRuleNet（数值结论，主路径）或 FuzzyRuleNet（Mamdani 模糊量词）。 */
   value: string
 }
 
@@ -589,7 +594,9 @@ function onGraphNodeClick(payload: { type: 'condition' | 'action'; index: number
 // 自动生成规则文本（核心逻辑）
 
 function generateRuleText() {
-  // 规则描述（机器语言）：IF keyword_level AND keyword_level THEN keyword_action_value AND ...（token 化契约见后端 _split_phase：条件侧 keyword_level 必须是单 token，勿写成 "SHORTSHOT low"；动作侧用 _ 分隔 name_action_value，如 MEL_add_10 / MEL_add_low）
+  // 规则描述（机器语言）：IF keyword_level AND keyword_level THEN keyword_action_value AND ...
+  // token 化契约见后端 _split_phase：条件侧 keyword_level 必须是单 token，勿写成 "SHORTSHOT low"；
+  // 动作侧用 _ 分隔 name_action_value，如 MEL_add_10 / MEL_add_low
   const condDesc = form.preconditions
     .filter(c => c.keyword && c.level)
     .map(c => `${c.keyword}_${c.level}`)
@@ -843,7 +850,8 @@ onMounted(() => {
 
 .edit-area,
 .graph-area {
-  /* 1:1 左右布局（大屏 ≥ 1100px）：flex: 1 1 0 平分宽度（不用 flex-basis: 50%，否则右侧起始 50% 再 grow 会占 ~75%）；min-width: 0 防溢出；<1100px 改上下布局 */
+  /* 1:1 左右布局（大屏 ≥ 1100px）：flex: 1 1 0 平分宽度（不用 flex-basis: 50%，否则右侧起始 50% 再 grow 会占 ~75%）
+     min-width: 0 防溢出；<1100px 改上下布局 */
   flex: 1 1 0;
   min-width: 0;
 }

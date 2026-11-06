@@ -226,11 +226,7 @@
       </div>
     </div>
 
-    <!--
-      添加缺陷按钮区：暂不开放多缺陷（需求未明确），隐藏保留备将来恢复
-      - 打开方式：把 v-if 改为 true，或改为某个可控 prop
-      - 同时需恢复：MAX_DEFECT_COUNT、canAddDefect、addDefect() 的实际使用
-    -->
+    <!-- 添加缺陷按钮区：多缺陷暂不开放（需求未明确），整块隐藏保留 -->
     <div v-if="false" class="add-button-wrapper">
       <el-button
         v-if="canAddDefect"
@@ -300,8 +296,7 @@ const defectList = ref<DefectItem[]>([])
 
 /**
  * 是否「合格」：合格态产品没有缺陷 ⇒ 缺陷区整体隐藏并清空。
- * ⚠️ 这里只隐藏**缺陷输入区**，上面的「工艺效果评价」单选必须保留 ——
- *    用户正是通过它切到「合格」的。
+ * ⚠️ 只隐藏缺陷输入区，上面的「工艺效果评价」单选必须保留（用户靠它切到合格）。
  */
 const isQualified = computed(() => props.tuningResult === 'qualified')
 
@@ -342,7 +337,6 @@ function makeEmptyDefect(): DefectItem {
   }
 }
 
-// 首次同步
 rebuildFromProps(props.modelValue)
 
 watch(
@@ -351,10 +345,7 @@ watch(
   { deep: true },
 )
 
-/**
- * 合格态切换：合格 ⇒ 隐藏并清空缺陷区（含父级已填的）；
- * 离开合格 ⇒ 按当前值重建（空 → 一张空缺陷卡）。
- */
+/** 合格态切换：合格 ⇒ 隐藏并清空缺陷区（含父级已填的）；离开合格 ⇒ 按当前值重建 */
 watch(
   () => props.tuningResult,
   (val) => {
@@ -368,7 +359,6 @@ watch(
   },
 )
 
-/** 本地变化 → emit 到父级 */
 function syncToParent() {
   emit(
     'update:modelValue',
@@ -468,7 +458,7 @@ const uploadHandlers = {
     previewVisible.value = true
   },
   onRemove: () => {
-    // 仅前端预览，删除即同步；后续接入上传时再调后端
+    // 仅前端预览，删除即同步
   },
 }
 
@@ -482,11 +472,8 @@ function makeModelPickerHandler(defect: DefectItem) {
 </script>
 
 <style lang="scss" scoped>
-/*
- * 类层级 ≤ 2：.defect-feedback > __item / __hint 等
- * 不带 title（由父级 round-detail-block__title 提供）
- * 每个缺陷独立卡片（__item），可堆叠多个
- */
+/* 类层级 ≤ 2：.defect-feedback > __item / __hint 等
+   不带 title（由父级 round-detail-block__title 提供） */
 .defect-feedback {
   &__tuning-result {
     display: flex;
@@ -558,7 +545,6 @@ function makeModelPickerHandler(defect: DefectItem) {
     }
   }
 
-  // 未选时退化为灰色提示
   &__title-pending {
     font-size: 13px;
     font-weight: 500;
@@ -573,7 +559,6 @@ function makeModelPickerHandler(defect: DefectItem) {
     padding: 4px 12px 12px;
   }
 
-  // tabs 头部紧凑一些
   &__tabs :deep(.el-tabs__header) {
     margin-bottom: 8px;
   }
@@ -598,7 +583,7 @@ function makeModelPickerHandler(defect: DefectItem) {
     line-height: 1.5;
   }
 
-  // 提示文案（warning 色，::before 绘制小圆点）
+  // 提示文案：warning 色 + ::before 小圆点
   &__hint {
     position: relative;
     padding-left: 12px;
@@ -619,7 +604,6 @@ function makeModelPickerHandler(defect: DefectItem) {
     }
   }
 
-  // DEFECTFREE 选中时的友好提示
   &__ok-hint {
     display: flex;
     align-items: center;

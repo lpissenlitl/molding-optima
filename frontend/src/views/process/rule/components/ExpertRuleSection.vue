@@ -1,4 +1,5 @@
-<!-- ExpertRuleSection.vue - 专家规则 section（ExpertRule 列表 + CRUD）：RuleLibraryDetail 的子组件，接收 libraryId prop，自包含搜索/列表/分页/新建编辑抽屉（含 JSON 实时校验），emit('changed') 通知父组件刷新 expert_rule_count；专家规则属平台级内部规则，仅平台超管可进入（父组件按超管分流，非超管展示只读说明） -->
+<!-- ExpertRuleSection.vue - 专家规则 section（ExpertRule 列表 + CRUD） -->
+<!-- 专家规则属平台级内部规则，仅平台超管可进入（父组件按超管分流，非超管展示只读说明） -->
 <template>
   <div ref="sectionRef" class="section-container">
     <!-- 搜索区 -->
@@ -497,7 +498,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Flex 布局：.section-container 为垂直 flex 容器；.search-container / .pagination 设 flex-shrink: 0 不被压缩；.table-wrapper 用 flex: 1 + min-height: 0 吃掉剩余空间（min-height: 0 是关键，flex 子项默认 min-height: auto 会被内容撑开） */
+/* Flex 布局：.section-container 为垂直 flex 容器
+   - .search-container / .pagination 设 flex-shrink: 0 不被压缩
+   - .table-wrapper 用 flex: 1 + min-height: 0 吃掉剩余空间（min-height: 0 是关键，flex 子项默认 min-height: auto 会被内容撑开） */
 .section-container {
   display: flex;
   flex-direction: column;

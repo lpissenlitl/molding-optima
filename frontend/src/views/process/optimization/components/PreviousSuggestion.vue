@@ -70,25 +70,22 @@ function directionIcon(dir: SuggestionDirection): string {
   return map[dir] || 'mdi:circle-small'
 }
 
-/** 规则引用格式化（'M001' → 'M001'；后续可加链接） */
+/** 规则引用格式化 */
 function formatRuleRef(ref: string): string {
   return ref
 }
 </script>
 
 <style lang="scss" scoped>
-/*
- * 浅色背景 + 左侧 3px 强调条（温和警示感，与"调整建议"语义匹配）
- * 不带 title（由父级 round-detail-block__title 提供）
- * 类层级 ≤ 2：.previous-suggestion > .previous-suggestion__group / __item / __category
- */
+/* 浅色背景 + 左侧 3px 强调条（温和警示感，与“调整建议”语义匹配）
+   不带 title（由父级 round-detail-block__title 提供）
+   类层级 ≤ 2：.previous-suggestion > .previous-suggestion__group / __item / __category */
 .previous-suggestion {
   padding: 10px 14px;
   background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%);
   border-left: 3px solid #e6a23c;
   border-radius: 4px;
 
-  /* 空状态（首轮 / 算法未返回） */
   &__empty {
     display: flex;
     align-items: center;
@@ -97,7 +94,6 @@ function formatRuleRef(ref: string): string {
     color: #909399;
   }
 
-  /* 每个 group 之间留白 */
   &__group {
     margin-top: 8px;
     &:first-child {
@@ -130,7 +126,6 @@ function formatRuleRef(ref: string): string {
     color: #303133;
   }
 
-  /* 调整方向图标（↑↓→等）*/
   &__direction {
     flex-shrink: 0;
     font-size: 14px;
@@ -155,7 +150,6 @@ function formatRuleRef(ref: string): string {
     min-width: 0;
   }
 
-  /* 规则引用（依据规则: M001 · M003） */
   &__rules {
     font-size: 11px;
     color: #909399;

@@ -444,7 +444,9 @@
 </template>
 
 <script setup lang="ts">
-/** LibraryParameterForm 工艺参数录入表单（工艺库模板编辑用）：与 optimization/components/TuningParameterPanel.vue 是两套独立组件（本组件无变更高亮、支持只读预览）；props.settingProcess 为嵌套工艺参数，props.machineInfo 决定单位系统 */
+/** LibraryParameterForm 工艺参数录入表单（工艺库模板编辑用）
+ *  - 与 optimization/components/TuningParameterPanel.vue 是两套独立组件（本组件无变更高亮、支持只读预览）
+ *  - props.settingProcess 为嵌套工艺参数，props.machineInfo 决定单位系统 */
 import { ref, computed, watch, reactive } from "vue";
 import { settingProcessForm } from "@/constants/process-const";
 
@@ -601,7 +603,8 @@ watch(
 
 <style scoped>
 /* ===== 表格 ===== */
-/* 参考 optimization/components/TuningParameterPanel.vue 的 .simple-table：表格整体 12px、表头 8px padding + 600 字重、表体 6px padding */
+/* 参考 optimization/components/TuningParameterPanel.vue 的 .simple-table：
+   表格整体 12px、表头 8px padding + 600 字重、表体 6px padding */
 .simple-table {
   width: 100%;
   font-size: 12px;

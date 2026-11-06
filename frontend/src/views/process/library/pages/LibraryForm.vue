@@ -1,4 +1,4 @@
-<!-- ProcessParameterForm - 工艺参数表单（new / edit / detail 三模式共用） -->
+<!-- LibraryForm.vue - 工艺档案表单（new / edit / detail 三模式共用） -->
 <template>
   <div class="process-condition-form">
     <div v-if="!loaded" v-loading="true" class="loading-placeholder" />
@@ -186,7 +186,9 @@ async function onSubmit() {
   }
 }
 
-// 仅回传后端可识别的字段；condition.*_info 是前端缓存不需要回传（业务身份锁字段 mold_id/machine_id/polymer_id 等发到后端后由 service.update_condition 处理；process_context 由后端管理，前端不构造空 dict）
+// 仅回传后端可识别的字段；condition.*_info 是前端缓存不需要回传
+// （业务身份锁字段 mold_id/machine_id/polymer_id 等发到后端后由 service.update_condition 处理；
+//  process_context 由后端管理，前端不构造空 dict）
 function buildPayload() {
   return {
     condition: {

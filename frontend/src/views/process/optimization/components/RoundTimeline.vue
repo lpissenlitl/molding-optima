@@ -27,8 +27,7 @@
             <el-tag size="small" :type="TYPE_TAG[round.type]">{{ TYPE_LABEL[round.type] }}</el-tag>
             <AppIcon v-if="round.sealed" icon="mdi:lock-outline" class="round-item__lock" />
           </div>
-          <!-- 占位 round（parameter_id 为 null）不显示时间：占位是页面初始化时建的，时间不准确
-            只有 infer / 优化 / 手动保存后真正“创建” round 时才显示 -->
+          <!-- 占位 round（parameter_id 为 null）不显示时间：占位是页面初始化时建的，时间不准确 -->
           <div v-if="round.parameter_id" class="round-item__time">{{ formatLocalTime(round.created_at) }}</div>
           <div v-if="round.summary" class="round-item__summary">{{ round.summary }}</div>
         </div>

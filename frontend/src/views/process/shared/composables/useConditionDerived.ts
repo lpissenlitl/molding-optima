@@ -1,4 +1,7 @@
-/** useConditionDerived - 工艺条件派生计算 composable：接收 reactive condition（不是 Ref），派生全部走 computed 链不缓存中间状态；shot_index / injection_index / product_index 是 0 索引，UI 显示用 1 索引（由 shotIndexDisplay 等转换）；缺失数据返回 undefined 由调用方降级 */
+/** useConditionDerived - 工艺条件派生计算 composable
+ *  - 接收 reactive condition（不是 Ref），派生全部走 computed 链不缓存中间状态
+ *  - shot_index / injection_index / product_index 是 0 索引，UI 显示用 1 索引（由 shotIndexDisplay 等转换）
+ *  - 缺失数据返回 undefined 由调用方降级 */
 import { computed, type ComputedRef } from 'vue'
 import type {
   Condition,

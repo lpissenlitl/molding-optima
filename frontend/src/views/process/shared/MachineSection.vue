@@ -4,7 +4,8 @@
     <div class="selection-area">
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :md="6">
-          <!-- prop 必须用 "machine_info.id"：顶层 injection_machine_id 是提交态平铺字段（buildPayload 从 machine_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
+          <!-- prop 必须用 "machine_info.id"：顶层 injection_machine_id 是提交态平铺字段
+               （buildPayload 从 machine_info.id 推导），前端编辑期恒为空，用它做校验目标会永远失败 -->
           <el-form-item label="选择注塑机" prop="machine_info.id">
             <el-autocomplete
               v-model="machineQuery"

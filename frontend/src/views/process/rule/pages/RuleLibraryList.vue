@@ -1,4 +1,5 @@
-<!-- RuleLibraryList.vue - 规则管理主页（父容器）：顶部 tabs + URL 同步（?tab=libraries|keywords），子组件 RuleLibraryTab / RuleKeywordTab 接收 activeTab + isSuperuser 并自行 watch 决定何时加载 -->
+<!-- RuleLibraryList.vue - 规则管理主页（父容器）：顶部 tabs + URL 同步（?tab=libraries|keywords），刷新保留选中 -->
+<!-- 子组件接收 activeTab + isSuperuser 并自行 watch 决定何时加载 -->
 <template>
   <div class="rule-library-list">
     <!-- ============= Tabs（胶囊 Segmented Control）============= -->
@@ -148,7 +149,8 @@ watch(
   align-items: center;
 }
 
-/* 表格包装层（关键词 tab）：flex: 1 撑满剩余空间；min-height: 0 允许 flex 子项收缩（撑高才生效）；overflow: hidden 让 el-table 内部独立滚动 */
+/* 表格包装层（关键词 tab）：flex: 1 撑满剩余空间；min-height: 0 允许 flex 子项收缩（撑高才生效）；
+   overflow: hidden 让 el-table 内部独立滚动 */
 .table-wrapper {
   flex: 1;
   min-height: 0;
@@ -181,7 +183,8 @@ watch(
 
 <!-- 本组件专用样式（scoped）：tabs / indicator 等 -->
 <style scoped lang="scss">
-/* Tab Bar（胶囊 Segmented Control，自定义 div + button）：参考 Apple iOS 风格，灰色胶囊底 + 选中态白色凸起 + transform 滑动 indicator */
+/* Tab Bar（胶囊 Segmented Control，自定义 div + button）：参考 Apple iOS 风格，
+   灰色胶囊底 + 选中态白色凸起 + transform 滑动 indicator */
 .tab-bar {
   position: relative;
   display: inline-flex;
@@ -205,7 +208,7 @@ watch(
     color-mix(in srgb, var(--el-color-primary, #254373) 20%, transparent)
   );
   border-radius: 8px;
-  /* 主题色阴影（10% 透明度，比之前更淡）*/
+  /* 主题色阴影（10% 透明度）*/
   box-shadow:
     0 2px 8px color-mix(in srgb, var(--el-color-primary, #254373) 12%, transparent),
     0 1px 3px rgba(0, 0, 0, 0.04);

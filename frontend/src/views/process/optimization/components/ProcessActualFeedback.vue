@@ -38,7 +38,6 @@ type UnitType = keyof typeof STANDARD_UNITS
 type MachineUnitMap = Partial<Record<UnitType, string>>
 
 const props = defineProps<{
-  /** v-model 绑定的观察列表 */
   modelValue?: CycleObservation[] | null
   /** 机器单位信息（用于覆盖默认单位）*/
   machine_unit?: MachineUnitMap | null
@@ -117,11 +116,9 @@ watch(
 </script>
 
 <style lang="scss" scoped>
-/*
- * 2-3 列网格布局：让 4 项观察项填满右栏宽度，避免右侧留白过大
- * - auto-fill 自适应列数（宽屏 3 列、窄屏 1-2 列）
- * - el-form-item 本身是 flex（label + content），能在 grid 单元格内正常工作
- */
+/* 2-3 列网格布局：让 4 项观察项填满右栏宽度
+   - auto-fill 自适应列数（宽屏 3 列、窄屏 1-2 列）
+   - el-form-item 本身是 flex（label + content），能在 grid 单元格内正常工作 */
 .process-actual-feedback {
   &__grid {
     display: grid;
@@ -134,7 +131,6 @@ watch(
     margin-bottom: 8px;
   }
 
-  /* 输入框：占满剩余宽度 */
   &__input {
     width: 100%;
     max-width: 180px;

@@ -1,4 +1,5 @@
-<!-- MiningRuleDetail.vue - 候选规则详情：挖掘指标 + 证据样本 + 落地预览（这条规则会变成哪几条生效规则）+ 审核操作（通过 / 驳回）；仅管理员可见 -->
+<!-- MiningRuleDetail.vue - 候选规则详情：挖掘指标 + 证据样本 + 落地预览（这条规则会变成哪几条生效规则）+ 审核操作（通过 / 驳回）
+     仅管理员可见 -->
 <template>
   <div v-loading="loading" class="mining-rule-detail">
     <!-- 顶部：返回 + 规则编号 + 状态 -->
