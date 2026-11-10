@@ -83,11 +83,11 @@ def _auto_extract_defect(rule_description: str, company_id: int):
 # ==================== RuleKeyword ====================
 
 # 允许写入的模糊档位（与 RuleKeyword.FUZZY_LEVELS 一致，
-# 也与前端 types/rule.ts::FuzzyLevel 同集合：3 | 5 | 7）。
+# 也与前端 types/rule.ts::FuzzyLevel 同集合：现网统一 **3 档**）。
 # ⚠️ Django 的 choices **不会在 save 时自动校验**（create_with_check 只过滤
 #    未知字段名），所以必须在 service 层显式拦，否则 API 客户端仍能写入
-#    非法档位（如 9），而内核会把该字段当无效论域直接跳过。
-_VALID_FUZZY_LEVELS = (3, 5, 7)
+#    非法档位（如 5 / 7 / 9），而内核会把该字段当无效论域直接跳过。
+_VALID_FUZZY_LEVELS = (3,)
 
 
 def _validate_fuzzy_level(params):

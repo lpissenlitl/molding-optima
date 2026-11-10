@@ -550,15 +550,15 @@ function removeCondition(i: number) {
   if (form.preconditions.length === 0) addCondition()
 }
 
-/** level 下拉选项：按 keyword.fuzzy_level 返回 level 词列表（未选 keyword 返回 []，fuzzy_level 不在 3/5/7 范围时兜底为 3 档） */
+/** level 下拉选项：按 keyword.fuzzy_level 返回 level 词列表（未选 keyword 返回 []，其它一律兜底为 3 档） */
 function levelOptionsFor(cond: ConditionItem): string[] {
   if (!cond.keyword) return []
   const kw = allKeywords.value.find(k => k.keyword_name === cond.keyword)
   const lvl = kw?.fuzzy_level
-  if (lvl === 3 || lvl === 5 || lvl === 7) {
+  if (lvl === 3) {
     return LEVEL_WORDS[lvl]
   }
-  // 兜底：3 档
+  // 兜底：3 档（现网业务已统一收敛到 3 档）
   return LEVEL_WORDS[3]
 }
 

@@ -141,6 +141,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 # Logging
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -155,13 +158,52 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        # 主日志（全量）—— 与 console 并存，console 的行为与格式不变
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'app.log'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 5,
+            'encoding': 'utf-8',
+            # 延迟开文件：runserver 的 autoreload 父进程也会加载 settings，
+            # 延迟到真正写日志时才占句柄，避免 Windows 上父子进程抢同一文件
+            'delay': True,
+            'formatter': 'verbose',
+        },
+        # 异常信号档：只收 WARNING 以上 —— 三层静默降级（模糊推理失败 ⇒ 经验推理兜底）
+        # 混在全量 INFO 里看不见，单独一档后「哪些请求发生过降级」一眼可见。
+        # 档内也会收录非降级的告警（如规则缺门控条件），属同类需关注的信号
+        # ⚠️ level 必须设在 **handler** 上：logger 的 level 只管「记录能否进入
+        #    handler 链」，handler 自己的 level 才管「这条记录写不写进文件」
+        'degradation': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(LOG_DIR / 'degradation.log'),
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'encoding': 'utf-8',
+            'delay': True,
+            'level': 'WARNING',
+            'formatter': 'verbose',
+        },
     },
     'root': {
-        'handlers': ['console'],
+        'handlers': ['console', 'file'],
         'level': 'INFO',
     },
     'loggers': {
-
+        # 降级相关的两个 logger 额外挂降级专档。
+        # propagate=True ⇒ 仍会冒泡到 root（console + app.log）；
+        # 自身 handler 只收 WARNING 以上 ⇒ 不重复、也不改变控制台输出
+        'process.algorithms.fuzzy': {
+            'handlers': ['degradation'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'process.services.parameter_optimize': {
+            'handlers': ['degradation'],
+            'level': 'INFO',
+            'propagate': True,
+        },
     },
 }
 

@@ -168,10 +168,7 @@
         </el-form-item>
         <el-form-item label="模糊级别" required>
           <el-select v-model="keywordForm.fuzzy_level" placeholder="选择模糊级别" style="width: 100%">
-            <el-option label="3 级（粗粒度）" :value="3" />
-            <el-option label="5 级（推荐）" :value="5" />
-            <el-option label="7 级（细粒度）" :value="7" />
-            <el-option label="9 级（极细）" :value="9" />
+            <el-option label="3 级（low / medium / high）" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item label="模糊步长">
@@ -327,7 +324,7 @@ const keywordForm = reactive({
   unit: '',
   range_min: 0,
   range_max: 0,
-  fuzzy_level: 5 as FuzzyLevel,
+  fuzzy_level: 3 as FuzzyLevel,
   step: null as number | null,
 })
 
@@ -342,7 +339,7 @@ function showCreateKeywordDialog() {
   keywordForm.unit = ''
   keywordForm.range_min = 0
   keywordForm.range_max = 0
-  keywordForm.fuzzy_level = 5
+  keywordForm.fuzzy_level = 3
   keywordForm.step = null
   keywordDrawerVisible.value = true
 }

@@ -61,7 +61,11 @@ def _param_names():
 def _build_engine():
     engine = FuzzyEngine()
 
-    def _fake_load(param_names, process_parameter, domain_limits=None):
+    def _fake_load(param_names, process_parameter, domain_limits=None,
+                   temperature_limits=None, position_limits=None,
+                   product_limits=None):
+        # ⚠️ 参数列表必须与真实实现 `_load_keyword_profiles` **同形**
+        #    （新增权威源维度时同步加可选参数，否则调用方多传一个就会 TypeError）。
         # 真实实现只返回查到的字段
         names = set(param_names)
         return [kp for kp in KEYWORD_PROFILES if kp.keyword in names]

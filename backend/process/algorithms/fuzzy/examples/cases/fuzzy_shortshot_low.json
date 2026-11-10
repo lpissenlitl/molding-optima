@@ -307,7 +307,7 @@
   "keywords": [
     {
       "keyword_name": "BT",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 50.0,
       "step": null,
@@ -315,7 +315,7 @@
     },
     {
       "keyword_name": "IP0",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 200.0,
       "step": null,
@@ -323,7 +323,7 @@
     },
     {
       "keyword_name": "IT",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 20.0,
       "step": null,
@@ -331,7 +331,7 @@
     },
     {
       "keyword_name": "IV0",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 120.0,
       "step": null,
@@ -339,7 +339,7 @@
     },
     {
       "keyword_name": "MBP0",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 50.0,
       "step": null,
@@ -347,7 +347,7 @@
     },
     {
       "keyword_name": "MEL",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 200.0,
       "step": null,
@@ -355,7 +355,7 @@
     },
     {
       "keyword_name": "PP0",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 140.0,
       "step": null,
@@ -363,7 +363,7 @@
     },
     {
       "keyword_name": "PT0",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 10.0,
       "step": null,
@@ -371,7 +371,7 @@
     },
     {
       "keyword_name": "PV0",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 100.0,
       "step": null,
@@ -379,7 +379,7 @@
     },
     {
       "keyword_name": "SHORTSHOT",
-      "fuzzy_level": 5,
+      "fuzzy_level": 3,
       "range_min": 0.0,
       "range_max": 1.0,
       "step": null,
@@ -389,11 +389,11 @@
   "expected": {
     "recommendations": [
       {
-        "param_name": "PV0",
-        "business_param_name": "hold_spd_1",
-        "current_value": 24.0,
-        "recommended_value": 26.028486139161025,
-        "confidence": 0.47509170151697916,
+        "param_name": "MBP0",
+        "business_param_name": "met_back_pres_1",
+        "current_value": 5.0,
+        "recommended_value": 6.013435906654223,
+        "confidence": 0.5036328649770389,
         "direction": "increase",
         "source": "fuzzy.numeric"
       },
@@ -401,8 +401,17 @@
         "param_name": "IT",
         "business_param_name": "inj_t",
         "current_value": 4.0,
-        "recommended_value": 4.507121534790256,
-        "confidence": 0.47509170151697916,
+        "recommended_value": 4.508983828436806,
+        "confidence": 0.37660804686050675,
+        "direction": "increase",
+        "source": "fuzzy.numeric"
+      },
+      {
+        "param_name": "PV0",
+        "business_param_name": "hold_spd_1",
+        "current_value": 24.0,
+        "recommended_value": 26.217550223576886,
+        "confidence": 0.06220875391965844,
         "direction": "increase",
         "source": "fuzzy.numeric"
       },
@@ -410,8 +419,8 @@
         "param_name": "IV0",
         "business_param_name": "inj_spd_1",
         "current_value": 30.0,
-        "recommended_value": 32.18242552380636,
-        "confidence": 0.07418659429492462,
+        "recommended_value": 32.29421497216299,
+        "confidence": 0.04599877505949625,
         "direction": "increase",
         "source": "fuzzy.numeric"
       },
@@ -419,17 +428,8 @@
         "param_name": "PP0",
         "business_param_name": "hold_pres_1",
         "current_value": 44.0,
-        "recommended_value": 46.300524812590155,
-        "confidence": 0.04503298149333761,
-        "direction": "increase",
-        "source": "fuzzy.numeric"
-      },
-      {
-        "param_name": "MBP0",
-        "business_param_name": "met_back_pres_1",
-        "current_value": 5.0,
-        "recommended_value": 6.16369649146612,
-        "confidence": 0.04133725836898068,
+        "recommended_value": 46.38907549320796,
+        "confidence": 0.03478381075116348,
         "direction": "increase",
         "source": "fuzzy.numeric"
       }

@@ -63,9 +63,9 @@ LEVEL_NUMBER_TO_BUCKET = {f'level{i}': i - 1 for i in range(1, 8)}
 
 # ⚠️ 档位→桶**没有全局静态口径**：档位词的权威定义是 LEVEL_WORDS_BY_LVL，
 # 编号轨（levelN）的权威定义是 LEVEL_NUMBER_TO_BUCKET。
-# 静态的 low/mid/medium/high 表在 5/7 档字段上会错位一档（现网 310/311
-# 个字段是 5 档 ⇒ 全部前件门控偏一档），必须按字段自己的词表定位
-# （见 LEVEL_WORDS_BY_LVL + resolve_bucket）。
+# 静态的 low/mid/medium/high 表在 5/7 档字段上会错位一档（**曾经**现网
+# 310/311 个字段是 5 档 ⇒ 全部前件门控偏一档；现网已统一收敛到 3 档），
+# 必须按字段自己的词表定位（见 LEVEL_WORDS_BY_LVL + resolve_bucket）。
 
 # === 档位词表（按字段的模糊等级数）===
 # 这是档位词的**唯一权威定义**。
@@ -88,13 +88,18 @@ LEVEL_NUMBER_TO_BUCKET = {f'level{i}': i - 1 for i in range(1, 8)}
 # ★ 口径（与业务对齐）：**档位词是绝对词义** —— 规则写 `low`
 #   就是「偏低」这一档，它落在向量的哪一格由**该字段切了几格**决定。
 #   5 档体系比 3 档体系多一个 `very_low` 在 `low` 之下 ⇒ `low` 自然上移一格
-#   （落桶 1 = 25% 分位）。**这是正确实现，不是缺陷、不是“语义漂移”。**
-#   ⇒ 规则**不需要**声明自己属于哪套档位体系，算法无需知道这件事。
-#   ⇒ 落格随字段档数变化**不列为风险**；规则**填不进**词表时的处理见
+#   （落桶 1 = 25% 分位）。落格随字段档数变化**不列为风险**；
+#   规则**不需要**声明自己属于哪套档位体系，算法无需知道这件事；
+#   规则**填不进**词表时的处理见
 #     `nets.py::_construct_numtskruleNet`（整条规则激活度 0，**不静默删条件**）。
-# 词表只覆盖 3|5|7 档（与 RuleKeyword.FUZZY_LEVELS、前端 FuzzyLevel 对齐）：
-#    9 档独有词 ultra_low / ultra_high 前端没有对应命名，字段一旦设成 9 档，
-#    前端 levelOptionsFor() 会静默兜底成 3 档 ⇒ 选出来的档位与论域对不上。
+#
+# ⚠️ 现网业务口径已统一收敛到 **3 档**（2026-11-09：RuleKeyword 全量回填
+#    310 条 5→3 + `_data/rule_keyword_curated.json` 同步）。
+#    ⇒ 下表里的 5/7 档词表**作为引擎能力保留**（词法解析、归一化、
+#      接口入参校验仍需支持），但业务数据不再落到它们 ⇒ 业务侧只暴露 3 档。
+#    词表覆盖 3|5|7 档；9 档独有词 ultra_low / ultra_high 前端没有对应命名，
+#    字段一旦设成 9 档，前端 levelOptionsFor() 会静默兜底成 3 档
+#    ⇒ 选出来的档位与论域对不上。
 LEVEL_WORDS_BY_LVL = {
     3: ('low', 'medium', 'high'),
     5: ('very_low', 'low', 'medium', 'high', 'very_high'),

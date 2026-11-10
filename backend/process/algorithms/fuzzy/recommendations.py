@@ -110,6 +110,13 @@ class AggregatedAdjustment:
             **不参与**任何数值计算 —— 加它们前后的推荐值逐位相同。
             ⚠️ 只统计**数值层**规则：提示层（Mamdani）的 activation 是
             **原始激活度**而非组内占比，权重语义不同质，混算无意义。
+        matched_rules: 该参数上**全部命中规则**的明细（开发者模式）。
+            每项 = ``{'rule': 规则串, 'weight': 组内占比, 'raw_activation': 原始激活度}``。
+            ⚠️ **只透出、不参与任何计算** —— 加它前后的推荐值 / 方向 / 置信度逐位相同。
+            ⚠️ 与 ``positive_rules`` / ``negative_rules`` 的区别：
+            那两个按**方向**分列、且只收数值层；本字段**不分方向、含全部命中规则**
+            （含 delta 恰为 0 的），用于回答「这条建议到底是哪几条规则推出来的」。
+            ⚠️ 提示层（Mamdani）的规则没有单一来源规则串（``rule_str=None``）⇒ 不进本字段。
     """
 
     param_name: str
@@ -123,6 +130,7 @@ class AggregatedAdjustment:
     negative_weight: float = 0.0
     positive_rules: List[str] = field(default_factory=list)
     negative_rules: List[str] = field(default_factory=list)
+    matched_rules: List[Dict[str, Any]] = field(default_factory=list)
 
 
 # ============================================================================
@@ -186,6 +194,20 @@ def aggregate(
             merged[p].negative_weight += adj.activation
             if adj.rule_str:
                 merged[p].negative_rules.append(adj.rule_str)
+
+        # ★ 命中规则明细（开发者模式）—— **只记、不参与任何计算**：
+        #    放在方向分支**之外** ⇒ delta 恰为 0 的命中规则也会被记下来
+        #    （它们同样是"这条建议的依据"）。
+        #    ⚠️ 数值层才记：提示层（Mamdani）无单一来源规则串（rule_str=None），
+        #    文本建议（advice）也不参与数值聚合 ⇒ 都不进本字段。
+        if adj.rule_str:
+            merged[p].matched_rules.append({
+                'rule': adj.rule_str,
+                # 组内占比：同参数组内各规则占比之和 = 1 ⇒ 直观表达"谁压过谁"
+                'weight': round(float(adj.activation), 6),
+                # 原始激活度（含 M-1 的 β）：表达"这条规则到底匹配得多准"
+                'raw_activation': round(float(adj.raw_activation), 6),
+            })
 
     for adj in advisory:
         # 检查/弹窗类结论（`X_adjust_提示语`）是**文本建议**：
@@ -290,18 +312,24 @@ class FuzzyRecommendation(AlgorithmRecommendation):
     Attributes:
         conflict: 冲突视图（仅在**同参数命中规则方向相反**时非 None）；
             结构见 :func:`build_conflict_view`。无冲突时为 None。
+        matched_rules: 该建议的**命中规则明细**（开发者模式）；
+            每项 = ``{'rule': 规则串, 'weight': 组内占比, 'raw_activation': 原始激活度}``。
+            ⚠️ **只透出、不参与计算** —— 建议值 / 方向 / 置信度均不受影响。
     """
 
     conflict: Optional[Dict[str, Any]] = None
+    matched_rules: Optional[List[Dict[str, Any]]] = None
 
     def to_dict(self) -> dict:
-        """在基类契约上**追加** ``conflict`` 键（不改基类的任何键）。
+        """在基类契约上**追加** ``conflict`` / ``matched_rules`` 键（不改基类的任何键）。
 
         ⚠️ 基类的 7 个键的值**逐字不动** ⇒ 既有消费方按原样读取不受影响；
-           新增键只承载"有没有冲突 / 分歧依据是什么"，前端可选消费。
+           新增键只承载"有没有冲突 / 分歧依据是什么""命中了哪几条规则"，
+           前端可选消费。
         """
         data = super().to_dict()
         data['conflict'] = self.conflict
+        data['matched_rules'] = self.matched_rules
         return data
 
 
@@ -384,6 +412,8 @@ def to_recommendations(
             source='fuzzy.numeric' if 'numeric' in info.sources else 'fuzzy.advisory',
             direction=direction,
             conflict=conflict,
+            # ★ 命中规则明细（开发者模式）—— **只透出、不参与计算**
+            matched_rules=info.matched_rules or None,
         ))
 
     # 检查/弹窗类建议：文本建议，不给数值，方向为「检查」
@@ -400,6 +430,13 @@ def to_recommendations(
             direction='check',
             # ⚠️ 文本建议不是多条规则加权平均出来的 ⇒ 无冲突概念
             conflict=None,
+            # ★ 文本建议同样是**规则驱动**的 ⇒ 也要标注来源规则。
+            #    权重口径：文本建议不走数值聚合（无组内占比概念）⇒ 记 1.0；
+            #    激活度同理不适用 ⇒ 记 0.0。
+            matched_rules=(
+                [{'rule': adj.rule_str, 'weight': 1.0, 'raw_activation': 0.0}]
+                if adj.rule_str else None
+            ),
         ))
 
     return recommendations

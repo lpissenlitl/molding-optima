@@ -22,7 +22,12 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from process.algorithms.fuzzy.fuzzy_core.profiles import KeywordProfile, RuleProfile
+from process.algorithms.fuzzy.fuzzy_core.profiles import (
+    DIMENSION_PARAMETER,
+    VALID_DIMENSIONS,
+    KeywordProfile,
+    RuleProfile,
+)
 from process.algorithms.fuzzy.library.contracts import (
     LibraryRecord,
     RuleRecord,
@@ -264,7 +269,29 @@ class RuleKeywordAdapter:
             min_val=min_val,
             max_val=max_val,
             step=float(step),
+            dimension=RuleKeywordAdapter._normalize_dimension(
+                getattr(keyword, 'category', None)),
         )
+
+    @staticmethod
+    def _normalize_dimension(value: Any) -> str:
+        """维度角色归一（ORM ``category`` / dict ``dimension`` → 合法取值）。
+
+        ⚠️ **为什么必须归一**：``KeywordProfile.dimension`` 参与内核 M-1 的
+        「是否参与档位归属判定」分支 ⇒ 取值非法会让内核走错分支。
+        未知取值一律当**工艺参数维**（最保守：行为与改造前一致）。
+
+        ⚠️ **为什么 ORM 侧读 ``category``**：``RuleKeyword.category`` 的取值
+        恰好就是三个维度角色（``parameter`` / ``defect`` / ``defect_position``）
+        ⇒ 不必另建字段，也不会出现两套分类口径。
+        """
+        text = str(value or '').strip().lower()
+        if text in VALID_DIMENSIONS:
+            return text
+        if text:
+            logger.warning(
+                '[RuleKeywordAdapter] 未知维度角色 %r，按工艺参数维处理', value)
+        return DIMENSION_PARAMETER
 
     @staticmethod
     def _dict_to_profile(keyword: Dict[str, Any]) -> Optional[KeywordProfile]:
@@ -304,4 +331,6 @@ class RuleKeywordAdapter:
             step=float(step),
             # dict 输入可带元数据来源标记（推测论域）；ORM 输入无此概念
             meta_source=keyword.get('meta_source', ''),
+            dimension=RuleKeywordAdapter._normalize_dimension(
+                keyword.get('dimension') or keyword.get('category')),
         )

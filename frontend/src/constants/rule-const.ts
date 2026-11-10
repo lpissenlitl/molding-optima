@@ -3,21 +3,14 @@
 
 import type { FuzzyLevel } from '@/types/rule'
 
-// level 词字典（fuzzy_level → 渐进式命名）：业界标准渐进式命名，每加一档在两端扩展（very_ / extremely_），medium 永远在中心位置（对称）
+// level 词字典（fuzzy_level → 渐进式命名）：现网业务已统一收敛到 **3 档**
+// （2026-11-09：后端 RuleKeyword.fuzzy_level 全量 5→3）
 // 与后端规则 service 对齐：新规则用 medium（与后端 rule_matcher.py 一致）；历史 1752 条数据用 mid（暂保留兼容，后续可一次性迁移）
+// ⚠️ 引擎侧 5/7 档词表（macros.LEVEL_WORDS_BY_LVL）作为**引擎能力**保留，
+//    但业务下拉不再暴露 —— 前端是业务口径的最后一层。
 
 export const LEVEL_WORDS: Record<FuzzyLevel, string[]> = {
   3: ['low', 'medium', 'high'],
-  5: ['very_low', 'low', 'medium', 'high', 'very_high'],
-  7: [
-    'extremely_low',
-    'very_low',
-    'low',
-    'medium',
-    'high',
-    'very_high',
-    'extremely_high',
-  ],
 }
 
 /**

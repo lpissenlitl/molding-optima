@@ -38,6 +38,10 @@ from typing import Dict, Iterable, List, Optional
 __all__ = [
     'KeywordProfile',
     'RuleProfile',
+    'DIMENSION_PARAMETER',
+    'DIMENSION_DEFECT',
+    'DIMENSION_DEFECT_POSITION',
+    'VALID_DIMENSIONS',
     'keyword_profile_issues',
     'rule_profile_issues',
     'validate_keyword_profiles',
@@ -45,7 +49,40 @@ __all__ = [
 ]
 
 
-# 内核支持的模糊等级数（与 RuleKeyword.FUZZY_LEVELS、macros.LEVEL_WORDS_BY_LVL 的键一致）
+# ============================================================================
+# 维度角色（该字段在推理网络里的角色）
+# ============================================================================
+
+#: 工艺参数维度（默认）：连续量，归属唯一 ⇒ 参与 M-1 的「档位归属」判定。
+DIMENSION_PARAMETER = 'parameter'
+
+#: 缺陷名维度（SHORTSHOT / FLASH / …）：**离散档位、多档并存**。
+#:
+#: ⚠️ 语义与工艺参数不同（见 ``nets.py`` 的 M-1 判定）：
+#:   工艺参数是「当前值唯一 ⇒ 它归属哪一档也唯一」；
+#:   缺陷维度是「规则库里 low/medium/high 三档**本来就并存**，
+#:   跨档参与是设计意图」（程度越严重，建议越激进）⇒
+#:   **不参与 competition / β 降权**，只做 τ（未命中）判定。
+DIMENSION_DEFECT = 'defect'
+
+#: 缺陷位置维度（DLSHORTSHOT1 / …）：**位置名本身就是精确匹配信号**。
+#:
+#: ⚠️ 规则库里 DL 前件的档位**恒为 high**（实测 20 条 100% 一致）⇒
+#:   位置维不需要跨档加权，同样**不参与 competition / β 降权**。
+DIMENSION_DEFECT_POSITION = 'defect_position'
+
+#: 合法的维度角色取值。
+VALID_DIMENSIONS = (
+    DIMENSION_PARAMETER,
+    DIMENSION_DEFECT,
+    DIMENSION_DEFECT_POSITION,
+)
+
+
+# 内核**支持**的模糊等级数（与 macros.LEVEL_WORDS_BY_LVL 的键一致）。
+# ⚠️ 这是**引擎能力**，不是业务口径：业务侧现网已统一收敛到 3 档
+#    （RuleKeyword.FUZZY_LEVELS = [(3, '3级')]），但内核仍保留 5/7 档的
+#    词表与桶中心算法 ⇒ 引擎侧**不做**收窄。
 VALID_LVL = (3, 5, 7)
 
 # 结论形态（按结论形态分流：能不能算出数值；不是规则库的组织维度）
@@ -80,6 +117,39 @@ class KeywordProfile:
     meta_source : str
         元数据来源标记（可选）。`'guessed'` 表示该论域是按实时值**推测**的，
         不是权威参数元数据；空串 = 权威来源。内核不读此字段，仅供上层分流。
+    domain_source : str
+        **论域边界**（`min_val` / `max_val`）的来源标记（可选）：
+
+        - ``'device'`` —— 设备实测可设上限（设定值类）
+        - ``'stroke'`` —— 设备实测最大注射行程（位置类）
+        - ``'material'`` —— 材料温度区间（温度类）
+        - ``'experience_domain'`` —— RuleKeyword 经验域（**本轮无权威源**）
+        - ``'kept_experience_domain'`` —— 权威源已拿到但**守卫拒绝**
+          （H1：设备上限 < 当前值 / G6：当前值超行程）⇒ 保留经验域
+        - ``'guessed'`` —— 整段论域由引擎按当前值**推测**
+        - 空串 = 未标注
+
+        ⚠️ **与 `meta_source` 是两回事，别混**：`meta_source` 说的是
+        **关键字元数据**（档位数等）的来源；`domain_source` 说的是
+        **论域边界**的来源。一个档案可以「元数据是权威的、论域是推测的」
+        （或反之）⇒ 两个字段独立填写。
+
+        ⚠️ **内核不读此字段**（与 `meta_source` 同构）：内核只认
+        `min_val` / `max_val` / `step` / `lvl`；本字段供上层分流与
+        诊断留痕（见 ``engine._load_keyword_profiles``）。
+    dimension : str
+        **维度角色**（默认 ``'parameter'``）：``'parameter'``（工艺参数）/
+        ``'defect'``（缺陷名）/ ``'defect_position'``（缺陷位置）。
+
+        ⚠️ **为什么内核需要这个字段**：缺陷类维度与工艺参数的**语义不同** ——
+        工艺参数是连续量、归属唯一；缺陷类是离散档位、多档并存。
+        内核的 M-1 门控据此区分「是否参与档位归属判定」
+        （见 ``nets.py`` 的 M-1 段）。
+
+        ⚠️ **默认值是 `'parameter'`**（向后兼容：既有构造点不必改）。
+        但**缺陷类元数据必须显式带上**，否则缺陷维会被当成工艺参数维 ⇒
+        又被打上「档位不符」的标签。数据来源侧（``library/adapters.py``）
+        从 ``RuleKeyword.category`` 带出本字段。
     """
 
     keyword: str
@@ -88,6 +158,8 @@ class KeywordProfile:
     max_val: float = 1.0
     step: float = 1.0
     meta_source: str = ''
+    domain_source: str = ''
+    dimension: str = DIMENSION_PARAMETER
 
 
 # ============================================================================
@@ -165,7 +237,11 @@ def keyword_profile_issues(p: KeywordProfile) -> List[str]:
     if not (p.min_val < p.max_val):
         issues.append(f'min_val({p.min_val}) 必须 < max_val({p.max_val})')
     if not (p.step > 0):
-        issues.append(f'step({p.step}) 必须 > 0')
+        issues.append(f"step={p.step!r} 必须 > 0")
+    if p.dimension not in VALID_DIMENSIONS:
+        issues.append(
+            f"dimension={p.dimension!r} 非法"
+            f"（合法值 {', '.join(VALID_DIMENSIONS)}）")
     return issues
 
 

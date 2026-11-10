@@ -76,3 +76,7 @@ backend/tests/_acc_*.txt
 .env.*.local
 secrets.json
 *-workspace
+
+# 服务端运行日志（轮转备份名 app.log.1 不匹配 *.log，故按目录忽略）
+backend/logs/
+backend/_dev_refs/

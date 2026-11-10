@@ -84,7 +84,7 @@ class FilteredRules:
     mamdani_param_names : set[str]
         提示层用到的工艺参数名。
     defect_param_names : set[str]
-        数值层用到的**缺陷类**名字（缺陷名 + 缺陷位置名）。
+        数值层 + 提示层用到的**缺陷类**名字（缺陷名 + 缺陷位置名）。
         决定要拉哪些缺陷关键词的论域元数据，用于把缺陷程度（档位）
         翻译成推理输入里的数值。⚠️ 与 `numeric_param_names` **必须分开放**
         —— 后者用于"规则缺一个门控条件"的体检，混进缺陷名会让体检把
@@ -234,6 +234,10 @@ def build_rule_objects(profiles: List[RuleProfile]) -> FilteredRules:
 
         # ---- 判定 3：检查/弹窗类 → 提示文本（不进推理网络）--------------
         if _has_check_conclusion(solutions):
+            # ★ 缺陷名也要收：提示层按缺陷程度去重需要它
+            #   （检查类规则在规则库里按档位各写一遍，如 FLASH_low/medium/high
+            #   各有一条「请检查锁模力」⇒ 提示层要拿缺陷维 μ 才能挑出最匹配的那条）
+            _collect_defect_names(parsed, result.defect_param_names)
             for sol in solutions:
                 if sol.get('action') not in ('adjust', 'popup'):
                     continue

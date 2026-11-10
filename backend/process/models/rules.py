@@ -144,11 +144,15 @@ class RuleKeyword(BusinessBaseModel):
     action_max_val = models.FloatField(null=True, blank=True, verbose_name="最大调整值")
 
     # --- 模糊参数 ---
-    # ⚠️ 档位集合与前端 types/rule.ts::FuzzyLevel（3 | 5 | 7）**严格对齐**。
+    # ⚠️ 档位集合与前端 types/rule.ts::FuzzyLevel **严格对齐**：
+    #    现网业务统一收敛到 **3 档**（2026-11-09：RuleKeyword 全量回填
+    #    310 条 5→3，`_data/rule_keyword_curated.json` 同步）。
+    #    引擎侧 5/7 档词表（macros.LEVEL_WORDS_BY_LVL）作为**引擎能力**保留，
+    #    但业务数据不再落到它们 ⇒ 业务侧只暴露 3 档。
     #    不提供 9 档：前端没有 9 档命名（ultra_low / ultra_high），
     #    后端留着 9 档选项只会让前端 levelOptionsFor() 静默兜底成 3 档。
-    FUZZY_LEVELS = [(3, '3级'), (5, '5级'), (7, '7级')]
-    fuzzy_level = models.IntegerField(choices=FUZZY_LEVELS, default=5, verbose_name="模糊级别")
+    FUZZY_LEVELS = [(3, '3级')]
+    fuzzy_level = models.IntegerField(choices=FUZZY_LEVELS, default=3, verbose_name="模糊级别")
 
     # --- 模糊步长 ---
     # 含义：去模糊化的输出粒度。推理输出会取整到 step 的整数倍

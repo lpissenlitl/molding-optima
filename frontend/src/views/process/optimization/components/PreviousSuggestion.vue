@@ -24,6 +24,7 @@
             v-for="(item, ii) in group.items"
             :key="ii"
             class="previous-suggestion__item"
+            :class="{ 'previous-suggestion__item--with-icon': !!item.direction }"
           >
             <AppIcon
               v-if="item.direction"
@@ -31,11 +32,17 @@
               :class="['previous-suggestion__direction', `previous-suggestion__direction--${item.direction}`]"
             />
             <span class="previous-suggestion__description">{{ item.description }}</span>
+            <!-- 依据规则：独占一行放在文案下方；规则串逐条换行，避免长串挤压文案 -->
             <span
               v-if="item.rule_refs && item.rule_refs.length"
               class="previous-suggestion__rules"
             >
-              依据规则: {{ item.rule_refs.map(formatRuleRef).join(' · ') }}
+              <span class="previous-suggestion__rules-label">依据规则:</span>
+              <span
+                v-for="(ref, ri) in item.rule_refs"
+                :key="ri"
+                class="previous-suggestion__rule"
+              >{{ formatRuleRef(ref) }}</span>
             </span>
           </li>
         </ul>
@@ -119,8 +126,9 @@ function formatRuleRef(ref: string): string {
 
   &__item {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
     align-items: baseline;
+    column-gap: 6px;
     padding: 2px 0;
     font-size: 13px;
     color: #303133;
@@ -151,10 +159,30 @@ function formatRuleRef(ref: string): string {
   }
 
   &__rules {
+    /* 独占一行：flex-basis 100% 强制换行，不再与文案抢同一行宽度 */
+    flex: 0 0 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    margin-top: 2px;
     font-size: 11px;
     color: #909399;
-    margin-left: 4px;
-    flex-shrink: 0;
+    line-height: 1.5;
+  }
+
+  &__rules-label {
+    font-weight: 600;
+  }
+
+  &__rule {
+    /* 规则串无空格断点，需允许任意位置断行 */
+    overflow-wrap: anywhere;
+  }
+
+  /* 有方向图标时，依据规则行与描述文字左对齐（图标宽 14px + 列间距 6px） */
+  &__item--with-icon &__rules {
+    padding-left: 20px;
   }
 }
 </style>

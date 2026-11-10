@@ -118,14 +118,18 @@ class FeedbackSchema(BaseSchema):
 class OptimizeMoldInfoSchema(BaseSchema):
     """模具信息（调优精度上下文 · 按需最小集）
 
-    调优不消费模具几何（浇口/壁厚/流长是初始化的推导输入）。
-    这里只留两类：规则精确筛选键 + 周期余量判断。
+    两类内容：
+    1. **规则筛选键 + 周期余量**（product_category / target_cycle_time）；
+    2. **制品级物理基准**（壁厚 / 制品重 / 流道 / 浇口）—— 冷却时间（CT）
+       判级论域的权威源（冷却时间 ∝ 最大壁厚²，见 specs.py 的
+       ``resolve_product_limits``）。
 
-    字段名贴 Mold（masterdata/models/mold.py）。
+    字段名贴 masterdata ORM 字段名（Cavity / GatingSystem / Gate）。
 
     必填等级见 specs.py::OPTIMIZE_MOLD_INFO_FIELDS：都是可选。
     product_category 是精度旋钮（填了命中高特异度规则，不填退到默认规则，
-    算法不报缺该值而不能运行），target_cycle_time 是同类。
+    算法不报缺该值而不能运行），target_cycle_time 是同类；
+    制品级字段缺失 ⇒ 冷却时间回落经验域，**不报错、不阻塞**。
 
     未纳入的字段（需成对使用才有意义）：
     - projected_area（在 GatingSystem 表，按 shot_index 选）
@@ -139,6 +143,31 @@ class OptimizeMoldInfoSchema(BaseSchema):
     )
     target_cycle_time: Optional[float] = Field(
         None, description="目标成型周期 [s]；判断能否用周期换质量",
+    )
+
+    # --- 制品级物理基准（Cavity：型腔壁厚）---
+    max_wall_thickness: Optional[float] = Field(
+        None,
+        description=(
+            "制品最大壁厚 [mm]；**冷却时间（CT）判级论域的物理基准输入**"
+            "（冷却时间 ∝ 壁厚²）；缺失 ⇒ 冷却时间回落经验域"
+        ),
+    )
+    ave_wall_thickness: Optional[float] = Field(
+        None, description="制品平均壁厚 [mm]；平均壁厚（本轮算法未消费，先入契约备查）",
+    )
+
+    # --- 制品级物理基准（GatingSystem：流道 / 制品总重）---
+    total_product_weight: Optional[float] = Field(
+        None, description="制品总重 [g]；充填量基准候选输入（本轮算法未消费）",
+    )
+    runner_type: Optional[str] = Field(
+        None, description="流道类型（冷流道 / 热流道 / ...）；本轮算法未消费，先入契约备查",
+    )
+
+    # --- 制品级物理基准（Gate：浇口类型）---
+    gate_type: Optional[str] = Field(
+        None, description="浇口类型（直浇口 / 侧浇口 / 点浇口 / ...）；本轮算法未消费，先入契约备查",
     )
 
 

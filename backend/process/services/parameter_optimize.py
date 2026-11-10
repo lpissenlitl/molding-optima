@@ -43,6 +43,7 @@ from process.algorithms.fuzzy import (
 )
 from process.algorithms.fuzzy.over_limit import (
     detect_blocking_over_limits,  # 越限分层口径（device = 设备安全红线 ⇒ 阻断）
+    detect_over_stroke_limits,  # 位置类超行程识别（stroke = 产品在本机做不出来 ⇒ 不阻断）
 )
 from process.algorithms.fuzzy.specs import (
     OPTIMIZE_MACHINE_INFO_FIELDS,
@@ -51,6 +52,7 @@ from process.algorithms.fuzzy.specs import (
     audit_feedback_defects,  # 缺陷反馈校验（契约层）
     OptimizeDataValidator,  # 入参契约校验器
     resolve_param_limits,  # 机台物理上限 → {参数族: 上限}
+    resolve_position_limits,  # 设备实测注射行程 → {位置类参数名/族: 上限}
 )  # 算法入参契约（字段字典）—— service 层按此白名单提取，不传全量 ORM 字段
 from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数快照/训练样本组装（均为唯一真相源）
     NON_SNAPSHOT_FIELDS,
@@ -634,6 +636,74 @@ def _guard_blocking_over_limits(
     raise BizException(ERROR_DATA_INVALID, _format_over_limit_message(blocking))
 
 
+def _append_position_over_stroke_notices(
+    recommendations: List[Dict[str, Any]],
+    *,
+    process_parameter: Dict[str, Any],
+    machine_info: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """位置类超行程 ⇒ 追加一条「检查」类建议（**告知，不阻断**）
+
+    与 :func:`_guard_blocking_over_limits` 同属「越限处理」的处理层，但**判据
+    不同、处理方式必须不同**：
+
+    - 那边 = **设备安全红线**（设定值类超机台可设定上限）⇒ 400 拒绝 ——
+      判据是「用户把参数设错了」，改个值就能继续 ⇒ 值得拦；
+    - 这边 = **产品与机台能力不匹配**（位置类当前值超设备注射行程）⇒
+      **用户改不了**（是产品本身在这台机上做不出来，实测 MEL 56/70 行超行程）
+      ⇒ 拦了也没有出路 ⇒ 只**告知**。
+
+    ⚠️ 告知走**既有的 check 通道**（``source='fuzzy.check'`` / ``direction='check'``）
+    ⇒ **不改对外契约**：``_normalize_recommendations`` 会自动译业务字段名、生成
+    中文标签，``_build_suggestion_payload`` 会按业务字段名自动归组
+    （``met_end_pos`` → 熔胶参数 / ``inj_pos_1`` → 注射参数）。
+
+    Args:
+        recommendations: 本次推理的原始推荐列表（**不修改**，返回新列表）。
+        process_parameter: 算法命名的工艺参数当前值。
+        machine_info: 机器维度入参（含最大注射行程）。
+
+    Returns:
+        追加了告知条目后的推荐列表；无位置类超行程时**原样返回**。
+    """
+    stroke_items = detect_over_stroke_limits(
+        process_parameter, resolve_position_limits(machine_info))
+    if not stroke_items:
+        return recommendations
+
+    # 多个位置参数同时超出行程（IL0 / ML0 / MEL 一起超）⇒ 合并成**一条**告知：
+    # 它们说的是同一件事（这个产品在本机做不出来），逐条提示只会刷屏。
+    # 取**超出量最大**的那项作代表。
+    top = max(stroke_items, key=lambda item: item.exceeded_by)
+    label = _param_label(_to_business_param_name(top.param_name))
+    others = len(stroke_items) - 1
+    reason = (
+        '%s当前 %smm 超出本机注射行程 %smm%s —— '
+        '该产品的充填量需求超出本机行程能力，本机无法成形'
+        % (label,
+           _format_limit_number(top.current_value),
+           _format_limit_number(top.limit),
+           ('（另有 %d 项位置参数同样超出行程）' % others) if others else '')
+    )
+    _logger.warning(
+        "[optimize] 位置类超行程（仅告知，不阻断）: %s ｜ 告知: %s",
+        [item.to_trace() for item in stroke_items], reason)
+
+    # ⚠️ **不就地改入参列表**：``_call_algorithms`` 返回的 ``recommendations`` 与
+    #    ``algorithm_sources[subtype]`` 是**同一个 list 对象** ⇒ 就地 append 会把
+    #    「引擎产出」污染成「引擎产出 + 本层告知」⇒ 选优/溯源口径失真。
+    #    这里返回**新列表**，入参保持原样。
+    return recommendations + [{
+        'param': top.param_name,
+        'current_value': top.current_value,
+        'recommended_value': None,
+        'confidence': None,
+        'direction': 'check',
+        'source': 'fuzzy.check',
+        'reason': reason,
+    }]
+
+
 # --- Step 3：字段提取（按 specs.py 白名单） ---
 def _select_injection_unit(condition: ProcessCondition) -> Optional[Any]:
     """按 condition.injection_index 从 InjectionMoldingMachine.injection_units 选一台
@@ -719,12 +789,37 @@ def _extract_polymer_info(condition: ProcessCondition) -> Dict[str, Any]:
 
 
 def _extract_mold_info(condition: ProcessCondition) -> Dict[str, Any]:
-    """按 OPTIMIZE_MOLD_INFO_FIELDS 契约从 Mold 提取 mold_info（白名单）"""
+    """按 OPTIMIZE_MOLD_INFO_FIELDS 契约从 Mold 提取 mold_info（白名单）
+
+    跨四张表合并：**Mold**（主表）+ **GatingSystem**（流道）+ **Cavity**（型腔）
+    + **Gate**（浇口）—— 后三张是制品级物理基准的来源（壁厚 / 制品重 / 流道 /
+    浇口类型），是冷却时间判级论域的必需输入（见 ``fuzzy/specs.py`` 的
+    ``resolve_product_limits``）。
+
+    ⚠️ **逐级取第一个**（多浇注系统 / 多型腔 / 多浇口时取第一个）：
+      与专家引擎侧「多腔取第一个 / 多浇口取第一个」的既有口径一致。
+      实测当前数据集 **56/56 工况的 shot_index 均为 0**（单射）
+      ⇒ 「取第一个」与按 shot_index 选取等价。
+      ⚠️ 若将来出现多射工况，需改为按 ``condition.shot_index`` 选取
+      （与 ``parameter_initialize._build_mold_snapshot`` 对齐）。
+
+    ⚠️ **任一级缺失 ⇒ 该 key 放 None** ⇒ ``_extract_orm_fields_by_spec``
+      自动跳过 ⇒ 对应字段缺失 ⇒ 调用方回落经验论域，
+      **不报错、不阻塞**。
+    """
     mold = condition.mold
     if mold is None:
         return {}
+    gating = mold.gating_systems.first()
+    cavity = gating.cavities.first() if gating is not None else None
+    gate = cavity.gates.first() if cavity is not None else None
     return _extract_orm_fields_by_spec(
-        source_orm_map={"Mold": mold},
+        source_orm_map={
+            "Mold": mold,
+            "GatingSystem": gating,
+            "Cavity": cavity,
+            "Gate": gate,
+        },
         spec_dict=OPTIMIZE_MOLD_INFO_FIELDS,
     )
 
@@ -849,10 +944,31 @@ def _build_description(rec: Dict[str, Any]) -> str:
 
 
 def _extract_rule_refs(rec: Dict[str, Any]) -> List[str]:
-    """提取规则引用（当前算法侧 AlgorithmRecommendation 无规则引用字段，预留接口）"""
-    refs = rec.get("rule_refs") or []
-    if isinstance(refs, list):
-        return [str(r) for r in refs]
+    """提取规则引用（该建议命中了哪几条规则）
+
+    来源优先级：
+    1. ``matched_rules`` —— 模糊推理引擎透出的**命中规则明细**（开发者模式）。
+       每项 = ``{'rule': 规则串, 'weight': 组内占比, 'raw_activation': 原始激活度}``
+       ⇒ 取其中的 ``rule`` 字段（**完整规则串**，一眼能看懂命中逻辑）。
+    2. ``rule_refs`` —— 算法侧直接给的规则引用列表（兼容其他引擎 / 存量数据）。
+
+    ⚠️ **只取规则串，不改任何数值** —— 本函数只影响展示，不参与建议值计算。
+    """
+    matched = rec.get("matched_rules")
+    refs: List[str] = []
+    if isinstance(matched, list):
+        for item in matched:
+            if isinstance(item, dict):
+                rule = item.get("rule")
+                if rule:
+                    refs.append(str(rule))
+            elif isinstance(item, str) and item:
+                refs.append(item)
+    if refs:
+        return refs
+    raw = rec.get("rule_refs") or []
+    if isinstance(raw, list):
+        return [str(r) for r in raw]
     return []
 
 
@@ -1456,6 +1572,15 @@ class ParameterOptimizeService:
                 interface_tag, algorithm_sources,
             )
             raise BizException(ERROR_OPERATION_FAILED, fail_fast_message)
+
+        # 位置类超行程告知（**告知，不阻断**）—— 详见 _append_position_over_stroke_notices。
+        # ⚠️ 必须放在 fail-fast **之后**：否则「只有超行程告知、没有任何数值建议」会被
+        #    fail-fast 当成「有推荐」而放行，掩盖真正的「推不出结论」。
+        raw_recommendations = _append_position_over_stroke_notices(
+            raw_recommendations,
+            process_parameter=algorithm_context.get('process_parameter') or {},
+            machine_info=machine_info,
+        )
 
         # 规范化：业务字段名 + 业务文案 + 过滤零变化项
         # （落库与展示共用这一份，Recommendation.recommendations 存的就是它）

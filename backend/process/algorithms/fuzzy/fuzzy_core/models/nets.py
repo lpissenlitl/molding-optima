@@ -54,7 +54,11 @@ from ..macros import (
     specificity_weight,      # ★ 特异级→匹配度权重
 )
 from ..parsing import is_level_word, parse_rule
-from ..profiles import KeywordProfile, RuleProfile
+from ..profiles import (
+    DIMENSION_PARAMETER,
+    KeywordProfile,
+    RuleProfile,
+)
 from .features import FuzzyFeature
 from .rules import FuzzyRule, NumTskRule
 
@@ -444,6 +448,9 @@ class NumTskRuleNet:
                     'min_val': kp.min_val,
                     'max_val': kp.max_val,
                     'step': kp.step,
+                    # ★ 维度角色（缺陷名 / 缺陷位置 / 工艺参数）——
+                    #   M-1 门控据此区分「是否参与档位归属判定」
+                    'dimension': getattr(kp, 'dimension', DIMENSION_PARAMETER),
                 })
             if kp.keyword in self.sol_set:
                 self.sol_dict[kp.keyword].update({
@@ -658,6 +665,19 @@ class NumTskRuleNet:
         #   μ_alt  = 该参数**其余桶**里隶属度的最大值（其余桶为空 ⇒ 0）
         #   competition = μ_used − μ_alt
         #     （>0 归属一致 / =0 分不清 / <0 归属不一致 ← 这就是「档位不符」）
+        #
+        # ★ **缺陷类维度例外**（缺陷名 / 缺陷位置）：
+        #   上面三态与 competition 判据**只适用于工艺参数维**。
+        #   缺陷类维度**只做 τ（未命中）判定**，不参与 competition / β 降权。
+        #   理由：competition 判的是「规则引用的桶是不是该维度上隶属度最高的桶」
+        #   —— 这对工艺参数成立（当前值唯一 ⇒ 归属唯一）；对缺陷类维度**不成立**：
+        #   规则库里 low/medium/high 三档**本来就并存**，跨档参与是设计意图
+        #   （程度越严重，建议越激进）。
+        #   ⚠️ 若让缺陷维也参与该判定，跨档规则会被打成「档位不符」
+        #   ⇒ β 被压到 GATE_BETA_MIN（0.2）⇒ 建议被无故稀释（实测 3%~29%），
+        #      且诊断里的「档位不符」计数**失真**（统计的是设计内的跨档，不是错配）。
+        #   ⚠️ **保留 τ 判定**：程度差太远时（跨两档 ⇒ μ=exp(-8)≈3.35e-4 < τ）
+        #   该规则确实不该参与（「极轻微」不该用「严重」的规则）。
         m1_beta = np.ones(shape=(self.rule_nums,), dtype=float)
         m1_unmatched = np.zeros(shape=(self.rule_nums,), dtype=bool)
         m1_boundary = set()
@@ -680,6 +700,13 @@ class NumTskRuleNet:
             competitions = []
             for name, bucket, col_idx in specs:
                 mu_used = float(membership_degrees[col_idx])
+                # ★ 缺陷类维度：只做 τ 判定，不参与 competition / β 降权
+                #   （理由见上方 M-1 段落的「缺陷类维度例外」）
+                if self.pre_dict[name].get('dimension') != DIMENSION_PARAMETER:
+                    if mu_used < GATE_TAU:
+                        # ① 未命中 ⇒ 整条规则出局（AND 语义）
+                        m1_unmatched[i] = True
+                    continue
                 p_idx = self.pre_dict[name]['index']
                 p_lvl = self.pre_dict[name]['lvl']
                 mu_alt = 0.0

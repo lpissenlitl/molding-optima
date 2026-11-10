@@ -42,10 +42,10 @@ export type ParameterKind = 'setpoint' | 'actual' | 'enum'
 /** 模糊级别（与后端 FUZZY_LEVELS 一致）*/
 /**
  * 模糊级别档位（决定前置条件的 level 词字典）
- * - 3 / 5 / 7 档渐进式命名（业界标准），与 fuzzy_level 字段联动
- * - 不提供 9 档（命名风格与 3/5/7 不兼容）
+ * - 现网业务统一收敛到 **3 档**（low / medium / high），与 fuzzy_level 字段联动
+ * - 引擎侧仍保留 5 / 7 档词表作为**引擎能力**，但业务数据不再落到它们
  */
-export type FuzzyLevel = 3 | 5 | 7
+export type FuzzyLevel = 3
 
 export type RuleSource = 'expert' | 'rule_miner' | 'llm'
 

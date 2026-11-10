@@ -578,9 +578,11 @@ const simulationCardRows = computed(() =>
   }))
 )
 
-// 流变 / 机械 / 收缩 section 绑定嵌套 model，其他绑定 polymer_info 顶层
+// PVT / 流变 / 机械 / 收缩 section 绑定嵌套 model，其他绑定 polymer_info 顶层
 function getCardModel(title: string): any {
   switch (title) {
+    case 'PVT 仿真参数':
+      return polymer_info.value.pvt
     case '流变仿真参数':
       return polymer_info.value.rheology
     case '机械仿真参数':
@@ -618,7 +620,22 @@ async function handleSave() {
     // 清理 null / 空字符串（保留 0 等有效值）
     const payload: any = {}
     for (const [key, val] of Object.entries(polymer_info.value)) {
-      if (val !== null && val !== '') {
+      if (val === null || val === '') {
+        continue
+      }
+      if (typeof val === 'object' && !Array.isArray(val)) {
+        // 嵌套参数（流变/PVT/机械/收缩）内部同样要清理：
+        // model_type 是后端 schema 的非 Optional 字段，传 null 会被校验拒掉；
+        // id 不传（新建/复制由后端自增，编辑靠已有记录定位）；
+        // 清理后为空 dict 时，后端语义是「删除该类参数」
+        const nested: any = {}
+        for (const [k, v] of Object.entries(val)) {
+          if (k !== 'id' && v !== null && v !== '') {
+            nested[k] = v
+          }
+        }
+        payload[key] = nested
+      } else {
         payload[key] = val
       }
     }
@@ -651,12 +668,28 @@ onMounted(async () => {
   }
 })
 
+/**
+ * 后端在无 Moldflow 子表记录时返回 null（polymer_service._assemble_moldflow_properties），
+ * 直接铺进模板会撞 null 属性访问；与默认表单合并后保证四类嵌套参数恒为对象
+ */
+function mergePolymerDetail(detail: any): any {
+  const base = structuredClone(polymerInfoForm)
+  return {
+    ...base,
+    ...detail,
+    rheology: { ...base.rheology, ...(detail?.rheology ?? {}) },
+    pvt: { ...base.pvt, ...(detail?.pvt ?? {}) },
+    mechanical: { ...base.mechanical, ...(detail?.mechanical ?? {}) },
+    shrinkage: { ...base.shrinkage, ...(detail?.shrinkage ?? {}) },
+  }
+}
+
 async function loadDetail(id: number) {
   loading.value = true
   try {
     const res: any = await polymerMethod.getDetail(id)
     if (res.status === 0) {
-      polymer_info.value = res.data
+      polymer_info.value = mergePolymerDetail(res.data)
       if (is_copy.value) {
         polymer_info.value.id = null
         polymer_info.value.grade = null
