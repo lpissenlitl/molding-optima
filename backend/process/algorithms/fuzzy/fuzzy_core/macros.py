@@ -336,6 +336,82 @@ def level_to_domain_value(lvl, level_word, min_val, max_val):
     return float(centers[bucket])
 
 
+# === 档位词降级（接口入参 → 推理输入）===
+#
+# ⚠️ 背景：接口层放行 15 个合法档位词（`ALL_LEVEL_WORDS`），但现网
+#    `RuleKeyword.fuzzy_level` 已全量收敛到 3 档（实测 311/311）⇒ 其中
+#    **8 个词在 3 档字段上无法解析**：
+#      · 语义轨 4 个：extremely_low / very_low / very_high / extremely_high
+#      · 编号轨 4 个：level4 / level5 / level6 / level7（超出字段等级数）
+#    若原样送进推理，`level_to_domain_value` 会抛错被吞成 ``None``
+#    ⇒ **整个缺陷维度掉出推理网络**（静默失活：不报错、结果合理、
+#    就是少了缺陷相关的建议）。
+#
+# ⚠️ 本降级**只用于「接口入参 → 推理输入」这一层**，
+#    **不用于规则前件解析** —— 规则侧的严格解析是**刻意设计**
+#    （`nets.py`：条件无法判定 ⇒ 整条规则匹配度 = 0，用来暴露
+#    「规则写了本字段不支持的档位词」这类规则错误）。
+#
+# 降级哲学：**取语义最近、且不夸大严重度**的一档。
+#
+# 这张表是「**词的映射**」而非「lvl 的映射」⇒ 在 5/7 档字段上这些词
+# 本来就能解析 ⇒ 降级不会触发 ⇒ **零副作用**。
+LEVEL_WORD_DOWNGRADE = {
+    # ---- 语义轨：5/7 档独有词 → 3 档 ----
+    # 「极轻微」比「轻微」更低，3 档无更低档 ⇒ 取保守的 low（不夸大严重度）
+    'extremely_low': 'low',
+    'very_low': 'low',
+    # 「极严重」比「严重」更高 ⇒ 取保守的 high
+    'very_high': 'high',
+    'extremely_high': 'high',
+    # ---- 编号轨：越界分位 → 钳位到最高合法分位 ----
+    # 「第 N 分位」在 3 档字段上不存在 ⇒ 钳到第 3 分位（= high），
+    # 与语义轨 very_high → high 同向
+    'level4': 'level3',
+    'level5': 'level3',
+    'level6': 'level3',
+    'level7': 'level3',
+}
+
+
+def downgrade_level_word(lvl, level_word):
+    """档位词在当前等级数下无法解析时，降级到语义最近的合法档位词。
+
+    ⚠️ 只用于「接口入参 → 推理输入」路径，**不用于规则前件解析**
+    （理由见 `LEVEL_WORD_DOWNGRADE` 上方注释）。
+
+    Args:
+        lvl: 字段的模糊等级数（`RuleKeyword.fuzzy_level`）
+        level_word: 入参档位词
+
+    Returns:
+        ``(词, 是否发生降级)``：
+
+        - 原词可解析 ⇒ ``(原词, False)``
+          （3 档词、别名 `mid`、合法编号词 `level1~level3` 全部原样透传）
+        - 原词不可解析但在降级表里 ⇒ ``(映射词, True)``
+        - 原词不可解析且不在降级表里（如 ``'abc'``）⇒ ``(原词, False)``
+          ⇒ 保持下游「该维度不参与推理」的既有语义不变
+    """
+    word = str(level_word or '').strip().lower()
+    try:
+        resolve_bucket(lvl, word)
+    except ValueError:
+        pass
+    else:
+        return word, False
+
+    mapped = LEVEL_WORD_DOWNGRADE.get(word)
+    if mapped is None:
+        return word, False
+    try:
+        resolve_bucket(lvl, mapped)
+    except ValueError:
+        # 映射词在当前等级数下也不可解析（理论上不会发生）⇒ 不降级
+        return word, False
+    return mapped, True
+
+
 # === 特异级 → 匹配度权重 ===
 
 # 特异级到「距精确级隔了几级」的映射。

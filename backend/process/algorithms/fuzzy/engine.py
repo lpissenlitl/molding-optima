@@ -35,6 +35,7 @@ from process.algorithms.fuzzy.recommendations import (
     to_recommendations,
 )
 from process.algorithms.fuzzy.fuzzy_core.macros import (
+    downgrade_level_word,
     level_to_domain_value,
     resolve_bucket,
 )
@@ -1400,8 +1401,17 @@ class FuzzyEngine(AlgorithmBase):
         if defect_name and level:
             kp = defect_profiles.get(defect_name)
             if kp is not None:
+                # ⚠️ 档位词可能在**当前等级数下无法解析**（5/7 档独有词、
+                #    编号轨越界词）⇒ 直接送进来会让**整个缺陷维度掉出
+                #    推理网络**（静默失活：不报错、结果合理、就是少了
+                #    缺陷相关建议）⇒ 先降级到语义最近的合法档位。
+                #    详见 docs/defect-level-downgrade-plan.md
+                word, downgraded = downgrade_level_word(kp.lvl, level)
+                if downgraded:
+                    self._report_level_downgrade(
+                        defect_name, level, word, kp.lvl)
                 value = level_to_domain_value(
-                    kp.lvl, level, kp.min_val, kp.max_val)
+                    kp.lvl, word, kp.min_val, kp.max_val)
                 if value is not None:
                     inputs[defect_name] = value
 
@@ -1414,6 +1424,44 @@ class FuzzyEngine(AlgorithmBase):
                 if value is not None:
                     inputs[position] = value
         return inputs
+
+    def _report_level_downgrade(
+        self,
+        defect_name: str,
+        origin_level: str,
+        downgraded_to: str,
+        lvl: int,
+    ) -> None:
+        """档位词降级留痕（**幂等**）。
+
+        ⚠️ **幂等是必需的**：`_build_defect_inputs` 在一次 `recommend()` 内
+        会被调用 **2 次**（`_infer_numeric_layer` 与 `_dedupe_advice_items`
+        各一次）⇒ 直接 append 会产生重复记录。
+        ⇒ 按 `(guard, param, origin_level)` 查重，同一次请求只留 1 条。
+
+        留痕进**已有的** `field_reports` 容器（不新增第 5 个诊断容器 ⇒
+        `Diagnostic.to_payload` 结构不变 ⇒ 黄金快照不受影响）。
+        该容器本来的定位就是「字段定性降级清单（每层一条）」⇒
+        正好落在这里。
+        """
+        reports = self._diag.field_reports
+        for r in reports:
+            if (r.get('guard') == 'LEVEL_DOWNGRADE'
+                    and r.get('param') == defect_name
+                    and r.get('origin_level') == origin_level):
+                return
+        reports.append({
+            'layer': 'defect_input',
+            'param': defect_name,
+            'guard': 'LEVEL_DOWNGRADE',
+            'origin_level': origin_level,
+            'downgraded_to': downgraded_to,
+            'fuzzy_level': lvl,
+        })
+        logger.warning(
+            '[FuzzyEngine] 缺陷档位词在当前等级数下无法解析，已降级: '
+            '%s %s → %s (lvl=%d)',
+            defect_name, origin_level, downgraded_to, lvl)
 
     def _infer_numeric_layer(
         self,
