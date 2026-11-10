@@ -97,9 +97,11 @@ LEVEL_NUMBER_TO_BUCKET = {f'level{i}': i - 1 for i in range(1, 8)}
 #    310 条 5→3 + `_data/rule_keyword_curated.json` 同步）。
 #    ⇒ 下表里的 5/7 档词表**作为引擎能力保留**（词法解析、归一化、
 #      接口入参校验仍需支持），但业务数据不再落到它们 ⇒ 业务侧只暴露 3 档。
-#    词表覆盖 3|5|7 档；9 档独有词 ultra_low / ultra_high 前端没有对应命名，
-#    字段一旦设成 9 档，前端 levelOptionsFor() 会静默兜底成 3 档
-#    ⇒ 选出来的档位与论域对不上。
+#    词表**只覆盖 3|5|7 档**（**没有 9 档**）：9 档设想中的独有词
+#    `ultra_low` / `ultra_high` **不在** `ALL_LEVEL_WORDS` ⇒ 接口层直接 400。
+#    ⚠️ 若将来要支持 9 档，需同时补齐：① 本表加 9 档键；
+#    ② 前端 `levelOptionsFor()` 的 9 档命名（现无 ultra_low/ultra_high 对应标签，
+#    会静默兜底成 3 档 ⇒ 选出来的档位与论域对不上）。
 LEVEL_WORDS_BY_LVL = {
     3: ('low', 'medium', 'high'),
     5: ('very_low', 'low', 'medium', 'high', 'very_high'),

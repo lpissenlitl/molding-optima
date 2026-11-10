@@ -577,9 +577,10 @@ VALID_DEFECT_LEVEL_WORDS: Tuple[str, ...] = _build_valid_level_words()
 
 
 def _build_level_words_text(words: Tuple[str, ...]) -> str:
-    """档位词展示文本：把 level1..level9 这类连续编号词折叠为区间
+    """档位词展示文本：把 level1..level7 这类连续编号词折叠为区间
 
-    不折叠的话提示会变成 17 个词的串，在界面上过长反而看不清重点。
+    不折叠的话提示会变成 15 个词的串（8 个语义词 + 7 个编号词），
+    在界面上过长反而看不清重点。
     """
     numbered = [w for w in words if w.startswith('level') and w[5:].isdigit()]
     others = [w for w in words if w not in numbered]
