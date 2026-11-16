@@ -286,6 +286,10 @@ def _prepare_defect_selection(feedback: Dict[str, Any]) -> DefectSelection:
 
     ⚠️ **实现属算法层、调用时机属本层** —— 可插拔的选取规则实现在
        ``process/algorithms/defect_selection.py``（零 ORM 的纯计算）。
+
+    ⚠️ **当前生效的选取规则 = 阶段序**（批次 12.7）—— 多缺陷反馈按调机阶段取
+       （打足 → 补缩 → 外观），**不按列表第一项**；口径来源 = 用户
+       「结合入参进行分析」（短射+缩水⇒先短射；缩水+飞边⇒先缩水）。
     """
     return select_defect({'feedback': feedback or {}})
 
@@ -567,7 +571,7 @@ def _compose_algorithm_context(
 
     `selected_defect`：预处理层整理出的「本轮处理哪个缺陷」
     （见 :func:`_prepare_defect_selection`）—— L1 推理与 L2 策略**共用同一份**。
-    None = 本层不产出（尚未接线）。
+    None = 本层不产出（未走预处理层的调用方）。
     """
     algorithm_params = field_names.to_algo_params(parameter)
     return {
@@ -1657,6 +1661,11 @@ class ParameterOptimizeService:
         # Step 0c: 缺陷反馈整理（**一次**）—— 本轮处理哪个缺陷。
         # ⚠ L1（推理）与 L2（策略）**共用这一份** ⇒ 同一份反馈不会推出两个缺陷。
         selection = _prepare_defect_selection(feedback)
+        # 缺陷选取留痕（**选了谁 / 按什么规则 / 跳过了谁**）——
+        # 批次 12.7 起规则 = 阶段序 ⇒ 多缺陷下选中项可能不是列表第一条。
+        _logger.info(
+            '[optimize] %s 缺陷选取: %s', interface_tag, selection.to_trace(),
+        )
 
         # 第2层的策略数据：**业务知识在策略清单文件**（场景 / 优先集 / 名额 /
         # 目标口径）—— 这里只做「读取 + 匹配 + 组装」；读不到或没命中 ⇒ 不裁决。

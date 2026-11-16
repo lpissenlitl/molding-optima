@@ -95,7 +95,7 @@ def main():
     algo_context['process_parameter'] = field_names.to_algo_params(baseline)
 
     # ---------------- 3) 规则（生产路径取出） ----------------
-    # 缺陷选取：与生产路径同一份实现（默认策略 = 只选第一条有效项），
+    # 缺陷选取：与生产路径同一份实现（默认策略 = 阶段序），
     # 结果随 context 下传 —— 引擎只读结果，不再各自挑缺陷。
     selection = select_defect(algo_context)
     algo_context['selected_defect'] = selection.to_context()

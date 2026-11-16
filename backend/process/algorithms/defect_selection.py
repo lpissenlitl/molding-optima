@@ -12,8 +12,9 @@
 
 本模块职责（**只做选取，不做推理**）：
 
-1. **唯一实现** —— fuzzy 与 empirical 都从这里取「本轮处理哪个缺陷」；
-2. **可插拔策略** —— 默认策略 = 取第一个有效缺陷；业务优先级规则作为
+1. **唯一实现** —— 「本轮处理哪个缺陷」只有这一处口径；service 预处理层调一次，
+   引擎与 L2 **只读结果**（不再各自挑缺陷）；
+2. **可插拔策略** —— 默认策略 = **阶段序**（批次 12.7）；业务优先级规则作为
    新策略接入，**不改调用点**；
 3. **留痕** —— 返回对象自带选取依据（选了谁 / 跳过了谁 / 依据什么），
    由调用方写进自己的诊断出口。
@@ -27,14 +28,16 @@
 
 本模块提供三种口径：
 
-- :class:`FirstValidDefectStrategy` —— **默认（当前生效）**，取第一个有效缺陷；
+- :class:`StagePriorityDefectStrategy` —— **默认（当前生效，批次 12.7）**：
+  先按**调机阶段**（打足 → 补缩 → 外观）重排，再取第一个有效缺陷
+  （阶段表见 :mod:`process.algorithms.stage_order`）；
+- :class:`FirstValidDefectStrategy` —— 「取第一个有效缺陷」（按列表顺序）——
+  **历史口径**，保留作参照与回退开关；
 - :class:`FirstOnlyDefectStrategy` —— 「只认首项，首项无效就整体放弃」
-  —— ⚠️ **引擎侧已不再单独选取**（预处理层已把列表收敛成一条有效项）⇒ 仅作历史语义参照；
-- :class:`StagePriorityDefectStrategy` —— **候选规则（未接线）**：先按**调机阶段**
-  （打足 → 补缩 → 外观）重排，再取第一个有效缺陷（阶段表见
-  :mod:`process.algorithms.stage_order`）。
-  ⚠️ 当前生效规则是「只选第一条」—— 更优的匹配规则尚未确定（用户口径：
-  「结合入参进行分析」，例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。
+  —— ⚠️ **引擎侧已不再单独选取**（预处理层已把列表收敛成一条有效项）⇒ 仅作历史语义参照。
+
+⚠️ **当前生效的匹配规则 = 阶段序**（批次 12.7）—— 口径来源 = 用户「结合入参进行分析」，
+例：短射+缩水⇒先短射；缩水+飞边⇒先缩水 ⇒ 多缺陷反馈**不按列表第一项**。
 
 零 ORM、零 Django（本模块只认 context 里的裸 dict）。
 """
@@ -140,13 +143,14 @@ def _collect_candidates(defects: Sequence[Any]) -> List[str]:
 
 
 class FirstValidDefectStrategy:
-    """默认策略：按列表顺序取第一个**有效**缺陷。
+    """**历史口径**：按列表顺序取第一个**有效**缺陷。
 
     「有效」= 是 dict 且有非空 `keyword_name`；无效项跳过，继续往后找。
 
-    —— 与 FuzzyEngine 现行行为**逐字一致**（切换到本模块不改变任何结果）。
+    —— 与 FuzzyEngine 的历史行为**逐字一致**。
 
-    ⚠️ 这**不是**业务优先级规则（业务优先级待定，见模块 docstring）。
+    ⚠️ **不是当前生效规则**（批次 12.7 起生效的是 :class:`StagePriorityDefectStrategy`
+    —— 阶段序）⇒ 本类保留作参照与回退开关。
     """
 
     name = 'first_valid'
@@ -228,13 +232,10 @@ class FirstOnlyDefectStrategy:
 class StagePriorityDefectStrategy:
     """**业务优先级策略** —— 按**调机阶段**选取本轮缺陷。
 
-    解决的问题（模块 docstring 里的现状问题）：fuzzy 与 empirical **各选各的**，
-    同一份反馈在不同引擎下可能选中**不同的缺陷**，且选取依据没有记录。
-    ⇒ 各引擎**各选各的**会让同一份反馈推理出不同缺陷的方案。
-    ⚠️ **口径（2026-11-13 用户界定）**：缺陷选取属 **L1 侧** ——
-    **L2 的输入是「规则」+「已确定的缺陷信息」，L2 不重选**。
-    本策略是**收敛 L1 侧各引擎的选取口径**（把「各选各的」变成一致的阶段优先级），
-    不是 L2 的裁决。
+    ⚠️ **口径（2026-11-13 用户界定 + 12.6 修正）**：缺陷选取属 **service 预处理层**
+    —— **L2 的输入是「规则」+「已确定的缺陷信息」，L2 不重选**。
+    本策略是**预处理层选「本轮处理哪个缺陷」时用的匹配规则**
+    （不是 L2 的裁决，也不是引擎各自的行为）。
 
     口径：**先按阶段优先级重排**（打足 → 补缩 → 外观；阶段表见
     :mod:`process.algorithms.stage_order`），**再取第一个有效缺陷**。
@@ -245,9 +246,10 @@ class StagePriorityDefectStrategy:
     - 「缩水 + 飞边 ⇒ 先做缩水」—— 飞边**可能是模具问题而不是工艺问题**，
       不该靠调机解决（对应规则原料 `FL-06` / `BN-01`）。
 
-    ⚠️ **接线状态（2026-11-16）**：**未接线** —— 当前生效的是「只选第一条」
-    （`DEFAULT_STRATEGY`）。本策略保留为**候选实现**，等确定更优的匹配规则
-    （用户口径：「结合入参进行分析」）后由预处理层选用，**调用点不变**。
+    ✅ **接线状态（批次 12.7，2026-11-16）**：**已接线** —— 作为 `DEFAULT_STRATEGY`
+    生效。⚠️ 12.6b 曾撤回过它，撤回理由是「选取散落在两个引擎里」⇒ 该理由在
+    12.6 把选取上移到 service 预处理层（唯一入口）后**已消除**；
+    剩下的「换一套规则」正是用户口径要的。
 
     ⚠️ **与 :class:`FirstValidDefectStrategy` 的差别只有一条**（多了阶段重排）：
     有效性判定完全一致 —— 无效项跳过；
@@ -297,14 +299,17 @@ class StagePriorityDefectStrategy:
         return DefectSelection(strategy=self.name, candidates=candidates, skipped=skipped)
 
 
-#: 默认策略（未显式指定时用）—— 等价于 fuzzy 的历史行为。
-DEFAULT_STRATEGY = FirstValidDefectStrategy()
+#: **当前生效的选取规则**（未显式指定时用）—— **阶段序**（批次 12.7）：
+#:    多缺陷反馈按调机阶段取（打足 → 补缩 → 外观），同阶段保持提交顺序。
+#:    口径来源 = 用户「结合入参进行分析」（短射+缩水⇒先短射；缩水+飞边⇒先缩水）。
+DEFAULT_STRATEGY = StagePriorityDefectStrategy()
+
+#: 历史口径 —— 按列表顺序取第一个有效缺陷（保留作参照与回退开关）。
+FIRST_VALID_STRATEGY = FirstValidDefectStrategy()
 
 #: 业务优先级策略 —— 按调机阶段重排后取第一个有效缺陷。
-#: ⚠️ **候选规则、未接线**（2026-11-16）：当前生效的是「只选第一条」
-#:    （`DEFAULT_STRATEGY`）—— 更优的匹配规则待定（用户口径：
-#:    「结合入参进行分析」，例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。
-STAGE_PRIORITY_STRATEGY = StagePriorityDefectStrategy()
+#: ⚠️ **别名**（当前生效的就是它，见 `DEFAULT_STRATEGY`）。
+STAGE_PRIORITY_STRATEGY = DEFAULT_STRATEGY
 
 
 def select_defect(
@@ -315,7 +320,7 @@ def select_defect(
 
     Args:
         context: 推理上下文（只读 `context['feedback']['defect']`）。
-        strategy: 选取策略（None = 默认策略「取第一个有效缺陷」）。
+        strategy: 选取策略（None = 默认策略「阶段序」—— 见 :data:`DEFAULT_STRATEGY`）。
 
     Returns:
         `DefectSelection` —— 选中项 + 留痕依据（选了什么 / 跳过了什么）。
@@ -339,8 +344,7 @@ def ensure_selected_defect(
     ⚠ **幂等**：已有 ``selected_defect`` 则原样返回（**不重算**）⇒
        service 层整理过的 context 不会被二次加工 ⇒ 两个来源不可能打架。
 
-    ⚠ 默认策略 = 「只选第一条有效项」（当前生效口径）；与 ``select_defect``
-       默认一致。
+    ⚠ 默认策略 = 与 ``select_defect`` 一致（当前生效口径 =「阶段序」）。
     """
     if not isinstance(context, dict):
         return context
@@ -352,6 +356,7 @@ def ensure_selected_defect(
 
 __all__ = [
     'DEFAULT_STRATEGY',
+    'FIRST_VALID_STRATEGY',
     'STAGE_PRIORITY_STRATEGY',
     'DefectSelection',
     'DefectSelectionStrategy',

@@ -429,6 +429,7 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
    ⚠️ **批次 12.1 已落地**（2026-11-12）：新增 `algorithms/stage_order.py` +
    `defect_selection.py` 的 `StagePriorityDefectStrategy`（**只加能力、未接线**，
    `DEFAULT_STRATEGY` 未动）⇒ pytest **135 passed**，行为零变化。
+   （⚠️ **批次 12.7 起该策略已接线**为 `DEFAULT_STRATEGY`。）
    ⚠️ **批次 12.2 已落地**（2026-11-13）：`ScenarioContext` 加 `extra` 通道
    （条件可引用**任意键**，未知键 ⇒ 不命中）+ `_compare` 新增 `in_set` / `not_in_set`
    （单值 ∈ 集合；原 `in` = 目标 ⊆ 字段值，方向不变）⇒ pytest **135 passed**，行为零变化。
@@ -454,7 +455,8 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
    结果经 `DefectSelection.to_context()` 随 context 的 `selected_defect` 下传；
    ② **12.6b**：`fuzzy` / `empirical` 改为**只读载荷**，不再各自 `select_defect`
    （原 12.4b ① 的阶段序接线**已撤回** —— 选取只做一次、在预处理层；
-   当前规则 = **「只选第一条」**，`stage_priority` 降级为未接线的候选规则）；
+   当时规则 = **「只选第一条」**，`stage_priority` 降级为未接线的候选规则；
+   ⚠️ **该状态已由 12.7 终结** —— 撤回理由里的「选取散落」被 12.6 消除）；
    ③ **12.6c**：5 条场景条件改引用 `selected_defect`，`resolve_policies` 调用点挪进
    `_infer_kernel` ⇒ **L1 与 L2 同一份口径** ⇒ §8 前提 ⑦ **闭环**。
    ⇒ pytest **135 passed**；场景判定核对 4 项全过（含「旧口径实证会错配」的对照）。
@@ -482,3 +484,15 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
    ⇒ **行为变化（修复，非回归）**：condition chain 由「必然抛异常」变为「能出推荐」——
    端到端离线实测：chain 式 context（无 level/position）⇒ 选中 `SHRINKAGE` ⇒
    命中真实规则库 93 条规则 ⇒ 产出推荐 `IV0 decrease → 87.3`。
+
+   ✅ **批次 12.7 已落地**（2026-11-16）—— **多缺陷选取接阶段序**：
+   ① `algorithms/defect_selection.py` 的 `DEFAULT_STRATEGY` 由 `FirstValidDefectStrategy`
+   改为 `StagePriorityDefectStrategy`（`FIRST_VALID_STRATEGY` 保留为历史口径/回退开关）；
+   ② `services/parameter_optimize.py` 预处理层落一条 `[optimize] … 缺陷选取` 日志。
+   ⇒ **为何现在能接**：12.6b 撤回阶段序的理由是「选取散落在两个引擎里」——
+   该理由在 12.6 把选取上移到 service 预处理层（**唯一入口**）后**已消除**；
+   剩下的「换一套规则」正是用户口径要的（「结合入参进行分析」，
+   例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。
+   ⇒ pytest **135 passed**；核对 **18 项全过**；黄金快照差异数不变（仍为 6，历史遗留）。
+   ⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条** ⇒
+   L1 推理对象 + L2 命中场景随之变（已留痕：`selection.to_trace()`）。

@@ -396,11 +396,13 @@ MEL       ≤ max_injection_stroke
 
 | 策略 | 何时用 | 行为 |
 |---|---|---|
-| `first_valid`（已有） | 默认 | 列表顺序取第一个有效缺陷 |
+| `stage_priority`（**12.7 起默认**） | 默认 | 按调机阶段重排后取第一个有效缺陷（打足 → 补缩 → 外观） |
+| `first_valid`（已有） | 历史口径 / 回退开关 | 列表顺序取第一个有效缺陷 |
 | `first_only`（已有） | 保留 empirical 历史行为 | 只看首项，首项无效即整体放弃 |
 | **待新增：充填优先** | 存在"成型性"缺陷且有实测重量反馈 | 见 §7.2 |
 
-⚠️ 新策略**不得改变** `first_valid` / `first_only` 的既有行为（那两个是"保持历史行为"的兼容策略）。
+⚠️ 新策略**不得改变** `first_valid` / `first_only` 的既有行为（那两个是"保持历史行为"的兼容策略）；
+⚠️ `stage_priority` 是**当前默认**（批次 12.7）—— 换默认策略属口径变更，需用户拍板。
 
 ⚠️ 新策略的**规则内容**仍受 §7.0 约束：策略实现只负责「按数据裁决」，
 具体缺陷优先级规则应来自规则库 / 派生输入，而非写在策略类的 `if` 里。
@@ -475,8 +477,10 @@ L2 的真正增量不是"多几条 if"，而是**决策可解释**。每次 L2 �
 ⚠️ **落地状态（2026-11-16）**：`selected_defect` / `skipped_defects` **已落地** ——
 `DefectSelection.to_trace()` 随 context 的 `selected_defect.trace` 下传，
 引擎的 `Diagnostic.selections` 记的就是它（决策级与规则级分开）。
+⚠️ **选取规则 = 阶段序**（批次 12.7）—— `selected_defect` 是**按调机阶段**选出来的
+（多缺陷不按列表第一项）；规则名 `stage_priority` 记在该 trace 的 `strategy` 里。
 `strategy` = 命中的**场景码**（`filling_first` / `shrinking_first` / …）⚠️
-不是缺陷选取策略名（那个是 `first_valid`）—— 两个“策略”含义不同，别混。
+不是缺陷选取策略名（那个是 `stage_priority`，批次 12.7 起默认）—— 两个“策略”含义不同，别混。
 ✅ **阶段进度已落地**（批次 12.5）：`StageProgress.to_trace()`
 （`defect_codes` / `achieved` / `pending` / `current`）进 `PolicyResolution.trace`
 + 一条 `[optimize] … 阶段进度` 日志；`current_stage` 注入 `ScenarioContext.extra`
