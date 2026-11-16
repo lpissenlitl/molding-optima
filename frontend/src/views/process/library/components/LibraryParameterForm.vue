@@ -374,11 +374,12 @@
               </el-input>
             </el-form-item>
             <el-form-item label="终止位置" prop="ending_position">
+              <!-- 只读：终止位置由计量位置 + 储后松退算出（MEL 是算法侧的标，不是可填字段） -->
               <el-input
                 v-model="metering.ending_position"
                 v-number
                 style="width: 8rem"
-                :disabled="readonly"
+                disabled
               >
                 <template #suffix>mm</template>
               </el-input>

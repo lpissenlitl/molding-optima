@@ -80,3 +80,7 @@ secrets.json
 # 服务端运行日志（轮转备份名 app.log.1 不匹配 *.log，故按目录忽略）
 backend/logs/
 backend/_dev_refs/
+
+# 专业资料原件（体积大 + 原书版权受限，仅本地留存，不入库）
+# 拆解结论与规则草稿已入库 backend/process/references/*.md
+backend/process/references/*.pdf

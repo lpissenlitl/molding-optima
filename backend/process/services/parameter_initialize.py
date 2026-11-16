@@ -18,6 +18,8 @@ Service 层职责：
 - Step 4 输出后处理：4 维算法结果 → 拍扁为 ProcessParameter + TuningRecord 落库
 - Step 3 推理算法：委托给 algorithms/expert/ProcessInitializer（含 DataValidator）
   校验失败 raise ValueError，service 层转 BizException 400
+- Step 3.5 机台能力校验：位置类参数超出机台注射行程 ⇒ BizException 400
+  （算出来的初值机台根本设不进去 ⇒ 不产出错参数）
 """
 
 import logging
@@ -38,12 +40,25 @@ from process.algorithms.expert.specs import (
     MACHINE_INFO_FIELDS,
     POLYMER_INFO_FIELDS,
 )
+# 越限识别口径复用模糊推理层（唯一真相源，不在本 service 里另写一套判据）：
+#   resolve_position_limits  —— 机台实测注射行程 → 位置类上限
+#   detect_over_stroke_limits —— 位置类超行程识别（纯函数）
+#   to_algo_params           —— 业务字段名 → 算法字段名（位置类参数按算法名匹配）
+from process.algorithms.integrate_params import (  # 第3层：整合参数
+    integrate,
+    numeric_snapshot,
+)
+from process.algorithms.check_params import validate  # 第4层：校验参数合理性
+from process.algorithms.fuzzy.field_names import to_algo_params
+from process.algorithms.fuzzy.over_limit import detect_over_stroke_limits
+from process.algorithms.fuzzy.specs import resolve_position_limits
 from process.exceptions import (
     ERROR_MACHINE_NOT_FOUND,
     ERROR_MOLD_NOT_FOUND,
     ERROR_POLYMER_NOT_FOUND,
     ERROR_PROCESS_CONDITION_NOT_FOUND,
     ERROR_PROCESS_INSUFFICIENT_FIELDS,
+    ERROR_PROCESS_OVER_STROKE,
     ERROR_PROCESS_PARAMETER_NOT_FOUND,
 )
 from process.models.condition import ProcessCondition
@@ -356,6 +371,98 @@ def _build_polymer_info_from_snapshot(
     return polymer_info
 
 
+def _param_label(business_name: str) -> str:
+    """业务字段名 → 中文标签（取 ProcessParameter 字段的 verbose_name）
+
+    例：``met_end_pos`` → ``熔胶终止位置``。
+
+    文案面向的是工艺员，必须用中文标签而不是 ``met_end_pos`` / ``MEL``。
+    与 ``parameter_optimize._param_label`` 同口径（同一份展示规则）；
+    两处各写一份：它们分属不同 service 的**局部展示工具**，
+    为此抽到公共模块属于为 5 行代码扩大改动面，不划算。
+
+    参数不在 ProcessParameter 里时（规则库专用参数如 ``IPOS`` / ``CUSION``）
+    回落到业务字段名本身。
+    """
+    if not business_name:
+        return business_name
+    try:
+        return ProcessParameter._meta.get_field(business_name).verbose_name
+    except Exception:  # noqa: BLE001 —— 字段不存在 / 非模型字段
+        return business_name
+
+
+def _format_limit_number(value: Any) -> str:
+    """上限 / 需用值的展示格式：整数不带小数尾巴（'100' 而不是 '100.0000'）
+
+    与 ``parameter_optimize._format_limit_number`` 同口径（数值展示格式一致）。
+    两处各写一份：它们分属不同 service 的**局部展示工具**，
+    为此抽到公共模块属于为 3 行格式化代码扩大改动面，不划算。
+    """
+    try:
+        if float(value) == int(value):
+            return str(int(value))
+    except (TypeError, ValueError):
+        pass
+    return ('%.4f' % value).rstrip('0').rstrip('.')
+
+
+def _guard_over_stroke(
+    process_flat: Dict[str, Any],
+    machine_info: Dict[str, Any],
+) -> None:
+    """位置类超行程守卫 —— **机台能力校验**（超了直接 400 拒绝，不产出错参数）
+
+    与优化链路的越限处理**判据相同、处理方式不同**：
+
+    - 那边（``parameter_optimize``）：位置类超行程 ⇒ **只告知不阻断**
+      —— 那是「已有参数」下产品做不出来，用户改不了 ⇒ 拦了没出路；
+    - 这边（初始化）：算出来的**初值本身就是超行程的** ⇒ 落到参数表里就是
+      让操作工去设一个机台根本设不进去的值 ⇒ **拒绝**，
+      文案指向「换机」而不是「改个值」。
+      ⚠️ **以产品为目标**（产品形态已定）⇒ 出路只有「换行程更大的机」，
+      不给「减轻制品重量 / 减少型腔数」这类迁就设备的建议。
+
+    判据复用越限识别层的唯一口径（``fuzzy/over_limit.detect_over_stroke_limits``），
+    上限取设备实测的最大注射行程（``fuzzy/specs.resolve_position_limits``）。
+
+    ⚠️ 缺机台行程（``max_injection_stroke`` 没录）⇒ **不判**：缺数据不等于
+    参数不合理（同 ``resolve_position_limits`` 的既定口径）。
+
+    Args:
+        process_flat: flat 形态的工艺参数（业务字段名）。
+        machine_info: 算法入参 machine_info（含 ``max_injection_stroke``）。
+
+    Raises:
+        BizException(ERROR_PROCESS_OVER_STROKE): 位置类参数超出机台注射行程
+    """
+    limits = resolve_position_limits(machine_info)
+    if not limits:
+        return
+    algo_params = to_algo_params(process_flat)
+    items = detect_over_stroke_limits(algo_params, limits)
+    if not items:
+        return
+
+    # 多个位置参数同时超出行程（注射位置 / 计量位置 / 终止位置）⇒ 合并成一条：
+    # 它们说的是同一件事（这个产品在本机做不出来），逐条提示只会刷屏。
+    # ⚠️ 文案三段式：**事实**（哪个参数、超多少）→ **出路**（换更大的机）。
+    #    「本机做不出来」的结论由错误码标题承担（当前设备无法生产该制品），
+    #    正文不再重复；出路只给「换机」—— 产品是既定的，不迁就设备。
+    top = max(items, key=lambda item: item.exceeded_by)
+    others = len(items) - 1
+    label = _param_label(top.business_name or top.param_name)
+    message = (
+        '%s需 %smm，超出本机注射行程 %smm%s，请更换行程更大的设备'
+        % (label,
+           _format_limit_number(top.current_value),
+           _format_limit_number(top.limit),
+           ('（另有 %d 项超出行程）' % others) if others else '')
+    )
+    logger.warning("[initialize] 位置类超行程，拒绝初始化: %s", message)
+    raise BizException(ERROR_PROCESS_OVER_STROKE, message)
+
+
 # Step 2 快照路径：ORM → snapshot → 4 维算法入参
 # 快照保留完整 masterdata 上下文（便于反查/复现/历史回溯），两个 Mode 共享同一套 snapshot builders。
 # initialize-from-provided 入口跳过这一步（前端已直接提供完整 4 维 dict）。
@@ -481,6 +588,12 @@ class ParameterInitializeService:
                 "injection_index": injection_index,
                 "process_set": process_set,
             }
+
+            # Step 3.5: 机台能力校验 —— 位置类参数超出机台注射行程 ⇒ 400 拒绝
+            # （算出来的初值本身就是超行程的 ⇒ 落库就是让操作工去设一个
+            #   机台根本设不进去的值 ⇒ 拒绝，不产出错参数）
+            _guard_over_stroke(
+                process_params_to_flat(result['process']), machine_info)
 
             # Step 4: 落库
             condition = ProcessCondition.objects.create(
@@ -650,6 +763,8 @@ class ParameterInitializeService:
         )
         # D1 契约统一：对外响应里的工艺参数一律 flat（与 optimize 的 new_parameter 同形）
         result['process'] = process_params_to_flat(result['process'])
+        # 机台能力校验（与 from_masterdata 同口径）：位置类超行程 ⇒ 400 拒绝
+        _guard_over_stroke(result['process'], machine_info)
         return result
 
     # --- 核心算法（Step 3）—— 私有方法，三个入口共用 ---
@@ -824,8 +939,16 @@ def _create_process_parameter(
         **process_params_to_flat(proc_dict),
     }
 
+    # 第3层：整合参数（新建轮次没有旧值可比 ⇒ 不传导）
+    integrated = integrate(flat)
+
+    # 第4层：校验参数合理性（只报不阻断）
+    validation = validate(integrated.values)
+    if not validation.ok:
+        logger.warning('create_process_parameter validation: %s', validation.summary())
+
     new_param = ProcessParameter.objects.create(
-        **flat, company_id=company_id, organization_id=organization_id
+        **integrated.values, company_id=company_id, organization_id=organization_id
     )
 
     # 同步创建初始 TuningRecord（pending 状态，无缺陷反馈）
@@ -868,8 +991,16 @@ def _copy_process_parameter(
         if value is not None:
             flat[field_name] = value
 
+    # 第3层：整合参数（复制是「原样复制」⇒ 没有数值改动 ⇒ 不传导）
+    integrated = integrate(flat, numeric_snapshot(source_param))
+
+    # 第4层：校验参数合理性（只报不阻断）
+    validation = validate(integrated.values)
+    if not validation.ok:
+        logger.warning('copy_process_parameter validation: %s', validation.summary())
+
     new_param = ProcessParameter.objects.create(
-        **flat, company_id=company_id, organization_id=organization_id
+        **integrated.values, company_id=company_id, organization_id=organization_id
     )
 
     # 同步创建初始 TuningRecord（pending 状态）

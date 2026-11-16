@@ -62,6 +62,11 @@ ERROR_PROCESS_SNAPSHOT_INVALID         = BizErrorCode.create(MOD_PROCESS, 35, "�
 ERROR_PROCESS_INSUFFICIENT_FIELDS      = BizErrorCode.create(MOD_PROCESS, 36, "工艺参数输入字段不足")
 # 归档轮次（已落库试模评价）参数不可改；评价仍可改（两者生命周期不同，分开设防）
 ERROR_PROCESS_ROUND_SEALED             = BizErrorCode.create(MOD_PROCESS, 37, "该调机轮次已归档，参数不可修改")
+# 位置类参数（注射位置 / 计量位置 / 储料终止位置）超出机台最大注射行程
+# ⇒ 算出来的初值机台根本设不进去 ⇒ 直接拒绝（产品与机台能力不匹配，用户改不了）
+# ⚠️ 文案口径：**以产品为目标**（产品形态已定）⇒ 出路只有「换行程更大的机」，
+#    不给「减轻制品重量 / 减少型腔数」这类迁就设备的建议
+ERROR_PROCESS_OVER_STROKE               = BizErrorCode.create(MOD_PROCESS, 38, "当前设备无法生产该制品")
 
 
 # ============================================================

@@ -17,7 +17,7 @@ from dataclasses import replace
 from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
-from process.algorithms.defect_selection import select_defect
+from process.algorithms.defect_selection import STAGE_PRIORITY_STRATEGY, select_defect
 # ⚠️ **物理常量来自中立层**（`algorithms/material_physics.py`）：材料大类解析是
 #    **物理事实**，不属于任何算法包的私有口径 ⇒ 与专家引擎共用同一份。
 from process.algorithms.material_physics import (
@@ -303,7 +303,15 @@ class FuzzyEngine(AlgorithmBase):
         # 缺陷选取 —— **唯一真相源**（`process/algorithms/defect_selection.py`）。
         # selection 对象自带选取依据，这里顺手**留痕**（决策级，
         # 与 `field_reports` / `diagnostics` 那两个规则级清单分开）。
-        selection = select_defect(context)
+        # ⚠️ **2026-11-13 口径（用户拍板）**：多缺陷反馈**不按列表第一项**，
+        #    而按**调机阶段**取（打足 → 补缩 → 外观）——
+        #    「短射 + 缩水 ⇒ 先解决短射；缩水 + 飞边 ⇒ 先做缩水
+        #    （飞边可能是**模具问题**而不是工艺问题，不该靠调机解决）」。
+        #    ⇒ fuzzy 切到 `STAGE_PRIORITY_STRATEGY`；
+        #    ⚠️ **empirical 不切** —— 它的「首项无效即整体放弃」是
+        #    **刻意保留**的历史语义，强行统一会让经验推理
+        #    在「首项无效、次项有效」时凭空多出推荐。
+        selection = select_defect(context, strategy=STAGE_PRIORITY_STRATEGY)
         self._diag.selections.append(selection.to_trace())
         defect_name = selection.keyword_name
         if not defect_name:
@@ -542,8 +550,10 @@ class FuzzyEngine(AlgorithmBase):
         ⚠️ 选取逻辑已收敛到**唯一真相源**
         （`process/algorithms/defect_selection.py`），本方法只是它的便捷包装，
         返回形状保持不变（`defect_name` / `level` / `position`）。
+        ⚠️ 选取策略与 :meth:`recommend` **保持同源**（阶段优先级）——
+           两处若用不同策略，同一份反馈会选出两个不同的缺陷。
         """
-        selection = select_defect(context)
+        selection = select_defect(context, strategy=STAGE_PRIORITY_STRATEGY)
         if selection.is_empty():
             return {}
         return {

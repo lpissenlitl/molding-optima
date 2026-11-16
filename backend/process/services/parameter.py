@@ -39,6 +39,11 @@ from django.db.models import Max, Q
 from extensions.exceptions import (
     BizException, ERROR_ACCESS_DENIED, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT,
 )
+from process.algorithms.integrate_params import (  # 第3层：整合参数
+    integrate,
+    numeric_snapshot,
+)
+from process.algorithms.check_params import validate  # 第4层：校验参数合理性
 from process.exceptions import ERROR_PROCESS_ROUND_SEALED
 from process.models import ProcessParameter, ProcessCondition, TuningRecord
 from utils.db import build_filters, parse_ordering, paginate_queryset
@@ -354,7 +359,19 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
 
     # 业务身份锁：白名单式扣除受保护字段
     allowed_fields = ProcessParameter.get_allowed_fields() - PARAMETER_LOCKED_FIELDS
-    parameter_obj.update_info(allow_fields=allowed_fields, **parameter_kwargs)
+
+    # 第3层：整合参数（只对数据负责：不论谁写的，落库前都过一遍）
+    # 旧值 = 数据库里的当前值 ⇒ 差分出「这次改动了哪些量」⇒ 走锚点传导
+    integrated = integrate(parameter_kwargs, numeric_snapshot(parameter_obj))
+    if integrated.touched:
+        _logger.info('update_parameter integration: %s', integrated.summary())
+
+    # 第4层：校验参数合理性（只报不阻断）
+    validation = validate(integrated.values)
+    if not validation.ok:
+        _logger.info('update_parameter validation: %s', validation.summary())
+
+    parameter_obj.update_info(allow_fields=allowed_fields, **integrated.values)
     return _serializable_parameter_dict(parameter_obj)
 
 
@@ -400,13 +417,21 @@ def clone_round_from_parameter(parameter_id: int, company_id: int = None) -> dic
     # 只拷工艺标量字段（快照口径：排除元数据 / 关系 / 来源标记 / 版本序号）
     snapshot = snapshot_parameter(source)
 
+    # 第3层：整合参数（克隆是「原样复制」⇒ 没有数值改动 ⇒ 不传导）
+    integrated = integrate(snapshot, numeric_snapshot(source))
+
+    # 第4层：校验参数合理性（只报不阻断）
+    validation = validate(integrated.values)
+    if not validation.ok:
+        _logger.warning('clone_round validation: %s', validation.summary())
+
     new_param = ProcessParameter.objects.create(
         process_condition=source.process_condition,
         parent_param=source,
         param_source="manual_adjusted",
         company_id=source.company_id,
         organization_id=source.organization_id,
-        **snapshot,
+        **integrated.values,
     )
 
     # 1:1 契约：同步建 pending 的 TuningRecord（新轮未评价 ⇒ 未封存 ⇒ 参数可编辑）

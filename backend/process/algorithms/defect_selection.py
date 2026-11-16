@@ -13,19 +13,30 @@
 本模块职责（**只做选取，不做推理**）：
 
 1. **唯一实现** —— fuzzy 与 empirical 都从这里取「本轮处理哪个缺陷」；
-2. **可插拔策略** —— 默认策略 = 取第一个有效缺陷；业务优先级规则将来作为
+2. **可插拔策略** —— 默认策略 = 取第一个有效缺陷；业务优先级规则作为
    新策略接入，**不改调用点**；
 3. **留痕** —— 返回对象自带选取依据（选了谁 / 跳过了谁 / 依据什么），
    由调用方写进自己的诊断出口。
 
-⚠️ 本轮**不实现**业务优先级规则 —— 口径是「一次只解决一个缺陷，
-优先级机制**功能预留**」⇒ 策略接口先立起来，规则等业务输入。
+⚠️ **「这一轮该处理哪个缺陷」属第1层（算法侧）的选取**（2026-11-13 用户界定）：
+**L2 的输入是「规则」+「已确定的缺陷信息」** ⇒ L2 **不重选、不重排**缺陷，
+只拿确定的缺陷信息去匹配策略、裁决方向。
+本模块在 **L1 侧**（fuzzy / empirical 调用它选缺陷去推理），提供三种口径：
+
+- :class:`FirstValidDefectStrategy` —— **默认**，取第一个有效缺陷（历史行为）；
+- :class:`FirstOnlyDefectStrategy` —— empirical 专用：只看列表第一个，首项无效就整体放弃；
+- :class:`StagePriorityDefectStrategy` —— **业务优先级**：先按**调机阶段**
+  （打足 → 补缩 → 外观）重排，再取第一个有效缺陷（阶段表见
+  :mod:`process.algorithms.stage_order`）。
+  ✅ **2026-11-13 起 fuzzy 已接线**（empirical 保持 `first_only`）。
 
 零 ORM、零 Django（本模块只认 context 里的裸 dict）。
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol, Sequence, runtime_checkable
+
+from .stage_order import order_defects
 
 
 @dataclass
@@ -181,8 +192,84 @@ class FirstOnlyDefectStrategy:
         )
 
 
+class StagePriorityDefectStrategy:
+    """**业务优先级策略** —— 按**调机阶段**选取本轮缺陷。
+
+    解决的问题（模块 docstring 里的现状问题）：fuzzy 与 empirical **各选各的**，
+    同一份反馈在不同引擎下可能选中**不同的缺陷**，且选取依据没有记录。
+    ⇒ 各引擎**各选各的**会让同一份反馈推理出不同缺陷的方案。
+    ⚠️ **口径（2026-11-13 用户界定）**：缺陷选取属 **L1 侧** ——
+    **L2 的输入是「规则」+「已确定的缺陷信息」，L2 不重选**。
+    本策略是**收敛 L1 侧各引擎的选取口径**（把「各选各的」变成一致的阶段优先级），
+    不是 L2 的裁决。
+
+    口径：**先按阶段优先级重排**（打足 → 补缩 → 外观；阶段表见
+    :mod:`process.algorithms.stage_order`），**再取第一个有效缺陷**。
+
+    ⚠️ **业务口径（2026-11-13 用户拍板）**：多缺陷反馈**不按列表第一项**，
+    而按**调机阶段**取：
+    - 「短射 + 缩水 ⇒ 先解决短射」（充填没打足就先打足）；
+    - 「缩水 + 飞边 ⇒ 先做缩水」—— 飞边**可能是模具问题而不是工艺问题**，
+      不该靠调机解决（对应规则原料 `FL-06` / `BN-01`）。
+
+    ⚠️ **接线范围（2026-11-13 用户拍板）**：**只切 fuzzy**，empirical 保持
+    `first_only` —— 它的「首项无效即整体放弃」是**刻意保留**的历史语义，
+    强行统一会让经验推理在「首项无效、次项有效」时凭空多出推荐。
+
+    ⚠️ **与 :class:`FirstValidDefectStrategy` 的差别只有一条**（多了阶段重排）：
+    有效性判定完全一致 —— 无效项跳过；
+    ``index`` 记的是**用户提交列表里的原始下标**（不是重排后的位置）。
+
+    ⚠️ **``skipped`` 记的是「全部」无效项**（原始顺序），比父策略多记了
+    「排在有效项之后」的那几个：阶段重排会把无效项挪到末位，
+    而选取是**遇到第一个有效项就停** ⇒ 不预扫一遍就会漏记它们
+    （父策略因为按原顺序遍历，天然不会漏）。
+    ⇒ ``skipped`` 的语义是「用户提交了但没被采用的项」，要**完整审计**。
+    """
+
+    name = 'stage_priority'
+
+    def select(self, defects: Sequence[Any]) -> DefectSelection:
+        items = list(defects or [])
+        candidates = _collect_candidates(items)
+        skipped: List[Dict[str, Any]] = []
+
+        # 先扫一遍**全部**项，把无效项都记下来（阶段重排会把它们挪到末位，
+        # 选取时走不到 ⇒ 不预扫就会漏记）。
+        for index, defect in enumerate(items):
+            if not isinstance(defect, dict):
+                skipped.append({'index': index, 'keyword_name': None,
+                                'reason': 'not_a_dict'})
+                continue
+            if not defect.get('keyword_name'):
+                skipped.append({'index': index, 'keyword_name': None,
+                                'reason': 'no_keyword_name'})
+
+        for original_index, defect in order_defects(items):
+            if not isinstance(defect, dict):
+                continue
+            keyword_name = defect.get('keyword_name')
+            if not keyword_name:
+                continue
+            return DefectSelection(
+                keyword_name=keyword_name,
+                level=defect.get('level'),
+                position=defect.get('position'),
+                strategy=self.name,
+                index=original_index,
+                candidates=candidates,
+                skipped=skipped,
+            )
+
+        return DefectSelection(strategy=self.name, candidates=candidates, skipped=skipped)
+
+
 #: 默认策略（未显式指定时用）—— 等价于 fuzzy 的历史行为。
 DEFAULT_STRATEGY = FirstValidDefectStrategy()
+
+#: 业务优先级策略 —— 按调机阶段重排后取第一个有效缺陷。
+#: ✅ **2026-11-13 起 fuzzy 已接线**（`fuzzy/engine.py`）；empirical 保持 `first_only`。
+STAGE_PRIORITY_STRATEGY = StagePriorityDefectStrategy()
 
 
 def select_defect(
@@ -204,9 +291,11 @@ def select_defect(
 
 __all__ = [
     'DEFAULT_STRATEGY',
+    'STAGE_PRIORITY_STRATEGY',
     'DefectSelection',
     'DefectSelectionStrategy',
     'FirstOnlyDefectStrategy',
     'FirstValidDefectStrategy',
+    'StagePriorityDefectStrategy',
     'select_defect',
 ]

@@ -37,11 +37,22 @@ from process.models import (
     Recommendation,
     TuningRecord,
 )
+from process.algorithms.decide_direction import (  # 第2层：结合实际情况，确定明确的调整方向
+    Direction,
+    PriorityTable,
+    ScenarioContext,
+    ScenarioPolicy,
+    collect_candidates,
+    resolve_direction,
+)
+from process.algorithms.integrate_params import apply_direction  # 第3层：整合参数
+from process.algorithms.check_params import validate  # 第4层：校验参数合理性
 from process.algorithms.base import AlgorithmRegistry
 from process.algorithms.fuzzy import (
     field_names,  # 命名契约：业务字段名 ↔ 算法字段名（双向映射，契约层唯一真相源）
 )
 from process.algorithms.fuzzy.over_limit import (
+    OverLimitItem,  # 越限记录（类型标注）
     detect_blocking_over_limits,  # 越限分层口径（device = 设备安全红线 ⇒ 阻断）
     detect_over_stroke_limits,  # 位置类超行程识别（stroke = 产品在本机做不出来 ⇒ 不阻断）
 )
@@ -61,6 +72,10 @@ from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数�
     is_qualified_result,
     is_round_sealed,
     snapshot_parameter,
+)
+from .policies import (  # 第2层的策略读表与组装（业务知识在策略表，代码只负责读+匹配）
+    PolicyResolution,
+    resolve_policies,
 )
 
 _logger = logging.getLogger(__name__)
@@ -409,7 +424,7 @@ def _select_algorithm_result(
 
     ⚠️ 选优**只影响建议集**，不影响 ``new_parameter``：
        经验推理项本就没有 ``recommended_value``，
-       ``_apply_recommendations_to_baseline`` 早就会跳过它们 ⇒ 参数结果不变。
+       ``collect_candidates`` 早就会跳过它们 ⇒ 参数结果不变。
 
     Args:
         algorithm_sources: {subtype: 该引擎的推荐列表}（全部引擎的产出）
@@ -636,11 +651,54 @@ def _guard_blocking_over_limits(
     raise BizException(ERROR_DATA_INVALID, _format_over_limit_message(blocking))
 
 
+def _drop_over_stroke_value_recommendations(
+    recommendations: List[Dict[str, Any]],
+    stroke_items: List[OverLimitItem],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """剔除「已超出行程的位置类参数」的**数值推荐**（只保留 check 告知）
+
+    矛盾在哪：位置类参数（MEL / IL / ML / VPTL）已经超出机台注射行程，
+    而规则层仍可能因**缺陷前件**（如 ``SHORTSHOT_low THEN MEL_add_2``）推荐
+    「再往上加」⇒ 一边告诉用户「这台机做不出这个产品」，一边又推一个
+    更离谱的数值（实测：MEL 当前 758.07 → 推荐 760.19，行程只有 200mm）。
+
+    处理方式：超行程参数的数值推荐**一律剔除**（不再推、不再写回 baseline），
+    只留 :func:`_append_position_over_stroke_notices` 追加的那条 check 告知。
+
+    ⚠️ 剔除的**不是当前值**：baseline 里超行程的原值照旧保留（那是既有工艺的
+    事实，抹掉反而看不出问题），本函数只管「别再往上推」。
+
+    ⚠️ 判据与 :func:`collect_candidates` 的入候选判据**严格一致**
+    （都是 ``recommended_value is not None``）⇒ 凡是会被写回 baseline 的数值推荐，
+    必定在这里被剔除 ⇒ 不会漏网。
+
+    Args:
+        recommendations: 本次推理的原始推荐列表（**不修改**，返回新列表）。
+        stroke_items: :func:`detect_over_stroke_limits` 的产物。
+
+    Returns:
+        ``(保留的推荐列表, 被剔除的推荐列表)``；无超行程时两者分别为
+        （入参列表本身, 空列表）。
+    """
+    if not stroke_items or not recommendations:
+        return recommendations, []
+
+    over_names = {item.param_name for item in stroke_items}
+    kept: List[Dict[str, Any]] = []
+    dropped: List[Dict[str, Any]] = []
+    for rec in recommendations:
+        # ⚠️ ``param`` 此刻还是**算法名**（MEL / IL0 ...）——本函数在
+        #    ``_normalize_recommendations`` **之前**调用，还未译回业务字段名。
+        if rec.get("param") in over_names and rec.get("recommended_value") is not None:
+            dropped.append(rec)
+            continue
+        kept.append(rec)
+    return kept, dropped
+
+
 def _append_position_over_stroke_notices(
     recommendations: List[Dict[str, Any]],
-    *,
-    process_parameter: Dict[str, Any],
-    machine_info: Dict[str, Any],
+    stroke_items: List[OverLimitItem],
 ) -> List[Dict[str, Any]]:
     """位置类超行程 ⇒ 追加一条「检查」类建议（**告知，不阻断**）
 
@@ -660,30 +718,31 @@ def _append_position_over_stroke_notices(
 
     Args:
         recommendations: 本次推理的原始推荐列表（**不修改**，返回新列表）。
-        process_parameter: 算法命名的工艺参数当前值。
-        machine_info: 机器维度入参（含最大注射行程）。
+        stroke_items: :func:`detect_over_stroke_limits` 的产物
+            （已超出行程的位置类参数）。
 
     Returns:
         追加了告知条目后的推荐列表；无位置类超行程时**原样返回**。
     """
-    stroke_items = detect_over_stroke_limits(
-        process_parameter, resolve_position_limits(machine_info))
     if not stroke_items:
         return recommendations
 
     # 多个位置参数同时超出行程（IL0 / ML0 / MEL 一起超）⇒ 合并成**一条**告知：
     # 它们说的是同一件事（这个产品在本机做不出来），逐条提示只会刷屏。
     # 取**超出量最大**的那项作代表。
+    # ⚠️ 文案三段式：**事实**（哪个参数、超多少）→ **结论**（本机做不出来）
+    #    → **出路**（换更大的机）。
+    #    出路只给「换机」—— **以产品为目标**（产品形态已定），不给
+    #    「减轻制品重量 / 减少型腔数」这类迁就设备的建议。
     top = max(stroke_items, key=lambda item: item.exceeded_by)
     label = _param_label(_to_business_param_name(top.param_name))
     others = len(stroke_items) - 1
     reason = (
-        '%s当前 %smm 超出本机注射行程 %smm%s —— '
-        '该产品的充填量需求超出本机行程能力，本机无法成形'
+        '%s当前 %smm，超出本机注射行程 %smm%s，本机无法生产该制品，请更换行程更大的设备'
         % (label,
            _format_limit_number(top.current_value),
            _format_limit_number(top.limit),
-           ('（另有 %d 项位置参数同样超出行程）' % others) if others else '')
+           ('（另有 %d 项超出行程）' % others) if others else '')
     )
     _logger.warning(
         "[optimize] 位置类超行程（仅告知，不阻断）: %s ｜ 告知: %s",
@@ -852,26 +911,50 @@ def _quantize_numeric_fields(
     return out
 
 
-def _apply_recommendations_to_baseline(
+def _resolve_direction(
     baseline: Dict[str, Any],
     algorithm_recommendations: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """Step 4a —— 用推荐值覆盖基线字段（仅覆盖基线中存在的字段）
+    strategy_table: Optional[PriorityTable] = None,
+    scenario: Optional[ScenarioPolicy] = None,
+    context: Optional[ScenarioContext] = None,
+) -> Direction:
+    """【第2层】结合实际情况，确定**明确的调整方向**。
+
+    输入：算法给的平级建议（第1层的产出）+ 实际情况 + 策略数据。
+    输出：**明确的调整方向** —— 调哪几个、调到什么值、谁让位、谁暂缓。
 
     注意：算法返回的 ``param`` 是算法命名空间（``IV0`` / ``BT1``），
     必须先译回业务字段名（``inj_spd_1`` / ``brl_temp_1``）才能命中 baseline。
 
-    出口统一量化（最多 2 位小数）—— 本函数是 optimize 路径**唯一的值出口**，
-    落库（``_create_new_parameter``）与响应（``new_parameter``）同源于此，
-    量化一次即可让「DB / 响应 / 建议文案」三处数字口径一致。
+    **方向定在 MEL 翻译之前**（歧义消解归第2层）—— 否则看不见 MEL 的意图
+    （只看得到「调计量位置」），规则无处安放。
+
+    ⚠️ ``strategy_table`` 为空且 ``scenario`` 为空 ⇒ **不裁决** ⇒ 行为与
+    「不接第2层」完全一致。
+
+    ⚠️ ``context``：**实际情况**（缺陷码 / 实测重量 / 目标重量）。
+    场景要求按**充填量比例**解算行程且目标可解 ⇒ MEL 保留项直接落行程目标值，
+    不再走「MEL 增量 → 计量位置」口径；目标解不出来 ⇒ 回落增量口径。
     """
-    new_parameter = dict(baseline)
-    for rec in algorithm_recommendations:
-        param_name = _to_business_param_name(rec.get("param"))
-        recommended_value = rec.get("recommended_value")
-        if param_name and param_name in new_parameter and recommended_value is not None:
-            new_parameter[param_name] = recommended_value
-    return _quantize_numeric_fields(new_parameter)
+    candidates = collect_candidates(
+        algorithm_recommendations,
+        baseline,
+        name_of=_to_business_param_name,
+    )
+    direction = resolve_direction(
+        candidates.names,
+        candidates.targets,
+        baseline,
+        context=context,
+        policy=scenario,
+        table=strategy_table,
+    )
+
+    # 决策留痕：有让位 / 暂缓时才落日志（正常路径不产噪声）
+    if direction.decision.yielded or direction.decision.deferred:
+        _logger.info('infer direction: %s', direction.decision.to_trace())
+
+    return direction
 
 
 def _resolve_primary_source(algorithm_sources: Dict[str, List[Dict[str, Any]]]) -> Optional[str]:
@@ -1069,14 +1152,14 @@ def _build_suggestion_payload(
     """Step 4b —— 扁平推荐按 category 分组，构建 SuggestionGroup
 
     baseline 不为 None 时只保留在 baseline 中存在的推荐字段
-    （与 _apply_recommendations_to_baseline 严格对齐）。
+    （与 collect_candidates 严格对齐）。
     """
     source_type = _resolve_primary_source(algorithm_sources) or "none"
 
     if not algorithm_recommendations:
         return {"source_type": source_type, "groups": []}
 
-    # 一致性过滤：与 _apply_recommendations_to_baseline 严格对齐
+    # 一致性过滤：与 collect_candidates 严格对齐
     # （过滤与分类都按**业务字段名**，算法命名空间的前缀规则匹配不到）
     if baseline is not None:
         filtered_recs = [
@@ -1238,6 +1321,9 @@ def _create_new_parameter(
     id / created_at / param_source / seq_idx 等系统字段，直接展开会与
     create() 的显式入参冲突（multiple values for keyword argument），
     故按 NON_SNAPSHOT_FIELDS 过滤后再落库。
+
+    ⚠️ 入参须**已是收口后的自洽参数集** —— 收口在 ``_infer_kernel`` 统一做
+    （那里同时产出落库值与响应值 ⇒ 两者同源）；此处不重复收口。
     """
     writable = {
         k: v for k, v in parameters_dict.items()
@@ -1381,6 +1467,12 @@ class ParameterOptimizeService:
         overrides = _extract_context_overrides(condition_orm)
 
         # ---------- Step 2: 纯推理（与 DB 无关）----------
+        # 第2层的策略数据：**业务知识在策略清单文件**（场景 / 优先集 / 名额 /
+        # 目标口径）—— 这里只做「读取 + 匹配 + 组装」；读不到或没命中 ⇒ 不裁决。
+        policy_resolution = resolve_policies(
+            feedback=feedback,
+            mold_info=mold_info,
+        )
         new_parameter_dict, suggestion_payload, algorithm_recommendations = self._infer_kernel(
             machine_info=machine_info,
             polymer_info=polymer_info,
@@ -1391,6 +1483,7 @@ class ParameterOptimizeService:
             rule_library_code=overrides.get('rule_library_code'),
             # 当前租户（规则库可见性）—— 取自工艺条件的归属公司
             company_id=condition_orm.company_id,
+            policy_resolution=policy_resolution,
         )
 
         # ---------- Step 3: 原子事务落库 ----------
@@ -1481,6 +1574,11 @@ class ParameterOptimizeService:
         # Step 0b: 入参契约校验（三维由调用方直传，同样要过契约）
         _validate_optimize_inputs(machine_info, polymer_info, mold_info)
 
+        # 第2层的策略数据：从策略清单文件取（策略本身与租户无关）
+        policy_resolution = resolve_policies(
+            feedback=feedback,
+            mold_info=mold_info or {},
+        )
         # 调 self._infer_kernel 纯推理（与 infer() 走同一函数）
         # 第 3 个返回值 algorithm_recommendations 无需落库（FromProvided 是纯推理）
         new_parameter_dict, suggestion_payload, _ = self._infer_kernel(
@@ -1493,6 +1591,7 @@ class ParameterOptimizeService:
             # ⚠️ **无租户上下文**（第三方集成 / 算法试算 / 烟测）
             #    ⇒ 不过滤（保持现状全量），不改变既有行为
             company_id=None,
+            policy_resolution=policy_resolution,
         )
 
         return {
@@ -1512,6 +1611,7 @@ class ParameterOptimizeService:
         interface_tag: str,
         rule_library_code: Optional[str] = None,
         company_id: Optional[int] = None,
+        policy_resolution: Optional[PolicyResolution] = None,
         fail_fast_message: str = "推荐算法暂不可用，请稍后重试或联系管理员",
     ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
         """【Step 3+4 纯算法内核】5 维 dict → (new_parameter, suggestion, algorithm_recommendations)
@@ -1529,6 +1629,8 @@ class ParameterOptimizeService:
             fail_fast_message: BizException 文案
             company_id: 当前租户（**规则库可见性上下文**）—— None = 无租户
                 上下文 ⇒ 不过滤（保持现状全量）。
+            policy_resolution: 第2层的策略解析结果（实际情况 + 场景 + 优先级表）；
+                None ⇒ **不裁决**（行为与「不接第2层」完全一致）。
 
         Returns:
             (new_parameter_dict, suggestion_payload, algorithm_recommendations)
@@ -1573,23 +1675,59 @@ class ParameterOptimizeService:
             )
             raise BizException(ERROR_OPERATION_FAILED, fail_fast_message)
 
-        # 位置类超行程告知（**告知，不阻断**）—— 详见 _append_position_over_stroke_notices。
+        # 位置类超行程：剔除该参数的**数值推荐** + 追加一条 check 告知
+        # （**告知，不阻断**）—— 详见 _drop_over_stroke_value_recommendations
+        #   与 _append_position_over_stroke_notices。
         # ⚠️ 必须放在 fail-fast **之后**：否则「只有超行程告知、没有任何数值建议」会被
         #    fail-fast 当成「有推荐」而放行，掩盖真正的「推不出结论」。
+        stroke_items = detect_over_stroke_limits(
+            algorithm_context.get('process_parameter') or {},
+            resolve_position_limits(machine_info),
+        )
+        raw_recommendations, dropped_recommendations = (
+            _drop_over_stroke_value_recommendations(raw_recommendations, stroke_items)
+        )
+        if dropped_recommendations:
+            # 留痕：剔了什么、为什么（超行程的参数不能再往上推）
+            _logger.warning(
+                "[optimize] 剔除超行程位置参数的数值推荐: %s ｜ 超行程参数: %s",
+                [{'param': rec.get('param'),
+                  'current': rec.get('current_value'),
+                  'recommended': rec.get('recommended_value')}
+                 for rec in dropped_recommendations],
+                [item.to_trace() for item in stroke_items],
+            )
         raw_recommendations = _append_position_over_stroke_notices(
-            raw_recommendations,
-            process_parameter=algorithm_context.get('process_parameter') or {},
-            machine_info=machine_info,
+            raw_recommendations, stroke_items,
         )
 
         # 规范化：业务字段名 + 业务文案 + 过滤零变化项
         # （落库与展示共用这一份，Recommendation.recommendations 存的就是它）
         algorithm_recommendations = _normalize_recommendations(raw_recommendations)
 
-        new_parameter_dict = _apply_recommendations_to_baseline(
+        # ---------- 第2层：结合实际情况，确定明确的调整方向 ----------
+        direction = _resolve_direction(
             baseline=baseline,
             algorithm_recommendations=algorithm_recommendations,
+            strategy_table=(policy_resolution.priority_table if policy_resolution else None),
+            scenario=(policy_resolution.scenario if policy_resolution else None),
+            context=(policy_resolution.context if policy_resolution else None),
         )
+
+        # ---------- 第3层：整合参数（写入方向 + 锚点传导自洽）----------
+        # 放在这里 ⇒ **落库值与响应值同源**（响应体就是这份 dict）。
+        integrated = apply_direction(baseline, direction, previous=baseline)
+        if integrated.touched:
+            _logger.info('infer integration: %s', integrated.summary())
+
+        # ---------- 第4层：校验参数合理性（只报不阻断）----------
+        # 出口统一量化（最多 2 位小数）—— 落库（``_create_new_parameter``）
+        # 与响应（``new_parameter``）同源于此 ⇒ 「DB / 响应 / 建议文案」
+        # 三处数字口径一致。
+        new_parameter_dict = _quantize_numeric_fields(integrated.values)
+        validation = validate(new_parameter_dict)
+        if not validation.ok:
+            _logger.info('infer validation: %s', validation.summary())
         suggestion_payload = _build_suggestion_payload(
             algorithm_recommendations=algorithm_recommendations,
             algorithm_sources=algorithm_sources,

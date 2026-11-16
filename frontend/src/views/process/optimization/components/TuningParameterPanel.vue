@@ -597,17 +597,8 @@
             </span>
           </el-form-item>
           <el-form-item label="终止位置">
-            <el-input
-              v-if="!readonly"
-              v-model="metering.ending_position"
-              v-number
-              style="width: 8rem"
-              :class="{ 'field-changed': isFieldChanged('metering.ending_position') }"
-            >
-              <template #suffix>mm</template>
-            </el-input>
+            <!-- 只读：终止位置由计量位置 + 储后松退算出（MEL 是算法侧的标，不是可填字段） -->
             <span
-              v-else
               style="width: 8rem;"
               class="readonly-value-with-unit"
               :class="{ 'field-changed-text': isFieldChanged('metering.ending_position') }"
