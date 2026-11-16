@@ -137,8 +137,11 @@ def derive_stage_progress(defect_codes: Sequence[str]) -> StageProgress:
     ⚠️ **不区分「已解决」与「从未报过」** —— 阶段状态不落库 ⇒ 没有历史可比
     ⇒ 「本轮没报该阶段缺陷」一律记为达成。反馈稀疏时**可能高估达成度**。
 
-    ⚠️ **本函数只做推导，不做裁决** —— ``current`` 目前只进留痕
-    （**不参与场景匹配**：阶段准入尚未落地）。
+    ⚠️ **本函数只做推导，不做裁决** —— 裁决由**策略清单**做
+    （:func:`process.algorithms.strategies.STRATEGIES`）：
+    ``current`` 经 ``services/policies.py`` 注入 ``ScenarioContext.extra``
+    ⇒ 场景条件**可引用**它（如 ``filling_stage_first`` 用
+    ``current_stage == 'filling'`` 判定「还在打足阶段」）。
     """
     codes: List[str] = []
     for code in defect_codes or ():

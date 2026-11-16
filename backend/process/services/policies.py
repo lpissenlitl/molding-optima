@@ -83,7 +83,8 @@ def resolve_policies(
 
     # 阶段进度（**只推导，不裁决**）—— 本轮哪些阶段还有缺陷、当前该推进哪一步。
     # ⚠️ ``current_stage`` 注入 extra ⇒ 场景条件**可以**引用它；
-    #    但**当前没有任何场景引用** ⇒ 行为零变化（阶段准入尚未落地）。
+    #    批次 13.0 起 ``filling_stage_first`` 已引用
+    #    （短射 + 仍在打足阶段 ⇒ 充填量优先）。
     progress = derive_stage_progress(context.defect_codes)
     context = replace(
         context,

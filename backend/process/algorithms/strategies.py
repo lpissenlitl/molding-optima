@@ -89,6 +89,70 @@ STRATEGIES: Tuple[ScenarioPolicy, ...] = (
         reason='充填量不足 ⇒ 充填优先，并按重量比例重算行程',
         priority=10,
     ),
+    # --- S1b 打足（缺重量口径）：短射 + 仍在打足阶段 ⇒ 充填量优先 ---
+    # ⚠️ **为什么要有这条**：`filling_first` 的命中依赖 ``fill_gap > 0``
+    #    （缺实测重量 ⇒ ``fill_gap`` 为 None ⇒ 不命中）⇒ 短射轮次会掉进
+    #    **兜底场景**，而兜底场景**没有优先集** ⇒ 次序完全继承 L1 的输出序
+    #    （= 规则库遍历序）⇒ 料筒温度等**间接旋钮**可能排到首位而上位。
+    #    ⚠️ 本条**不依赖重量数据**：改用**阶段进度**（``current_stage``）判定
+    #    「还在打足阶段」—— 阶段由**缺陷码**推导，与重量数据无关。
+    # ⚠️ **priority=15 ⇒ 排在 ``filling_first``(10) 之后** ⇒
+    #    **有重量数据时仍走 ``filling_first``**（按重量比例解算行程），
+    #    本条只在「拿不到重量口径」时接管 ⇒ 两个场景互不覆盖。
+    # ⚠️ **白名单 = 打足阶段该动哪些旋钮**（素材 U-07「先胶量端」的口径）：
+    #    胶量端（熔胶终止位置 / VP 切换位置）→ 保压组 → 熔体侧 → 料筒温度组。
+    #    **料筒温度组排末位**（熔体黏度的间接影响，打足阶段不是主旋钮）。
+    # ⚠️ 白名单**含 ``inj_t``**：它虽受 G3 让位规则约束（改注射时间要让位给
+    #    注射速度，而注射速度是基线项不可调），但**不在白名单会让位理由被
+    #    「本场景不允许」掩盖** ⇒ 反而看不出 G3 规则在工作。
+    ScenarioPolicy(
+        scenario_code='filling_stage_first',
+        conditions=(
+            {'field': 'selected_defect', 'operator': 'in_set', 'value': ('SHORTSHOT',)},
+            {'field': 'current_stage', 'operator': 'exact', 'value': 'filling'},
+        ),
+        allowed_params=(
+            # --- 胶量端（充填量端，主旋钮）---
+            'met_end_pos',        # 熔胶终止位置（MEL）
+            'vps_pos',            # VP 切换位置（VPTL）
+            # --- 注射时间（受 G3 让位规则约束，保留在白名单内）---
+            'inj_t',
+            # ⚠️ **注射压力**：规则库实测短射类会产出 ``inj_pres_1``（4 条）
+            #    / ``inj_pres_2``（1 条）⇒ 不放进白名单会有「本场景无输出」风险
+            #    （白名单写窄 ⇒ 候选全部让位 ⇒ 这一轮什么都不落地）。
+            #    ⚠️ 但**不进优先集** ⇒ 排在优先集之后 ⇒ 胶量端/保压/熔体侧
+            #    都不可调时才轮得到它（注射速度才是基线项，注射压力不是）。
+            'inj_pres_1', 'inj_pres_2',
+            # --- 保压组 ---
+            'hold_pres_1',        # 一段保压压力
+            'hold_spd_1',         # 一段保压速度
+            'hold_t_1',           # 一段保压时间
+            # --- 熔体侧 ---
+            'met_back_pres_1',    # 一段背压
+            'met_rot_spd_1',      # 一段螺杆转速
+            'pst_met_decomp_dist',  # 熔胶后松退距离
+            # --- 料筒温度组（末位：熔体黏度的间接影响）---
+            'brl_temp_1', 'brl_temp_2', 'brl_temp_3', 'brl_temp_4', 'brl_temp_5',
+            'brl_temp_6', 'brl_temp_7', 'brl_temp_8', 'brl_temp_9',
+            'noz_temp',
+        ),
+        blocked_params=BASELINE_EXCLUDED_PARAMS,
+        # ⚠️ 优先集与白名单同序 ⇒ **白名单成员的先后即调整次序**
+        #    （`resolve_priority` 的排序键：场景优先集 → 字段级优先级 → 原序）。
+        preferred_params=(
+            'met_end_pos', 'vps_pos',
+            'inj_t',
+            'hold_pres_1', 'hold_spd_1', 'hold_t_1',
+            'met_back_pres_1', 'met_rot_spd_1', 'pst_met_decomp_dist',
+            'brl_temp_1', 'brl_temp_2', 'brl_temp_3', 'brl_temp_4', 'brl_temp_5',
+            'brl_temp_6', 'brl_temp_7', 'brl_temp_8', 'brl_temp_9',
+            'noz_temp',
+        ),
+        max_items=1,             # 一轮只调一个量（与其它场景一致）
+        # ⚠️ ``target_mode='delta'``（默认）：拿不到重量口径 ⇒ 不能按比例解算行程。
+        reason='打足阶段（短射）⇒ 充填量优先：胶量端 → 保压 → 熔体侧 → 料筒温度',
+        priority=15,
+    ),
     # --- S2 补缩：缩水类 ⇒ 只动保压组 ---
     # ⚠️ 白名单 = 二段压力 + 二段时间（素材 SK-01 / SK-02）
     #    ⇒ 二段时间的定量锚点是**浇口封冻时间**（🔵 尚缺判据 ⇒ 目标值待校准）。
