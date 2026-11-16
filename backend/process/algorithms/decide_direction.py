@@ -461,6 +461,7 @@ def resolve_priority(
     max_items: Optional[int] = None,
     *,
     scenario: Optional[ScenarioPolicy] = None,
+    veto_params: Optional[Mapping[str, str]] = None,
 ) -> StrategyDecision:
     """按优先级表 + 场景策略裁决候选调整，并显式让位 / 暂缓未执行的项。
 
@@ -472,11 +473,13 @@ def resolve_priority(
          在禁入清单的候选**让位**，理由「基线项 ⇒ 不参与阶段调机」；
       3. **准入**（:attr:`ScenarioPolicy.allowed_params`，非空时才生效）：
          不在白名单的候选**让位**，理由「本场景不允许」；
-      4. 落在 ``satisfied`` 里的候选**让位** —— 目标已达成，无需再调；
-      5. **名额**（场景优先，其次 ``max_items``）：保留项超出名额的部分**暂缓**；
-      6. 让位与暂缓都是**显式决策并留痕**，不静默丢弃；
-      7. 表中未列出的候选排在最后，但**不丢弃**；
-      8. **保留项也留依据**（:attr:`StrategyDecision.kept_reasons`）——
+      4. **落不了地**（``veto_params``，非空时才生效）：本轮注定不生效的候选
+         **让位**（理由由调用方给）—— 让位对象本轮不可调 ⇒ 改了也是白改；
+      5. 落在 ``satisfied`` 里的候选**让位** —— 目标已达成，无需再调；
+      6. **名额**（场景优先，其次 ``max_items``）：保留项超出名额的部分**暂缓**；
+      7. 让位与暂缓都是**显式决策并留痕**，不静默丢弃；
+      8. 表中未列出的候选排在最后，但**不丢弃**；
+      9. **保留项也留依据**（:attr:`StrategyDecision.kept_reasons`）——
          没有依据，反馈回来只能证伪「调了这些量」，证伪不了「为什么按这个次序调」。
 
     ⚠️ **禁入排在准入之前**：基线项是**全局**理由（任何场景都不该动），
@@ -485,6 +488,7 @@ def resolve_priority(
 
     ⚠️ **四类让位/暂缓理由分开**：目标已达成 / 本场景不允许 / 基线项 / 名额已满 ——
     「为什么没落地」必须能分辨是哪一类。
+    （「本轮落不了地」是第五类，见 ``veto_params``。）
 
     ⚠️ **无场景 ⇒ 行为与「不接第2层」完全一致**（表为空 ⇒ 全部候选保留、原序）。
 
@@ -497,11 +501,16 @@ def resolve_priority(
         max_items: 本轮最多执行的项数（``None`` 表示不限）；
             场景策略里给了名额时，以场景的为准。
         scenario: 场景策略（``None`` = 无场景，只按优先级表裁决）。
+        veto_params: **本轮落不了地**的候选 → 让位理由（字段名 → 理由）。
+            ⚠️ 判据由调用方给（物理关系在底座
+            :func:`process.algorithms.anchors.unlandable_params`）——
+            本模块只读，不内置物理知识。
 
     Returns:
         :class:`StrategyDecision` —— 保留项、让位项与暂缓项、完整次序。
     """
     satisfied_set = set(satisfied)
+    vetoed = dict(veto_params or {})
 
     allowed = tuple(scenario.allowed_params) if scenario is not None else ()
     allowed_set = set(allowed)
@@ -538,6 +547,9 @@ def resolve_priority(
         if allowed_set and candidate not in allowed_set:
             reason = (scenario.reason if scenario is not None else '') or '场景准入'
             yielded[candidate] = f'{reason} ⇒ 本场景不允许'
+            continue
+        if candidate in vetoed:
+            yielded[candidate] = vetoed[candidate]
             continue
         if candidate in satisfied_set:
             reason = table.reason_of(candidate) or '目标已达成'
@@ -742,6 +754,7 @@ def resolve_direction(
     table: Optional[PriorityTable] = None,
     satisfied: Sequence[str] = (),
     max_items: Optional[int] = None,
+    veto_params: Optional[Mapping[str, str]] = None,
 ) -> Direction:
     """候选 + 实际情况 + 策略数据 ⇒ **明确的调整方向**。
 
@@ -765,6 +778,7 @@ def resolve_direction(
         table: 数据化的优先级表（``None`` ⇒ 空表 ⇒ 只按场景裁决）。
         satisfied: 已达成目标的字段名（本模块不判定 ⇒ 由调用方传入）。
         max_items: 本轮最多执行的项数（``None`` = 不限；场景给了名额时以场景为准）。
+        veto_params: **本轮落不了地**的候选 → 让位理由（透传给 :func:`resolve_priority`）。
 
     Returns:
         :class:`Direction` —— 明确的方向 + 让位 / 暂缓理由 + 依据。
@@ -775,6 +789,7 @@ def resolve_direction(
         satisfied,
         max_items,
         scenario=policy,
+        veto_params=veto_params,
     )
 
     values: Dict[str, Any] = dict(baseline)

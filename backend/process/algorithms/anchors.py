@@ -1,25 +1,27 @@
-"""锚点关系的事实：字段口径 + 共用判据（第3层与第4层共用）
+"""锚点关系的事实：字段口径 + 共用判据（第2层 / 第3层 / 第4层共用）
 
-为什么单独放一个模块：同一批锚点关系要**被两个方向使用** ——
+为什么单独放一个模块：同一批锚点关系要**被多个方向使用** ——
 
+- **第2层**（``decide_direction.py``）：按关系**排除本轮落不了地的候选**；
 - **第3层**（``integrate_params.py``）：按关系**改值**（联动传播）；
 - **第4层**（``check_params.py``）：按关系**只读校验**（锚点自检）。
 
-关系本身（谁等于谁、哪些量必须递增）只应**定义一次** ⇒ 字段口径与共用判据
-放这里，两边各自引用，不各自复制：
+关系本身（谁等于谁、哪些量必须递增、谁的改动要让给谁）只应**定义一次** ⇒
+字段口径与共用判据放这里，各层各自引用，不各自复制：
 
-- **字段口径**（本模块）：G1 / G2 涉及的字段名与模板；
+- **字段口径**（本模块）：G1 / G2 / G3 涉及的字段名与模板；
 - **共用判据**（本模块）：:func:`find_chain_break`（回抽链断裂判定）、
-  :func:`resolve_stage_count`（段数解析）、:func:`last_stage_field`（末段字段名）。
+  :func:`resolve_stage_count`（段数解析）、:func:`last_stage_field`（末段字段名）、
+  :func:`unlandable_params`（本轮落不了地的候选项）。
 
-两边**各自**的只有"拿关系做什么"：传导侧改值、检查侧透传事实。
+各层**各自**的只有"拿关系做什么"：第2层排除、第3层改值、第4层透传事实。
 
 字段名：**代码侧**业务字段名（与 ``ProcessParameterSchema`` 对齐）；
 与算法/工艺侧命名的对照见设计文档 §6 与 ``integrate_params.py`` 模块 docstring。
 """
 
 from dataclasses import dataclass
-from typing import Mapping, Optional, Tuple
+from typing import Iterable, Mapping, Optional, Tuple
 
 
 # --- G1 计量终止位置 -------------------------------------------------------
@@ -45,6 +47,23 @@ G2_VPS_FIELD = 'vps_pos'
 
 #: 计量段数字段（``met_stg``）。
 STAGE_COUNT_FIELD = 'met_stg'
+
+
+# --- G3 自由度让位 ---------------------------------------------------------
+
+#: **自由度让位关系**：被让位的量 → 让给谁（业务字段名 → 业务字段名）。
+#:
+#: G3 口径（用户口径，2026-11-12）：注射阶段是**速度控制**，设定时间只是设定值
+#: ⇒ 改「注射时间」没有物理意义，真正起作用的是「注射速度」
+#: ⇒ 改时间让位给速度（改速度不联动时间）。
+#:
+#: ⚠️ **本关系同时被第2层引用**（:mod:`process.algorithms.decide_direction`）：
+#:    让位对象本轮不可调（场景禁入 / 基线项）时，被让位的量**也无处可去**
+#:    —— 第3层的让位是**值回退**（改了也不生效）⇒ 该量本轮**落不了地**。
+#:    ⇒ 第2层不能把它选成保留项：否则第3层静默回退 ⇒ 本轮零变化，
+#:    而用户只看到「一屏建议、参数没动」。
+#:    ⇒ 关系放**底座**（只定义一次），第2层与第3层各自引用。
+FREEDOM_YIELDS: Mapping[str, str] = {'inj_t': 'inj_spd_1'}
 
 
 # --- 共用判据 --------------------------------------------------------------
@@ -279,6 +298,37 @@ def find_chain_break(
     if vps is not None and values[first] <= vps:
         return G2_VPS_FIELD, first, f'{first}({values[first]}) ≤ {G2_VPS_FIELD}({vps})'
     return None
+
+
+def unlandable_params(
+    blocked_params: Iterable[str] = (),
+    available_params: Iterable[str] = (),
+) -> Mapping[str, str]:
+    """本轮**落不了地**的候选项（让位对象不可调 ⇒ 本量无处可去）。
+
+    背景：:data:`FREEDOM_YIELDS` 声明「被让位的量 → 让给谁」。
+    第3层的让位是**值回退**（改了也让位 ⇒ 不生效），
+    所以当让位对象本轮**不可调**（场景禁入 / 基线项）时，
+    被让位的量**改了也是白改** ⇒ 第2层不该把它选成保留项。
+
+    ⚠️ **让位对象缺值时不算数**：让位对象在参数集里没有值 ⇒
+    第3层不会触发让位（:func:`process.algorithms.integrate_params.propagate`
+    的让位前提是让位对象有值）⇒ 本量仍可落地 ⇒ 不排除。
+
+    Args:
+        blocked_params: 本轮**不可调**的字段名（场景禁入清单）。
+        available_params: 当前参数集里**有值**的字段名。
+
+    Returns:
+        落不了地的字段名 → 让位对象字段名（按 :data:`FREEDOM_YIELDS` 声明序）。
+    """
+    blocked = set(blocked_params or ())
+    available = set(available_params or ())
+    return {
+        name: free
+        for name, free in FREEDOM_YIELDS.items()
+        if free in blocked and free in available
+    }
 
 
 __all__ = [

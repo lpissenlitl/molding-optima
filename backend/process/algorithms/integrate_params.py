@@ -53,6 +53,7 @@ from typing import (
 )
 
 from .anchors import (
+    FREEDOM_YIELDS,
     G1_AUTO_FIELD,
     G1_BACKOFF_FIELD,
     find_chain_break,
@@ -134,7 +135,11 @@ LINK_RULES: Tuple[LinkRule, ...] = (
 #:
 #: 注射阶段实际是**速度控制**（设定时间只是设定值，实际时间会有偏差），
 #: 所以改时间的建议让位给速度 —— 留痕且**值回退**（让位 = 不生效）。
-FREEDOM_OVERRIDES: Mapping[str, str] = {'inj_t': 'inj_spd_1'}
+#:
+#: ⚠️ **声明在底座**（:data:`process.algorithms.anchors.FREEDOM_YIELDS`）——
+#: 第2层也要用它（让位对象不可调 ⇒ 被让位的量本轮落不了地 ⇒ 不该占名额），
+#: 放底座才能只定义一次、两层各自引用。
+FREEDOM_OVERRIDES: Mapping[str, str] = FREEDOM_YIELDS
 
 
 @dataclass(frozen=True)

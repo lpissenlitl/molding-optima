@@ -45,7 +45,12 @@ from process.algorithms.decide_direction import (  # 第2层：结合实际情�
     collect_candidates,
     resolve_direction,
 )
-from process.algorithms.integrate_params import apply_direction  # 第3层：整合参数
+from process.algorithms.anchors import unlandable_params  # 底座：物理关系（只定义一次）
+from process.algorithms.integrate_params import (  # 第3层：整合参数
+    IntegratedParams,
+    apply_direction,
+    diff_numeric_fields,
+)
 from process.algorithms.check_params import validate  # 第4层：校验参数合理性
 from process.algorithms.base import AlgorithmRegistry
 from process.algorithms.defect_selection import (  # 缺陷选取（实现在算法层；调用时机在 service 的预处理层）
@@ -944,6 +949,34 @@ def _quantize_numeric_fields(
     return out
 
 
+def _unlandable_veto(
+    baseline: Dict[str, Any],
+    scenario: Optional[ScenarioPolicy],
+) -> Dict[str, str]:
+    """本轮**落不了地**的候选项 → 让位理由（第2层不该选它当保留项）。
+
+    物理背景（底座声明：:data:`process.algorithms.anchors.FREEDOM_YIELDS`）：
+    注射阶段是**速度控制** ⇒ 改「注射时间」要让位给「注射速度」；
+    而第3层的让位是**值回退**（改了也不生效）——
+    ⇒ 当让位对象本轮不可调（场景禁入 / 基线项）时，
+    被让位的量**改了也是白改** ⇒ 不能让它占掉本轮唯一的名额。
+
+    ⚠️ **不选它 ≠ 丢掉它**：它仍进裁决留痕（让位理由），
+    只是不占名额 ⇒ 名额**顺延**到下一个可落地的候选。
+    """
+    if scenario is None:
+        return {}
+    blocked = scenario.blocked_params or ()
+    available = {name for name, value in baseline.items() if value is not None}
+    return {
+        name: f'本轮落不了地（让位对象 {free} 不可调）⇒ 让位'
+        for name, free in unlandable_params(
+            blocked_params=blocked,
+            available_params=available,
+        ).items()
+    }
+
+
 def _resolve_direction(
     baseline: Dict[str, Any],
     algorithm_recommendations: List[Dict[str, Any]],
@@ -981,6 +1014,7 @@ def _resolve_direction(
         context=context,
         policy=scenario,
         table=strategy_table,
+        veto_params=_unlandable_veto(baseline, scenario),
     )
 
     # 决策留痕：有让位 / 暂缓时才落日志（正常路径不产噪声）
@@ -988,6 +1022,55 @@ def _resolve_direction(
         _logger.info('infer direction: %s', direction.decision.to_trace())
 
     return direction
+
+
+def _zero_landing_detail(integrated: IntegratedParams) -> str:
+    """零落地的原因说明（让位回退 / 硬约束未处理）。
+
+    给工艺员看的**人话**：告诉用户「为什么这一轮调不下去」，
+    而不是抛一个无参的「操作失败」。
+    """
+    parts: List[str] = []
+    if integrated.superseded_fields:
+        parts.append('让位回退：%s' % '、'.join(
+            '%s→%s' % item for item in integrated.superseded_fields))
+    if integrated.unresolved:
+        parts.append('硬约束未处理：%s' % '；'.join(integrated.unresolved))
+    return '；'.join(parts) or '保留项未产生实际变化'
+
+
+def _guard_zero_landing(
+    baseline: Dict[str, Any],
+    direction: Direction,
+    integrated: IntegratedParams,
+    interface_tag: str,
+) -> None:
+    """零落地守卫 —— **本该落地却一个量都没动** ⇒ 明确报错。
+
+    触发条件（两个都要满足）：
+
+    - 第2层**裁决出了保留项**（说明「本轮该调这个」）；
+    - 第3层落地后**实际没有任何字段发生变化**（说明「调了等于没调」）。
+
+    ⚠️ **为什么要报错**：静默产出一个与上一轮**一模一样**的新轮次，
+    用户看到的是「一屏建议、参数没动」，无处追因 ⇒ 宁可明确报错。
+
+    ⚠️ **不管另一种形态**：第2层**根本没保留任何候选**
+    （规则没给出可用调整）属于另一回事，既有行为不变，不在本守卫范围内。
+    """
+    if not direction.decision.kept:
+        return
+    if diff_numeric_fields(baseline, integrated.values):
+        return
+    detail = _zero_landing_detail(integrated)
+    _logger.warning(
+        '[optimize] %s 零落地（保留项=%s，但无任何参数变化）: %s',
+        interface_tag, list(direction.decision.kept), detail,
+    )
+    raise BizException(
+        ERROR_OPERATION_FAILED,
+        '本轮调整无法落地（%s）' % detail,
+    )
 
 
 def _resolve_primary_source(algorithm_sources: Dict[str, List[Dict[str, Any]]]) -> Optional[str]:
@@ -1765,6 +1848,10 @@ class ParameterOptimizeService:
         integrated = apply_direction(baseline, direction, previous=baseline)
         if integrated.touched:
             _logger.info('infer integration: %s', integrated.summary())
+
+        # 零落地守卫：**本该落地却一个量都没动** ⇒ 明确报错
+        # （不静默产出「与上一轮一模一样」的新轮次）
+        _guard_zero_landing(baseline, direction, integrated, interface_tag)
 
         # ---------- 第4层：校验参数合理性（只报不阻断）----------
         # 出口统一量化（最多 2 位小数）—— 落库（``_create_new_parameter``）
