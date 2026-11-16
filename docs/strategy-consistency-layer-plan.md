@@ -477,7 +477,11 @@ L2 的真正增量不是"多几条 if"，而是**决策可解释**。每次 L2 �
 引擎的 `Diagnostic.selections` 记的就是它（决策级与规则级分开）。
 `strategy` = 命中的**场景码**（`filling_first` / `shrinking_first` / …）⚠️
 不是缺陷选取策略名（那个是 `first_valid`）—— 两个“策略”含义不同，别混。
-`priority_order` / `yielded_params` **仍待补**。
+✅ **阶段进度已落地**（批次 12.5）：`StageProgress.to_trace()`
+（`defect_codes` / `achieved` / `pending` / `current`）进 `PolicyResolution.trace`
++ 一条 `[optimize] … 阶段进度` 日志；`current_stage` 注入 `ScenarioContext.extra`
+⇒ 场景条件**可以**引用（**当前无场景引用** ⇒ 行为零变化）。
+⚠️ `priority_order` / `yielded_params` 仍待补。
 
 ---
 

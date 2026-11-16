@@ -1668,6 +1668,15 @@ class ParameterOptimizeService:
             selected_defect=selection.keyword_name,
         )
 
+        # 阶段进度留痕（**只观测，不参与裁决**）—— 本轮哪些阶段还有缺陷、
+        # 当前该推进哪一步。⚠️ 场景匹配**不引用**它（阶段准入尚未落地）。
+        _logger.info(
+            '[optimize] %s 阶段进度: %s',
+            interface_tag,
+            (policy_resolution.stage_progress.to_trace()
+             if policy_resolution.stage_progress else None),
+        )
+
         # 装成 AlgorithmContext（service 内实现细节）
         algorithm_context = _compose_algorithm_context(
             machine_info=machine_info,

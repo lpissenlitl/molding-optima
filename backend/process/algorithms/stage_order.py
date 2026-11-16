@@ -28,7 +28,8 @@
 既不塞进已知阶段，也不丢。
 """
 
-from typing import Any, List, Mapping, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 #: 阶段优先级（**升序 = 推进顺序**）：打足 → 补缩 → 外观。
 STAGE_ORDER: Tuple[str, ...] = ('filling', 'shrinking', 'appearance')
@@ -96,10 +97,78 @@ def order_defects(
     return [(index, item) for _, index, item in decorated]
 
 
+@dataclass(frozen=True)
+class StageProgress:
+    """阶段进度（**每轮从反馈纯推导**，不落库）。
+
+    Attributes:
+        defect_codes: 本轮反馈涉及的缺陷码（去重，保持出现顺序）。
+        achieved: **本轮未复现**的阶段（本轮反馈里没有该阶段的任何缺陷码）。
+        pending: 本轮仍有缺陷的阶段（**明确未达成**）。
+        current: 当前应推进的阶段 = 第一个 ``pending``
+            （``None`` = 本轮无已知阶段的缺陷）。
+    """
+
+    defect_codes: Tuple[str, ...] = ()
+    achieved: Tuple[str, ...] = ()
+    pending: Tuple[str, ...] = ()
+    current: Optional[str] = None
+
+    def to_trace(self) -> Dict[str, Any]:
+        """留痕载荷（阶段进度进第2层留痕）。"""
+        return {
+            'defect_codes': list(self.defect_codes),
+            'achieved': list(self.achieved),
+            'pending': list(self.pending),
+            'current': self.current,
+        }
+
+
+def derive_stage_progress(defect_codes: Sequence[str]) -> StageProgress:
+    """由本轮缺陷码 ⇒ **阶段进度**（纯函数，不落库、不查库）。
+
+    口径（**阶段达成信号**，见 ``docs/l2-stage-strategy-design.md`` §3.2）：
+
+    - **达成**：该阶段的**所有**缺陷码在本轮反馈里**都不出现**
+      （「这一类缺陷不见了」= 可观测的达成信号）；
+    - **未达成（pending）**：本轮反馈里还有该阶段的缺陷码；
+    - **当前阶段（current）**：第一个未达成的阶段（按 :data:`STAGE_ORDER` 推进顺序）。
+
+    ⚠️ **不区分「已解决」与「从未报过」** —— 阶段状态不落库 ⇒ 没有历史可比
+    ⇒ 「本轮没报该阶段缺陷」一律记为达成。反馈稀疏时**可能高估达成度**。
+
+    ⚠️ **本函数只做推导，不做裁决** —— ``current`` 目前只进留痕
+    （**不参与场景匹配**：阶段准入尚未落地）。
+    """
+    codes: List[str] = []
+    for code in defect_codes or ():
+        if not code:
+            continue
+        text = str(code)
+        if text not in codes:
+            codes.append(text)
+
+    # 阶段 → 本轮该阶段的缺陷码（未知码归 UNKNOWN_STAGE，不影响任何已知阶段）
+    by_stage: Dict[str, List[str]] = {}
+    for code in codes:
+        by_stage.setdefault(stage_of(code), []).append(code)
+
+    pending = tuple(stage for stage in STAGE_ORDER if by_stage.get(stage))
+    achieved = tuple(stage for stage in STAGE_ORDER if not by_stage.get(stage))
+    return StageProgress(
+        defect_codes=tuple(codes),
+        achieved=achieved,
+        pending=pending,
+        current=pending[0] if pending else None,
+    )
+
+
 __all__ = [
     'DEFECT_STAGE',
     'STAGE_ORDER',
+    'StageProgress',
     'UNKNOWN_STAGE',
+    'derive_stage_progress',
     'order_defects',
     'stage_of',
     'stage_rank',

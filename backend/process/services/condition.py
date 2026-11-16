@@ -1116,25 +1116,29 @@ def update_condition_info(condition_id: int, **params):
 # （合并自 optimization_advice.add_process_optimization + chain 调度）
 # ============================================================================
 
-# 中文缺陷名 → 英文 defect_code 译文表（与 RuleMethod.defect_code 对齐）
+# 中文缺陷名 → 英文缺陷码译文表
+# ⚠️ **权威源 = RuleKeyword.keyword_name**（规则库 17 类缺陷码）—— chain 用它
+#    查规则库（``RuleMethod.defect_code`` 与 ``keyword_name`` 同码）。
+#    中文名逐条取自规则库条目的 ``description``。
 DEFECT_NAME_MAP = {
     "短射": "SHORTSHOT",
-    "缩水": "SINK_MARK",
+    "缩水": "SHRINKAGE",
     "飞边": "FLASH",
-    "熔接痕": "WELD_LINE",
-    "困气": "TRAP",
-    "气纹": "FLOW_MARK",
+    "熔接痕": "WELDLINE",
+    "困气": "AIRTRAP",
+    "气纹": "GASVEINS",
     "烧焦": "BURN",
-    "料花": "FLOW_LINE",
-    "色差": "COLOR_SHIFT",
-    "水波纹": "RIPPLE",
-    "脱模不良": "EJECT_DIFFICULT",
-    "顶白": "WHITENING",
-    "变形": "WARPAGE",
+    "料花": "MATERIALFLOWER",
+    "水波纹": "WATERRIPPLE",
+    "脱模不良": "HARDDEMOLDING",
+    "顶白": "TOPWHITE",
+    "变形": "WARPING",
     "尺寸偏大": "OVERSIZE",
     "尺寸偏小": "UNDERSIZE",
-    "浇口印": "GATE_MARK",
-    "阴阳面": "BRIGHT_DARK",
+    "浇口印": "GATEMARK",
+    "阴阳面": "SHADING",
+    # ⚠️ 规则库**无「色差」这一类缺陷** ⇒ 保留原名（查不到规则 ⇒ 无推荐）。
+    "色差": "COLOR_SHIFT",
 }
 
 # 工艺参数字段白名单（仅数值型字段，避免非数值字段进入 FuzzyEngine）
@@ -1217,6 +1221,9 @@ def _build_optimization_context(
                 {
                     "defect_name": defect_name_en,
                     "defect_name_zh": target_defect,
+                    # ⚠️ 缺陷选取的**有效性判据** = 有非空 ``keyword_name``
+                    #    ⇒ 缺它 ⇒ 选不出缺陷 ⇒ 引擎拿不到缺陷类型（无推荐）。
+                    "keyword_name": defect_name_en,
                 }
             ] if defect_name_en else [],
         },

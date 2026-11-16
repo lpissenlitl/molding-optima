@@ -19,7 +19,7 @@
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional
 
 from process.algorithms.decide_direction import (
@@ -29,6 +29,7 @@ from process.algorithms.decide_direction import (
     build_scenario_context,
     select_policy,
 )
+from process.algorithms.stage_order import StageProgress, derive_stage_progress
 from process.algorithms.strategies import load_strategies
 
 _logger = logging.getLogger(__name__)
@@ -42,12 +43,15 @@ class PolicyResolution:
         context: **实际情况**（缺陷码 / 实测重量 / 目标重量 / 充填缺口）。
         scenario: 命中的场景策略（``None`` = 无场景 ⇒ 不裁决）。
         priority_table: 字段级优先级表（空表 = 不按字段级排序）。
+        stage_progress: **阶段进度**（本轮哪些阶段还有缺陷、当前该推进哪一步）。
+            ⚠️ **只做推导，不做裁决** —— 不参与场景匹配（阶段准入尚未落地）。
         trace: 留痕（场景码、命中条件、上下文摘要）。
     """
 
     context: ScenarioContext = field(default_factory=ScenarioContext)
     scenario: Optional[ScenarioPolicy] = None
     priority_table: Optional[PriorityTable] = None
+    stage_progress: Optional[StageProgress] = None
     trace: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -77,18 +81,27 @@ def resolve_policies(
         extra={'selected_defect': selected_defect},
     )
 
+    # 阶段进度（**只推导，不裁决**）—— 本轮哪些阶段还有缺陷、当前该推进哪一步。
+    # ⚠️ ``current_stage`` 注入 extra ⇒ 场景条件**可以**引用它；
+    #    但**当前没有任何场景引用** ⇒ 行为零变化（阶段准入尚未落地）。
+    progress = derive_stage_progress(context.defect_codes)
+    context = replace(
+        context,
+        extra={**context.extra, 'current_stage': progress.current},
+    )
+
     try:
         policies = load_strategies()
     except Exception as exc:                  # 读清单失败 ⇒ 不裁决（不阻塞优化）
         _logger.warning('[policy] 读取策略清单失败，本轮不裁决: %s', exc)
-        return PolicyResolution(context=context)
+        return PolicyResolution(context=context, stage_progress=progress)
 
     if not policies:
-        return PolicyResolution(context=context)
+        return PolicyResolution(context=context, stage_progress=progress)
 
     policy = select_policy(policies, context)
     if policy is None:
-        return PolicyResolution(context=context)
+        return PolicyResolution(context=context, stage_progress=progress)
 
     trace = {
         'scenario_code': policy.scenario_code,
@@ -99,11 +112,13 @@ def resolve_policies(
         'defect_codes': list(context.defect_codes),
         'selected_defect': context.extra.get('selected_defect'),
         'fill_gap': context.fill_gap,
+        'stage_progress': progress.to_trace(),
     }
     return PolicyResolution(
         context=context,
         scenario=policy,
         priority_table=policy.priority_table,
+        stage_progress=progress,
         trace=trace,
     )
 
