@@ -435,6 +435,27 @@ class StrategyDecision:
     deferred: Mapping[str, str] = field(default_factory=dict)
     scenario_code: str = ''
 
+    def status_of(self, name: str) -> Tuple[Optional[str], str]:
+        """候选字段的**裁决状态** → ``(状态, 原因)``。
+
+        状态三取值：
+
+        - ``adopted``：保留并执行 ⇒ 本轮真的调了它（原因 = 保留依据）；
+        - ``yielded``：明确让位（原因 = 让位理由）；
+        - ``deferred``：名额用满暂缓（原因 = 暂缓理由）。
+
+        ⚠️ **不在候选集**（没进第2层：零变化 / 译不出 / 不在参数表里）
+        ⇒ 返回 ``(None, '')`` ⇒ 调用方据此判断「这条建议没有裁决状态」
+        （含**旧数据**：状态字段是批次 12.9 才加的，历史轮次没有）。
+        """
+        if name in self.kept:
+            return 'adopted', self.kept_reasons.get(name, '')
+        if name in self.yielded:
+            return 'yielded', self.yielded.get(name, '')
+        if name in self.deferred:
+            return 'deferred', self.deferred.get(name, '')
+        return None, ''
+
     def to_trace(self) -> Dict[str, object]:
         """决策留痕载荷（写进调用方的诊断出口）。
 

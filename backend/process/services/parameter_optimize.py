@@ -42,6 +42,7 @@ from process.algorithms.decide_direction import (  # 第2层：结合实际情�
     PriorityTable,
     ScenarioContext,
     ScenarioPolicy,
+    StrategyDecision,
     collect_candidates,
     resolve_direction,
 )
@@ -977,6 +978,33 @@ def _unlandable_veto(
     }
 
 
+def _apply_decision_status(
+    recommendations: List[Dict[str, Any]],
+    decision: StrategyDecision,
+) -> List[Dict[str, Any]]:
+    """把第2层的裁决状态**就地**回填到每条建议。
+
+    状态三取值（与 :meth:`StrategyDecision.status_of` 一致）：
+    ``adopted``（本轮保留并执行）/ ``yielded``（让位）/ ``deferred``（暂缓）。
+
+    ⚠️ **就地修改**：同一批 dict 既是响应载荷（``_build_suggestion_payload``）
+    又是落库载荷（``Recommendation.recommendations``）⇒ 一处回填，
+    **当轮响应 / 落库 / 历史轮次回显**三处同时带上状态。
+
+    ⚠️ **不在候选集的建议不打标**（零变化 / 译不出 / 不在参数表里）
+    ⇒ 前端按「有状态才过滤」处理 ⇒ **旧数据**（状态字段是批次 12.9 才加的）
+    照常显示，不会被误当成「未采用」。
+    """
+    for rec in recommendations:
+        status, reason = decision.status_of(rec.get('param') or '')
+        if status is None:
+            continue
+        rec['decision_status'] = status
+        if reason:
+            rec['decision_reason'] = reason
+    return recommendations
+
+
 def _resolve_direction(
     baseline: Dict[str, Any],
     algorithm_recommendations: List[Dict[str, Any]],
@@ -1212,7 +1240,7 @@ def build_recommendation_suggestion(recommendation, parameter) -> dict:
         for f in parameter._meta.fields
         if not f.is_relation
     }
-    payload = _build_suggestion_payload(recs, {}, baseline)
+    payload = _build_suggestion_payload(recs, {}, baseline, applied_values=baseline)
     return {
         "source_type": source_type,
         "groups": payload.get("groups", []),
@@ -1264,11 +1292,17 @@ def _build_suggestion_payload(
     algorithm_recommendations: List[Dict[str, Any]],
     algorithm_sources: Dict[str, List[Dict[str, Any]]],
     baseline: Optional[Dict[str, Any]] = None,
+    applied_values: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Step 4b —— 扁平推荐按 category 分组，构建 SuggestionGroup
 
     baseline 不为 None 时只保留在 baseline 中存在的推荐字段
     （与 collect_candidates 严格对齐）。
+
+    ``applied_values``：**已采用项的实际落地值**（字段名 → 值）。
+    当轮响应传 ``integrated.values``（整合后的最终参数集），
+    历史轮次回显传该轮参数（落库后的值）⇒ 两者同源。
+    ⚠️ **只给已采用项**：未采用项的「落地值」就是原值，没有意义。
     """
     source_type = _resolve_primary_source(algorithm_sources) or "none"
 
@@ -1296,7 +1330,7 @@ def _build_suggestion_payload(
         if category not in grouped:
             grouped[category] = {"category": category, "icon": icon, "items": []}
 
-        grouped[category]["items"].append({
+        item = {
             "param": param_name,
             "description": rec.get("reason") or _build_description(rec),
             "direction": (
@@ -1309,7 +1343,20 @@ def _build_suggestion_payload(
             "current_value": rec.get("current_value"),
             "recommended_value": rec.get("recommended_value"),
             "rule_refs": _extract_rule_refs(rec),
-        })
+        }
+        # 本轮裁决状态（批次 12.9）：adopted 已采用 / yielded 让位 / deferred 暂缓。
+        # ⚠️ **无状态就不给字段**（旧数据 / 未进候选集）⇒ 前端按「有则用」处理。
+        status = rec.get("decision_status")
+        if status:
+            item["decision_status"] = status
+            reason = rec.get("decision_reason")
+            if reason:
+                item["decision_reason"] = reason
+            if status == "adopted" and applied_values is not None:
+                applied = applied_values.get(param_name)
+                if applied is not None:
+                    item["applied_value"] = applied
+        grouped[category]["items"].append(item)
 
     return {
         "source_type": source_type,
@@ -1843,6 +1890,9 @@ class ParameterOptimizeService:
             context=(policy_resolution.context if policy_resolution else None),
         )
 
+        # 裁决状态回填到建议（**就地**）⇒ 响应 / 落库 / 历史回显三处一致
+        _apply_decision_status(algorithm_recommendations, direction.decision)
+
         # ---------- 第3层：整合参数（写入方向 + 锚点传导自洽）----------
         # 放在这里 ⇒ **落库值与响应值同源**（响应体就是这份 dict）。
         integrated = apply_direction(baseline, direction, previous=baseline)
@@ -1865,6 +1915,7 @@ class ParameterOptimizeService:
             algorithm_recommendations=algorithm_recommendations,
             algorithm_sources=algorithm_sources,
             baseline=baseline,
+            applied_values=integrated.values,
         )
         return new_parameter_dict, suggestion_payload, algorithm_recommendations
 

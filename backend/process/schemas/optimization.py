@@ -416,6 +416,14 @@ class SuggestionItemSchema(BaseSchema):
     - description：建议文本
     - direction：调整方向（increase / decrease / hold / check）
     - rule_refs：关联规则 ID 列表
+    - param / current_value / recommended_value：业务字段名与调整前后值
+    - decision_status / decision_reason：第2层的**本轮裁决状态**与原因
+    - applied_value：**已采用项的实际落地值**（当轮响应 = 整合后参数集；
+      历史回显 = 该轮落库参数 ⇒ 两者同源）
+
+    ⚠️ 本 schema **不是响应契约的守门人**（优化接口未用它做 response_model，
+    响应体直接返回 dict）⇒ 实际载荷字段比这里多也不会被裁掉。
+    此处声明是为了让契约与实际载荷**保持一致**（可读 + 可 model_validate）。
     """
 
     description: str = Field(..., description="建议文本")
@@ -424,6 +432,28 @@ class SuggestionItemSchema(BaseSchema):
     )
     rule_refs: Optional[List[str]] = Field(
         default_factory=list, description="关联规则 ID 列表",
+    )
+    param: Optional[str] = Field(
+        None, description="业务字段名（如 'inj_pres_1'）",
+    )
+    current_value: Optional[float] = Field(
+        None, description="调整前的当前值",
+    )
+    recommended_value: Optional[float] = Field(
+        None, description="建议的目标值（未采用时只是建议）",
+    )
+    decision_status: Optional[str] = Field(
+        None,
+        description=(
+            "本轮裁决状态：adopted 已采用 / yielded 让位 / deferred 暂缓；"
+            "无值 = 旧数据（批次 12.9 之前）或该建议未进候选集"
+        ),
+    )
+    decision_reason: Optional[str] = Field(
+        None, description="未采用的原因（中文）；已采用时为保留依据",
+    )
+    applied_value: Optional[float] = Field(
+        None, description="实际落地值（仅已采用项有）",
     )
 
 

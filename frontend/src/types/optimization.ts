@@ -112,6 +112,14 @@ export interface DefectFeedbackData {
 /** 调整方向（用于 UI 提示，无需翻译）*/
 export type SuggestionDirection = 'increase' | 'decrease' | 'hold' | 'check'
 
+/**
+ * 本轮裁决状态（后端第2层「确定明确的调整方向」的产出）
+ * - adopted：已采用（本轮保留并执行，参数真的改了）
+ * - yielded：让位（明确决定不做，附原因）
+ * - deferred：暂缓（名额用满，附原因）
+ */
+export type SuggestionDecisionStatus = 'adopted' | 'yielded' | 'deferred'
+
 /** 单条建议项 */
 export interface SuggestionItem {
   /** 建议文本：'降低 一段注射压力：70 → 60'（后端已拼好中文文案）*/
@@ -126,6 +134,12 @@ export interface SuggestionItem {
   current_value?: number | null
   /** 调整后的推荐值（可选）*/
   recommended_value?: number | null
+  /** 本轮裁决状态（可选）：无值 = 旧数据（批次 12.9 之前）或该建议未进候选集 */
+  decision_status?: SuggestionDecisionStatus
+  /** 未采用的原因（可选）：中文；已采用时为保留依据 */
+  decision_reason?: string
+  /** 实际落地值（可选）：仅已采用项有；与建议值不一致时值得提示 */
+  applied_value?: number | null
 }
 
 /** 同一类别的多个建议（如"工艺调整"包含多个参数调整）*/

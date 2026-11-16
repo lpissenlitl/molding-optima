@@ -9,8 +9,17 @@
 
     <!-- 多模态内容：按 group 分类展示 -->
     <template v-else>
+      <!-- 汇总行：本轮实际应用了几项 / 有几条建议没被采用 -->
+      <div class="previous-suggestion__summary">
+        <AppIcon
+          :icon="adoptedCount > 0 ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'"
+        />
+        <span>{{ summaryText }}</span>
+        <span v-if="devMode" class="previous-suggestion__devtag">开发模式 · 全量</span>
+      </div>
+
       <div
-        v-for="(group, gi) in suggestion!.groups"
+        v-for="(group, gi) in visibleGroups"
         :key="gi"
         class="previous-suggestion__group"
       >
@@ -24,7 +33,10 @@
             v-for="(item, ii) in group.items"
             :key="ii"
             class="previous-suggestion__item"
-            :class="{ 'previous-suggestion__item--with-icon': !!item.direction }"
+            :class="[
+              'previous-suggestion__item--with-icon',
+              { 'previous-suggestion__item--muted': isNotAdopted(item) },
+            ]"
           >
             <AppIcon
               v-if="item.direction"
@@ -32,6 +44,18 @@
               :class="['previous-suggestion__direction', `previous-suggestion__direction--${item.direction}`]"
             />
             <span class="previous-suggestion__description">{{ item.description }}</span>
+            <!-- 裁决状态：已应用 / 未采用（具体原因走 title） -->
+            <span
+              v-if="item.decision_status"
+              class="previous-suggestion__status"
+              :class="`previous-suggestion__status--${item.decision_status}`"
+              :title="item.decision_reason || ''"
+            >{{ statusLabel(item) }}</span>
+            <!-- 实际落地值与建议值不一致时才提示（一致时文案里已含目标值） -->
+            <span
+              v-if="appliedText(item)"
+              class="previous-suggestion__applied"
+            >{{ appliedText(item) }}</span>
             <!-- 依据规则：独占一行放在文案下方；规则串逐条换行，避免长串挤压文案 -->
             <span
               v-if="item.rule_refs && item.rule_refs.length"
@@ -47,13 +71,21 @@
           </li>
         </ul>
       </div>
+
+      <!-- 未采用建议的展开开关（默认视图；开发模式恒展开） -->
+      <button
+        v-if="!devMode && notAdoptedCount > 0"
+        type="button"
+        class="previous-suggestion__toggle"
+        @click="expanded = !expanded"
+      >{{ expanded ? '收起未采用的建议' : `另有 ${notAdoptedCount} 条建议本轮未采用 ›` }}</button>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { Suggestion, SuggestionDirection } from '@/types/optimization'
+import { computed, onMounted, ref } from 'vue'
+import type { Suggestion, SuggestionDirection, SuggestionItem } from '@/types/optimization'
 
 const props = defineProps<{
   suggestion?: Suggestion | null
@@ -65,6 +97,89 @@ const hasContent = computed(() => {
   if (!sug || !sug.groups || sug.groups.length === 0) return false
   return sug.groups.some(g => g.items && g.items.length > 0)
 })
+
+/**
+ * 开发模式：`?dev=1` ⇒ 全量展示建议（已采用 + 未采用），并逐条标状态。
+ * 默认关闭 ⇒ 工艺员只看到本轮真正落地的调整。
+ */
+const devMode = ref(false)
+onMounted(() => {
+  devMode.value = new URLSearchParams(window.location.search).get('dev') === '1'
+})
+
+/** 默认视图下手动展开「未采用」的建议 */
+const expanded = ref(false)
+
+/** 全部建议项（跨 group 拉平，供计数用） */
+const allItems = computed<SuggestionItem[]>(() =>
+  (props.suggestion?.groups ?? []).flatMap(g => g.items ?? [])
+)
+
+/** 本轮被采用（已落地）的建议条数 */
+const adoptedCount = computed(() =>
+  allItems.value.filter(i => i.decision_status === 'adopted').length
+)
+
+/** 本轮未采用的建议条数（让位 + 暂缓） */
+const notAdoptedCount = computed(() =>
+  allItems.value.filter(i => !!i.decision_status && i.decision_status !== 'adopted').length
+)
+
+/** 汇总行文案：说清楚「这一轮到底动了什么」 */
+const summaryText = computed(() => {
+  if (adoptedCount.value > 0) {
+    return notAdoptedCount.value > 0
+      ? `本轮已应用 ${adoptedCount.value} 项调整（另有 ${notAdoptedCount.value} 条建议未采用）`
+      : `本轮已应用 ${adoptedCount.value} 项调整`
+  }
+  if (notAdoptedCount.value > 0) {
+    return `本轮未落地任何调整（${notAdoptedCount.value} 条建议均未采用）`
+  }
+  return '本轮没有调整建议'
+})
+
+/** 可见分组：开发模式全量；默认视图只留「已采用 + 无状态（旧数据）」 */
+const visibleGroups = computed(() => {
+  const groups = props.suggestion?.groups ?? []
+  if (devMode.value) return groups
+  return groups
+    .map(g => ({
+      ...g,
+      items: (g.items ?? []).filter(item => {
+        if (!item.decision_status) return true
+        if (item.decision_status === 'adopted') return true
+        return expanded.value
+      }),
+    }))
+    .filter(g => g.items.length > 0)
+})
+
+/** 未采用项置灰 */
+function isNotAdopted(item: SuggestionItem): boolean {
+  return !!item.decision_status && item.decision_status !== 'adopted'
+}
+
+/** 状态徽标文案（具体原因走 title 提示） */
+function statusLabel(item: SuggestionItem): string {
+  if (item.decision_status === 'adopted') return '已应用'
+  if (item.decision_status === 'deferred') return '未采用·暂缓'
+  return '未采用'
+}
+
+/**
+ * 实际落地值与建议值不一致时才提示。
+ * 一致时 description 里已含目标值，重复展示反而噪声。
+ */
+function appliedText(item: SuggestionItem): string {
+  if (item.decision_status !== 'adopted') return ''
+  if (item.applied_value == null || item.recommended_value == null) return ''
+  if (Math.abs(item.applied_value - item.recommended_value) <= 1e-9) return ''
+  return `实际落地 ${formatNumber(item.applied_value)}`
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)))
+}
 
 /** 调整方向 → iconify 图标 */
 function directionIcon(dir: SuggestionDirection): string {
@@ -99,6 +214,68 @@ function formatRuleRef(ref: string): string {
     gap: 6px;
     font-size: 13px;
     color: #909399;
+  }
+
+  &__summary {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #b88230;
+  }
+
+  &__devtag {
+    padding: 0 5px;
+    border: 1px solid #c0c4cc;
+    border-radius: 2px;
+    font-size: 11px;
+    color: #909399;
+  }
+
+  &__status {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border-radius: 2px;
+    font-size: 11px;
+    line-height: 18px;
+
+    &--adopted {
+      background: #f0f9eb;
+      border: 1px solid #c2e7b0;
+      color: #67c23a;
+    }
+
+    &--yielded,
+    &--deferred {
+      background: #f4f4f5;
+      border: 1px solid #e4e7ed;
+      color: #909399;
+    }
+  }
+
+  &__applied {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #67c23a;
+  }
+
+  &__item--muted {
+    opacity: 0.55;
+  }
+
+  &__toggle {
+    margin-top: 6px;
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: #409eff;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 
   &__group {
