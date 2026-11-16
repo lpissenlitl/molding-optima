@@ -42,6 +42,7 @@ from process.algorithms.fuzzy.fuzzy_core.models.rules import NumTskRule  # noqa:
 from process.algorithms.fuzzy.fuzzy_core.parsing import parse_rule  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.profiles import RuleProfile  # noqa: E402
 from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
+from process.algorithms.defect_selection import ensure_selected_defect  # noqa: E402
 from process.algorithms.fuzzy.library.rules import RuleService  # noqa: E402
 
 OUT = sys.argv[1]
@@ -272,6 +273,8 @@ for sname, rules in SCENARIOS:
     for cname, ctx in CONTEXTS:
         repo = FakeRepo([mk(r) for r in rules])
         engine = FuzzyEngine(repository=repo)
+        # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
+        ensure_selected_defect(ctx)
         recs = engine.recommend(ctx)
         key = '%s|%s' % (sname, cname)
         infer[key] = {

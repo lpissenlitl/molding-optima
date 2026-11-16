@@ -186,6 +186,9 @@ def run(rules, context, boom=False):
     """跑一次引擎，返回推荐列表。"""
     repo = OfflineRepository(rules, boom=boom)
     engine = FuzzyEngine(repository=repo)
+    # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
+    from process.algorithms.defect_selection import ensure_selected_defect
+    ensure_selected_defect(context)
     return engine.recommend(context), engine
 
 

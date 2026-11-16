@@ -115,6 +115,9 @@ def build_context(case):
     ctx = dict(case['context'])
     ctx['process_parameter'] = field_names.to_algo_params(
         case['context']['process_parameter'])
+    # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
+    from process.algorithms.defect_selection import ensure_selected_defect
+    ensure_selected_defect(ctx)
     return ctx
 
 

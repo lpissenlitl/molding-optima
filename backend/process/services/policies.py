@@ -55,17 +55,27 @@ def resolve_policies(
     *,
     feedback: Optional[Mapping[str, Any]] = None,
     mold_info: Optional[Mapping[str, Any]] = None,
+    selected_defect: Optional[str] = None,
 ) -> PolicyResolution:
     """取策略清单 → 判定场景 → 组装第2层要的数据。
 
     Args:
         feedback: 缺陷反馈（缺陷码 + 实测观察）。
         mold_info: 模具上下文（制品总重）。
+        selected_defect: **本轮实际处理的缺陷码**（service 预处理层的整理结果）
+            —— 场景条件按它判定（经 ``ScenarioContext.extra`` 注入）。
+
+            ⚠️ **不按 ``defect_codes``（全部缺陷码）判定** —— 多缺陷反馈下
+            「反馈里含此缺陷」≠「本轮处理的是这个缺陷」⇒ 会命中错场景。
 
     Returns:
         :class:`PolicyResolution` —— **无命中 ⇒ 场景与优先级表为空**（不裁决）。
     """
-    context = build_scenario_context(feedback, mold_info)
+    context = build_scenario_context(
+        feedback,
+        mold_info,
+        extra={'selected_defect': selected_defect},
+    )
 
     try:
         policies = load_strategies()
@@ -87,6 +97,7 @@ def resolve_policies(
         'max_items': policy.max_items,
         'preferred_params': list(policy.preferred_params),
         'defect_codes': list(context.defect_codes),
+        'selected_defect': context.extra.get('selected_defect'),
         'fill_gap': context.fill_gap,
     }
     return PolicyResolution(

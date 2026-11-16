@@ -17,7 +17,6 @@ from dataclasses import replace
 from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
-from process.algorithms.defect_selection import STAGE_PRIORITY_STRATEGY, select_defect
 # ⚠️ **物理常量来自中立层**（`algorithms/material_physics.py`）：材料大类解析是
 #    **物理事实**，不属于任何算法包的私有口径 ⇒ 与专家引擎共用同一份。
 from process.algorithms.material_physics import (
@@ -295,35 +294,22 @@ class FuzzyEngine(AlgorithmBase):
                 ['%s=%.4f>%.4f' % (i.param_name, i.current_value, i.limit)
                  for i in stroke_over_limits[:5]])
 
-        # 1) 认缺陷
-        defects = (context.get('feedback') or {}).get('defect', []) or []
-        if not defects:
-            return []
+        # 1) 认缺陷 —— **选取已在 service 预处理层做完**（只做一次）
+        #    （见 `services/parameter_optimize.py::_prepare_defect_selection`）
+        #    ⇒ 本引擎**不再自己挑缺陷**，只读整理结果。
+        # 选取依据留痕（决策级，与 `field_reports` / `diagnostics` 那两个
+        # 规则级清单分开）—— 记的是预处理层给的完整 trace。
+        selected = context.get('selected_defect') or {}
+        trace = selected.get('trace')
+        if trace:
+            self._diag.selections.append(trace)
 
-        # 缺陷选取 —— **唯一真相源**（`process/algorithms/defect_selection.py`）。
-        # selection 对象自带选取依据，这里顺手**留痕**（决策级，
-        # 与 `field_reports` / `diagnostics` 那两个规则级清单分开）。
-        # ⚠️ **2026-11-13 口径（用户拍板）**：多缺陷反馈**不按列表第一项**，
-        #    而按**调机阶段**取（打足 → 补缩 → 外观）——
-        #    「短射 + 缩水 ⇒ 先解决短射；缩水 + 飞边 ⇒ 先做缩水
-        #    （飞边可能是**模具问题**而不是工艺问题，不该靠调机解决）」。
-        #    ⇒ fuzzy 切到 `STAGE_PRIORITY_STRATEGY`；
-        #    ⚠️ **empirical 不切** —— 它的「首项无效即整体放弃」是
-        #    **刻意保留**的历史语义，强行统一会让经验推理
-        #    在「首项无效、次项有效」时凭空多出推荐。
-        selection = select_defect(context, strategy=STAGE_PRIORITY_STRATEGY)
-        self._diag.selections.append(selection.to_trace())
-        defect_name = selection.keyword_name
-        if not defect_name:
+        # 缺陷上下文（缺陷名 / 严重程度 / 位置）—— 取自预处理层的整理结果
+        defect_ctx = self._extract_defect_context(context)
+        if not defect_ctx:
             logger.warning('[FuzzyEngine] 反馈中未指定缺陷类型（keyword_name），跳过推荐')
             return []
-
-        # 缺陷上下文（缺陷名 / 严重程度 / 位置）——算法自己从 input 推导
-        defect_ctx = {
-            'defect_name': defect_name,
-            'level': selection.level,
-            'position': selection.position,
-        }
+        defect_name = defect_ctx['defect_name']
 
         # 2) 拉规则
         # context['polymer_info'] / context['mold_info'] 是子对象 dict
@@ -547,19 +533,19 @@ class FuzzyEngine(AlgorithmBase):
         - `level`：严重程度（low / medium / high），与规则前件的档位词一致
         - `position`：缺陷位置（`DL` + 缺陷名 + 段号）
 
-        ⚠️ 选取逻辑已收敛到**唯一真相源**
-        （`process/algorithms/defect_selection.py`），本方法只是它的便捷包装，
-        返回形状保持不变（`defect_name` / `level` / `position`）。
-        ⚠️ 选取策略与 :meth:`recommend` **保持同源**（阶段优先级）——
-           两处若用不同策略，同一份反馈会选出两个不同的缺陷。
+        ⚠️ **选取不在本引擎** —— 缺陷选取由 service 预处理层做**一次**
+           （`services/parameter_optimize.py::_prepare_defect_selection`），
+           结果随 context 的 ``selected_defect`` 下传；本方法**只读、不挑**。
+           返回形状保持不变（`defect_name` / `level` / `position`）。
         """
-        selection = select_defect(context, strategy=STAGE_PRIORITY_STRATEGY)
-        if selection.is_empty():
+        selected = context.get('selected_defect') or {}
+        defect_name = selected.get('defect_name')
+        if not defect_name:
             return {}
         return {
-            'defect_name': selection.keyword_name,
-            'level': selection.level,
-            'position': selection.position,
+            'defect_name': defect_name,
+            'level': selected.get('level'),
+            'position': selected.get('position'),
         }
 
     @staticmethod

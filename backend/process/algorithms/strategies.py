@@ -34,6 +34,13 @@
 
 条件可引用的**标准字段**见 :data:`process.algorithms.decide_direction.CONTEXT_FIELDS`；
 还可引用 ``ScenarioContext.extra`` 里注入的任意键（附加字段）。
+
+⚠️ **场景条件按「本轮实际处理的缺陷」判定**（``selected_defect`` —— 由 service
+预处理层整理出、经 ``ScenarioContext.extra`` 注入），**不按** ``defect_codes``
+（= 反馈里的**全部**缺陷码）⚠️ 二者在**多缺陷反馈**下会错配：反馈含
+``SHRINKAGE`` + ``SHORTSHOT`` 而本轮处理的是 ``SHORTSHOT`` 时，
+按全部缺陷码会误命中 ``shrinking_first``（优先级 20）而不是 ``filling_first``。
+⇒ 条件用 ``in_set``（字段值是**单值**：本轮处理的缺陷码落在目标集合内）。
 """
 
 from typing import Tuple
@@ -71,7 +78,7 @@ STRATEGIES: Tuple[ScenarioPolicy, ...] = (
     ScenarioPolicy(
         scenario_code='filling_first',
         conditions=(
-            {'field': 'defect_codes', 'operator': 'contains', 'value': 'SHORTSHOT'},
+            {'field': 'selected_defect', 'operator': 'in_set', 'value': ('SHORTSHOT',)},
             {'field': 'fill_gap', 'operator': 'gt', 'value': 0},
         ),
         allowed_params=('met_end_pos', 'vps_pos'),
@@ -85,14 +92,14 @@ STRATEGIES: Tuple[ScenarioPolicy, ...] = (
     # --- S2 补缩：缩水类 ⇒ 只动保压组 ---
     # ⚠️ 白名单 = 二段压力 + 二段时间（素材 SK-01 / SK-02）
     #    ⇒ 二段时间的定量锚点是**浇口封冻时间**（🔵 尚缺判据 ⇒ 目标值待校准）。
-    # ⚠️ 条件用 ``in_any``（字段值 ``defect_codes`` 是**集合**）
-    #    ⇒ 任一缺陷码落在目标集合内即命中。
+    # ⚠️ 条件用 ``in_set``（字段值 ``selected_defect`` 是**单值**）
+    #    ⇒ 本轮处理的缺陷码落在目标集合内即命中。
     ScenarioPolicy(
         scenario_code='shrinking_first',
         conditions=(
             {
-                'field': 'defect_codes',
-                'operator': 'in_any',
+                'field': 'selected_defect',
+                'operator': 'in_set',
                 'value': ('SHRINKAGE', 'UNDERSIZE', 'OVERSIZE', 'WARPING'),
             },
         ),
@@ -116,7 +123,7 @@ STRATEGIES: Tuple[ScenarioPolicy, ...] = (
     ScenarioPolicy(
         scenario_code='flash_first',
         conditions=(
-            {'field': 'defect_codes', 'operator': 'contains', 'value': 'FLASH'},
+            {'field': 'selected_defect', 'operator': 'in_set', 'value': ('FLASH',)},
         ),
         allowed_params=('hold_pres_1', 'met_end_pos'),
         blocked_params=BASELINE_EXCLUDED_PARAMS,
@@ -139,7 +146,7 @@ STRATEGIES: Tuple[ScenarioPolicy, ...] = (
     ScenarioPolicy(
         scenario_code='burn_first',
         conditions=(
-            {'field': 'defect_codes', 'operator': 'contains', 'value': 'BURN'},
+            {'field': 'selected_defect', 'operator': 'in_set', 'value': ('BURN',)},
         ),
         allowed_params=(
             'met_back_pres_1',
@@ -164,7 +171,7 @@ STRATEGIES: Tuple[ScenarioPolicy, ...] = (
     ScenarioPolicy(
         scenario_code='gasveins_first',
         conditions=(
-            {'field': 'defect_codes', 'operator': 'contains', 'value': 'GASVEINS'},
+            {'field': 'selected_defect', 'operator': 'in_set', 'value': ('GASVEINS',)},
         ),
         allowed_params=('met_back_pres_1', 'hold_pres_1', 'hold_t_1'),
         blocked_params=BASELINE_EXCLUDED_PARAMS,

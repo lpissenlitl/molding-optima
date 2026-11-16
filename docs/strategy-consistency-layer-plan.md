@@ -472,6 +472,13 @@ L2 的真正增量不是"多几条 if"，而是**决策可解释**。每次 L2 �
 
 沿用 `DefectSelection.to_trace()` 的形态（决策级留痕与规则级诊断分开，见该模块 docstring）。
 
+⚠️ **落地状态（2026-11-16）**：`selected_defect` / `skipped_defects` **已落地** ——
+`DefectSelection.to_trace()` 随 context 的 `selected_defect.trace` 下传，
+引擎的 `Diagnostic.selections` 记的就是它（决策级与规则级分开）。
+`strategy` = 命中的**场景码**（`filling_first` / `shrinking_first` / …）⚠️
+不是缺陷选取策略名（那个是 `first_valid`）—— 两个“策略”含义不同，别混。
+`priority_order` / `yielded_params` **仍待补**。
+
 ---
 
 ## 8. L3 一致性层设计

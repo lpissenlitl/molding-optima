@@ -1287,6 +1287,11 @@ def _run_optimization_chain(context: dict) -> Tuple[List[dict], str]:
       4. empirical 也不可用 → 抛 BizException(OPERATION_FAILED)
     """
     from process.algorithms.base import AlgorithmRegistry
+    from process.algorithms.defect_selection import ensure_selected_defect
+
+    # 缺陷选取：**统一在调用方整理一次**（service 预处理层的等价外提）——
+    # 引擎只读 context['selected_defect']，不再各自挑缺陷。
+    ensure_selected_defect(context)
 
     candidates = AlgorithmRegistry.get_algorithms_by_type("optimization")
     if not candidates:

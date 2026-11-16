@@ -30,6 +30,9 @@ def main():
     print("engine.recommend: 验证嵌套 context['polymer/mold'] 取值")
     print("=" * 70)
 
+    # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
+    from process.algorithms.defect_selection import ensure_selected_defect
+
     engine = FuzzyEngine()
     context = {
         "feedback": {
@@ -53,6 +56,7 @@ def main():
         "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
+        ensure_selected_defect(context)
         recs = engine.recommend(context)
 
     assert len(captured) == 1, f"RuleQueryContext 应被构造 1 次, got {len(captured)}"
@@ -84,6 +88,7 @@ def main():
         "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
+        ensure_selected_defect(context_empty)
         recs2 = engine.recommend(context_empty)
     assert len(captured) == 1
     assert captured[0].polymer_abbreviation is None
@@ -105,6 +110,7 @@ def main():
         "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
+        ensure_selected_defect(context_none)
         recs3 = engine.recommend(context_none)
     assert len(captured) == 1
     assert captured[0].polymer_abbreviation is None

@@ -86,6 +86,10 @@ CONTEXT = {
     'iteration_trend': {'trend': 'stable'},
 }
 
+# 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
+from process.algorithms.defect_selection import ensure_selected_defect  # noqa: E402
+ensure_selected_defect(CONTEXT)
+
 failures = []
 
 

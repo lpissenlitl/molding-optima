@@ -48,6 +48,10 @@ from process.algorithms.decide_direction import (  # 第2层：结合实际情�
 from process.algorithms.integrate_params import apply_direction  # 第3层：整合参数
 from process.algorithms.check_params import validate  # 第4层：校验参数合理性
 from process.algorithms.base import AlgorithmRegistry
+from process.algorithms.defect_selection import (  # 缺陷选取（实现在算法层；调用时机在 service 的预处理层）
+    DefectSelection,
+    select_defect,
+)
 from process.algorithms.fuzzy import (
     field_names,  # 命名契约：业务字段名 ↔ 算法字段名（双向映射，契约层唯一真相源）
 )
@@ -74,7 +78,6 @@ from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数�
     snapshot_parameter,
 )
 from .policies import (  # 第2层的策略读表与组装（业务知识在策略表，代码只负责读+匹配）
-    PolicyResolution,
     resolve_policies,
 )
 
@@ -265,6 +268,26 @@ def _validate_optimize_inputs(
         )
     except ValueError as exc:
         raise BizException(ERROR_REQUIRED_FIELD, str(exc)) from exc
+
+
+# --- Step 0c：缺陷反馈整理（预处理层，只做一次）---
+
+def _prepare_defect_selection(feedback: Dict[str, Any]) -> DefectSelection:
+    """**feedback 预处理** —— 对前端缺陷反馈做**一次**整理。
+
+    分层口径（2026-11-13 用户界定）：
+
+    - **输入** = 前端提交的缺陷列表（``feedback['defect']``，**可多个**）；
+    - **输出** = **本轮处理哪一个缺陷**（明确的、唯一的）+ 选取依据（留痕载荷）。
+
+    ⚠️ **只做一次**：下游 L1（推理）与 L2（策略）都消费本层的结果。
+       任何一层再各自挑一遍 ⇒ 同一份反馈可能推出**两个不同缺陷**的方案
+       （已记录的偏差：L2 按 ``defect_codes`` 反推场景、L1 按另一口径选取缺陷）。
+
+    ⚠️ **实现属算法层、调用时机属本层** —— 可插拔的选取规则实现在
+       ``process/algorithms/defect_selection.py``（零 ORM 的纯计算）。
+    """
+    return select_defect({'feedback': feedback or {}})
 
 
 # --- Step 1：装配推理上下文 ---
@@ -528,6 +551,7 @@ def _compose_algorithm_context(
     feedback: Dict[str, Any],
     rule_library_code: Optional[str] = None,
     company_id: Optional[int] = None,
+    selected_defect: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Step 2 核心 —— 装成 AlgorithmContext（Port-Adapter 模式）
 
@@ -540,6 +564,10 @@ def _compose_algorithm_context(
     `company_id`：当前租户（**规则库可见性上下文**）—— 系统库对所有租户公用，
     租户私库只对归属租户可见（判据在算法侧共用编排层）。
     None = **无租户上下文** ⇒ 不过滤（保持现状全量）。
+
+    `selected_defect`：预处理层整理出的「本轮处理哪个缺陷」
+    （见 :func:`_prepare_defect_selection`）—— L1 推理与 L2 策略**共用同一份**。
+    None = 本层不产出（尚未接线）。
     """
     algorithm_params = field_names.to_algo_params(parameter)
     return {
@@ -550,6 +578,7 @@ def _compose_algorithm_context(
         'feedback': feedback,
         'rule_library_code': rule_library_code,
         'company_id': company_id,
+        'selected_defect': selected_defect or {},
     }
 
 
@@ -1467,12 +1496,6 @@ class ParameterOptimizeService:
         overrides = _extract_context_overrides(condition_orm)
 
         # ---------- Step 2: 纯推理（与 DB 无关）----------
-        # 第2层的策略数据：**业务知识在策略清单文件**（场景 / 优先集 / 名额 /
-        # 目标口径）—— 这里只做「读取 + 匹配 + 组装」；读不到或没命中 ⇒ 不裁决。
-        policy_resolution = resolve_policies(
-            feedback=feedback,
-            mold_info=mold_info,
-        )
         new_parameter_dict, suggestion_payload, algorithm_recommendations = self._infer_kernel(
             machine_info=machine_info,
             polymer_info=polymer_info,
@@ -1483,7 +1506,6 @@ class ParameterOptimizeService:
             rule_library_code=overrides.get('rule_library_code'),
             # 当前租户（规则库可见性）—— 取自工艺条件的归属公司
             company_id=condition_orm.company_id,
-            policy_resolution=policy_resolution,
         )
 
         # ---------- Step 3: 原子事务落库 ----------
@@ -1574,11 +1596,6 @@ class ParameterOptimizeService:
         # Step 0b: 入参契约校验（三维由调用方直传，同样要过契约）
         _validate_optimize_inputs(machine_info, polymer_info, mold_info)
 
-        # 第2层的策略数据：从策略清单文件取（策略本身与租户无关）
-        policy_resolution = resolve_policies(
-            feedback=feedback,
-            mold_info=mold_info or {},
-        )
         # 调 self._infer_kernel 纯推理（与 infer() 走同一函数）
         # 第 3 个返回值 algorithm_recommendations 无需落库（FromProvided 是纯推理）
         new_parameter_dict, suggestion_payload, _ = self._infer_kernel(
@@ -1591,7 +1608,6 @@ class ParameterOptimizeService:
             # ⚠️ **无租户上下文**（第三方集成 / 算法试算 / 烟测）
             #    ⇒ 不过滤（保持现状全量），不改变既有行为
             company_id=None,
-            policy_resolution=policy_resolution,
         )
 
         return {
@@ -1611,7 +1627,6 @@ class ParameterOptimizeService:
         interface_tag: str,
         rule_library_code: Optional[str] = None,
         company_id: Optional[int] = None,
-        policy_resolution: Optional[PolicyResolution] = None,
         fail_fast_message: str = "推荐算法暂不可用，请稍后重试或联系管理员",
     ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
         """【Step 3+4 纯算法内核】5 维 dict → (new_parameter, suggestion, algorithm_recommendations)
@@ -1629,8 +1644,6 @@ class ParameterOptimizeService:
             fail_fast_message: BizException 文案
             company_id: 当前租户（**规则库可见性上下文**）—— None = 无租户
                 上下文 ⇒ 不过滤（保持现状全量）。
-            policy_resolution: 第2层的策略解析结果（实际情况 + 场景 + 优先级表）；
-                None ⇒ **不裁决**（行为与「不接第2层」完全一致）。
 
         Returns:
             (new_parameter_dict, suggestion_payload, algorithm_recommendations)
@@ -1641,6 +1654,20 @@ class ParameterOptimizeService:
         Raises:
             BizException(ERROR_OPERATION_FAILED): 算法无任何推荐
         """
+        # Step 0c: 缺陷反馈整理（**一次**）—— 本轮处理哪个缺陷。
+        # ⚠ L1（推理）与 L2（策略）**共用这一份** ⇒ 同一份反馈不会推出两个缺陷。
+        selection = _prepare_defect_selection(feedback)
+
+        # 第2层的策略数据：**业务知识在策略清单文件**（场景 / 优先集 / 名额 /
+        # 目标口径）—— 这里只做「读取 + 匹配 + 组装」；读不到或没命中 ⇒ 不裁决。
+        # ⚠ **在本层算**（而非调用方）—— 场景条件要引用 **本轮实际处理的缺陷**
+        #    （`selected_defect`），它由 Step 0c 给出 ⇒ 必须与 L1 同一份口径。
+        policy_resolution = resolve_policies(
+            feedback=feedback,
+            mold_info=mold_info,
+            selected_defect=selection.keyword_name,
+        )
+
         # 装成 AlgorithmContext（service 内实现细节）
         algorithm_context = _compose_algorithm_context(
             machine_info=machine_info,
@@ -1650,6 +1677,7 @@ class ParameterOptimizeService:
             feedback=feedback,
             rule_library_code=rule_library_code,
             company_id=company_id,
+            selected_defect=selection.to_context(),
         )
 
         algorithm_result = _call_algorithms(algorithm_context)
