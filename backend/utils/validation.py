@@ -11,7 +11,7 @@ def validate_pk(
     field_name: str,
     message: str = None
 ) -> int:
-    """主键参数校验"""
+    """主键参数校验。"""
     if isinstance(value, int) == False or value <= 0:
         raise BizException(
             ERROR_ILLEGAL_ARGUMENT, 
@@ -38,7 +38,7 @@ def validate_required(
     field_name: str,
     message: str = None
 ) -> Any:
-    """必填参数校验"""
+    """必填参数校验。"""
     if value is None:
         raise BizException(
             ERROR_ILLEGAL_ARGUMENT, 
@@ -62,7 +62,7 @@ def validate_code(
     field_name: str,
     message: str = None
 ) -> str:
-    """编码参数校验"""
+    """编码参数校验。"""
     value = validate_required(value, field_name, message)
     value_valid = value.lower()
     if not re.match(r"^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$", value_valid, re.ASCII):
@@ -78,7 +78,7 @@ def validate_permission_codes(
     field_name: str,
     message: str = None
 ) -> list:
-    """权限编码参数校验"""
+    """权限编码参数校验。"""
     if not isinstance(permission_codes, list):
         raise BizException(
             ERROR_USER_PERMISSION_CODES_INVALID, 

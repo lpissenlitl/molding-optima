@@ -1,5 +1,4 @@
-"""
-molding-optima 规则管理 service
+"""molding-optima 规则管理 service。
 
 提供 RuleKeyword / RuleLibrary / RuleMethod / ExpertRule 的 CRUD + 列表查询。
 RuleFlowDoc（MongoDB 流程图）相关功能暂不引入。
@@ -28,7 +27,7 @@ _PRECOND_TOKEN_RE = re.compile(
 
 
 def _extract_precondition_keywords(rule_description: str) -> list:
-    """从规则描述字符串中提取所有前置条件的 keyword_name
+    """从规则描述字符串中提取所有前置条件的 keyword_name。
 
     规则描述格式：
         IF kw1 op1 v1 AND kw2 op2 v2 THEN ...
@@ -51,7 +50,7 @@ def _extract_precondition_keywords(rule_description: str) -> list:
 
 
 def _auto_extract_defect(rule_description: str, company_id: int):
-    """从规则描述中自动识别缺陷关键词
+    """从规则描述中自动识别缺陷关键词。
 
     业务说明：
       defect_label / defect_code 是索引字段（用于列表查询过滤），
@@ -84,7 +83,7 @@ def _auto_extract_defect(rule_description: str, company_id: int):
 
 # 允许写入的模糊档位（与 RuleKeyword.FUZZY_LEVELS 一致，
 # 也与前端 types/rule.ts::FuzzyLevel 同集合：现网统一 **3 档**）。
-# ⚠️ Django 的 choices **不会在 save 时自动校验**（create_with_check 只过滤
+# 【注意】Django 的 choices **不会在 save 时自动校验**（create_with_check 只过滤
 #    未知字段名），所以必须在 service 层显式拦，否则 API 客户端仍能写入
 #    非法档位（如 5 / 7 / 9），而内核会把该字段当无效论域直接跳过。
 _VALID_FUZZY_LEVELS = (3,)
@@ -108,7 +107,7 @@ def _validate_fuzzy_level(params):
 
 
 def get_rule_keyword(rule_keyword_id):
-    """获取规则关键字详情"""
+    """获取规则关键字详情。"""
     rule = RuleKeyword.objects.filter(
         id=rule_keyword_id, is_deleted=False,
     ).first()
@@ -119,7 +118,7 @@ def get_rule_keyword(rule_keyword_id):
 
 @transaction.atomic
 def add_rule_keyword(company_id, organization_id, **params):
-    """新增规则关键字"""
+    """新增规则关键字。"""
     _validate_fuzzy_level(params)
     params["company_id"] = company_id
     if organization_id:
@@ -129,7 +128,7 @@ def add_rule_keyword(company_id, organization_id, **params):
 
 @transaction.atomic
 def update_rule_keyword(rule_keyword_id, **params):
-    """更新规则关键字"""
+    """更新规则关键字。"""
     _validate_fuzzy_level(params)
     rule = RuleKeyword.objects.filter(
         id=rule_keyword_id, is_deleted=False,
@@ -142,7 +141,7 @@ def update_rule_keyword(rule_keyword_id, **params):
 
 @transaction.atomic
 def delete_rule_keyword(rule_keyword_id):
-    """删除规则关键字（软删除）"""
+    """删除规则关键字（软删除）。"""
     rule = RuleKeyword.objects.filter(
         id=rule_keyword_id, is_deleted=False,
     ).first()
@@ -160,7 +159,7 @@ def get_list_of_rule_keyword(
     page_size=30,
     sort="-id",
 ):
-    """获取规则关键字列表
+    """获取规则关键字列表。
 
     隔离逻辑：
     - is_superuser=True 且未接管（company_id=None） → 看全部（平台超管视角）
@@ -207,7 +206,7 @@ def get_list_of_rule_keyword(
 # ==================== RuleMethod ====================
 
 def get_rule_method(rule_method_id):
-    """获取规则方法详情"""
+    """获取规则方法详情。"""
     rule = RuleMethod.objects.filter(
         id=rule_method_id, is_deleted=False,
     ).first()
@@ -218,7 +217,7 @@ def get_rule_method(rule_method_id):
 
 @transaction.atomic
 def add_rule_method(company_id, organization_id, **params):
-    """新增规则方法（仅模糊规则库允许）"""
+    """新增规则方法（仅模糊规则库允许）。"""
     # 库存在性 + 类型校验
     lib_id = params.get("rule_library_id")
     if not lib_id:
@@ -250,7 +249,7 @@ def add_rule_method(company_id, organization_id, **params):
 
 @transaction.atomic
 def update_rule_method(rule_method_id, **params):
-    """更新规则方法"""
+    """更新规则方法。"""
     rule = RuleMethod.objects.filter(
         id=rule_method_id, is_deleted=False,
     ).first()
@@ -272,7 +271,7 @@ def update_rule_method(rule_method_id, **params):
 
 @transaction.atomic
 def delete_rule_method(rule_method_id):
-    """删除规则方法（软删除）"""
+    """删除规则方法（软删除）。"""
     rule = RuleMethod.objects.filter(
         id=rule_method_id, is_deleted=False,
     ).first()
@@ -290,7 +289,7 @@ def get_list_of_rule_method(
     page_size=30,
     sort="-priority",
 ):
-    """获取规则方法列表"""
+    """获取规则方法列表。"""
     qs = RuleMethod.objects.filter(is_deleted=False)
 
     if defect_label:
@@ -320,7 +319,7 @@ def _visible_library_company_ids(company_id, is_superuser):
     - 平台超管未接管（`company_id=None`）⇒ 返回 `None`（不限归属，看全部）
     - 其余 ⇒ 当前公司 + 系统演示公司（系统级库对所有租户可见）
 
-    ⚠️ 系统演示公司必须通过 **code 反查**，不能硬编码 id（演示 / 生产环境 id 不同）。
+    【注意】系统演示公司必须通过 **code 反查**，不能硬编码 id（演示 / 生产环境 id 不同）。
     """
     from identity.const import SYSTEM_DEMO_COMPANY_CODE
     from identity.models.company import Company
@@ -338,9 +337,9 @@ def _visible_library_company_ids(company_id, is_superuser):
 
 
 def get_rule_library(rule_library_id, company_id=None, is_superuser=False):
-    """获取规则库详情（带规则数量统计）
+    """获取规则库详情（带规则数量统计）。
 
-    ⚠️ **归属校验**：可见性口径与列表一致（见 `_visible_library_company_ids`）——
+    【注意】**归属校验**：可见性口径与列表一致（见 `_visible_library_company_ids`）——
     租户只能读自己的库 + 系统级库；读他人租户私库一律拒绝
     （否则登录用户可按 id 遍历越权读取其它租户的规则库）。
     """
@@ -368,14 +367,14 @@ def get_rule_library(rule_library_id, company_id=None, is_superuser=False):
 @transaction.atomic
 def add_rule_library(company_id, organization_id, is_superuser=False,
                      target_company_id=None, **params):
-    """新增规则库
+    """新增规则库。
 
     `target_company_id`（**仅超管**）= **代办建库**：把库直接建到指定租户名下。
     - 不传 ⇒ 库建在调用者自己公司名下（租户自建 / 超管自建系统库）；
     - 传了 ⇒ 库建在 `target_company_id` 名下，且**只能是租户级库**
       （系统级库归平台，走「不传」路径即可）。
 
-    ⚠️ **代办是必要的**：不传时 `company_id` 强制 = 调用者公司，
+    【注意】**代办是必要的**：不传时 `company_id` 强制 = 调用者公司，
     超管建出来的 `owner_type='tenant'` 库会落在超管的公司（系统演示）名下，
     对目标租户**永远不生效**（静默失效）。
     """
@@ -424,7 +423,7 @@ def add_rule_library(company_id, organization_id, is_superuser=False,
 
 @transaction.atomic
 def update_rule_library(rule_library_id, company_id, is_superuser=False, **params):
-    """更新规则库（含归属校验：系统库仅平台超管可改）"""
+    """更新规则库（含归属校验：系统库仅平台超管可改）。"""
     lib = RuleLibrary.objects.filter(
         id=rule_library_id, is_deleted=False,
     ).first()
@@ -458,8 +457,8 @@ def update_rule_library(rule_library_id, company_id, is_superuser=False, **param
 
 @transaction.atomic
 def delete_rule_library(rule_library_id, company_id, is_superuser=False):
-    """删除规则库（软删除）
-    ⚠️ 系统级库（平台公共大库）**仅超管可删** —— 删了全平台就失去该库。
+    """删除规则库（软删除）。
+    【注意】系统级库（平台公共大库）**仅超管可删** —— 删了全平台就失去该库。
     """
     lib = RuleLibrary.objects.filter(
         id=rule_library_id, is_deleted=False,
@@ -496,7 +495,7 @@ def get_list_of_rule_library(
     page_size=30,
     sort="-priority",
 ):
-    """获取规则库列表（带规则数量统计）
+    """获取规则库列表（带规则数量统计）。
 
     隔离逻辑：
     - is_superuser=True 且未接管（company_id=None） → 看全部（平台超管视角）
@@ -505,7 +504,7 @@ def get_list_of_rule_library(
     筛选参数（**均与 `RuleLibraryListSchema` 字段一一对应**）：
     - library_name / library_code：模糊匹配
     - owner_type：system / tenant
-    - library_type：expert / fuzzy（⚠️ 决定库内允许的规则种类，租户建库时选定）
+    - library_type：expert / fuzzy（【注意】决定库内允许的规则种类，租户建库时选定）
     - is_active：启用状态
     """
     qs = RuleLibrary.objects.filter(is_deleted=False)
@@ -562,7 +561,7 @@ def get_list_of_rule_library(
 # ==================== ExpertRule ====================
 
 def get_expert_rule(expert_rule_id):
-    """获取专家规则详情"""
+    """获取专家规则详情。"""
     rule = ExpertRule.objects.filter(
         id=expert_rule_id, is_deleted=False,
     ).first()
@@ -574,9 +573,9 @@ def get_expert_rule(expert_rule_id):
 @transaction.atomic
 def add_expert_rule(company_id, organization_id, rule_library_id,
                     is_superuser=False, **params):
-    """新增专家规则（仅专家规则库允许）
+    """新增专家规则（仅专家规则库允许）。
 
-    ⚠️ **系统级库（平台公共大库）** 的专家规则 **仅平台超管可维护** ——
+    【注意】**系统级库（平台公共大库）** 的专家规则 **仅平台超管可维护** ——
     公共大库是平台资产，由超管维护（租户不得自助塞入）。
     """
     if not rule_library_id:
@@ -615,7 +614,7 @@ def add_expert_rule(company_id, organization_id, rule_library_id,
 
 @transaction.atomic
 def update_expert_rule(expert_rule_id, company_id, is_superuser=False, **params):
-    """更新专家规则（系统级库下仅平台超管可改）"""
+    """更新专家规则（系统级库下仅平台超管可改）。"""
     rule = ExpertRule.objects.filter(
         id=expert_rule_id, is_deleted=False,
     ).first()
@@ -635,7 +634,7 @@ def update_expert_rule(expert_rule_id, company_id, is_superuser=False, **params)
 
 @transaction.atomic
 def delete_expert_rule(expert_rule_id, company_id, is_superuser=False):
-    """删除专家规则（软删除；系统级库下仅平台超管可删）"""
+    """删除专家规则（软删除；系统级库下仅平台超管可删）。"""
     rule = ExpertRule.objects.filter(
         id=expert_rule_id, is_deleted=False,
     ).first()
@@ -659,7 +658,7 @@ def get_list_of_expert_rule(
     page_size=30,
     sort="priority",
 ):
-    """获取专家规则列表"""
+    """获取专家规则列表。"""
     qs = ExpertRule.objects.filter(is_deleted=False)
 
     if rule_library_id is not None:

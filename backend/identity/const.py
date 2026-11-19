@@ -10,7 +10,7 @@ def make_perm(
     description: str = "",
     is_active: bool = True,
 ) -> dict:
-    """构建权限项，提供清晰接口和合理默认值"""
+    """构建权限项，提供清晰接口和合理默认值。"""
     return {
         "name": name,
         "code": code,

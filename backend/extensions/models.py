@@ -8,7 +8,7 @@ from datetime import datetime
 
 class AbstractBaseModel(models.Model):
     """
-    模型公共方法
+    模型公共方法。
     """
     id = models.BigAutoField(primary_key=True, unique=True)
     def __repr__(self):
@@ -66,8 +66,7 @@ class AbstractBaseModel(models.Model):
         include_m2m=False,
         include_rvs=False
     ):
-        """
-        返回 dict 结构对象
+        """返回 dict 结构对象。
 
         Args:
             fields: 如果指定 fields, 则只返回 fields 里的字段数据.
@@ -130,14 +129,14 @@ class AbstractBaseModel(models.Model):
     @classmethod
     def create_with_check(cls, **kwargs):
         """
-        封装一层创建方法，检验并过滤无效字段
+        封装一层创建方法，检验并过滤无效字段。
         """
         filtered_kwargs = {k: v for k, v in kwargs.items() if k in cls.get_allowed_fields()}
         return cls.objects.create(**filtered_kwargs)
 
     @classmethod
     def _get_default_lookup_fields(cls):
-        """返回推荐的查找字段"""
+        """返回推荐的查找字段。"""
         fields = []
         for f in cls._meta.fields:
             if f.primary_key or (f.unique and not f.null and not isinstance(f, models.FileField)):
@@ -146,8 +145,7 @@ class AbstractBaseModel(models.Model):
     
     @classmethod
     def update_or_create_with_check(cls, lookup_fields=None, **kwargs):
-        """
-        安全的 update_or_create
+        """安全的 update_or_create。
         :param lookup_fields: 用于查找的字段名，如 ['id'], ['username']
         :param kwargs: 字段值
         """
@@ -173,7 +171,7 @@ class AbstractBaseModel(models.Model):
     
     @classmethod
     def get_queryset_by_filter_map(cls, filter_map):
-        """根据筛选条件获取queryset"""
+        """根据筛选条件获取queryset。"""
         filters = build_filters(filter_map)
         qs = cls.objects.filter(**filters)
         return qs
@@ -195,8 +193,7 @@ class AbstractBaseModel(models.Model):
         return total, results
 
     def update_info(self, allow_fields=None, **kwargs):
-        """
-        通用字段更新方法
+        """通用字段更新方法。
         支持部分字段更新，自动事务
         """
         if allow_fields is None:
@@ -219,7 +216,7 @@ class AbstractBaseModel(models.Model):
             if getattr(field, 'auto_now', False):
                 value = datetime.now() if isinstance(field, models.DateTimeField) else True
                 setattr(self, field.name, value)
-                update_fields.add(field.name)  # ✅ 强制加入 update_fields
+                update_fields.add(field.name)  # 强制加入 update_fields
         
         with transaction.atomic():
             for k, v in valid_args.items():
@@ -251,7 +248,7 @@ class TracedModel(AbstractBaseModel):
 
 
 class SoftDeleteManager(models.Manager):
-    """软删除模型管理器"""
+    """软删除模型管理器。"""
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
 
@@ -274,7 +271,7 @@ class BaseModel(TracedModel):
     all_objects = models.Manager()
     
     def soft_delete(self):
-        """软删除"""
+        """软删除。"""
         if self.is_deleted: return
         
         with transaction.atomic():
@@ -286,7 +283,7 @@ class BaseModel(TracedModel):
         return self
     
     def restore(self):
-        """恢复软删除
+        """恢复软删除。
 
         与 soft_delete() 对称。用途：幂等重建场景下，
         “查不到（已软删）就新建”会变成“同编号两条并存”，
@@ -304,7 +301,7 @@ class BaseModel(TracedModel):
     
     @classmethod
     def batch_soft_delete(cls, ids: list):
-        """批量软删除"""
+        """批量软删除。"""
         return cls.objects.filter(
             id__in=ids
         ).update(
@@ -438,8 +435,7 @@ class BaseModel(TracedModel):
 
 
 class BusinessBaseModel(BaseModel):
-    """
-    业务模型，提供公司、组织归属
+    """业务模型，提供公司、组织归属。
     - company: 公司
     - organization: 组织
     """

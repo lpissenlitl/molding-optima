@@ -1,4 +1,4 @@
-"""反模糊化（结论阶段）
+"""反模糊化（结论阶段）。
 
 模糊推理推理链的**最后一段**：把模糊结论（采样点上的隶属度序列）
 反模糊化成精确值。
@@ -14,7 +14,7 @@ Mamdani 的结论本身是模糊集，必须反模糊化才能拿到可执行的
   反模糊化是 `(采样点序列, 隶属度序列)` → 实数。
 - **扩展节奏不同**：本模块是"去模糊化**方法**"族 —— `centroid` / `bisector` /
   `mom` / `som` / `lom` **均已实现**，用哪个由工艺定；
-  ⚠️ **默认仍是 `centroid`**（`nets.py` 也显式传 `'centroid'`）⇒ 默认路径不改变任何现有输出。
+  【注意】**默认仍是 `centroid`**（`nets.py` 也显式传 `'centroid'`）⇒ 默认路径不改变任何现有输出。
 """
 
 import numpy as np
@@ -27,7 +27,7 @@ __all__ = ['centroid', 'bisector', 'mom', 'som', 'lom', 'defuzz',
 class UnsupportedDefuzzMode(NotImplementedError, ValueError):
     """不支持的反模糊化模式。
 
-    ⚠️ 同时继承 `NotImplementedError`（历史抛出类型，保持向后兼容）
+    【注意】同时继承 `NotImplementedError`（历史抛出类型，保持向后兼容）
     与 `ValueError`（模式名非法本质是取值错误）⇒ 两种 ``except`` 都能兜住。
     """
 
@@ -37,7 +37,7 @@ class UnsupportedDefuzzMode(NotImplementedError, ValueError):
 # ============================================================================
 
 def centroid(x: np.ndarray, mfx: np.ndarray) -> float:
-    """重心法（centroid）反模糊化（Mamdani 用）"""
+    """重心法（centroid）反模糊化（Mamdani 用）。"""
     sum_moment_area = 0.0
     sum_area = 0.0
 
@@ -71,7 +71,7 @@ def centroid(x: np.ndarray, mfx: np.ndarray) -> float:
 
 
 def defuzz(x: np.ndarray, mfx: np.ndarray, mode: str = 'centroid') -> float:
-    """反模糊化统一入口
+    """反模糊化统一入口。
 
     Parameters
     ----------

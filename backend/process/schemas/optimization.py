@@ -1,4 +1,4 @@
-"""工艺参数调优（optimize）Schema 定义
+"""工艺参数调优（optimize）Schema 定义。
 
 两个入口（命名范式与 initialization.py 对齐：Process<动作>From<入口>）：
 - ProcessOptimizeFromConditionSchema：业务主流程，POST /api/processes/algorithms/optimize/
@@ -7,29 +7,20 @@
   （路由尚未注册）。面向第三方系统集成（其库内没有我们的 masterdata，
   却同样有「缺陷 → 调优」诉求）。
 
-设计原则：
-- 上下文三维按实体归属分组（mold_info / machine_info / polymer_info），不扁平化：
-  ① 与 DB 模式反查的三张表 1:1 对应，字段来源可追溯；
-  ② 调用方可按自己「知道什么」分段填，不必在混合字段堆里判断；
-  ③ 与 initialize 的 FromProvided 保持同一心智模型。
-- 必填性分两层，与 initialization 完全同构：
-  ① 维度对象本身必填（mold_info / machine_info / polymer_info 必须出现）——
-     它们对应 AlgorithmContext 的必需 key，缺一个维度等于缺整类判级依据；
-  ② 对象内字段的必填等级不写在 pydantic，而是定义在 algorithms/fuzzy/specs.py，
-     由 OptimizeDataValidator 在算法入口校验。理由：pydantic 表达不了
-     「液压机必填」这类条件必填；且算法层校验能让 service / 第三方 / CLI
-     所有调用方自动受约束，而不是只守住一个 HTTP 入口。
-     所以 pydantic 里字段全是 Optional —— 那是传输形状，不是契约强度。
-- 调优的消费面与初始化不同：模具/材料只需极少数（多为规则筛选键与边界值），
-  设备是重点（HMI 设定上限决定推荐值的物理可行性），故【不复用】initialization 的
-  MoldInfoSchema / MachineInfoSchema / PolymerInfoSchema。
-- optimize 无 process_set 维度：段数与模式（inj_stg / hold_stg / vps_mode ...）属于
-  当前工艺本身，已包含在 parameter 基线内，不是外部配置。所以是三维而非四维。
+契约要点：
+- 三维上下文按实体归属分组（mold_info / machine_info / polymer_info），不扁平化
+- 必填性分两层：维度对象本身必填；对象内字段的必填等级不在 pydantic，定义在
+  algorithms/fuzzy/specs.py，由 OptimizeDataValidator 在算法入口校验
+  ⇒ pydantic 里字段全是 Optional（传输形状 ≠ 契约强度）
+- 三维 schema 与 initialization 的同名 schema 不同源（调优只消费规则筛选键与物理边界值）
+- 无 process_set 维度：段数与模式属于当前工艺本身，已含在 parameter 基线内
+
+设计取舍见 docs/process-schema-design-notes.md §1.1–1.4。
 
 术语规范：
-- parameter：调优基线 / 手动修改覆盖（两个入口语义不同，见各自 docstring）
+- parameter：入参 = 调优基线 / 手动修改覆盖（两个入口语义不同，见各自 docstring）；
+  响应 = 新工艺参数（落库端点为完整对象，未落库端点为纯工艺字段）
 - feedback：嵌套结构（defect / observations / tuning_result）
-- new_parameter：算法推理后的新工艺参数（含 parameter_id）
 - suggestion：算法建议展示对象（含 source_type / recommendation_id / groups）
 """
 from typing import Optional, List, Dict, Any  # noqa: F401 保留 Dict/Any 供后续子 schema 用
@@ -45,16 +36,15 @@ from .parameter import ProcessParameterSchema
 # ============================================================================
 
 class DefectFeedbackDataSchema(BaseSchema):
-    """缺陷反馈数据（与前端 DefectFeedbackData 对齐）
+    """缺陷反馈数据（与前端 DefectFeedbackData 对齐）。
 
     数据约束：
-    - keyword_id / keyword_name：可空（用户未选时为 null；后端匹配走 keyword_name）
+    - keyword_name：可空（用户未选时为 null；后端匹配走 keyword_name）
     - level：当 keyword_name='DEFECTFREE' 时为 null；其他情况按 fuzzy_level 选词
     - position：缺陷位置（产品区域描述，如 "DL飞边3"）
     - position_3d：可选的 3D 模型点选坐标
     """
 
-    keyword_id: Optional[int] = Field(None, description="缺陷关键词 ID（关联 RuleKeyword.id，可空）")
     keyword_name: Optional[str] = Field(None, description="缺陷关键词名称（冗余存，可空）")
     level: Optional[str] = Field(None, description="缺陷档位（low/medium/high/...）")
     position: Optional[str] = Field("", description="缺陷位置")
@@ -64,7 +54,7 @@ class DefectFeedbackDataSchema(BaseSchema):
 
 
 class CycleObservationSchema(BaseSchema):
-    """实测观察项
+    """实测观察项。
 
     对齐前端 CycleObservation：
     - param_key：4 种参数类型之一（actual_product_weight / peak_pressure / ...）
@@ -79,17 +69,17 @@ class CycleObservationSchema(BaseSchema):
 
 
 class FeedbackSchema(BaseSchema):
-    """反馈信息（嵌套在 InferRequest 内）
+    """反馈信息（嵌套在 InferRequest 内）。
 
     3 类反馈合一：
-    - defect[]：缺陷反馈列表（多个，算法识别优先级）
+    - defects[]：缺陷反馈列表（多个，算法识别优先级）
     - observations[]：实测观察（按需传）
     - tuning_result：试模效果评价（对【该轮工艺参数】的整体评价）
 
     tuning_result：首轮 qualified/unqualified，第 2 轮起 qualified + effective/unchanged/ineffective
     """
 
-    defect: List[DefectFeedbackDataSchema] = Field(
+    defects: List[DefectFeedbackDataSchema] = Field(
         default_factory=list, description="缺陷反馈列表（可空，可多个）",
     )
     observations: List[CycleObservationSchema] = Field(
@@ -116,7 +106,7 @@ class FeedbackSchema(BaseSchema):
 
 
 class OptimizeMoldInfoSchema(BaseSchema):
-    """模具信息（调优精度上下文 · 按需最小集）
+    """模具信息（调优精度上下文 · 按需最小集）。
 
     两类内容：
     1. **规则筛选键 + 周期余量**（product_category / target_cycle_time）；
@@ -130,11 +120,6 @@ class OptimizeMoldInfoSchema(BaseSchema):
     product_category 是精度旋钮（填了命中高特异度规则，不填退到默认规则，
     算法不报缺该值而不能运行），target_cycle_time 是同类；
     制品级字段缺失 ⇒ 冷却时间回落经验域，**不报错、不阻塞**。
-
-    未纳入的字段（需成对使用才有意义）：
-    - projected_area（在 GatingSystem 表，按 shot_index 选）
-      + 机台 max_clamping_force（在 InjectionMoldingMachine 主表）
-      → 飞边类推荐的压力上界。两者跨两张表，单独取其一无法算出所需锁模力。
     """
 
     product_category: Optional[str] = Field(
@@ -172,22 +157,12 @@ class OptimizeMoldInfoSchema(BaseSchema):
 
 
 class OptimizeMachineInfoSchema(BaseSchema):
-    """设备信息（调优精度上下文 · 重点维度）
+    """设备信息（调优精度上下文 · 重点维度）。
 
     作用：给推荐值划定「这台机设得出来」的物理边界，并参与参数模糊等级判定。
 
-    为何必需：
-    fuzzy 算法构造隶属度函数时需要参数论域 [min_val, max_val]。现状两处都不看设备：
-    - RuleKeyword 覆盖到的参数：论域取 keyword.range_min/range_max（全厂通用值）
-    - 未覆盖的参数：论域取 当前值×2（自我参照，等于猜）
-    后果：同一套参数在 180MPa 与 350MPa 的机上被判成同一模糊等级，规则条件命中失真。
-    算法侧接设备实际值的改造另行讨论，本 schema 先把契约钉死。
-
     下限统一为 0，故不设 min_set_*：压力/速度/位置类参数不做功即为 0，
     只需保证推荐值不超上限。（温度不同，见 OptimizePolymerInfoSchema 的 min_*。）
-
-    未纳入的能力字段（对调优无意义，initialize 才需要）：
-    screw_diameter / max_injection_volume / plasticizing_capacity 等。
 
     必填等级见 algorithms/fuzzy/specs.py::OPTIMIZE_MACHINE_INFO_FIELDS：
     max_set_decompression_pressure / max_set_decompression_speed 是「可选」
@@ -196,13 +171,10 @@ class OptimizeMachineInfoSchema(BaseSchema):
     （全电机 HMI 物理上无此栏，缺失属正常）；
     其余 5 个（注射压力/速度、保压压力/速度、螺杆转速）是「必填」
     ——缺上界不是精度下降，而是判级错误。
-    ⚠️ **单位不在算法层考虑**：这里取的就是**界面值**（HMI 面板显示上限），
+    【注意】**单位不在算法层考虑**：这里取的就是**界面值**（HMI 面板显示上限），
     算法侧直接用，**不做单位换算、不做单位一致性校验**（用户口径：
     「我们取的就是界面值，不需要关心单位」）。ORM 字段声明的单位仅作字段描述用。
 
-    命名空间：本 schema 的字段名 == ORM 字段名（InjectionUnit / InjectionMoldingMachine）。
-    fuzzy 侧的命名空间就是业务/ORM 名 —— 这些**机器属性字段不在** fuzzy 的命名映射表内
-    （`field_names.FIELD_NAME_ALIAS` 只收工艺参数，如 ``inj_spd`` → ``IV``）。
     """
 
     # --- 驱动形式（InjectionMoldingMachine 主表）：「液压机必填」等级的评估前提 ---
@@ -225,7 +197,7 @@ class OptimizeMachineInfoSchema(BaseSchema):
 
 
 class OptimizePolymerInfoSchema(BaseSchema):
-    """材料信息（调优精度上下文 · 按需最小集）
+    """材料信息（调优精度上下文 · 按需最小集）。
 
     两类价值：
     1. abbreviation 是规则库精确筛选键（specificity 1/2），缺了只能落到通用默认规则。
@@ -257,7 +229,7 @@ class OptimizePolymerInfoSchema(BaseSchema):
 
 
 class ProcessOptimizeFromConditionSchema(BaseSchema):
-    """【工艺参数调优 - 业务主流程】基于 condition + 缺陷反馈调优推理
+    """【工艺参数调优 - 业务主流程】基于 condition + 缺陷反馈调优推理。
 
     POST /api/processes/algorithms/optimize/
 
@@ -272,17 +244,12 @@ class ProcessOptimizeFromConditionSchema(BaseSchema):
     - feedback：反馈信息（嵌套结构）
 
     主动不传的字段（从 condition_id 反查）：
-    - ❌ machine_id / polymer_id / mold_id / process_set
-    - ❌ subrule_no（后端算法自动识别）
-    - ❌ 上一轮 suggestion（后端实时推理）
+    - machine_id / polymer_id / mold_id / process_set
+    - subrule_no（后端算法自动识别）
+    - 上一轮 suggestion（后端实时推理）
 
-    parameter 字段一律 flat（与 FromProvided 同形）：
-    - 算法契约源头就是 flat（AlgorithmContext.process_parameter，FIELD_NAME_ALIAS
-      按 flat 业务名翻译为算法名），上游嵌套 = 多一层翻译、多一处故障点
-    - 服务契约是镜像（ProcessParameterSchema 镜像 ORM，与 _to_full_dict 同源），
-      用 flat 后调用方无歧义
-    - 即使是「稀疏覆盖」（只带要改的几个键），也用 flat 形状——每个 key 都是
-      ORM 字段名；与「全量基线」的差别只在数量，不在 length
+    parameter 字段一律 flat（与 FromProvided 同形，key 均为 ORM 字段名）；
+    稀疏覆盖与全量基线的差别只在数量，不在 length。
     """
 
     condition_id: int = Field(..., description="工艺条件 ID（必填）")
@@ -293,8 +260,8 @@ class ProcessOptimizeFromConditionSchema(BaseSchema):
         None,
         description=(
             "手动修改覆盖（flat 字段，与 FromProvided 同形；前端嵌套 form → flat "
-            "的翻译由前端 API 层负责，详见 views/process/optimization/components/"
-            "parameterTransform.ts 的 parameterToFlat）"
+            "的翻译由前端 API 层负责，详见 frontend/src/views/process/optimization/"
+            "components/parameterTransform.ts 的 parameterToFlat）"
         ),
     )
     feedback: FeedbackSchema = Field(
@@ -303,10 +270,9 @@ class ProcessOptimizeFromConditionSchema(BaseSchema):
 
     @model_validator(mode="after")
     def _parameter_must_have_override(self):
-        """parameter 不为 None 时必须至少有一个标量工艺字段（拦截「忘翻译」「误传空 dict」）
+        """parameter 不为 None 时必须至少有一个标量工艺字段（拦截「忘翻译」「误传空 dict」）。
 
-        业务元数据字段（process_condition_id / param_code / param_source /
-        parent_seq_idx / seq_idx）由 service 层自动处理，不计入此校验——
+        业务元数据字段由 service 层自动处理，不计入此校验——
         调优上下文里调用方只需关心「改了哪些工艺参数」，不需要重写业务元数据。
 
         通过条件：
@@ -319,8 +285,7 @@ class ProcessOptimizeFromConditionSchema(BaseSchema):
             return self
         # 业务元数据字段：service 层处理，不算「工艺覆盖」
         _BUSINESS_META = frozenset({
-            "process_condition_id", "param_code", "param_source",
-            "parent_seq_idx", "seq_idx",
+            "parameter_no", "param_source", "seq_idx",
         })
         non_none = [
             (k, v) for k, v in self.parameter.model_dump(exclude_none=True).items()
@@ -336,7 +301,7 @@ class ProcessOptimizeFromConditionSchema(BaseSchema):
 
 
 class ProcessOptimizeFromProvidedSchema(BaseSchema):
-    """【工艺参数调优 - 纯推理，不查库不落库】调用方自带完整上下文
+    """【工艺参数调优 - 纯推理，不查库不落库】调用方自带完整上下文。
 
     POST /api/processes/algorithms/optimize-from-provided/（待路由注册）
 
@@ -356,27 +321,12 @@ class ProcessOptimizeFromProvidedSchema(BaseSchema):
         "machine_info": {...},      // 必填对象（HMI 设定上限是硬约束）
         "polymer_info": {...}       // 必填对象（abbreviation 为精度旋钮）
     }
-    
-    为何不放 rule_library_code：这是算法内部的资源选择（哪一套规则库），
-    调优侧不需知道该概念。RuleQueryContext 已自带 fallback 链
-    （user 指定 → 按 polymer_abbreviation + product_category 自动解析），
-    上游完全可以自解，传出来只是多一个泄漏点。
 
-    对象必填 + 字段等级由 specs.py 校验：传 {} 能过 pydantic，但进算法会被
-    OptimizeDataValidator 拒（与 initialize 的 FromProvided 同一套两层设计）
+    陷阱：三维上下文传 {} 能过 pydantic，但进算法会被 OptimizeDataValidator 拒
+    （字段级等级由 algorithms/fuzzy/specs.py 校验）。
 
-    响应：与 FromCondition 同构的 suggestion（groups / items），但无落库产物
-    ——没有 new_parameter.parameter_id / seq_idx，也没有 recommendation_id。
-
-    两个入口 parameter 形状一致的说明（统一为 ProcessParameterSchema）：
-    - FromProvided 用全量基线：第三方需要明确契约，传不齐就是漏数据
-    - FromCondition 用稀疏覆盖：调用方只带要改的几个键，service 按
-      `_resolve_baseline`（入参优先，否则 ORM 反查）补齐未传的字段
-    - 两者形状一致（key 都是 ORM 字段名），差异在「数量」而非「length」
-
-    为何三维上下文在 FromProvided 必填、FromCondition 却不传：
-    FromCondition 的上下文由后端从 condition 反查（DB 里已有），FromProvided 无人可查，
-    只能调用方给。两者最终汇流到同一个 algorithm context，同一套契约校验。
+    响应：suggestion 与 FromCondition 同构（groups / items），但无落库产物
+    ——parameter 里没有 id / seq_idx（未落库），也没有 recommendation_id。
     """
 
     # --- 必填：调优的作用对象与触发原因 ---
@@ -402,15 +352,12 @@ class ProcessOptimizeFromProvidedSchema(BaseSchema):
     )
 
 
-# 注：rule_library_code 不在此处暴露。该字段是算法内部资源选择——上游自解或由
-# service 从 condition.process_context_snapshot 注入，不该作为公共 HTTP 入参。
-
 # ============================================================================
 # 出参 Schema（Suggestion 子结构）
 # ============================================================================
 
 class SuggestionItemSchema(BaseSchema):
-    """单条建议项
+    """单条建议项。
 
     对齐前端 Suggestion：
     - description：建议文本
@@ -421,7 +368,7 @@ class SuggestionItemSchema(BaseSchema):
     - applied_value：**已采用项的实际落地值**（当轮响应 = 整合后参数集；
       历史回显 = 该轮落库参数 ⇒ 两者同源）
 
-    ⚠️ 本 schema **不是响应契约的守门人**（优化接口未用它做 response_model，
+    【注意】本 schema **不是响应契约的守门人**（优化接口未用它做 response_model，
     响应体直接返回 dict）⇒ 实际载荷字段比这里多也不会被裁掉。
     此处声明是为了让契约与实际载荷**保持一致**（可读 + 可 model_validate）。
     """
@@ -446,7 +393,7 @@ class SuggestionItemSchema(BaseSchema):
         None,
         description=(
             "本轮裁决状态：adopted 已采用 / yielded 让位 / deferred 暂缓；"
-            "无值 = 旧数据（批次 12.9 之前）或该建议未进候选集"
+            "无值 = 历史轮次没有状态字段，或该建议未进候选集"
         ),
     )
     decision_reason: Optional[str] = Field(
@@ -458,7 +405,7 @@ class SuggestionItemSchema(BaseSchema):
 
 
 class SuggestionGroupSchema(BaseSchema):
-    """同一类别的多个建议
+    """同一类别的多个建议。
 
     与后端 Recommendation.recommendations 对齐（按 category 分组）：
     - category：类别名（如 '注射参数' / '保压参数'）
@@ -474,7 +421,7 @@ class SuggestionGroupSchema(BaseSchema):
 
 
 class SuggestionSchema(BaseSchema):
-    """算法建议（infer 返回的核心对象）
+    """算法建议（_infer_kernel 返回的核心对象）。
 
     设计要点：
     - source_type：算法来源（fuzzy_rule / rule_miner / llm ...）

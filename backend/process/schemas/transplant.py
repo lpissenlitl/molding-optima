@@ -1,5 +1,4 @@
-"""
-工艺参数移植 Schema
+"""工艺参数移植 Schema。
 
 对应接口：
 - POST /api/processes/algorithms/transplant/
@@ -22,7 +21,7 @@ from extensions.schemas import BaseSchema
 
 
 class TransplantRequestSchema(BaseSchema):
-    """工艺参数移植请求 Schema
+    """工艺参数移植请求 Schema。
 
     与前端 api/index.ts 里的 algorithmsTransplant 参数对齐。
     """

@@ -15,7 +15,7 @@ L2 层：连真实 DB 的 optimize 链路端到端验证
 参照系来源：frontend/src/views/process/optimization/components/parameterTransform.ts
 （前端唯一的 flat → nested 翻译器）。
 
-不落库：走 infer_from_provided（纯推理入口），DB 只读。
+不落库：走 optimize_from_provided（纯推理入口），DB 只读。
 """
 
 import json
@@ -31,7 +31,6 @@ django.setup()
 from process.models.condition import ProcessCondition  # noqa: E402
 from process.services import parameter_optimize as opt  # noqa: E402
 from process.services.parameter_optimize import (  # noqa: E402
-    ParameterOptimizeService,
     _to_full_dict,
 )
 
@@ -60,7 +59,7 @@ NESTED_ARRAY_KEYS = (
 
 
 def _pick_context():
-    """挑一个可用的工艺条件：优先 MOULD_CONDITION_ID，否则取最新的有参数的 condition"""
+    """挑一个可用的工艺条件：优先 MOULD_CONDITION_ID，否则取最新的有参数的 condition。"""
     cid = os.environ.get("MOULD_CONDITION_ID")
     queryset = ProcessCondition.objects.select_related(
         "injection_machine", "polymer", "mold"
@@ -78,9 +77,9 @@ def _pick_context():
 
 
 def _run(condition, parent, position):
-    """走一遍 optimize 纯推理（不落库），返回 (result, baseline)"""
+    """走一遍 optimize 纯推理（不落库），返回 (result, baseline)。"""
     feedback = {
-        "defect": [
+        "defects": [
             {
                 "keyword_name": DEFECT_NAME,
                 "level": DEFECT_LEVEL,
@@ -89,7 +88,7 @@ def _run(condition, parent, position):
         ]
     }
     baseline = _to_full_dict(parent)
-    result = ParameterOptimizeService().infer_from_provided(
+    result = opt.optimize_from_provided(
         parameter=baseline,
         feedback=feedback,
         mold_info=opt._extract_mold_info(condition),
@@ -117,7 +116,7 @@ def main():
     print(f"[D1] 产出推荐 {len(items)} 条 OK")
 
     # ---- D2 推荐真的落地到 baseline 的业务字段 ----
-    new_parameter = result.get("new_parameter") or {}
+    new_parameter = result.get("parameter") or {}
     changed = {
         k: (baseline.get(k), new_parameter.get(k))
         for k in baseline
@@ -128,12 +127,12 @@ def main():
         print(f"       · {key}: {old} → {new}")
     print(f"[D2] 推荐落地 {len(changed)} 个 baseline 业务字段 OK")
 
-    # ---- D3 new_parameter 是 flat 形态 ----
+    # ---- D3 parameter 是 flat 形态 ----
     for nested_key in NESTED_ARRAY_KEYS:
-        assert nested_key not in new_parameter, f"new_parameter 不应含 nested 数组字段 {nested_key}"
+        assert nested_key not in new_parameter, f"parameter 不应含 nested 数组字段 {nested_key}"
     missing = [f for f in SEGMENT_FIELDS if f not in new_parameter]
-    assert not missing, f"new_parameter 缺段位字段（前端表格无法还原）: {missing}"
-    print(f"[D3] new_parameter 为 flat 且含 {len(SEGMENT_FIELDS)} 个段位字段 OK")
+    assert not missing, f"parameter 缺段位字段（前端表格无法还原）: {missing}"
+    print(f"[D3] parameter 为 flat 且含 {len(SEGMENT_FIELDS)} 个段位字段 OK")
 
     # ---- D4 表格关键格子有值（前端空白问题的直接判据） ----
     inj_spd_1 = new_parameter.get("inj_spd_1")
@@ -150,8 +149,8 @@ def main():
 
     # ---- D6 位置条件不影响产出（已知实现现状，钉住不漂移） ----
     result_alt, _ = _run(condition, parent, "浇口附近")
-    np_alt = result_alt.get("new_parameter") or {}
-    assert np_alt == new_parameter, "不同 position 产出的 new_parameter 不一致（位置条件已生效？）"
+    np_alt = result_alt.get("parameter") or {}
+    assert np_alt == new_parameter, "不同 position 产出的 parameter 不一致（位置条件已生效？）"
     print("[D6] 不同 position 产出逐位相同（位置条件无效 —— 已知现状，已钉住）")
 
     # ---- D7 落盘 flat 供前端真代码验证 ----

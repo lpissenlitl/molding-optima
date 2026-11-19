@@ -1,5 +1,4 @@
-"""
-推荐结果模型
+"""推荐结果模型。
 """
 
 from django.db import models
@@ -8,8 +7,7 @@ from extensions.models import BusinessBaseModel
 
 
 class Recommendation(BusinessBaseModel):
-    """
-    推荐结果 - 基于缺陷反馈的智能推荐
+    """推荐结果 - 基于缺陷反馈的智能推荐。
 
     可扩展的 AI 推荐插槽，支持多种 AI 算法：
     - fuzzy_rule: 模糊规则推理

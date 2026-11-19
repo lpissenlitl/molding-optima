@@ -1,5 +1,4 @@
-"""
-molding-optima 列表导出服务
+"""molding-optima 列表导出服务。
 
 为前端主数据列表页的"导出列表"按钮提供后端能力：
     POST /api/reports/export-list/  {"resource": "polymer_list", "ids": [1, 2]}
@@ -48,7 +47,7 @@ MAX_EXPORT_ROWS = 5000
 # ==================== 取值辅助 ====================
 
 def _format_value(value):
-    """单元格取值格式化：空值转空串，日期/时间转标准文本"""
+    """单元格取值格式化：空值转空串，日期/时间转标准文本。"""
     if value is None:
         return ""
     if isinstance(value, datetime):
@@ -59,12 +58,12 @@ def _format_value(value):
 
 
 def _field(obj, field_name):
-    """读取模型字段并格式化"""
+    """读取模型字段并格式化。"""
     return _format_value(getattr(obj, field_name, None))
 
 
 def _unit_values(obj, field_name):
-    """注射单元多值列：按射台顺序用 " / " 拼接（与前端列表页一致）"""
+    """注射单元多值列：按射台顺序用 " / " 拼接（与前端列表页一致）。"""
     units = obj.injection_units.all()
     values = []
     for unit in units:
@@ -75,7 +74,7 @@ def _unit_values(obj, field_name):
 
 
 def _range_text(min_value, max_value, unit):
-    """区间文本：min - max（与前端列表页一致）"""
+    """区间文本：min - max（与前端列表页一致）。"""
     if min_value is not None and max_value is not None:
         return f"{min_value} - {max_value} {unit}"
     if min_value is not None:
@@ -172,7 +171,7 @@ RESOURCE_COLUMNS = {
 # ==================== 服务函数 ====================
 
 def _resolve_model(resource: str):
-    """按白名单解析模型"""
+    """按白名单解析模型。"""
     key = (resource or "").strip()
     if key not in RESOURCE_MODEL_MAP:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, f"不支持的 resource: {resource!r}")
@@ -181,7 +180,7 @@ def _resolve_model(resource: str):
 
 
 def _validate_ids(ids) -> list:
-    """校验导出 ID 列表"""
+    """校验导出 ID 列表。"""
     if not ids:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, "ids 不能为空")
     try:
@@ -197,7 +196,7 @@ def _validate_ids(ids) -> list:
 
 
 def export_list(company_id: int, tenant_slug: str, resource: str, ids: list) -> dict:
-    """导出列表数据到 Excel
+    """导出列表数据到 Excel。
 
     Args:
         company_id: 租户公司 ID（强制隔离）

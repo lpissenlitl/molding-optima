@@ -6,7 +6,7 @@ from extensions.exceptions import BizException, ERROR_REQUIRED_FIELD, ERROR_DATA
 
 
 def create_injection_machine(company_id: int, organization_id: int, **kwargs):
-    """创建注塑机"""
+    """创建注塑机。"""
     device_no = kwargs.get("device_no")
     if not device_no:
         raise BizException(ERROR_REQUIRED_FIELD, "设备编号必须存在，且不能为空")
@@ -26,7 +26,7 @@ def create_injection_machine(company_id: int, organization_id: int, **kwargs):
 
 
 def _get_injection_machine(injection_machine_id: int) -> InjectionMoldingMachine:
-    """获取注塑机对象"""
+    """获取注塑机对象。"""
     injection_machine_id = validate_pk(injection_machine_id, "注塑机ID")
     injection_machine = InjectionMoldingMachine.objects.filter(
         pk=injection_machine_id
@@ -39,7 +39,7 @@ def _get_injection_machine(injection_machine_id: int) -> InjectionMoldingMachine
 
 
 def _build_injection_machine_dict(injection_machine: InjectionMoldingMachine) -> dict:
-    """构建注塑机完整数据（含注射单元和工时标准）"""
+    """构建注塑机完整数据（含注射单元和工时标准）。"""
     ret_dict = injection_machine.to_dict()
     ret_dict["injection_units"] = [
         unit.to_dict() for unit in injection_machine.injection_units.all()
@@ -50,7 +50,7 @@ def _build_injection_machine_dict(injection_machine: InjectionMoldingMachine) ->
 
 
 def _validate_device_no_unique(company_id: int, device_no: str, exclude_id: int = None):
-    """校验设备编号唯一性"""
+    """校验设备编号唯一性。"""
     if not device_no:
         raise BizException(ERROR_REQUIRED_FIELD, "设备编号必须存在，且不能为空")
     qs = InjectionMoldingMachine.objects.filter(device_no=device_no, company_id=company_id)
@@ -61,13 +61,13 @@ def _validate_device_no_unique(company_id: int, device_no: str, exclude_id: int 
 
 
 def get_injection_machine_info(injection_machine_id: int) -> dict:
-    """获取注塑机信息"""
+    """获取注塑机信息。"""
     injection_machine = _get_injection_machine(injection_machine_id)
     return _build_injection_machine_dict(injection_machine)
 
 
 def update_injection_machine(company_id: int, injection_machine_id: int, **kwargs) -> dict:
-    """更新注塑机信息"""
+    """更新注塑机信息。"""
     injection_machine = _get_injection_machine(injection_machine_id)
     _validate_device_no_unique(company_id, kwargs.get("device_no"), exclude_id=injection_machine_id)
 
@@ -93,7 +93,7 @@ def update_injection_machine(company_id: int, injection_machine_id: int, **kwarg
 
 
 def delete_injection_machine(company_id: int, injection_machine_id: int) -> None:
-    """删除注塑机（仅限本公司）"""
+    """删除注塑机（仅限本公司）。"""
     injection_machine = InjectionMoldingMachine.objects.filter(pk=injection_machine_id, company_id=company_id, is_deleted=False).first()
     if injection_machine is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"注塑机不存在: id={injection_machine_id}")
@@ -116,7 +116,7 @@ def get_injection_machine_list(
     page_size: int = None,
     sort: str = None
 ) -> tuple:
-    """获取注塑机列表"""
+    """获取注塑机列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "brand": {"input": brand, "column": "brand", "lookup": "icontains"},
@@ -143,7 +143,7 @@ def get_injection_machine_list(
 
 
 def batch_delete_injection_machine(company_id: int, ids: list) -> int:
-    """批量删除注塑机（仅删本公司存在的）"""
+    """批量删除注塑机（仅删本公司存在的）。"""
     ids = validate_id_list(ids, "注塑机ID")
     # 按 company_id 过滤出本公司的 id（防止跨公司删除）
     valid_ids = list(

@@ -2,8 +2,8 @@
 
 **层定位**：模糊推理五层流程的第 4 层。
 
-    ① 读取(ORM) → ② 契约化(RuleProfile) → ③ 适用性筛选
-    → ④ **本模块：拆一次 → 分类 → 建对象** → ⑤ 推理（Mamdani / 0 阶 TSK）
+    1. 读取(ORM) → 2. 契约化(RuleProfile) → 3. 适用性筛选
+    → 4. **本模块：拆一次 → 分类 → 建对象** → 5. 推理（Mamdani / 0 阶 TSK）
 
 **输入**
     ``List[RuleProfile]`` —— 第 2 层契约化、第 3 层适用性筛选之后的规则档案。
@@ -30,7 +30,7 @@
 3. **检查类识别** —— 提示类规则里只要有 adjust/popup 结论 ⇒
    整条按"检查类"处理（出提示文本）。
 
-⚠️ 第 1 段比第 2 段**松**（第 1 段"至少一个数字"、第 2 段"全部数字"）⇒
+【注意】第 1 段比第 2 段**松**（第 1 段"至少一个数字"、第 2 段"全部数字"）⇒
    混合规则（``THEN IV0_add_2 AND IV0_add_low``）会被第 1 段判为 numeric、
    再被第 2 段挡下 ⇒ **不进任何一层**。本模块保留这一行为（进 ``skipped``）。
 """
@@ -59,7 +59,7 @@ __all__ = ['AdviceItem', 'FilteredRules', 'build_rule_objects']
 class AdviceItem:
     """一条文本建议（检查/弹窗类结论）。
 
-    ⚠️ 不含数值：这类结论给的是提示语，不是调整量。
+    【注意】不含数值：这类结论给的是提示语，不是调整量。
     """
 
     param_name: str
@@ -86,7 +86,7 @@ class FilteredRules:
     defect_param_names : set[str]
         数值层 + 提示层用到的**缺陷类**名字（缺陷名 + 缺陷位置名）。
         决定要拉哪些缺陷关键词的论域元数据，用于把缺陷程度（档位）
-        翻译成推理输入里的数值。⚠️ 与 `numeric_param_names` **必须分开放**
+        翻译成推理输入里的数值。【注意】与 `numeric_param_names` **必须分开放**
         —— 后者用于"规则缺一个门控条件"的体检，混进缺陷名会让体检把
         缺陷维度误判为缺失门控。
     skipped : list[dict]
@@ -146,7 +146,7 @@ def _has_algebra_conclusion(solutions: List[Dict]) -> bool:
 def _collect_param_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None:
     """把一条规则的参数名并进集合（与 `parsing.is_param_name` 同口径）。
 
-    ⚠️ 走的是**已拆解产物**，不重新拆规则串 ⇒ 第 4 层只拆一次。
+    【注意】走的是**已拆解产物**，不重新拆规则串 ⇒ 第 4 层只拆一次。
     """
     for info in parsed['preconditions'] + parsed['solutions']:
         name = info.get('name')
@@ -165,7 +165,7 @@ def _collect_defect_names(parsed: Dict[str, List[Dict]], into: Set[str]) -> None
     "越严重越激进"），因此需要缺陷关键词的论域元数据
     （RuleKeyword.range / fuzzy_level）把档位词翻译成论域上的数值。
 
-    ⚠️ 走的是**已拆解产物**，不重新拆规则串 ⇒ 第 4 层仍然只拆一次。
+    【注意】走的是**已拆解产物**，不重新拆规则串 ⇒ 第 4 层仍然只拆一次。
     """
     for info in parsed['preconditions'] + parsed['solutions']:
         name = info.get('name')
@@ -202,7 +202,7 @@ def build_rule_objects(profiles: List[RuleProfile]) -> FilteredRules:
     result = FilteredRules()
 
     for profile in profiles:
-        # ★ 规则串**只拆一次**：优先复用来源适配层拆好的产物
+        # 规则串**只拆一次**：优先复用来源适配层拆好的产物
         #   （`RuleProfile.parsed`）；没有（直接构造档案的调用方：测试替身 /
         #   离线脚本 / demo 案例）才现拆 ⇒ 兼容旧构造方式。
         parsed = (profile.parsed if profile.parsed is not None
@@ -234,7 +234,7 @@ def build_rule_objects(profiles: List[RuleProfile]) -> FilteredRules:
 
         # ---- 判定 3：检查/弹窗类 → 提示文本（不进推理网络）--------------
         if _has_check_conclusion(solutions):
-            # ★ 缺陷名也要收：提示层按缺陷程度去重需要它
+            # 缺陷名也要收：提示层按缺陷程度去重需要它
             #   （检查类规则在规则库里按档位各写一遍，如 FLASH_low/medium/high
             #   各有一条「请检查锁模力」⇒ 提示层要拿缺陷维 μ 才能挑出最匹配的那条）
             _collect_defect_names(parsed, result.defect_param_names)

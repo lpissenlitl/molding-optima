@@ -1,4 +1,4 @@
-"""字段体检（_build_field_context）测试
+"""字段体检（_build_field_context）测试。
 
 覆盖字段三态分类：
   - authority : 有 RuleKeyword 权威元数据
@@ -7,7 +7,7 @@
 
 不依赖规则库数据：mock 掉 _load_keyword_profiles，只测分类与报告逻辑。
 
-⚠️ 参数名由**第 4 层 filter**（`fuzzy_core.rules_filter.build_rule_objects`）
+【注意】参数名由**第 4 层 filter**（`fuzzy_core.rules_filter.build_rule_objects`）
    收好后交给 `_build_field_context`；元数据清单是内核契约对象 `KeywordProfile`。
 
 运行：
@@ -64,7 +64,7 @@ def _build_engine():
     def _fake_load(param_names, process_parameter, domain_limits=None,
                    temperature_limits=None, position_limits=None,
                    product_limits=None):
-        # ⚠️ 参数列表必须与真实实现 `_load_keyword_profiles` **同形**
+        # 【注意】参数列表必须与真实实现 `_load_keyword_profiles` **同形**
         #    （新增权威源维度时同步加可选参数，否则调用方多传一个就会 TypeError）。
         # 真实实现只返回查到的字段
         names = set(param_names)

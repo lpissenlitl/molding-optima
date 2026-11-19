@@ -1,5 +1,4 @@
-"""
-molding-optima 工艺参数导出服务
+"""molding-optima 工艺参数导出服务。
 
 仅服务于 process app，不集成试模/模流相关的报告。
 
@@ -151,7 +150,7 @@ DETAIL_EXTRA_FIELDS = [
 # ==================== 取值辅助 ====================
 
 def _format_value(value):
-    """单元格取值格式化：空值转空串，日期/时间转标准文本"""
+    """单元格取值格式化：空值转空串，日期/时间转标准文本。"""
     if value is None:
         return ""
     if isinstance(value, datetime):
@@ -162,7 +161,7 @@ def _format_value(value):
 
 
 def _json_text(value):
-    """JSON 字段转可读文本"""
+    """JSON 字段转可读文本。"""
     if value in (None, "", {}, []):
         return ""
     try:
@@ -172,7 +171,7 @@ def _json_text(value):
 
 
 def _resolve_columns(template: str):
-    """按模板组装列定义"""
+    """按模板组装列定义。"""
     if template == TEMPLATE_COMPACT:
         return HEADER_FIELDS + COMPACT_FIELDS
     if template == TEMPLATE_DETAIL:
@@ -181,7 +180,7 @@ def _resolve_columns(template: str):
 
 
 def _resolve_template(template) -> str:
-    """校验导出模板"""
+    """校验导出模板。"""
     name = (template or TEMPLATE_DEFAULT).strip()
     if name not in VALID_TEMPLATES:
         raise BizException(
@@ -192,7 +191,7 @@ def _resolve_template(template) -> str:
 
 
 def _validate_ids(ids) -> list:
-    """校验工艺条件 ID 列表"""
+    """校验工艺条件 ID 列表。"""
     if not ids:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, "process_condition_ids 不能为空")
     try:

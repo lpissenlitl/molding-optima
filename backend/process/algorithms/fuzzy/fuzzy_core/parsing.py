@@ -1,4 +1,4 @@
-"""规则词法解析（公开 API）
+"""规则词法解析（公开 API）。
 
 供**算法层**与**规则层**共用的词法工具：
 
@@ -153,7 +153,7 @@ def is_numeric_value(value) -> bool:
     口径：去百分号 → 去**一个**前导负号 → 去一个小数点 → 必须是纯数字。
     ⇒ ``3.8`` / ``-5`` / ``30%`` 是数值；``low`` / ``None`` / ``''`` 不是。
 
-    ⚠️ 两条边界：
+    【注意】两条边界：
 
     1. **只去一个负号** —— 用 ``lstrip('-')`` 会把 ``--5`` 削成 ``5``
        判为数值，于是数值层 ``float('--5')`` 抛 ValueError ⇒
@@ -185,7 +185,7 @@ def classify_conclusion_kind(solutions: List[Dict]) -> str:
     - 只要有一个结论的动作不是 add/reduce（adjust / popup）⇒ 'advisory'
     - 全是 add/reduce 时，至少一个结论值是数字 ⇒ 'numeric'，否则 'advisory'
 
-    ⚠️ **单一真相源**（与 `is_numeric_value` 同理）：规则层
+    【注意】**单一真相源**（与 `is_numeric_value` 同理）：规则层
     （`library/rules.py::classify_conclusion_kind`）与第 4 层
     （`fuzzy_core/rules_filter.py`）必须用这一份判定。两处各写一份时，
     一处收紧、另一处放宽，就会让同一批规则分流到**不同的推理层**。
@@ -209,7 +209,7 @@ def parse_rule(rule_str: str) -> Dict[str, List[Dict[str, str]]]:
         {'preconditions': [...], 'solutions': [...]}
         每个元素是 `split_phase()` 的结果 dict，另附 ``'phase'`` = 原始词。
 
-    ⚠️ `phase`（原始词）不是冗余：弹窗结论的 `r_extra` 键、代数结论的等式串
+    【注意】`phase`（原始词）不是冗余：弹窗结论的 `r_extra` 键、代数结论的等式串
     都只能从原文取（`split_phase` 只给拆解后的字段，拆不回原文）。
     """
     preconditions: List[Dict[str, str]] = []

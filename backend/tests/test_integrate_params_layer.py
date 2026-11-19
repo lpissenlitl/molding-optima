@@ -332,8 +332,8 @@ def test_mel_target_is_satisfied_through_metering_position():
 def test_mel_and_ddam_adjustments_stack_on_metering_position():
     """参照系（业务口径）：``ΔDDAM`` 不叠加到计量位置，它落在 ``MEL`` 那一侧。
 
-    两步式：① ``ML_N 基准 = 原MEL − 原DDAM``；
-    ② ``MEL_新 = ML_N + DDAM + ΔDDAM + ΔMEL``。
+    两步式：1. ``ML_N 基准 = 原MEL − 原DDAM``；
+    2. ``MEL_新 = ML_N + DDAM + ΔDDAM + ΔMEL``。
     ⇒ 落库的计量位置 = ``原ML_N + ΔMEL``；终止位置随松退距离自然后移。
     """
     previous = {

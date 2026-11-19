@@ -1,5 +1,4 @@
-"""
-用户相关 Schema - Pydantic 版本
+"""用户相关 Schema - Pydantic 版本。
 
 """
 from typing import Optional, List
@@ -10,33 +9,33 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 
 
 class RegisterSchema(BaseSchema):
-    """用户注册信息"""
+    """用户注册信息。"""
     username: str = Field(..., description="用户名")
     password: str = Field(..., description="密码")
 
 
 class LoginSchema(BaseSchema):
-    """用户登录信息"""
+    """用户登录信息。"""
     username: str = Field(..., description="用户名")
     password: str = Field(..., description="密码")
     ua: str = Field(..., description="用户代理")
 
 
 class UpdateUserPasswordSchema(BaseSchema):
-    """修改用户密码信息"""
+    """修改用户密码信息。"""
     old_password: str = Field(..., description="旧密码")
     new_password: str = Field(..., description="新密码")
 
 
 class ResetUserPasswordSchema(BaseSchema):
-    """重置用户密码信息"""
+    """重置用户密码信息。"""
     username: Optional[str] = Field(None, description="用户名")
     password: str = Field(..., description="密码")
     code: Optional[str] = Field(None, description="验证码")
 
 
 class UserSchema(BaseSchema):
-    """用户信息"""
+    """用户信息。"""
     # company_id = fields.Integer(allow_none=True, metadata={"description": "所属公司ID"})
     organization_id: Optional[int] = Field(None, description="所属组织ID")
     id: Optional[int] = Field(None, description="用户ID")
@@ -59,7 +58,7 @@ class UserSchema(BaseSchema):
 
 
 class UserListSchema(PaginationBaseSchema):
-    """用户列表信息"""
+    """用户列表信息。"""
     organization_id: Optional[int] = Field(None, description="组织ID")
     username: Optional[str] = Field(None, description="用户名")
     engineer_name: Optional[str] = Field(None, description="工程师姓名")
@@ -71,7 +70,7 @@ class UserListSchema(PaginationBaseSchema):
 
 
 class RoleSchema(BaseSchema):
-    """角色信息"""
+    """角色信息。"""
     id: Optional[int] = Field(None, description="角色ID")
     name: Optional[str] = Field(None, description="角色名称")
     code: Optional[str] = Field(None, description="角色代码")
@@ -81,5 +80,5 @@ class RoleSchema(BaseSchema):
 
 
 class RoleListSchema(PaginationBaseSchema):
-    """角色列表信息"""
+    """角色列表信息。"""
     name: Optional[str] = Field(None, description="角色名称")

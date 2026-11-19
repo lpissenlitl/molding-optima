@@ -1,4 +1,4 @@
-"""数据文件（_data）路径解析
+"""数据文件（_data）路径解析。
 
 backend/_data 是后端数据文件目录，存放管理命令导入脚本的默认数据源：
 
@@ -36,7 +36,7 @@ RULE_KEYWORD_STEPS_CSV = '_data/process_ranges.csv'
 
 
 def resolve_data_path(path) -> Path:
-    """把数据文件路径解析为绝对路径
+    """把数据文件路径解析为绝对路径。
 
     解析优先级：
       1. 绝对路径 → 原样返回

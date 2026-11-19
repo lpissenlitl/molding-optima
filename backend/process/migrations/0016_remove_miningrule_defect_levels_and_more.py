@@ -6,7 +6,7 @@ from django.db import migrations, models
 def _to_structured_defects(apps, schema_editor):
     """把 `defects`（裸名列表）+ `defect_levels`（名字→等级）合成结构化。
 
-    ⚠️ **必须在 RemoveField 之前跑** —— 旧字段一删，等级就再也读不回来了。
+    【注意】**必须在 RemoveField 之前跑** —— 旧字段一删，等级就再也读不回来了。
     """
     MiningRule = apps.get_model('process', 'MiningRule')
     for rule in MiningRule.objects.all().iterator():

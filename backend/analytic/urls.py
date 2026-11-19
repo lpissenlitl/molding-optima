@@ -1,5 +1,4 @@
-"""
-molding-optima analytic URL 路由
+"""molding-optima analytic URL 路由。
 
 聚合分析接口（实时查询）：
 - /api/analytic/process-statistics/        → 工艺统计聚合（trend + origin）

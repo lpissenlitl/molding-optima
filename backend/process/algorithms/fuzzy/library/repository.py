@@ -10,7 +10,7 @@
 
 编排层只认 `library/contracts.py` 的 `AlgorithmResourceRepository` 协议。
 
-⚠️ **本模块只做「取数」，不做「编排」**：
+【注意】**本模块只做「取数」，不做「编排」**：
 
 选库、去重、特异级计算这些**来源无关**的逻辑已抽到 `library/assembly.py`
 的 `RuleAssembler` —— 文件来源（`library/files/`）与数据库来源共用同一份，
@@ -65,7 +65,7 @@ class ResourceRepository:
            「哪条规则适用于当前产品/材料」交给**规则级**判定
            （`RuleService.matches_context` + `resolve_specificity`）。
 
-        ⚠️ **为什么不按产品类别挑库**：「产品类别 → 库编码」映射表指向的 code
+        【注意】**为什么不按产品类别挑库**：「产品类别 → 库编码」映射表指向的 code
           （`packaging` / `auto_parts` / `medical`）在库里**根本不存在**
           （实际库码是 `base` 与 `R2023*`/`R2024*` 这类编号）⇒ 候选必然落空
           ⇒ 未显式指定时**永远只加载 base 库**，其余库（占全库 64%）从不参与推理。
@@ -75,13 +75,15 @@ class ResourceRepository:
         返回**来源无关记录** `LibraryRecord`（不是 ORM 实例）——
         编排层只认这一种形态，数据库来源与文件来源在此汇流。
 
-        ⚠️ **为什么不返回 ORM 实例**：ORM 实例会把数据库绑进编排层的
+        【注意】**为什么不返回 ORM 实例**：ORM 实例会把数据库绑进编排层的
           类型契约里，文件来源就没有对应的形态可用。返回记录后，
           `RuleAssembler.select_libraries` 才能被两个来源共用。
         """
+        if context.libraries:
+            return RuleAssembler.select_libraries_from(context.libraries)
         codes = RuleAssembler.library_code_candidates(context)
         index = RuleQueryService.get_library_index(codes)
-        return RuleAssembler.select_libraries(codes, index, context)
+        return RuleAssembler.select_libraries(codes, index)
 
     @classmethod
     def get_rules(cls, context: RuleQueryContext) -> List[RuleProfile]:
@@ -100,16 +102,14 @@ class ResourceRepository:
 
         返回按 (specificity 升序, priority 降序) 排序，便于上层加权推理。
         """
-        codes = RuleAssembler.library_code_candidates(context)
-        index = RuleQueryService.get_library_index(codes)
-        libraries = RuleAssembler.select_libraries(codes, index, context)
+        libraries = cls.select_libraries(context)
         if not libraries:
             logger.warning('[ResourceRepository] 未找到任何可用规则库: %s', context)
             return []
 
         # 每个库只查一次：「规则该维为 NULL 或等于上下文值」这个集合
         #   按特异级拆成 4 段查，与一次查询取全**等价** ⇒ 无需再拆。
-        # ⚠️ **按库主键归档**（不按库编码）：库编码跨租户可重复 ⇒ 同码两库
+        # 【注意】**按库主键归档**（不按库编码）：库编码跨租户可重复 ⇒ 同码两库
         #   按编码归档会互相覆盖（后取的那库顶掉前一个），
         #   别家的规则被**静默张冠李戴**（不报错，只是结果不同）。
         methods_by_library: Dict[int, List[RuleRecord]] = {}
@@ -134,7 +134,7 @@ class ResourceRepository:
         net 现在直接吃契约对象，多这一层转换只会把契约掐断）。
         排序在这里做（ORM 的 `__in` 查询与顺序无关，但调用方要稳定序）。
 
-        ⚠️ **内核契约校验关口**（`fuzzy_core/profiles.py`）：档案不合格的
+        【注意】**内核契约校验关口**（`fuzzy_core/profiles.py`）：档案不合格的
         关键字**跳过并留痕**，不整批抛 —— 理由同 `get_rules`。
         """
         if not names:

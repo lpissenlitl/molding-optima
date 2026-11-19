@@ -11,7 +11,7 @@ class InjectionMachineDetailView(BaseView):
     
     @method_decorator(require_login)
     def get(self, request, injection_machine_id):
-        """获取注塑机详情"""
+        """获取注塑机详情。"""
         return injection_service.get_injection_machine_info(
             injection_machine_id=injection_machine_id
         )
@@ -19,7 +19,7 @@ class InjectionMachineDetailView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(InjectionMoldingMachineSchema))
     def put(self, request, injection_machine_id, cleaned_data):
-        """更新注塑机"""
+        """更新注塑机。"""
         return injection_service.update_injection_machine(
             company_id=request.user.company_id,
             injection_machine_id=injection_machine_id,
@@ -28,7 +28,7 @@ class InjectionMachineDetailView(BaseView):
     
     @method_decorator(require_login)
     def delete(self, request, injection_machine_id):
-        """删除注塑机"""
+        """删除注塑机。"""
         return injection_service.delete_injection_machine(
             company_id=request.user.company_id,
             injection_machine_id=injection_machine_id
@@ -40,7 +40,7 @@ class InjectionMachineListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(InjectionMoldingMachineSchema))
     def post(self, request, cleaned_data):
-        """创建注塑机"""
+        """创建注塑机。"""
         return injection_service.create_injection_machine(
             company_id=request.user.company_id,
             organization_id=request.user.organization_id,
@@ -50,7 +50,7 @@ class InjectionMachineListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(InjectionMachineListSchema))
     def get(self, request, cleaned_data):
-        """获取注塑机列表"""
+        """获取注塑机列表。"""
         total, items = injection_service.get_injection_machine_list(
             company_id=request.user.company_id,
             **cleaned_data
@@ -60,7 +60,7 @@ class InjectionMachineListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
-        """批量删除注塑机"""
+        """批量删除注塑机。"""
         return injection_service.batch_delete_injection_machine(
             company_id=request.user.company_id,
             **cleaned_data

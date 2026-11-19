@@ -206,17 +206,23 @@ MEL → ML_N → d 表重排 ML_1..N-1 → IL_倒推 → VPTL
 
 `backend/process/algorithms/defect_selection.py` 已经是一个**完整的 L2 接入点**：
 
-- `DefectSelectionStrategy` Protocol —— **可插拔策略接口**
-- `select_defect(context, strategy=None)` —— **唯一入口**
+- `select_defect(feedback)` —— **唯一入口**，返回**收敛后的 feedback**
+  （`defects` 只剩本轮处理的那条 + `defect_selection` 留痕）
 - `DefectSelection` 自带**留痕**（选了谁 / 跳过了谁 / 依据什么）
-- 已实现三个策略：`FirstValidDefectStrategy`（fuzzy 原行为）、`FirstOnlyDefectStrategy`（empirical 现行行为）、`StagePriorityDefectStrategy`（**按调机阶段重排**，✅ **2026-11-13 起 fuzzy 已接线**，empirical 不切）
+- 选取口径固定 = **阶段序**（`StagePriorityDefectStrategy`）
+⚠️ `FirstOnlyDefectStrategy` 已删除（与「只取首个」口径重复）
+⚠️ `FirstValidDefectStrategy` / `FIRST_VALID_STRATEGY` / `DefectSelectionStrategy`
+   Protocol / `select_defect` 的 `strategy` 形参 —— **已删除**（2026-11-19）：
+   前两者是**早期为跑通流程设计的占位口径**（按列表顺序取首个），核验阶段已无价值；
+   后两者是**用不到的切换机制** ⇒ 按「用不到就不写代码」原则一并删掉。
+   ⇒ 将来真有第二个口径时再加回（加实现类 + 加形参，成本很低）。
 
-模块 docstring 原文：
+模块 docstring 原文（**当时**形态，现已改写）：
 
 > 本轮**不实现**业务优先级规则 —— 口径是「一次只解决一个缺陷，优先级机制**功能预留**」
 > ⇒ 策略接口先立起来，规则等业务输入。
 
-⇒ **L2 的"选哪个缺陷"已就绪，只差业务优先级规则接入。** 不需要新建框架。
+⇒ **L2 的"选哪个缺陷"已就绪**，业务优先级口径已落地为**阶段序**。不需要新建框架。
 
 ### 4.2 L2：其余部分缺失
 
@@ -239,7 +245,7 @@ MEL → ML_N → d 表重排 ML_1..N-1 → IL_倒推 → VPTL
 |---|---|---|
 | 推荐值封顶裁剪 | `engine._apply_machine_limits` | 一元（单参数 vs 上限） |
 | 当前值越限识别 + 安全分层 | `algorithms/fuzzy/over_limit.py` | 一元 |
-| 越限阻断（400） | `parameter_optimize._guard_blocking_over_limits` | 一元 |
+| 越限阻断（400） | `parameter_optimize._guard_over_limit_settings` | 一元 |
 | **参数间同步组** | — | ❌ **无** |
 | **差值越限检查** | — | ❌ **无**（§1.4） |
 
@@ -390,19 +396,22 @@ MEL       ≤ max_injection_stroke
 
 ⚠️ 旧版对照：`process_optimize_service.py:666-673` 正是 `if target_defect == "SHORTSHOT" and actual_product_weight < product_weight` 的硬编码 ⇒ **照搬即违规**，其正确迁移形态是 §7.2 的数据落法。
 
-### 7.1 缺陷选取（地基已有，只差策略）
+### 7.1 缺陷选取（口径已定 = 阶段序）
 
-**接入点**：`defect_selection.DefectSelectionStrategy`（Protocol，已定义）。
+**接入点**：`defect_selection.select_defect(feedback)`（**唯一入口**，口径固定，无策略入参）。
 
 | 策略 | 何时用 | 行为 |
 |---|---|---|
-| `stage_priority`（**12.7 起默认**） | 默认 | 按调机阶段重排后取第一个有效缺陷（打足 → 补缩 → 外观） |
-| `first_valid`（已有） | 历史口径 / 回退开关 | 列表顺序取第一个有效缺陷 |
-| `first_only`（已有） | 保留 empirical 历史行为 | 只看首项，首项无效即整体放弃 |
+| `stage_priority`（**当前唯一实现**） | 默认 | 按调机阶段重排后取第一个有效缺陷（打足 → 补缩 → 外观） |
 | **待新增：充填优先** | 存在"成型性"缺陷且有实测重量反馈 | 见 §7.2 |
 
-⚠️ 新策略**不得改变** `first_valid` / `first_only` 的既有行为（那两个是"保持历史行为"的兼容策略）；
-⚠️ `stage_priority` 是**当前默认**（批次 12.7）—— 换默认策略属口径变更，需用户拍板。
+⚠️ **现状更新（2026-11-19）** —— `first_valid` / `first_only` 两个占位口径
+**已删除**（前者是早期为跑通流程设计的占位实现，后者与「只取首个」重复）；
+⚠️ **「策略切换」机制一并删除**（Protocol + `strategy` 形参）—— 当前用不到，
+按「用不到就不写代码」原则不留空壳；将来真有第二个口径时再加回。
+
+⚠️ 新增策略**不得改变** `stage_priority` 的既有行为（它是当前默认口径）；
+⚠️ 换默认策略属口径变更，需用户拍板。
 
 ⚠️ 新策略的**规则内容**仍受 §7.0 约束：策略实现只负责「按数据裁决」，
 具体缺陷优先级规则应来自规则库 / 派生输入，而非写在策略类的 `if` 里。
@@ -470,7 +479,7 @@ L2 的真正增量不是"多几条 if"，而是**决策可解释**。每次 L2 �
 | `skipped_defects` | 跳过了哪些、为什么 |
 | `priority_order` | 参数优先级排序结果 |
 | `yielded_params` | 哪些建议让位了、让给谁、依据什么 |
-| `strategy` | 命中的策略名（`first_valid` / `fill_first` / …） |
+| `strategy` | 命中的策略名（如 `fill_first` / `shrinking_first` / …） |
 
 沿用 `DefectSelection.to_trace()` 的形态（决策级留痕与规则级诊断分开，见该模块 docstring）。
 
@@ -484,8 +493,24 @@ L2 的真正增量不是"多几条 if"，而是**决策可解释**。每次 L2 �
 ✅ **阶段进度已落地**（批次 12.5）：`StageProgress.to_trace()`
 （`defect_codes` / `achieved` / `pending` / `current`）进 `PolicyResolution.trace`
 + 一条 `[optimize] … 阶段进度` 日志；`current_stage` 注入 `ScenarioContext.extra`
-⇒ 场景条件**可以**引用（**当前无场景引用** ⇒ 行为零变化）。
+⇒ 场景条件**已引用**（批次 12.7 起 `filling_stage_first` 用
+`current_stage == 'filling'` 判定「还在打足阶段」）。
 ⚠️ `priority_order` / `yielded_params` 仍待补。
+
+⚠️ **现状更新（2026-11-19）** —— 缺陷信息**已收进 `feedback`**，context 顶层
+不再有 `selected_defect` 键：
+
+- `select_defect(feedback)` 是**唯一入口**，返回**收敛后的 feedback**
+  （`defects` 只剩本轮处理的那条 + `defect_selection` 留痕）；
+- 引擎与 L2 都读它 ⇒ 同一份反馈**不可能**推出两个缺陷；
+- 上文「随 `selected_defect.trace` 下传」是**当时形态**，现行是
+  `feedback['defect_selection']`；留痕的**实际字段名**是 trace 里的
+  `selected` / `skipped`（上表是规范目标名）；
+- 收敛后 `defect_codes` 只含**本轮处理的那条** ⇒ `achieved` / `pending`
+  只反映该条所在阶段（不再是「本轮全阶段」视图）；`current` 不受影响
+  ⇒ **场景判定零变化**；
+- ⚠️ **缺陷收敛链尚无专门单元测试**（目前只被
+  `tests/verify_fuzzy_nested_context.py` 与 pytest 套件间接覆盖）。
 
 ---
 
@@ -667,7 +692,7 @@ L3 = 信息锚点 ⇒ 每个量要么是**独立量**（自己说了算），要
 | 写入路径 | 入口 | 旧值从哪来 | 收口做什么 |
 |---|---|---|---|
 | 手工编辑 | `services/parameter.py::update_parameter` | 数据库里的当前值 | 差分 ⇒ 传导 ⇒ 回填 |
-| 规则优化产出 | `services/parameter_optimize.py::_create_new_parameter` | 父轮次 | 差分（= 推荐改的量）⇒ 传导 |
+| 规则优化产出 | `services/parameter_optimize.py::_create_new_round` | 父轮次 | 差分（= 推荐改的量）⇒ 传导 |
 | 初始化（新建轮次） | `services/parameter_initialize.py::_create_process_parameter` | **没有** | 只自检（值由算法产出，本应自洽） |
 | 克隆 / 复制 | `parameter.py::clone_round_from_parameter`、`parameter_initialize.py::_copy_process_parameter` | 源轮次 | 原样复制 ⇒ 无改动 ⇒ 只自检 |
 

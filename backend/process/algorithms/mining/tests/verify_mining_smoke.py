@@ -1,4 +1,4 @@
-"""规则挖掘内核 smoke test（独立运行，不依赖 Django 配置）
+"""规则挖掘内核 smoke test（独立运行，不依赖 Django 配置）。
 
 覆盖范围：
   场景 A - 关联规则产出与指标（12 条构造样本，期望值手算）
@@ -16,7 +16,7 @@
 注：本文件是独立运行脚本（`verify_` 前缀 ⇒ 不被 pytest 收集）；
     断言走 `_failures` 收集器 + 退出码，不依赖 pytest 断言。
 
-⚠️ 构造样本（12 条，手算基准）：
+【注意】构造样本（12 条，手算基准）：
     A 组 6 条：SHORTSHOT + inj_pres_1:increase  → qualified
     B 组 3 条：FLASH     + hold_pres_1:decrease  → qualified
     C 组 3 条：SHORTSHOT + hold_pres_1:decrease  → unqualified
@@ -381,9 +381,9 @@ def main():
     print('=' * 70)
     print(f"通过: {len(_passes)}    失败: {len(_failures)}")
     if _failures:
-        print('❌ 规则挖掘 smoke test 存在失败项')
+        print('规则挖掘 smoke test 存在失败项')
         return 1
-    print('✅ 全部规则挖掘 smoke test 通过！')
+    print('全部规则挖掘 smoke test 通过！')
     return 0
 
 

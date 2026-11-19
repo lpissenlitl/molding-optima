@@ -1,12 +1,6 @@
-"""规则关键字模糊档位（fuzzy_level）存量统一命令
+"""规则关键字模糊档位（fuzzy_level）存量统一命令。
 
-背景：
-    `RuleKeyword.fuzzy_level` 原先默认 5 档，平台公共大库 310 条全部声明 5 档；
-    但模糊规则库 1646 条**只用了 `low` / `medium` / `high` 三个词**，
-    5 档词表里的 `very_low` / `very_high` 一条规则都没用到。
-    ⇒ 5 档词表把 `low` 顶到 25% 分位、`high` 顶到 75% 分位，
-      而规则作者写 `low` 想表达的是「偏低这一档」⇒ **前件门控整体偏一档**。
-    ⇒ 现统一收敛到 3 档（`low` / `medium` / `high` 对应 0% / 50% / 100% 分位）。
+背景：存量 `fuzzy_level` 需与现行 3 档词表对齐（分析见 docs/fuzzy-algorithm-diagnosis.md）。
 
 用法：
     python manage.py backfill_fuzzy_level                # 预览（默认不写库）
@@ -16,8 +10,8 @@
 说明：
     - 含软删记录（软删记录恢复后仍应与现网口径一致）
     - 幂等：只处理 `fuzzy_level != 目标值` 的记录 ⇒ 可重复执行
-    - 数据源 `_data/rule_keyword_curated.json` 已同步改为 3 档，
-      本命令负责把**存量库**对齐到源；重建库时由 init_rule_keyword 直接落 3 档
+    - 数据源 `_data/rule_keyword_curated.json` 为 3 档，本命令负责把**存量库**对齐到源；
+      重建库时由 init_rule_keyword 直接落 3 档
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction

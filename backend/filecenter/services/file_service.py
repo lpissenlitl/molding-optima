@@ -320,7 +320,7 @@ def _map_ext_to_usage(ext: str) -> str:
 
 
 def _get_file_by_uuid(uuid: str) -> File | None:
-    """获取文件"""
+    """获取文件。"""
     file = File.objects.filter(uuid=uuid).first()
     if not file:
         raise BizException(ERROR_DATA_NOT_FOUND, "文件信息不存在")
@@ -332,13 +332,13 @@ def _get_file_by_uuid(uuid: str) -> File | None:
 # ============================================================
 
 def get_file_info(uuid: str) -> dict:
-    """获取文件信息"""
+    """获取文件信息。"""
     file = _get_file_by_uuid(uuid)
     return file.to_dict()
 
 
 def delete_file(uuid: str) -> dict:
-    """删除文件"""
+    """删除文件。"""
     file = _get_file_by_uuid(uuid)
     file.soft_delete()
 
@@ -349,8 +349,7 @@ def get_file_list_by_business(
     business_type: str,
     usage_type: str,
 ):
-    """
-    获取文件列表
+    """获取文件列表。
 
     业务关联存在 FileReference 中，通过 join File 表获取，
     并用 File.company_id 过滤租户。
@@ -375,7 +374,7 @@ def get_file_list_by_business(
 # ============================================================
 
 def download_file(company_id: int, tenant_slug: str, uuid: str, dispose_type: str) -> dict:
-    """下载文件（代理）- 需要登录"""
+    """下载文件（代理）- 需要登录。"""
     file = _get_file_by_uuid(uuid)
     
     # 租户隔离验证
@@ -438,8 +437,7 @@ def upload_single_file(uploaded_file, tenant_slug: str, storage_dir: str, file_c
 
 
 def download_file_by_token(tenant_slug: str, uuid: str, dispose_type: str = "attachment"):
-    """
-    下载文件（通过 Token 验证）- 无需登录
+    """下载文件（通过 Token 验证）- 无需登录。
     
     Args:
         tenant_slug: 租户标识（从 Token 解密获得）

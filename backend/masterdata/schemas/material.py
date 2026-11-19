@@ -1,5 +1,4 @@
-"""
-材料相关 Schema 定义 - Pydantic 版本
+"""材料相关 Schema 定义 - Pydantic 版本。
 
 """
 from typing import Optional, Dict, Any
@@ -9,7 +8,7 @@ from extensions.schemas import AbstractBaseSchema, BaseSchema, PaginationBaseSch
 
 
 class PolymerRheologySchema(AbstractBaseSchema):
-    """流变属性"""
+    """流变属性。"""
     
     id: Optional[int] = Field(None, description="流变属性ID")
     # Cross-WLF 模型参数
@@ -31,7 +30,7 @@ class PolymerRheologySchema(AbstractBaseSchema):
 
 
 class PolymerPVTSchema(AbstractBaseSchema):
-    """PVT 属性"""
+    """PVT 属性。"""
     
     id: Optional[int] = Field(None, description="PVT 属性ID")
     tait_b5: Optional[float] = Field(None, description="Tait b5 [K]")
@@ -50,7 +49,7 @@ class PolymerPVTSchema(AbstractBaseSchema):
 
 
 class PolymerMechanicalSchema(AbstractBaseSchema):
-    """机械属性"""
+    """机械属性。"""
     
     id: Optional[int] = Field(None, description="机械属性ID")
     elastic_modulus_1: Optional[float] = Field(None, description="弹性模量E1 [MPa]")
@@ -63,7 +62,7 @@ class PolymerMechanicalSchema(AbstractBaseSchema):
 
 
 class PolymerShrinkageSchema(AbstractBaseSchema):
-    """收缩属性"""
+    """收缩属性。"""
     
     id: Optional[int] = Field(None, description="ID")
     ave_h_shrink: Optional[float] = Field(None, description="平均水平收缩率 [%]")
@@ -75,7 +74,7 @@ class PolymerShrinkageSchema(AbstractBaseSchema):
 
 
 class FillerSchema(BaseSchema):
-    """填充物属性"""
+    """填充物属性。"""
     
     name: Optional[str] = Field(None, description="名称")
     abbreviation: Optional[str] = Field(None, description="缩写")
@@ -94,7 +93,7 @@ class FillerSchema(BaseSchema):
 
 
 class PolymerSchema(BaseSchema):
-    """塑料材料主数据"""
+    """塑料材料主数据。"""
     
     # --- 基本信息 ---
     abbreviation: Optional[str] = Field(None, description="缩写，如：ABS、PP")
@@ -141,7 +140,7 @@ class PolymerSchema(BaseSchema):
 
 
 class FillerListSchema(PaginationBaseSchema):
-    """填充物列表"""
+    """填充物列表。"""
     
     name: Optional[str] = Field(None, description="名称")
     category: Optional[str] = Field(None, description="类别")
@@ -151,7 +150,7 @@ class FillerListSchema(PaginationBaseSchema):
 
 
 class PolymerListSchema(PaginationBaseSchema):
-    """塑料列表"""
+    """塑料列表。"""
     
     abbreviation: Optional[str] = Field(None, description="缩写")
     grade: Optional[str] = Field(None, description="牌号")

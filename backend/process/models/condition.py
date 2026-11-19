@@ -1,5 +1,4 @@
-"""
-工艺条件模型
+"""工艺条件模型。
 """
 
 from django.db import models
@@ -8,8 +7,7 @@ from extensions.models import BusinessBaseModel
 
 
 class ProcessCondition(BusinessBaseModel):
-    """
-    工艺条件 - 工艺条件主表
+    """工艺条件 - 工艺条件主表。
 
     一条记录对应一组"工艺事件"（参数录入、变更、优化等），
     必须包含模具/机器/材料等上下文。

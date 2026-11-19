@@ -57,7 +57,7 @@ NC = '\033[0m'
 
 def _machine(power_method='液压机', nozzle_type='直通型', max_screw_rotation_speed=150.0,
              screw_diameter=40.0, screw_ld_ratio=20.0):
-    """标准海天级注塑机（液压+直通+max=150rpm+L/D=20）"""
+    """标准海天级注塑机（液压+直通+max=150rpm+L/D=20）。"""
     return {
         'screw_diameter': screw_diameter,
         'max_set_injection_pressure': 150.0,
@@ -76,7 +76,7 @@ def _machine(power_method='液压机', nozzle_type='直通型', max_screw_rotati
 
 
 def _base_mold(**overrides):
-    """基础 ABS mold（max_thickness=2.0, medium）"""
+    """基础 ABS mold（max_thickness=2.0, medium）。"""
     m = {
         'product_weight': 50.0,
         'runner_weight': 0.0,
@@ -95,7 +95,7 @@ def _base_mold(**overrides):
 
 
 def _base_material(**overrides):
-    """基础 ABS 材料（字段命名与数据库一致）
+    """基础 ABS 材料（字段命名与数据库一致）。
 
     说明：代码中所有材料参数字段名与数据库字段命名保持一致。
     测试 fixture 走 algorithm 输入路径，使用与数据库同名的字段名以避免认知差异。
@@ -179,7 +179,7 @@ def _assert_le(actual, max_val, label):
 # ========== 场景 A：PP 通用件 ==========
 
 def test_scenario_a_pp_high_shear():
-    """PP 流动性好：family_factor=1.10，应得到 ~84.05rpm"""
+    """PP 流动性好：family_factor=1.10，应得到 ~84.05rpm。"""
     print("\n=== 场景 A: PP 通用件（液压 + 直通 + L/D=20）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PP')
@@ -192,7 +192,7 @@ def test_scenario_a_pp_high_shear():
 # ========== 场景 B：PC 精密件 ==========
 
 def test_scenario_b_pc_conservative():
-    """PC 高黏度：family_factor=0.55，ratio_raw 应被钳到下限 0.30，meter_speed=45"""
+    """PC 高黏度：family_factor=0.55，ratio_raw 应被钳到下限 0.30，meter_speed=45。"""
     print("\n=== 场景 B: PC 精密件（液压 + 直通 + L/D=20）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PC')
@@ -205,7 +205,7 @@ def test_scenario_b_pc_conservative():
 # ========== 场景 C：PA66 含水件 ==========
 
 def test_scenario_c_pa66_most_conservative():
-    """PA66 最保守：family_factor=0.50，钳制下限"""
+    """PA66 最保守：family_factor=0.50，钳制下限。"""
     print("\n=== 场景 C: PA66 含水件（液压 + 直通 + L/D=20）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PA66')
@@ -218,7 +218,7 @@ def test_scenario_c_pa66_most_conservative():
 # ========== 场景 D：全电机 ABS 精密件（与液压机同公式）==========
 
 def test_scenario_d_electric_machine_same_formula():
-    """全电机与液压机走同一公式：验证对称性"""
+    """全电机与液压机走同一公式：验证对称性。"""
     print("\n=== 场景 D: 全电机 ABS 精密件（与液压机同公式）===")
     mold = _base_mold()
     material = _base_material(abbreviation='ABS')
@@ -240,7 +240,7 @@ def test_scenario_d_electric_machine_same_formula():
 # ========== 场景 E：短 L/D ABS（L/D=16）==========
 
 def test_scenario_e_short_ld():
-    """短 L/D=16：ld_factor=1.05，应比 standard 高 5%"""
+    """短 L/D=16：ld_factor=1.05，应比 standard 高 5%。"""
     print("\n=== 场景 E: 短 L/D ABS（L/D=16 → ld_factor=1.05）===")
     mold = _base_mold()
     material = _base_material(abbreviation='ABS')
@@ -254,7 +254,7 @@ def test_scenario_e_short_ld():
 # ========== 场景 F：长 L/D ABS（L/D=24）==========
 
 def test_scenario_f_long_ld():
-    """长 L/D=24：ld_factor=0.95，应比 standard 低 5%"""
+    """长 L/D=24：ld_factor=0.95，应比 standard 低 5%。"""
     print("\n=== 场景 F: 长 L/D ABS（L/D=24 → ld_factor=0.95）===")
     mold = _base_mold()
     material = _base_material(abbreviation='ABS')
@@ -268,7 +268,7 @@ def test_scenario_f_long_ld():
 # ========== 场景 G：边界守门 ==========
 
 def test_scenario_g_boundary_clamp():
-    """边界守门：钳制下限/上限 + L/D 字段缺失兜底"""
+    """边界守门：钳制下限/上限 + L/D 字段缺失兜底。"""
     print("\n=== 场景 G: 边界守门===")
 
     # G1：钳制下限（PA66 + 极大 max_screw_speed=300 → ratio_raw=0.127 → 钳到 0.30）
@@ -314,7 +314,7 @@ def test_scenario_g_boundary_clamp():
 # ========== 场景 H：兜底 level 字符串验证 ==========
 
 def test_scenario_h_level_strings():
-    """内部函数 level 字符串验证：_get_family_meter_shear_ratio + _get_ld_correction"""
+    """内部函数 level 字符串验证：_get_family_meter_shear_ratio + _get_ld_correction。"""
     print("\n=== 场景 H: 兜底 level 字符串验证===")
 
     init = ProcessInitializer(
@@ -398,9 +398,9 @@ def _print_summary():
     fail_count = len(_failures)
     print("\n" + "=" * 70)
     if fail_count == 0:
-        print(f"  {PASS}✓ 全部通过{NC}  ({len(_passes)}/{total})")
+        print(f"  {PASS}全部通过{NC}  ({len(_passes)}/{total})")
     else:
-        print(f"  {FAIL}✗ 有失败{NC}  ({fail_count}/{total} 失败)")
+        print(f"  {FAIL}有失败{NC}  ({fail_count}/{total} 失败)")
     print("=" * 70)
     return fail_count
 

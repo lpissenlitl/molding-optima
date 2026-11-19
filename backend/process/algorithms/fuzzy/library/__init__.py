@@ -28,11 +28,11 @@
 | `repository.py` | 数据库来源的资源仓库 | 有 |
 | `files/` | 文件来源（读取线 / 仓库 / 导出工具） | 零（导出工具除外） |
 
-⚠️ **语义、转换、编排三层必须零 ORM** —— 文件来源要复用它们，
+【注意】**语义、转换、编排三层必须零 ORM** —— 文件来源要复用它们，
   一旦被 ORM 拖住，文件通道就失去意义（依赖倒置的实质检验 =
   高层不被低层实现拖住）。
 
-⚠️ **本包不 import 子模块**：`rules` / `keywords` / `repository` 都依赖
+【注意】**本包不 import 子模块**：`rules` / `keywords` / `repository` 都依赖
   Django ORM，若在包初始化时 import，编排层 `engine` 会被拖进 ORM。
   `engine._get_repository()` 用延迟导入触达。
 """

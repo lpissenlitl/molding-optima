@@ -13,8 +13,7 @@ import json
 _LOGGER = logging.getLogger(__name__)
 
 class ApiMiddleware(MiddlewareMixin):
-    """
-    统一 API 中间件，处理请求参数
+    """统一 API 中间件，处理请求参数。
     - 解析请求参数到 request.DATA 中
     """
     def process_request(self, request: HttpRequest):
@@ -56,7 +55,7 @@ class ApiMiddleware(MiddlewareMixin):
         request: HttpRequest,
         response: Union[ HttpResponse, dict, list, str, int, float, bool, None ]
     ):
-        """记录请求结束时间，封装响应数据"""
+        """记录请求结束时间，封装响应数据。"""
         # 获取请求结束时间（毫秒）
         request.outgoing_ts = int(datetime.now().timestamp() * 1000)
 
@@ -88,7 +87,7 @@ class ApiMiddleware(MiddlewareMixin):
             return response
     
     def process_exception(self, request: HttpRequest, exception: Exception):
-        """处理异常"""
+        """处理异常。"""
         if isinstance(exception, BizException):
             response = {
                 "status": exception.code,

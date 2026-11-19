@@ -1,5 +1,4 @@
-"""
-参数验证装饰器 - Pydantic 版本
+"""参数验证装饰器 - Pydantic 版本。
 
 """
 from typing import Type
@@ -12,7 +11,7 @@ from extensions.exceptions import BizException, ERROR_ILLEGAL_ARGUMENT
 
 
 def validate_parameters(schema: Type[BaseModel]):
-    """参数验证装饰器 - Pydantic 版本"""
+    """参数验证装饰器 - Pydantic 版本。"""
     def decorator(func):
         def wrapper(*args, **kwargs):
             request = args[0]

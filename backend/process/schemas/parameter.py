@@ -1,14 +1,11 @@
-"""molding-optima 工艺参数 Schema 定义
+"""molding-optima 工艺参数 Schema 定义。
 
 字段命名严格匹配 process/models/parameter.py。对应 Model：ProcessParameter
-
-包含：注射参数（6 段）、VP 切换、保压参数（5 段）、冷却参数、熔胶参数（4 段）、
-      松退参数、料筒温度参数（brl_temp_1..9）。
 
 三类契约:
 - ProcessParameterSchema       入参（flat 全字段, 算法/优化/移植用）
 - ProcessParameterListSchema   列表查询条件（按 parameter 字段过滤）
-- ProcessParameterUpdateSchema 更新 parameter (PUT /api/processes/parameters/<parameter_id>/)
+- ProcessParameterUpdateSchema 更新 parameter (PUT /api/processes/parameters/<int:parameter_id>/)
 
 UI 嵌套格式（前端 records 写入用, 独立于 flat 契约）:
 - SettingProcessSchema         嵌套结构 (5 段: injection/vp_switch/holding/metering/barrel_temperature)
@@ -26,21 +23,18 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 
 
 class ProcessParameterSchema(BaseSchema):
-    """工艺参数记录（DB 扁平字段, 与 ProcessParameter model 一一对应）
+    """工艺参数记录（DB 扁平字段, 覆盖 ProcessParameter model 的工艺列）。
 
     用于算法/优化/移植场景的入参, 直接覆盖 DB 扁平列,
     方便算法以数字特征 (inj_pres_1, hold_pres_1 ...) 直接处理。
+
+    归属条件 (process_condition) 与父子链 (parent_param) 由 service 层按业务
+    自动建立，不接受入参指定。
     """
 
-    process_condition_id: Optional[int] = Field(None, description="所属工艺条件 ID")
-
     # --- 基本信息 ---
-    param_code: Optional[str] = Field(None, description="工艺参数编号")
+    parameter_no: Optional[str] = Field(None, description="工艺参数编号")
     param_source: Optional[str] = Field(None, description="参数来源")
-    # 业务编号：前端可见，用于确定调机树中的基准节点
-    # 与 process_condition_id 联合定位父节点（反查 parent_param.id）
-    # 注意：这是业务编号（condition 内全局递增），不是数据库 ID
-    parent_seq_idx: Optional[int] = Field(None, description="父参数业务编号（seq_idx）")
     seq_idx: Optional[int] = Field(None, description="序列序号")
 
     # --- 注射参数 (6段) ---
@@ -155,7 +149,7 @@ class ProcessParameterSchema(BaseSchema):
 
 
 class ProcessParameterListSchema(PaginationBaseSchema):
-    """工艺参数列表查询条件（按 parameter 字段过滤）
+    """工艺参数列表查询条件（按 parameter 字段过滤）。
 
     condition_id 走 query 参数:
     - 不传 -> 查全表 (后台 / 集成 API 场景)
@@ -165,16 +159,16 @@ class ProcessParameterListSchema(PaginationBaseSchema):
         None,
         description="工艺条件 ID (可选, 过滤该 condition 下的 parameter)",
     )
-    parent_seq_idx: Optional[int] = Field(None, description="父参数业务编号")
+    parent_seq_idx: Optional[int] = Field(None, description="父参数模次序号（父节点的 seq_idx）")
     seq_idx: Optional[int] = Field(None, description="序列序号")
-    param_code: Optional[str] = Field(None, description="工艺参数编号（模糊匹配）")
+    parameter_no: Optional[str] = Field(None, description="工艺参数编号（模糊匹配）")
     param_source: Optional[str] = Field(None, description="参数来源")
     created_after: Optional[date] = Field(None, description="创建起始日期")
     created_before: Optional[date] = Field(None, description="创建结束日期")
 
 
 class ProcessParameterTreeSchema(BaseSchema):
-    """工艺参数版本树查询条件
+    """工艺参数版本树查询条件。
 
     condition_id 走 query 参数:
     - 不传 -> 查全表 (后台 / 集成 API 场景)
@@ -191,16 +185,12 @@ class ProcessParameterTreeSchema(BaseSchema):
 
 
 class SettingProcessSchema(BaseSchema):
-    """前端 UI 嵌套结构（setting_process 内部）
+    """前端 UI 嵌套结构（setting_process 内部）。
 
     对应前端的 settingProcessForm, 用于 UI 提交 records 写入。
     service 内部通过 _frontend_to_condition_dict 转 ProcessParameter 的 flat 字段写入 DB。
 
-    设计选择: 内部字段用 dict (而非强类型子 schema), 因为:
-    - table_data 是动态结构 `[{label, unit, sections: [n, ...]}, ...]`, 段数由 max_stage 决定
-    - 子结构由前端工艺参数组件维护（optimization 用 TuningParameterPanel，
-      library 用 LibraryParameterForm），后端只透传
-    - 业务上 schema 只需保证 "五大段存在" 这层结构
+    内部字段用 dict（不强类型子 schema）：table_data 是动态结构，段数由 max_stage 决定。
     """
 
     injection: Optional[dict] = Field(
@@ -231,15 +221,12 @@ class SettingProcessSchema(BaseSchema):
 
 
 class ProcessParameterNestSchema(BaseSchema):
-    """parameter 业务容器（前端 records 写入用）
+    """parameter 业务容器（前端 records 写入用）。
 
     当前含:
-    - setting_process: 5 段嵌套 (NEST 强验证)
+    - setting_process: 分段嵌套 (NEST 强验证)
 
-    可扩展字段（直接平铺到本 schema, 不另起 schema）:
-    - metadata: 参数元数据
-    - algorithm_hint: 算法侧配置
-    - 其他 parameter 业务相关字段
+    新增 parameter 业务字段直接平铺到本 schema，不另起 schema。
     """
 
     setting_process: Optional[SettingProcessSchema] = Field(
@@ -249,7 +236,7 @@ class ProcessParameterNestSchema(BaseSchema):
 
 
 class ProcessParameterUpdateSchema(BaseSchema):
-    """工艺参数更新（PUT /api/processes/parameters/<parameter_id>/ 写入契约, NEST 强验证）
+    """工艺参数更新（PUT /api/processes/parameters/<int:parameter_id>/ 写入契约, NEST 强验证）
 
     parameter 是独立业务对象（自带 ID 与 process_condition_id 外键），URL 不嵌套
     condition_id；归属关系由 parameter 自带字段表达。

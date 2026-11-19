@@ -128,8 +128,8 @@
 
 | 落点 | 职责 | 用阶段表做什么 | 现状 |
 |---|---|---|---|
-| `algorithms/defect_selection.py`（**L1 侧**） | 选哪个缺陷去推理 | **排**（按阶段优先级重排后取第一个） | ✅ **批次 12.7 起生效**：`StagePriorityDefectStrategy` = 按阶段优先级重排后取第一个（`FirstValidDefectStrategy` 降为历史口径） |
-| `algorithms/decide_direction.py`（**L2 侧**） | 调什么、怎么调 | **查**（``stage_of(code)`` ⇒ 这个缺陷属哪个阶段） | `select_policy` 已就位；12.3 起清单有 2 条（S1 + 兜底） |
+| `algorithms/defect_selection.py`（**L1 侧**） | 选哪个缺陷去推理 | **排**（按阶段优先级重排后取第一个） | ✅ **批次 12.7 起生效**：`StagePriorityDefectStrategy` = 按阶段优先级重排后取第一个（**当前唯一实现**；`FirstValidDefectStrategy` 已于 2026-11-19 删除） |
+| `algorithms/decide_direction.py`（**L2 侧**） | 调什么、怎么调 | **查**（阶段进度 —— `derive_stage_progress()` 推导 `current_stage`，经 `ScenarioContext.extra` 注入） | `select_policy` 已就位；12.3 起清单有 2 条（S1 + 兜底） |
 
 ⚠️ **这两处必须读同一份阶段优先级表**，否则会打架：
 选了 `SHORTSHOT`（S1），策略却匹配到 `SHRINKAGE`（S2）的条件 ⇒ 方向与缺陷对不上。
@@ -215,7 +215,7 @@ ScenarioPolicy(
 | **白名单** | `allowed_params`（空 = 不限制） | **场景范围** —— 这个场景该动哪些旋钮 | 不在名单 ⇒ 让位「本场景不允许」 |
 | **禁入清单** | `blocked_params`（空 = 不禁） | **基线项** —— 任何场景都不该动的旋钮 | 在名单 ⇒ 让位「基线项 ⇒ 不参与阶段调机」 |
 
-⇒ 基线项只需写 **6 个字面量**（`inj_spd_1`~`inj_spd_6`，见 `strategies.BASELINE_EXCLUDED_PARAMS`），
+⇒ 基线项只需写 **6 个字面量**（`inj_spd_1`~`inj_spd_6`，见 `tuning_strategy.BASELINE_BLOCKED_PARAMS`），
 **不需要全集** ⇒ 新增旋钮不用改清单。
 
 ⚠️ **禁入排在准入之前**（裁决序 §2 早于 §3）：基线项是**全局**理由，比
@@ -239,6 +239,15 @@ ScenarioPolicy(
 | **⑤** | **条件运算子缺 `in_set`** | ✅ **批次 12.2 已落地** —— 新增 `in_set`（单值 ∈ 集合）/ `not_in_set`；原 `in` = `_contains(field_value, target)` = **目标 ⊆ 字段值**，方向**保持不变**（两者并存，靠命名区分） | S2（4 个码）/ S3（12 个码）的条件**写不出来** ⇒ 需新增 `in_set`（单值 ∈ 集合） |
 | **⑥** | **条件运算子缺「集合 ∈ 集合」** | ✅ **批次 12.4a 已落地** —— 新增 `in_any`（**字段值是集合** ⇒ 任一元素 ∈ 目标集合）；与 `in_set`（字段值是单值）**方向相反**，两者并存不混 | ⚠️ `defect_codes` 是**元组**（全部缺陷码）⇒ `in_set` 对它**永远为假** ⇒ S2 的 4 个码写不出来 |
 | ⑦ | **条件引用的是「选中缺陷」还是「含该缺陷」** | ✅ **已修复**（2026-11-16）—— 缺陷选取上移到 **service 预处理层**（**只做一次**），结果经 `DefectSelection.to_context()` 随 context 的 `selected_defect` 下传；**L1（推理）与 L2（策略）共用同一份** ⇒ 场景条件改引用 `selected_defect`（`in_set`），不再用 `defect_codes`（全部缺陷码） | 已消除：多缺陷反馈下 L2 命中的场景 = **本轮实际处理的缺陷**对应的场景，不再错配（白名单不会再挡掉本该调的参数 ⇒ 不再“该轮无输出”） |
+
+⚠️ **现状更新（2026-11-19）** —— 缺陷信息**已收进 `feedback`**（收敛后
+`defects` 只剩本轮处理的那条）⇒ 前提 ⑥ 的「`defect_codes` 是全部缺陷码元组」
+已不成立（现在只含本轮那条）⇒ `in_any` 仍在，但**当前无场景引用**它。
+前提 ⑦ 的**载体变了、判定口径不变**：缺陷选取仍在 service 预处理层做**一次**，
+结果**写回 `feedback`**（`defects` 收敛成一条 + `defect_selection` 留痕），
+**不再**用 context 顶层键 `selected_defect` ⇒ L1 与 L2 仍共用同一份 ⇒
+场景条件仍引用 `selected_defect`（由 `services/policies.py` 从收敛后的
+`defects[0]` 取出注入 `extra`）。
 
 ⚠️ ① 直接触及 `§6.2` 撤回策略表的理由②（「条件字段集写死在代码里 ⇒ 表达不了需要表达的东西」）
 ⇒ 扩字段时**不要再把字段名写死成枚举**，否则等于把撤回的理由又请回来。
@@ -274,7 +283,7 @@ ScenarioPolicy(
 | **E** | 条件字段集 | ✅ **改为引用上下文任意键**（未知键 ⇒ 不命中），`CONTEXT_FIELDS` 降级为文档清单 | 避免重蹈 §6.2 撤回理由② |
 | **F** | 阶段优先级表位置 | ✅ **`algorithms/` 下独立文件** —— `defect_selection` 与 `strategies` **共读**（前者**排**、后者**查**） | 新增一个文件 |
 | **G** | S3 本轮范围 | ✅ **先做 2–3 条验证形态** —— `FLASH` / `BURN` / `GASVEINS`（覆盖「减胶量」「先提示修模」「查背压」三种不同形态） | 决定本轮工作量 |
-| **H** | 多缺陷反馈的选取口径 | ✅ **已定**（2026-11-16，批次 12.7）—— 选取**只做一次**、在 **service 预处理层**（不在算法层或各层各挑一遍）；**当前生效规则 = 阶段序**（`stage_priority`）：多缺陷按调机阶段取（打足 → 补缩 → 外观），**不按列表第一项**（用户口径：「结合入参进行分析」，例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。`first_valid` 保留为历史口径（`FIRST_VALID_STRATEGY`，可作回退开关） | L1/L2 选取口径统一；⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条**（L1 推理对象 + L2 命中场景随之变） |
+| **H** | 多缺陷反馈的选取口径 | ✅ **已定**（2026-11-16，批次 12.7）—— 选取**只做一次**、在 **service 预处理层**（不在算法层或各层各挑一遍）；**当前生效规则 = 阶段序**（`stage_priority`）：多缺陷按调机阶段取（打足 → 补缩 → 外观），**不按列表第一项**（用户口径：「结合入参进行分析」，例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。⚠️ **2026-11-19 更新**：`first_valid` 口径与 `FIRST_VALID_STRATEGY` 常量**已删除**（早期为跑通流程设计的占位实现，核验阶段已无价值）；**策略接口（Protocol）与 `strategy` 形参也一并删除** —— 当前用不到切换机制，按「用不到就不写代码」原则不留空壳，将来真有第二个口径时再加回 | L1/L2 选取口径统一；⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条**（L1 推理对象 + L2 命中场景随之变） |
 | **I** | L2 场景条件的缺陷口径 | ✅ **已修**（2026-11-16）—— L2 场景条件引用 **`selected_defect`**（本轮实际处理的缺陷码，经 `ScenarioContext.extra` 注入），**不再用** `defect_codes` | §8 ⑦ 闭环 |
 
 ⚠️ 拍板 **E** 连带出一条**新增技术前提**（§8 前提 ⑤）：
@@ -304,11 +313,39 @@ ScenarioPolicy(
 | **12.7** | ✅ **已落地**（2026-11-16）—— **多缺陷选取接阶段序**：`algorithms/defect_selection.py` 的 `DEFAULT_STRATEGY` 由 `FirstValidDefectStrategy` 改为 `StagePriorityDefectStrategy`（`FIRST_VALID_STRATEGY` 保留为历史口径/回退开关）；`services/parameter_optimize.py` 预处理层落一条 `[optimize] … 缺陷选取` 日志 | ✅ pytest **135 passed**；核对 **18 项全过**（缩水+短射⇒短射 / 飞边+缩水⇒缩水 / 同阶段保序 / 无效项 `skipped` 完整 / 未知码排末位 / `ensure_selected_defect` 幂等不重算 / 留痕 `strategy=stage_priority` / 多缺陷 ⇒ L2 命中被选中缺陷的场景 + 旧口径对照）；黄金快照差异数不变（仍为 6，历史遗留）；⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条** ⇒ L1 推理对象 + L2 命中场景随之变 |
 | **13.0** | ✅ **已落地**（2026-11-16）—— **阶段准入首次生效**：策略清单新增 `filling_stage_first`（`priority=15`），条件 = `selected_defect in {SHORTSHOT}` + **`current_stage == 'filling'`** ⇒ **阶段进度从「只观测」升级为「参与场景匹配」**；白名单 = 胶量端 + 注射时间/压力 + 保压组 + 熔体侧 + 料筒温度组，优先集 = **胶量端 → 保压 → 背压 → 料筒温度**（用户拍板） | ✅ pytest **135 passed**；三离线脚本 e2=0 / algo=0 / nested=0；黄金快照差异数不变（仍为 6）；核对 **15 项全过**（短射+缺重量 ⇒ 命中本场景且落地 `met_end_pos`（`met_pos_1` 300→303）/ 料筒温度降为「名额已满」/ G3 让位与基线项理由仍可见 / **有重量数据时仍走 `filling_first`**（`fill_ratio` 不变）/ 缩水、飞边场景不受影响 / 短射规则库 13 个参数全部有归属 ⇒ 无「本场景无输出」风险）；⚠️ **`inj_t` 仍被 G3 彻底废掉**（让位对象 `inj_spd_1` 是基线项）⇒ 短射少一个强力旋钮，待用户另行拍板 |
 
+⚠️ **现状更新（2026-11-19）** —— 缺陷选取的**载体**已改（**判定口径不变**）：
+
+- `select_defect` 成为**唯一入口**，入参 = feedback，返回**收敛后的 feedback**
+  （`defects` 只剩本轮处理的那条 + `defect_selection` 留痕）；
+- `DefectSelection.to_context()` 与 `ensure_selected_defect(context)` **已删除**；
+- context 顶层键 `selected_defect` **已移除**；
+- `resolve_policies` 的 `selected_defect` 参数**已删**（改为从收敛后的
+  `defects[0]` 自行取）；
+- ⚠️ **2026-11-19 追加**：`FirstValidDefectStrategy` / `FIRST_VALID_STRATEGY` /
+  `DefectSelectionStrategy` Protocol / `select_defect` 的 `strategy` 形参 ——
+  **全部删除**（占位口径 + 用不到的切换机制，按「用不到就不写代码」原则不留空壳）。
+- ⚠️ **2026-11-19 追加（纯改名 + 合并，行为零变化）**：调机策略全套（**阶段表 +
+  场景清单**）合并为 **`algorithms/tuning_strategy.py`** —— 阶段表与场景规则是
+  同一张表的两端（场景清单按 S1/S2/S3 分区，恰好对应三个阶段）。曾用名：
+  `algorithms/stage_order.py`（阶段表）、`algorithms/strategies.py`（场景清单）。
+  符号改名：`stage_of` → `stage_of_defect`、`stage_rank` → `rank_of_stage`、
+  `order_defects` → `sort_defects_by_stage`、`DEFECT_STAGE` → `DEFECT_STAGE_MAP`、
+  `STRATEGIES` → `SCENARIO_POLICIES`、`load_strategies()` →
+  `sorted_scenario_policies()`、`BASELINE_EXCLUDED_PARAMS` → `BASELINE_BLOCKED_PARAMS`
+  ⇒ 上文批次纪实里的旧名是**当时形态**。
+
+⇒ 12.6a / 12.6b / 12.6c 三行里描述的「随 context 的 `selected_defect` 下传」
+是**当时形态**；12.7 验收项里的「`ensure_selected_defect` 幂等不重算」
+对应的函数已不存在（幂等性由「只收敛一次」保证）。
+⇒ 另：`StageProgress` 的 `achieved` / `pending` 因收敛而只反映**本轮处理那条**
+所在阶段（`current` 不受影响 ⇒ 场景判定零变化）。
+
 ⚠️ **每个批次结束跑一次现成 pytest**（不新写测试框架），
-基线 **135 passed**；行为变化要能用留痕/`to_trace()` 说明白。
+基线 **80 passed**（2026-11-19 实测；此前记录为 135 passed —— 测试集规模已变）；
+行为变化要能用留痕/`to_trace()` 说明白。
 
 ⚠️ **批次 12.1 的一个副产品（已记录在代码里）**：阶段重排把无效项挪到末位，
 而选取是「遇到第一个有效项就停」⇒ 不预扫就会漏记无效项。
 ⇒ `StagePriorityDefectStrategy` 的 ``skipped`` 改为**记录全部无效项**（原始顺序），
-比父策略多记「排在有效项之后」的那几个（``skipped`` 的语义是"用户提交了但没被采用的项"，
+包括「排在有效项之后」的那几个（``skipped`` 的语义是"用户提交了但没被采用的项"，
 要完整审计）。

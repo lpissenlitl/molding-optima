@@ -3,7 +3,7 @@ from django.db import models
 
 
 class Polymer(BusinessBaseModel):
-    """塑料材料主数据"""
+    """塑料材料主数据。"""
     # --- 基本信息 ---
     abbreviation = models.CharField(null=True, max_length=50, verbose_name="缩写", help_text="如：ABS、PP")
     grade = models.CharField(null=True, max_length=100, verbose_name="牌号", help_text="聚丙烯 Grade PP-H040")
@@ -56,7 +56,7 @@ class Polymer(BusinessBaseModel):
 
 
 class PolymerRheology(AbstractBaseModel):
-    """流变属性"""
+    """流变属性。"""
     polymer = models.ForeignKey(
         "masterdata.Polymer",
         related_name="rheology_set",
@@ -103,7 +103,7 @@ class PolymerRheology(AbstractBaseModel):
 
 
 class PolymerPVT(AbstractBaseModel):
-    """PVT 属性"""
+    """PVT 属性。"""
     polymer = models.ForeignKey(
         "masterdata.Polymer",
         related_name="pvt_set",
@@ -130,7 +130,7 @@ class PolymerPVT(AbstractBaseModel):
         
 
 class PolymerMechanical(AbstractBaseModel):
-    """机械属性"""
+    """机械属性。"""
     polymer = models.ForeignKey(
         "masterdata.Polymer",
         related_name="mechanical_set",
@@ -151,7 +151,7 @@ class PolymerMechanical(AbstractBaseModel):
 
 
 class PolymerShrinkage(AbstractBaseModel):
-    """收缩属性"""
+    """收缩属性。"""
     polymer = models.ForeignKey(
         "masterdata.Polymer",
         related_name="shrinkage_set",
@@ -171,8 +171,7 @@ class PolymerShrinkage(AbstractBaseModel):
 
 
 class Filler(BusinessBaseModel):
-    """
-    填充物属性
+    """填充物属性。
     如：玻璃纤维、滑石粉、碳酸钙等
     """
     name = models.CharField(

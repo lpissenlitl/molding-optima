@@ -25,7 +25,7 @@ class ProcessExportView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ProcessExportSchema))
     def post(self, request, cleaned_data):
-        """工艺参数导出（Excel）"""
+        """工艺参数导出（Excel）。"""
         return process_export_service.export_process_parameters(
             company_id=request.user.company_id,
             tenant_slug=request.user.company.tenant_slug,
@@ -37,7 +37,7 @@ class ExportListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(ExportListSchema))
     def post(self, request, cleaned_data):
-        """列表数据导出（Excel），返回下载地址"""
+        """列表数据导出（Excel），返回下载地址。"""
         return list_export_service.export_list(
             company_id=request.user.company_id,
             tenant_slug=request.user.company.tenant_slug,
@@ -48,7 +48,7 @@ class ExportListView(BaseView):
 class ReportDownloadView(BaseView):
     @method_decorator(require_login)
     def get(self, request, path):
-        """导出文件下载（Excel）"""
+        """导出文件下载（Excel）。"""
         file_path = resolve_export_list_file(
             tenant_slug=request.user.company.tenant_slug,
             relative_path=path,

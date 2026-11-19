@@ -173,7 +173,7 @@ LOGGING = {
         # 异常信号档：只收 WARNING 以上 —— 三层静默降级（模糊推理失败 ⇒ 经验推理兜底）
         # 混在全量 INFO 里看不见，单独一档后「哪些请求发生过降级」一眼可见。
         # 档内也会收录非降级的告警（如规则缺门控条件），属同类需关注的信号
-        # ⚠️ level 必须设在 **handler** 上：logger 的 level 只管「记录能否进入
+        # 【注意】level 必须设在 **handler** 上：logger 的 level 只管「记录能否进入
         #    handler 链」，handler 自己的 level 才管「这条记录写不写进文件」
         'degradation': {
             'class': 'logging.handlers.RotatingFileHandler',

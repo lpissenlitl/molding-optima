@@ -39,7 +39,7 @@ DEFAULT_TOKEN_EXPIRY_HOURS = 6  # 默认token过期时间
 
 
 def authenticate_user(username: str, password: str):
-    """认证用户登录"""
+    """认证用户登录。"""
     try:
         user = User.objects.select_related(
             "company", "organization"
@@ -73,8 +73,7 @@ def create_token(
     expire_hours: int = DEFAULT_TOKEN_EXPIRY_HOURS,
     allow_multi_login: bool = True
 ):
-    """
-    创建 Token
+    """创建 Token。
 
     Returns:
         (raw_token, expires_at) 元组
@@ -99,7 +98,7 @@ def create_token(
 
 
 def get_user_by_token(request: HttpRequest, raw_token: str):
-    """根据 Token 获取用户信息
+    """根据 Token 获取用户信息。
 
     Args:
         request: Django 请求对象，用于在滑动续期后回传新的过期时间给前端
@@ -178,7 +177,7 @@ def register_user(
     extra_accessible_orgs: list = None,
     expires_at: datetime = None
 ):
-    """注册用户"""
+    """注册用户。"""
     if not username:
         raise BizException(ERROR_USER_USERNAME_EMPTY)
     if not password:
@@ -248,7 +247,7 @@ def register_user(
 
 
 def login(request: HttpRequest, username: str, password: str, **kwargs):
-    """用户登录：认证 + 权限校验 + 用户信息组装"""
+    """用户登录：认证 + 权限校验 + 用户信息组装。"""
     user = authenticate_user(username, password)
 
     # 构建脱敏用户信息
@@ -268,7 +267,7 @@ def login(request: HttpRequest, username: str, password: str, **kwargs):
 
 
 def sso_login(request: HttpRequest):
-    """SSO登录"""
+    """SSO登录。"""
     if not hasattr(request, "user") or not request.user:
         raise BizException(ERROR_USER_NOT_FOUND)
     user: User = request.user
@@ -276,12 +275,12 @@ def sso_login(request: HttpRequest):
 
 
 def logout(user: User, token: str):
-    """用户登出"""
+    """用户登出。"""
     Token.objects.filter(user=user, token=token).update(is_revoked=True, revoked_at=datetime.now())
 
 
 def _get_user_by_id(user_id: int) -> User:
-    """根据用户 ID 获取用户"""
+    """根据用户 ID 获取用户。"""
     user_id = validate_pk(user_id, "user_id")
 
     # 预加载用户企业、组织、角色、访问信息
@@ -301,7 +300,7 @@ def _get_user_by_id(user_id: int) -> User:
 
 def get_user_info(user_id: int) -> dict:
     """
-    根据用户 ID 获取用户信息（排除 password 字段），包含外键和多对多关系数据
+    根据用户 ID 获取用户信息（排除 password 字段），包含外键和多对多关系数据。
     """
     target = _get_user_by_id(user_id)
 
@@ -319,7 +318,7 @@ def get_user_info(user_id: int) -> dict:
 
 @transaction.atomic
 def update_user_info(operator: User, user_id: int, **kwargs):
-    """更新用户信息（支持部分字段更新）"""
+    """更新用户信息（支持部分字段更新）。"""
     target = _get_user_by_id(user_id)
     kwargs.pop("password") if "password" in kwargs else None
     target.update_info(**kwargs)
@@ -336,13 +335,13 @@ def update_user_info(operator: User, user_id: int, **kwargs):
 
 
 def delete_user(operator: User, user_id: int):
-    """管理员删除用户（软删除）"""
+    """管理员删除用户（软删除）。"""
     target = _get_user_by_id(user_id)
     target.soft_delete()
 
 
 def _bind_user_to_roles(user: User, role_ids: list):
-    """绑定用户到角色"""
+    """绑定用户到角色。"""
     roles = Role.objects.filter(id__in=role_ids)
     if len(roles) != len(role_ids):
         missing = set(role_ids) - set(roles.values_list('id', flat=True))
@@ -351,7 +350,7 @@ def _bind_user_to_roles(user: User, role_ids: list):
 
 
 def _bind_user_to_organizations(user: User, org_ids: list):
-    """绑定用户到数据访问"""
+    """绑定用户到数据访问。"""
     organizations = Organization.objects.filter(id__in=org_ids)
     if len(organizations) != len(org_ids):
         missing = set(org_ids) - set(organizations.values_list('id', flat=True))
@@ -360,7 +359,7 @@ def _bind_user_to_organizations(user: User, org_ids: list):
 
 
 def create_user(operator: User, **kwargs):
-    """创建用户（通常由管理员调用）"""
+    """创建用户（通常由管理员调用）。"""
     organization = Organization.objects.filter(id=kwargs["organization_id"]).first()
     company_id = organization.company_id if organization else operator.company_id
 
@@ -381,7 +380,7 @@ def get_user_list(
     page_size: int = None,
     sort: str = None
 ):
-    """获取用户列表"""
+    """获取用户列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "organization_id": {"input": organization_id, "column": "organization_id", "lookup": "exact"},
@@ -409,7 +408,7 @@ def get_user_list(
 
 
 def batch_delete_user(user: User, ids: list):
-    """批量删除用户（软删除）"""
+    """批量删除用户（软删除）。"""
     ids = validate_id_list(ids, "用户 ID 列表")
     return User.objects.filter(
         id__in=ids, 
@@ -421,19 +420,19 @@ def batch_delete_user(user: User, ids: list):
 
 
 def enable_user(operator: User, user_id: int):
-    """管理员启用用户"""
+    """管理员启用用户。"""
     target = _get_user_by_id(user_id)
     update_user_info(operator, user_id, is_active=True)
 
 
 def disable_user(operator: User, user_id: int):
-    """管理员禁用用户"""
+    """管理员禁用用户。"""
     target = _get_user_by_id(user_id)
     update_user_info(operator, user_id, is_active=False)
 
 
 def _set_password(user: User, password: str):
-    """设置用户密码"""
+    """设置用户密码。"""
     pwd_valid, pwd_msg = check_pwd_strength(password)
     if not pwd_valid:
         raise BizException(ERROR_USER_PASSWORD_STRENGTH, pwd_msg)
@@ -444,7 +443,7 @@ def _set_password(user: User, password: str):
     
 
 def reset_password(operator: User, user_id: int, password: str):
-    """管理员重置用户密码"""
+    """管理员重置用户密码。"""
     obj_user = _get_user_by_id(user_id)
     password = password or generate_random_password()
     _set_password(obj_user, password)
@@ -452,12 +451,12 @@ def reset_password(operator: User, user_id: int, password: str):
 
 
 def get_profile(user: User) -> dict:
-    """获取当前用户信息"""
+    """获取当前用户信息。"""
     return get_user_info(user.id)
 
 
 def update_profile(user: User, **kwargs):
-    """更新当前用户信息（支持部分字段更新）"""
+    """更新当前用户信息（支持部分字段更新）。"""
     user = _get_user_by_id(user.id)
     UPDATABLE_FIELDS = [
         "engineer_name", "email", "phone"
@@ -466,7 +465,7 @@ def update_profile(user: User, **kwargs):
 
 
 def deactivate(user: User):
-    """用户注销"""
+    """用户注销。"""
     user.deactivate()
 
 
@@ -475,7 +474,7 @@ def reset_password_after_verify_old_password(
     old_password: str, 
     new_password: str
 ):
-    """用户更新密码，需先验证旧密码"""
+    """用户更新密码，需先验证旧密码。"""
     if not check_pwd(old_password, user.password):
         raise BizException(ERROR_USER_PASSWORD_WRONG, "旧密码错误")
     _set_password(user, new_password)

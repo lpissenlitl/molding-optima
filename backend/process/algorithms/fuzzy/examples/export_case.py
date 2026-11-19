@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """案例导出工具（开发期）—— 从生产库抽一个业务案例，固化成可离线复现的 JSON。
 
-⚠️ **这是开发期工具，不是运行时组件**：
+【注意】**这是开发期工具，不是运行时组件**：
    它 import 了 service 层（`process.services.parameter_optimize`）来还原
    「机台 / 材料 / 模具 / 工艺参数」的真实抽取口径 ——
    算法包内的**运行时**代码不依赖 service 层（依赖方向：service → algorithm）。
@@ -14,7 +14,7 @@
 产出：
     process/algorithms/fuzzy/examples/cases/fuzzy_shortshot_low.json
 
-⚠️ 导出的 rules / keywords 是**数据源原始形态**（RuleProfile 字段 / RuleKeyword
+【注意】导出的 rules / keywords 是**数据源原始形态**（RuleProfile 字段 / RuleKeyword
    原始元数据），**不是**裁剪后的中间态 ——
    裁剪（论域上界按设备实测值替换）发生在引擎里，离线复现时走同一条路径。
 """
@@ -83,7 +83,7 @@ def main():
     mold_info = po._extract_mold_info(cond)
 
     # ---------------- 2) 组上下文 ----------------
-    feedback = {'defect': rec.defect_feedbacks}
+    feedback = {'defects': rec.defect_feedbacks}
     biz_context = {
         'feedback': feedback,
         'polymer_info': polymer_info,
@@ -96,13 +96,13 @@ def main():
 
     # ---------------- 3) 规则（生产路径取出） ----------------
     # 缺陷选取：与生产路径同一份实现（默认策略 = 阶段序），
-    # 结果随 context 下传 —— 引擎只读结果，不再各自挑缺陷。
-    selection = select_defect(algo_context)
-    algo_context['selected_defect'] = selection.to_context()
+    # 结果写回 feedback（defects 收敛成一条）—— 引擎只读结果，不再各自挑缺陷。
+    algo_context['feedback'] = select_defect(algo_context.get('feedback') or {})
+    selected = (algo_context['feedback'].get('defects') or [{}])[0]
     query_ctx = RuleQueryContext(
-        defect_name=selection.keyword_name,
-        defect_level=selection.level,
-        defect_position=selection.position,
+        defect_name=selected.get('keyword_name'),
+        defect_level=selected.get('level'),
+        defect_position=selected.get('position'),
         polymer_abbreviation=(polymer_info or {}).get('abbreviation'),
         product_category=(mold_info or {}).get('product_category'),
         rule_library_code=None,

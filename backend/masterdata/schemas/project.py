@@ -1,5 +1,4 @@
-"""
-项目相关 Schema 定义 - Pydantic 版本
+"""项目相关 Schema 定义 - Pydantic 版本。
 
 """
 from typing import Optional
@@ -10,7 +9,7 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 
 
 class ProjectSchema(BaseSchema):
-    """项目信息 Schema —— 与 Project 模型完全对齐"""
+    """项目信息 Schema —— 与 Project 模型完全对齐。"""
     
     # --- 核心标识 ---
     project_code: Optional[str] = Field(None, description="项目编号")
@@ -60,7 +59,7 @@ class ProjectSchema(BaseSchema):
 
 
 class ProjectListSchema(PaginationBaseSchema):
-    """项目列表"""
+    """项目列表。"""
     # --- 核心标识 & 业务信息 ---
     project_code: Optional[str] = Field(None, description="项目编号（模糊或精确）")
     project_name: Optional[str] = Field(None, description="项目名称（模糊查询）")

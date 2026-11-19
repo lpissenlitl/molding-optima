@@ -1,4 +1,4 @@
-"""锚点关系的事实：字段口径 + 共用判据（第2层 / 第3层 / 第4层共用）
+"""锚点关系的事实：字段口径 + 共用判据（第2层 / 第3层 / 第4层共用）。
 
 为什么单独放一个模块：同一批锚点关系要**被多个方向使用** ——
 
@@ -17,7 +17,7 @@
 各层**各自**的只有"拿关系做什么"：第2层排除、第3层改值、第4层透传事实。
 
 字段名：**代码侧**业务字段名（与 ``ProcessParameterSchema`` 对齐）；
-与算法/工艺侧命名的对照见设计文档 §6 与 ``integrate_params.py`` 模块 docstring。
+与算法/工艺侧命名的对照见 ``integrate_params.py`` 模块 docstring。
 """
 
 from dataclasses import dataclass
@@ -53,11 +53,11 @@ STAGE_COUNT_FIELD = 'met_stg'
 
 #: **自由度让位关系**：被让位的量 → 让给谁（业务字段名 → 业务字段名）。
 #:
-#: G3 口径（用户口径，2026-11-12）：注射阶段是**速度控制**，设定时间只是设定值
+#: G3 口径（用户口径）：注射阶段是**速度控制**，设定时间只是设定值
 #: ⇒ 改「注射时间」没有物理意义，真正起作用的是「注射速度」
 #: ⇒ 改时间让位给速度（改速度不联动时间）。
 #:
-#: ⚠️ **本关系同时被第2层引用**（:mod:`process.algorithms.decide_direction`）：
+#: 【注意】**本关系同时被第2层引用**（:mod:`process.algorithms.decide_direction`）：
 #:    让位对象本轮不可调（场景禁入 / 基线项）时，被让位的量**也无处可去**
 #:    —— 第3层的让位是**值回退**（改了也不生效）⇒ 该量本轮**落不了地**。
 #:    ⇒ 第2层不能把它选成保留项：否则第3层静默回退 ⇒ 本轮零变化，
@@ -96,17 +96,17 @@ def resolve_mel_target(
 ) -> Optional[Tuple[str, float]]:
     """MEL 目标值 ⇒ 决策量（计量末段位置 ``ML_N``）。
 
-    「**先定 ML，再确定 MEL**」（用户口径，2026-11-12）：``MEL`` 是算法侧的
+    「**先定 ML，再确定 MEL**」（用户口径）：``MEL`` 是算法侧的
     **标**（由 ``ML_N + DDAM`` 算出），落到能决策的量上要先算出 ``ML_N``，
     ``MEL`` 再由 ``ML_N`` 算出。
 
-    **推算只用「旧值 + 调整量」**（用户口径，2026-11-12）—— L3 手里没有
+    **推算只用「旧值 + 调整量」**（用户口径）—— L3 手里没有
     「新值」这个东西，只有**旧值**与**调整量**。两步式：
 
     .. code-block:: text
 
-        ① ML_N 基准 = 原MEL − 原DDAM
-        ② MEL_新    = ML_N + DDAM + ΔDDAM + ΔMEL
+        1. ML_N 基准 = 原MEL − 原DDAM
+        2. MEL_新    = ML_N + DDAM + ΔDDAM + ΔMEL
 
     ⇒ 落库的计量位置 = ``原ML_N + ΔMEL``：**``ΔDDAM`` 不叠加到计量位置**，
     它落在 ``MEL`` 那一侧（终止位置随松退距离自然后移）。
@@ -114,7 +114,7 @@ def resolve_mel_target(
     - ``ML_N`` 基准：按 ``原MEL − 原DDAM`` 反推（不取参数集里的 ``ML_N``）；
     - ``ΔMEL``：MEL 目标与旧 MEL 之差。
 
-    ⚠️ 缺**旧值**就算不出调整量 ⇒ 返回 ``None``（不臆造）。
+    【注意】缺**旧值**就算不出调整量 ⇒ 返回 ``None``（不臆造）。
 
     Args:
         params: 当前参数集（含本轮调整后的值）。
@@ -141,7 +141,7 @@ def resolve_mel_target(
         return None          # 缺原 MEL / 原 DDAM ⇒ 反推不出计量位置 ⇒ 不臆造
 
     try:
-        base_last = float(old_auto) - float(old_backoff)   # ① 原MEL − 原DDAM
+        base_last = float(old_auto) - float(old_backoff)   # 1. 原MEL − 原DDAM
         delta_mel = float(mel_value) - float(old_auto)
     except (TypeError, ValueError):
         return None
@@ -194,10 +194,10 @@ def resolve_fill_target(
 
     （注射行程 = ``ML_N − VPTL``；``DDAM`` 是螺杆回抽量，**不**参与注射量计算。）
 
-    ⚠️ **这是目标，不是增量** —— 落库的是「改完之后的值」；
+    【注意】**这是目标，不是增量** —— 落库的是「改完之后的值」；
     与 :func:`resolve_mel_target` 的「旧 MEL + ΔMEL」不是同一口径。
 
-    ⚠️ **不静默截断**：解不出来就返回 ``None``（调用方回落到规则增量口径）；
+    【注意】**不静默截断**：解不出来就返回 ``None``（调用方回落到规则增量口径）；
     越限也**照实解算**（由调用方留痕）—— 截断会把「差多少」这个信息吃掉。
 
     Args:
@@ -311,7 +311,7 @@ def unlandable_params(
     所以当让位对象本轮**不可调**（场景禁入 / 基线项）时，
     被让位的量**改了也是白改** ⇒ 第2层不该把它选成保留项。
 
-    ⚠️ **让位对象缺值时不算数**：让位对象在参数集里没有值 ⇒
+    【注意】**让位对象缺值时不算数**：让位对象在参数集里没有值 ⇒
     第3层不会触发让位（:func:`process.algorithms.integrate_params.propagate`
     的让位前提是让位对象有值）⇒ 本量仍可落地 ⇒ 不排除。
 

@@ -7,7 +7,7 @@ r"""推荐结果层（`fuzzy/recommendations.py`）合并逻辑测试
   4. `to_recommendations()` 的对外字段（recommended_value / confidence /
      direction / source / reason）
 
-⚠️ 本模块**零 Django 依赖**（已实测：import 后 `django` 与 `process.models`
+【注意】本模块**零 Django 依赖**（已实测：import 后 `django` 与 `process.models`
 均未进 `sys.modules`），因此不需要 `django.setup()`。
 
 运行：
@@ -57,7 +57,7 @@ def test_aggregate_same_layer_sum():
     assert abs(inj1.delta - 15.0) < 1e-6, f'aggregated delta={inj1.delta}'
     assert inj1.rule_count == 2, inj1.rule_count
     assert abs(inj1.activation_sum - 1.5) < 1e-6, f'activation_sum={inj1.activation_sum}'
-    # ⚠️ 置信度来源是**原始激活度之和**，不是组内占比之和
+    # 【注意】置信度来源是**原始激活度之和**，不是组内占比之和
     assert abs(inj1.raw_activation_sum - 1.8) < 1e-6, (
         f'raw_activation_sum={inj1.raw_activation_sum}'
     )
@@ -116,7 +116,11 @@ def test_to_recommendations_numeric_fields():
 
 
 def test_to_recommendations_advice_fields():
-    """文本建议：recommended_value=None / confidence=None / direction='check' / source='fuzzy.check'。"""
+    """文本建议场景下四个字段的取值。
+
+    recommended_value=None / confidence=None /
+    direction='check' / source='fuzzy.check'
+    """
     aggregated, advice_items = aggregate(NUMERIC_RESULTS, ADVISORY_RESULTS)
     recs = to_recommendations(aggregated, advice_items, FACTOR, CURRENT_PARAMS)
     rec_by_name = {r.param_name: r for r in recs}

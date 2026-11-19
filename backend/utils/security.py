@@ -10,8 +10,7 @@ def generate_random_password(
     min_special: int = 1,
     special_chars: str = "!@#$%^&*"
 ) -> str:
-    """
-    生成随机密码
+    """生成随机密码。
     :param length: 密码长度
     :param min_digits: 最少位数
     :param min_upper: 最少大写字母

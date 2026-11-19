@@ -7,8 +7,8 @@
 2. **取数口径**：过滤（缺陷码 / 启用）与排序（priority 降、id 升）
    与数据库来源逐条一致；
 3. **适用性闸门**：聚合物 / 产品两维由共用的 `matches_context` 判定；
-4. **选库**：**未指定 ⇒ 全量模糊库**（停用库 / 专家库不选）、显式指定 ⇒ 只用它、
-   按优先级降序；
+4. **选库**：**未指定 ⇒ 全部公共模糊库**（停用库 / 专家库 / 租户私库不选）、
+   显式指定 ⇒ 只用它、按优先级降序；
 5. **自动重载**：改了 JSON 立即生效（mtime 缓存）；
 6. **同码多库**：库编码跨租户可重复 ⇒ 同码多库是合法状态，
    两个库各读各的规则文件（按库主键分文件）。
@@ -124,7 +124,7 @@ def repo(data_dir):
 def test_file_channel_has_no_orm_dependency():
     """文件通道的模块**不许** import Django / ORM 模型。
 
-    ⚠️ 这是「文件来源能脱离数据库跑」的**前提** —— 一旦有人在
+    【注意】这是「文件来源能脱离数据库跑」的**前提** —— 一旦有人在
       `loader.py` / `repository.py` 里 import 了 ORM，文件通道就会
       把 Django 拖进依赖链，脱离数据库运行的能力就没了。
     """
@@ -156,7 +156,7 @@ def test_candidate_methods_filters_and_sorts(data_dir):
 def test_priority_zero_sorts_last(data_dir):
     """``priority=0`` 必须排在最后 —— 排序用的是**原始值**。
 
-    ⚠️ 若用转换后的 ``or 1.0`` 归一值排序，priority=0 会与 priority=1
+    【注意】若用转换后的 ``or 1.0`` 归一值排序，priority=0 会与 priority=1
       并列 ⇒ 顺序与数据库侧分叉。
     """
     loader = FileLibraryLoader(root_dir=str(data_dir))
@@ -175,7 +175,7 @@ def test_missing_library_file_is_empty(data_dir):
 def test_select_libraries_without_code_loads_all_fuzzy_libraries(repo):
     """**未指定库 ⇒ 全量模糊库**。
 
-    ⚠️ **不按「产品类别 → 库编码」映射表选库**：该映射表指向的 code
+    【注意】**不按「产品类别 → 库编码」映射表选库**：该映射表指向的 code
       库里根本不存在 ⇒ 候选必然落空 ⇒ 只会加载 base 通用库。
       口径是**全部加载**，适用性交由规则级判定
       （`matches_context` / `resolve_specificity`）。
@@ -322,7 +322,7 @@ def test_missing_data_dir_raises(data_dir):
 def test_same_code_libraries_read_their_own_rule_file(tmp_path):
     """**同码两库各读各的规则文件**（按库主键分文件）。
 
-    ⚠️ **业务规则**：库编码是业务分类编码，跨租户可重复 ⇒ 同码多库是合法状态。
+    【注意】**业务规则**：库编码是业务分类编码，跨租户可重复 ⇒ 同码多库是合法状态。
       若两个库读同一个 `<库码>.json` ⇒ 后写的覆盖先写的，
       文件侧只剩一个库的规则（不报错，只是结果悄悄不同）。
     """
@@ -352,15 +352,23 @@ def test_same_code_libraries_read_their_own_rule_file(tmp_path):
             }, ensure_ascii=False), encoding='utf-8')
 
     repo = FileResourceRepository(root_dir=str(tmp_path))
-    # ⚠️ 两个同码库都在索引里（不被去重掉）
-    libs = repo.select_libraries(RuleQueryContext(defect_name='SHORTSHOT'))
+    # 【注意】默认路径（调用方未给库清单）⇒ 只吃公共库 ⇒ 两个租户私库都不取
+    assert repo.select_libraries(RuleQueryContext(defect_name='SHORTSHOT')) == []
+
+    # 上层授权的库清单里两个同码库都在（不被去重掉）
+    authorized = list(repo.loader.load_libraries()['rule_miner'])
+    libs = repo.select_libraries(RuleQueryContext(
+        defect_name='SHORTSHOT', libraries=authorized))
     assert {(l.library_code, l.library_id) for l in libs} == {
         ('rule_miner', 11), ('rule_miner', 12)}
 
     # 各自只拿到自己那份规则（不串库）
+    # 【注意】公司 1 的库 = library_id 11；公司 9 的库 = library_id 12
     d1 = {p.rule_description for p in repo.get_rules(
-        RuleQueryContext(defect_name='SHORTSHOT', company_id=1))}
+        RuleQueryContext(defect_name='SHORTSHOT',
+                         libraries=[l for l in authorized if l.library_id == 11]))}
     d9 = {p.rule_description for p in repo.get_rules(
-        RuleQueryContext(defect_name='SHORTSHOT', company_id=9))}
+        RuleQueryContext(defect_name='SHORTSHOT',
+                         libraries=[l for l in authorized if l.library_id == 12]))}
     assert d1 == {'IF SHORTSHOT_low THEN IV0_add_1'}
     assert d9 == {'IF SHORTSHOT_low THEN IV0_add_2'}

@@ -21,7 +21,7 @@ FUZZY_CORE = os.path.dirname(HERE)
 BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(FUZZY_CORE))))
 
 # 只把 backend 根目录（包的父目录）加进 sys.path。
-# ⚠️ 不要把 `fuzzy/` 目录加进来：那等于宣布「该目录下每个带 __init__.py 的子目录
+# 【注意】不要把 `fuzzy/` 目录加进来：那等于宣布「该目录下每个带 __init__.py 的子目录
 #    都是顶层包」，于是包内子模块（`fuzzy_core` / `library` …）泄漏成
 #    顶层名，将来撞名即**静默劫持**。内核一律用完整点分路径导入。
 sys.path.insert(0, BACKEND_ROOT)

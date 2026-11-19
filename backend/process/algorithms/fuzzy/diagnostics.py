@@ -37,12 +37,12 @@ class Diagnostic:
     内容结构也**保持原样** —— 黄金快照 `_golden_ABC.json` 会记录
     `_diagnostics` 的 repr，结构一变快照就 diff。
 
-    ⚠️ `selections` 是**后加的第三个容器**（决策级留痕，来源见
+    【注意】`selections` 是**后加的第三个容器**（决策级留痕，来源见
     `process/algorithms/defect_selection.py`）：刻意**独立**于上面两个清单 ——
     它们是「规则级诊断」，它是「决策级留痕」，性质不同；
     且**不动**那两个 ⇒ 黄金快照仍然零差异。
 
-    ⚠️ `over_limits` 是**后加的第四个容器**（**输入体检级**留痕，来源见
+    【注意】`over_limits` 是**后加的第四个容器**（**输入体检级**留痕，来源见
     `process/algorithms/fuzzy/over_limit.py`）：性质与上面三个都不同 ——
     上面三个是「本次推荐**怎么算出来**的」，它是「**进来的参数本身**合不合规」；
     同样刻意独立、且**不动**前面三个 ⇒ 黄金快照仍然零差异。
@@ -100,7 +100,7 @@ def request_diagnostics() -> Iterator[Diagnostic]:
     - **退出**：同时 `emit()` 一条结构化日志（放 finally ⇒ 推理失败时
       也能留下「失败前到底发生了什么」）。
 
-    ⚠️ 「请求结束后仍能读到本次诊断」这个既有约定由调用方承担：
+    【注意】「请求结束后仍能读到本次诊断」这个既有约定由调用方承担：
     `engine.py` 把容器移交给实例槽位 `_last_diag`，诊断脚本与快照脚本读它。
     """
     diag = Diagnostic()

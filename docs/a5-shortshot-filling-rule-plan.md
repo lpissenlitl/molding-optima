@@ -114,7 +114,7 @@ JSON 1752 条 vs DB 1646 条，差额 106 条主要来自 `R20240516093115`（JS
 
 ### Step 3｜验证层（= §6.4 A5 验收）
 
-用既有真实回归脚本跑短射样例（`backend/tests/verify_fuzzy_algo_db.py`，缺陷 `SHORTSHOT/very_low/DLSHORTSHOT1`，走真实 DB + 真实规则库 + 真实 `infer_from_provided`）：
+用既有真实回归脚本跑短射样例（`backend/tests/verify_fuzzy_algo_db.py`，缺陷 `SHORTSHOT/very_low/DLSHORTSHOT1`，走真实 DB + 真实规则库 + 真实 `optimize_from_provided`）：
 
 **验收口径（逐位比对）**：
 1. 推荐列表**含 `MEL`**（业务字段 `met_end_pos`）；
@@ -125,7 +125,7 @@ JSON 1752 条 vs DB 1646 条，差额 106 条主要来自 `R20240516093115`（JS
 
 **改前状态**：该脚本此前 PASSED 但产出的是 `inj_spd_1` / `inj_t` / `hold_spd_1` —— **没有 `MEL`** ⇒ 正是本方案要改变的那一处。
 
-#### 实测验收结果（2026-11-10，真实 DB + 真实规则库 + 真实 `infer_from_provided`）
+#### 实测验收结果（2026-11-10，真实 DB + 真实规则库 + 真实 `optimize_from_provided`）
 
 **A5 五条口径逐位达成**（`condition_id=104`，`MEL` 当前值 121.99）：
 

@@ -1,4 +1,4 @@
-"""molding-optima 工艺条件 Schema 定义
+"""molding-optima 工艺条件 Schema 定义。
 
 字段命名严格匹配 process/models/condition.py。
 
@@ -13,7 +13,7 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 
 
 class ProcessConditionSchema(BaseSchema):
-    """工艺条件"""
+    """工艺条件。"""
 
     condition_no: Optional[str] = Field(None, description="工艺条件编号")
     status: Optional[str] = Field(None, description="状态")
@@ -28,7 +28,7 @@ class ProcessConditionSchema(BaseSchema):
 
 
 class ProcessConditionListSchema(PaginationBaseSchema):
-    """工艺条件列表查询条件（按 condition 字段过滤, 取最新 parameter）"""
+    """工艺条件列表查询条件（按 condition 字段过滤, 取最新 parameter）。"""
 
     status: Optional[str] = Field(None, description="状态")
     origin_type: Optional[str] = Field(None, description="工艺起源类型")
@@ -44,7 +44,7 @@ class ProcessConditionListSchema(PaginationBaseSchema):
 
 
 class BatchDeleteConditionSchema(BaseSchema):
-    """批量删除工艺条件
+    """批量删除工艺条件。
 
     业务语义: 传入 condition_id 列表, 级联软删其下所有 parameter。
     实际 view 现阶段使用通用的 BatchIdsSchema, 本 schema 作为业务契约预留。

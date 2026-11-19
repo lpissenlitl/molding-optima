@@ -35,7 +35,7 @@ def eval_condition_when(
     condition_when: Dict[str, Any],
     info_dict: Dict[str, Any],
 ) -> bool:
-    """评估条件必填
+    """评估条件必填。
 
     操作符（key 后缀）：
     - 无后缀（如 'gate_type'）：info_dict[key] == expected（向后兼容的相等匹配）
@@ -85,7 +85,7 @@ def eval_condition_when(
 
 
 def derive_required_fields(mapping: Dict[str, Dict[str, Any]]) -> Tuple[str, ...]:
-    """从字段字典派生 condition 为必填等级的字段集
+    """从字段字典派生 condition 为必填等级的字段集。
 
     包括 "必填" / "液压机必填"（所有液压机都必填）/ "条件必填"（按 context 评估）。
 
@@ -106,7 +106,7 @@ def audit_field_completeness(
     *,
     is_hydraulic: bool = False,
 ) -> List[str]:
-    """按 mapping spec 核查输入维度字段完整性，返回缺失字段清单
+    """按 mapping spec 核查输入维度字段完整性，返回缺失字段清单。
 
     Args:
         info_dict: 输入字典（如 machine_info、polymer_info、mold_info）
@@ -142,7 +142,7 @@ def audit_field_completeness(
     如 ``max_set_injection_velocity``：算法有除零保护
     （``inj_len / equivalent_velo if equivalent_velo > 0 else min_t``），
     0 是合法的业务输入（机器未标定注射速度），不能被契约拦死。
-    ⚠️ 只给**确实支持 0** 的字段加；其余设备上限字段的 0 仍是非法上界。
+    【注意】只给**确实支持 0** 的字段加；其余设备上限字段的 0 仍是非法上界。
     """
     missing: List[str] = []
     for target_key, spec in mapping.items():
@@ -186,7 +186,7 @@ def audit_field_completeness(
 
 
 def drive_system_to_power_method(drive_system: Optional[str]) -> Optional[str]:
-    """InjectionMoldingMachine.drive_system → 标准化的 power_method
+    """InjectionMoldingMachine.drive_system → 标准化的 power_method。
 
     drive_system 字段取值多样：
         'hydraulic' / 'hydraulic_rear' / 'hydraulic_front' / '液压' / '液压机' → '液压机'

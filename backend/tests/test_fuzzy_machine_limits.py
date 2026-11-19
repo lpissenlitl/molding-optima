@@ -1,4 +1,4 @@
-r"""机台物理上限 → 推荐值裁剪
+r"""机台物理上限 → 推荐值裁剪。
 
 覆盖三段：
   1. specs.resolve_param_limits   —— machine_info → {算法参数前缀: 上限}
@@ -10,7 +10,7 @@ r"""机台物理上限 → 推荐值裁剪
   - 参数命名：field_names 的「业务前缀 ↔ 算法前缀」映射（既有契约）
   - 物理约束：推荐值不得超出 HMI 可设定范围 —— 操作工输不进去就是无效建议
 
-⚠️ 不依赖规则库数据：直接构造 AlgorithmRecommendation 喂给裁剪方法。
+【注意】不依赖规则库数据：直接构造 AlgorithmRecommendation 喂给裁剪方法。
 
 运行：
   cd backend

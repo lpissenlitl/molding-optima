@@ -1,11 +1,11 @@
-r"""位置类判级论域（设备实测最大注射行程）测试
+r"""位置类判级论域（设备实测最大注射行程）测试。
 
 口径（**3 条，各自都有独立参照系**）：
 
   1. **业务口径 —— 权威源与匹配方式**
      位置类参数（注射位置 `IL` / 计量位置 `ML` / 储料终止位置 `MEL` /
      VP 切换位置 `VPTL`）的判级论域取 `InjectionUnit.max_injection_stroke`
-     （最大注射行程）—— 旧版 `read_machine_setting_para` 的同一口径。
+     （最大注射行程）。
      匹配是**两级**：整段参数（`MEL`/`VPTL`）走精确匹配，分段参数
      （`IL0`~`IL5` / `ML0`~`ML3`）走族前缀匹配 —— `param_family()` 的
      `^([A-Za-z]+)(\d+)$` 正则取不到整段参数 ⇒ 必须另立名单。
@@ -106,7 +106,7 @@ def test_position_domain_fallback_and_gate():
     assert over is profile
     assert (over.min_val, over.max_val) == (30.0, 60.0), over
 
-    # 接线入口：机器维度字段字典已声明最大注射行程，且条件是「可选」（缺不阻塞）
+    # 权威源入口：机器维度字段字典已声明最大注射行程，且条件是「可选」（缺不阻塞）
     spec = OPTIMIZE_MACHINE_INFO_FIELDS['max_injection_stroke']
     assert spec['source_model'] == 'InjectionUnit', spec
     assert spec['attr_name'] == 'max_injection_stroke', spec

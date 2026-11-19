@@ -10,7 +10,7 @@
         ↓ collect      → MiningSample（JSONL 文件语料）
         ↓ mine         → MiningRule（DB，状态 pending 待审核）
 
-⚠️ **语料落盘位置**
+【注意】**语料落盘位置**
     `{STORE_PATH}/{tenant_slug}/mining/samples/company_{company_id}.jsonl`
     —— 运行时数据目录，不在代码仓库内（见 `mining.provider`）。
 """

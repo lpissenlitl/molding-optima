@@ -7,8 +7,7 @@ import typing
 
 
 class BaseView(View):
-    """
-    自定义基础视图类，统一处理返回值
+    """自定义基础视图类，统一处理返回值。
     子类的处理方法（如 get、post）若返回 None，这自动返回成功相应
 
     统一返回格式（与 ApiMiddleware 保持一致）：
@@ -29,7 +28,7 @@ class BaseView(View):
 
     @classmethod
     def _wrap_response(cls, response, status: int = 200):
-        """统一包装 view 返回值为 HttpResponse（与 ApiMiddleware 格式一致）
+        """统一包装 view 返回值为 HttpResponse（与 ApiMiddleware 格式一致）。
 
         支持：
         - HttpResponse            原样返回
@@ -59,8 +58,7 @@ class BaseView(View):
 
 @dataclass
 class PaginationResponse:
-    """
-    分页响应数据结构
+    """分页响应数据结构。
     用于 API 接口返回分页数据，如：{ "total": 100, "items": [ ... ] }
     """
     total: int = 0

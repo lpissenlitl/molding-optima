@@ -26,10 +26,10 @@ net 不拆规则串，也不做分类（检查/弹窗类归提示层，不进数
 分层口径（见 engine.py）：
     数值层 (numeric)  = 结论能算出数值    → NumTskRuleNet
     提示层 (advisory) = 结论是文本/模糊等级 → FuzzyRuleNet
-  ⚠️ 实测：规则库 1646 条中，模糊等级结论 0 条 ⇒ FuzzyRuleNet
-     代码路径已接线但**实际空跑**；99 条 adjust/popup 由第 4 层 filter
+  【注意】当前规则库中**模糊等级结论 0 条** ⇒ FuzzyRuleNet
+     代码路径已实现但**实际空跑**；adjust/popup 类由第 4 层 filter
      抽成文本建议（`advice_items`），不进任何推理网络；
-     1547 条数值结论走 NumTskRuleNet。
+     其余数值结论走 NumTskRuleNet。
 """
 
 import json
@@ -42,16 +42,16 @@ import numpy as np
 from ..defuzz import defuzz
 from ..macros import (
     DEFAULT_MEMBERSHIP_TYPE,
-    MIN_CONCLUSION_DEGREE,   # ① Mamdani 输出侧：结论隶属度之和下限
-    MIN_RULE_ACTIVATION,    # ② TSK 输入侧：规则绝对激活度下限
-    MIN_GROUP_SHARE,        # ③ TSK 相对量：组内占比下限
+    MIN_CONCLUSION_DEGREE,   # 1. Mamdani 输出侧：结论隶属度之和下限
+    MIN_RULE_ACTIVATION,    # 2. TSK 输入侧：规则绝对激活度下限
+    MIN_GROUP_SHARE,        # 3. TSK 相对量：组内占比下限
     GATE_TAU,               # M-1 门控：未命中门限（结构量 exp(-2)）
     GATE_EPSILON,           # M-1 门控：明确态门限（纯代价旋钮）
     GATE_BETA_MIN,          # M-1 门控：降权下限（效果旋钮）
     MAMDANI_SAMPLE_POINTS,
     EPSILON,
-    resolve_bucket,          # ★ 档位→桶映射（按字段自己的档位词表定位）
-    specificity_weight,      # ★ 特异级→匹配度权重
+    resolve_bucket,          # 档位→桶映射（按字段自己的档位词表定位）
+    specificity_weight,      # 特异级→匹配度权重
 )
 from ..parsing import is_level_word, parse_rule
 from ..profiles import (
@@ -96,8 +96,7 @@ class FuzzyRuleNet:
 
     处理'条件模糊 + 结论模糊级别'规则，结果经 centroid 反模糊化得到精确值。
 
-    ⚠️ 实测：当前规则库中模糊等级结论 0 条 ⇒ 本引擎实际空跑，
-       代码路径已接线但无数据流入。
+    【注意】当前规则库中模糊等级结论 0 条 ⇒ 本引擎实际空跑（口径见模块 docstring）。
     """
 
     def __init__(self, rules: List[FuzzyRule], keywords: List[KeywordProfile]):
@@ -126,7 +125,7 @@ class FuzzyRuleNet:
                             keywords: List[KeywordProfile]):
         """装配规则对象与论域元数据，构建 pre_dict / sol_dict。
 
-        ⚠️ 本方法**不拆规则串、不做分类** —— 规则对象由第 4 层 filter 产出，
+        【注意】本方法**不拆规则串、不做分类** —— 规则对象由第 4 层 filter 产出，
         net 只负责把已定形的结构装进矩阵。
         """
         self.rule_dict = {}
@@ -209,7 +208,7 @@ class FuzzyRuleNet:
                     # 数值结论（add_2）属于工厂级 TSK 层
                     continue
                 if name in self.sol_dict:
-                    # ⚠️ 结论侧用【输出变量自己的档位数】sol_dict[name]['lvl']
+                    # 【注意】结论侧用【输出变量自己的档位数】sol_dict[name]['lvl']
                     bucket = _resolve_bucket_safe(
                         self.sol_dict[name]['lvl'], level, 'FuzzyRuleNet.sol')
                     if bucket is None:
@@ -229,7 +228,7 @@ class FuzzyRuleNet:
         -------
         list of (param_name, value, (activation, rule))
         """
-        # ⚠️ 先复制再补默认值 —— **不就地修改入参**。
+        # 【注意】先复制再补默认值 —— **不就地修改入参**。
         #   提示层传进来的是编排层的 process_parameter **原对象**，
         #   就地写 x['MT'] = 0 会把引擎的原始参数污染掉
         #   （数值层传的是副本，两层口径必须一致）。
@@ -254,7 +253,7 @@ class FuzzyRuleNet:
         rule_matrix = self.connected_matrix * membership_degrees
         rule_activations = np.zeros(shape=(rule_matrix.shape[0],))
         for i in range(self.rule_nums):
-            # ★ 用【连接关系】取门控列，而不是用【隶属度非零】：
+            # 用【连接关系】取门控列，而不是用【隶属度非零】：
             #   后者会把隶属度恰为 0 的门控踢出 min ⇒
             #   「门控不满足」被当成了「门控不存在」⇒ 规则反而激活。
             #   语义：隶属度 0 ⇒ 视为门控不满足 ⇒ 激活度 0。
@@ -289,8 +288,8 @@ class FuzzyRuleNet:
                     rule_to_outputs[idx + i] = np.max(selected_values)
                     rule_selected_list[int(np.argmax(selected_values))] = True
 
-            # ★ 主导规则：**只从「命中了该输出变量」的规则里选**。
-            #   ⚠️ 若直接对全量激活度取 argmax，在**一条规则都没命中该输出变量**时
+            # 主导规则：**只从「命中了该输出变量」的规则里选**。
+            #   【注意】若直接对全量激活度取 argmax，在**一条规则都没命中该输出变量**时
             #     会返回 0 ⇒ 去取 `rule_dict[0]`（那条规则可能根本没有这个参数
             #     ⇒ KeyError；即使不崩，也会把**无关规则**当成主导规则）。
             #   语义等价性：选中者的激活度 ≥ 0 > -1 ⇒ argmax 必然落在选中集合内
@@ -400,7 +399,7 @@ class NumTskRuleNet:
                             keywords: List[KeywordProfile]):
         """装配数值层规则对象与论域元数据。
 
-        ⚠️ 本方法**不过滤、不拆规则串** —— 那是第 4 层 filter 的职责：
+        【注意】本方法**不过滤、不拆规则串** —— 那是第 4 层 filter 的职责：
         检查/弹窗类结论（`X_adjust_提示语` / `X_popup_xxx`）由 filter 判为
         提示类，根本不会进数值层。
 
@@ -448,7 +447,7 @@ class NumTskRuleNet:
                     'min_val': kp.min_val,
                     'max_val': kp.max_val,
                     'step': kp.step,
-                    # ★ 维度角色（缺陷名 / 缺陷位置 / 工艺参数）——
+                    # 维度角色（缺陷名 / 缺陷位置 / 工艺参数）——
                     #   M-1 门控据此区分「是否参与档位归属判定」
                     'dimension': getattr(kp, 'dimension', DIMENSION_PARAMETER),
                 })
@@ -486,24 +485,24 @@ class NumTskRuleNet:
         s_cols = sum(1 for _ in self.sol_dict)  # TSK 每个输出变量仅占 1 列
         self.connected_matrix = np.zeros(shape=(rows, p_cols))
         self.solution_matrix = np.zeros(shape=(rows, s_cols))
-        # ★ M-1 门控规格：
+        # M-1 门控规格：
         #   每条规则**实际连上**的每个前件，记下 (参数名, 桶索引, 列下标)。
-        #   ⚠️ 为什么不能只靠 `connected_matrix`：矩阵只记「哪些列非零」，
+        #   【注意】为什么不能只靠 `connected_matrix`：矩阵只记「哪些列非零」，
         #      **丢掉了「这些列属于哪个参数、是该参数的第几桶」**
         #      ⇒ 光有矩阵算不出 `μ_alt`（该参数其余桶的最大 μ）⇒ 必须另存。
-        #   ⚠️ 「不可判级前件」（`worse` / 无元数据）**不连桶** ⇒ 不入规格
+        #   【注意】「不可判级前件」（`worse` / 无元数据）**不连桶** ⇒ 不入规格
         #      ⇒ 不参与三态判定、也不降权（明文）。
         self.gate_specs = [[] for _ in range(rows)]
 
         for row_idx, rule in self.rule_dict.items():
-            # ★ 档位词填不进该字段的档位词表 ⇒ **整条规则不参与推理**。
+            # 档位词填不进该字段的档位词表 ⇒ **整条规则不参与推理**。
             #   语义：档位词是**绝对词义**（low 就是「偏低」这一档），它落在向量的
             #   哪一格由**字段自己的档数**决定；词不在该字段词表内 ⇒ 这个条件
             #   **无法判定** ⇒ 该条件匹配度为 0 ⇒ 整条规则匹配度为 0。
-            #   ⚠️ 绝不能「只跳过这一个前件」：那等于把条件从门控里删掉，
+            #   【注意】绝不能「只跳过这一个前件」：那等于把条件从门控里删掉，
             #      门控乘数变少 ⇒ 匹配度不降反升（实测：删掉填不进去的
             #      very_low 后，激活度从 0 变成 1.0）。
-            #   ⚠️ 与下面两种「不作为门控」严格区分，它们是「该条件不参与」，
+            #   【注意】与下面两种「不作为门控」严格区分，它们是「该条件不参与」，
             #      不是「条件无法判定」：
             #      - 'worse' 等人工判断词：本来就没有隶属度可言
             #      - pre_dict 里没有该维度：建不了论域（缺陷反馈未给程度等）
@@ -524,7 +523,7 @@ class NumTskRuleNet:
                     # （缺陷维度在「反馈未给出程度」时也走这条路）
                     logger.debug('[NumTskRuleNet] pre_dict 中没有 %s，跳过该前件', name)
                     continue
-                # ★ 按【该字段自己的档位数】取桶：同一个 'high' 在 3 档字段是桶 2，
+                # 按【该字段自己的档位数】取桶：同一个 'high' 在 3 档字段是桶 2，
                 #   在 5 档字段是桶 3（论域 75% 分位）。用全局静态表会整体错位一档。
                 bucket = _resolve_bucket_safe(
                     self.pre_dict[name]['lvl'], level, 'NumTskRuleNet.pre')
@@ -535,7 +534,7 @@ class NumTskRuleNet:
                 p_col_idx = self.pre_dict[name]['index'] + bucket
                 if row_idx < len(self.connected_matrix):
                     self.connected_matrix[row_idx][p_col_idx] = 1
-                    # ★ 记下门控规格（M-1 要用它算 μ_used / μ_alt）
+                    # 记下门控规格（M-1 要用它算 μ_used / μ_alt）
                     gate_specs.append((name, bucket, p_col_idx))
                 else:
                     logger.error(
@@ -547,7 +546,7 @@ class NumTskRuleNet:
                 # （其余规则完全不受影响 —— 规则库是渐进生长的，一条不可用
                 #   不该拖垮整批推理）
                 self.connected_matrix[row_idx][:] = 0
-                # ★ 整条规则作废 ⇒ 门控规格一并作废
+                # 整条规则作废 ⇒ 门控规格一并作废
                 #   （否则 M-1 会拿一个「已清零的列」算 μ_used ⇒ 假门控）
                 gate_specs = []
             self.gate_specs[row_idx] = gate_specs
@@ -576,7 +575,7 @@ class NumTskRuleNet:
                             f"index {row_idx} is out of bounds for axis 0 with size {len(self.solution_matrix)}"
                         )
 
-            # ⚠️ 这里**不收集 `r_extra`**（弹窗/检查类结论）：
+            # 【注意】这里**不收集 `r_extra`**（弹窗/检查类结论）：
             #   第 4 层 filter 已把它们抽成 `advice_items` 并整条跳过，
             #   根本不会进推理网络 ⇒ `r_extra` 恒空 ⇒ 收集它是死路径。
 
@@ -598,10 +597,10 @@ class NumTskRuleNet:
                      - ``raw_activation``：**原始激活度** $a_i$（前件隶属度之积），
                        不含 priority / specificity 乘数 ⇒ 供置信度使用。
             extra_dict: **恒空**（保留仅为返回值签名兼容）
-                ⚠️ 弹窗/检查类结论由第 4 层 filter 抽成 ``advice_items``，
+                【注意】弹窗/检查类结论由第 4 层 filter 抽成 ``advice_items``，
                 不进推理网络 ⇒ net 层拿不到 ``r_extra``。
 
-        ⚠️ 优先级**只有一个来源**：每条规则自己的档案 `rule.profile.priority`
+        【注意】优先级**只有一个来源**：每条规则自己的档案 `rule.profile.priority`
         （构造时已固化进 `self.priority_array`）。
         这里刻意不开放「外部注入优先级数组」的口子 —— 否则同一批规则存在
         两套优先级，net 内部算出来的权重与规则档案会对不上。
@@ -624,7 +623,7 @@ class NumTskRuleNet:
         rule_matrix = self.connected_matrix * membership_degrees
         rule_activations = np.zeros(shape=(rule_matrix.shape[0],))
         for i in range(self.rule_nums):
-            # ★ 用【连接关系】取门控列，而不是用【隶属度非零】：
+            # 用【连接关系】取门控列，而不是用【隶属度非零】：
             #   后者会把隶属度恰为 0 的门控踢出乘积 ⇒
             #   「门控不满足」被当成了「门控不存在」⇒ **规则反而激活**。
             #   语义：隶属度 0 ⇒ 视为门控不满足 ⇒ 激活度 0。
@@ -632,60 +631,59 @@ class NumTskRuleNet:
             if gate_cols.size == 0:
                 continue
             conditions = rule_matrix[i, gate_cols]
-            # ★ 多前件用 **min（弱连接）**，不是 prod（相乘）：
+            # 多前件用 **min（弱连接）**，不是 prod（相乘）：
             #   规则是 AND 条件判断 ⇒ “最弱的那条证据说了算”。
             #   - prod 会让多前件规则被**指数级稀释**（两个 0.5 的条件 ⇒ 0.25），
             #     条件越多激活度越接近 0 ⇒ 整批规则被 too_weak 闸门拦掉。
             #   - min 的性质：>=2 门控时真正起作用；**单门控时 min == 该值本身**，
             #     天然正确（单前件规则不受影响）。
             #   - min(0, x) == 0 ⇒ 门控不满足时激活度仍为 0，语义不变。
-            #   规格见设计文档 §5.2。
             rule_activations[i] = np.min(conditions)  # 各项激活度取最弱（弱连接）
 
         # ============================================================
         # M-1 门控三态
         # ============================================================
         # 逐前件判三态：
-        #   ① μ_used < τ                      → 未命中：规则不参与结论
-        #   ② μ_used ≥ τ 且 competition < ε   → 边界态：生效但降权
-        #   ③ competition ≥ ε                 → 明确态：正常生效
+        #   1. μ_used < τ                      → 未命中：规则不参与结论
+        #   2. μ_used ≥ τ 且 competition < ε   → 边界态：生效但降权
+        #   3. competition ≥ ε                 → 明确态：正常生效
         #
         #   β_p = clamp(competition / ε, β_min, 1)   （连续衰减，无阶跃）
         #   β_r = min(β_p1, …, β_pk)                （最弱前件说了算，方案 (a)）
         #
-        # ⚠️ 为什么 τ 判「整条规则出局」而不是只压低该前件的权重：
+        # 【注意】为什么 τ 判「整条规则出局」而不是只压低该前件的权重：
         #   前件是 AND 关系 ⇒ 任一前提不成立 ⇒ 整条规则的前提不成立。
         #   副产品（重要）：这保证了「τ 的剔除集 ⊇ MIN_RULE_ACTIVATION 的剔除集」
         #   —— 全部前件 μ_used ≥ τ ⇒ 激活度 = min(各前件 μ_used) ≥ τ = 0.1353
         #   > MIN_RULE_ACTIVATION ⇒ 绝对激活度闸对**有可判级前件**的规则
         #   永不触发（冗余可删的成立条件）。
         #
-        # ⚠️ `μ_used` / `μ_alt` 的定义（**勿回退**成 μ_max/μ_second）：
+        # 【注意】`μ_used` / `μ_alt` 的定义（**勿回退**成 μ_max/μ_second）：
         #   μ_used = 规则**实际引用的那个桶**上的隶属度
         #   μ_alt  = 该参数**其余桶**里隶属度的最大值（其余桶为空 ⇒ 0）
         #   competition = μ_used − μ_alt
         #     （>0 归属一致 / =0 分不清 / <0 归属不一致 ← 这就是「档位不符」）
         #
-        # ★ **缺陷类维度例外**（缺陷名 / 缺陷位置）：
+        # **缺陷类维度例外**（缺陷名 / 缺陷位置）：
         #   上面三态与 competition 判据**只适用于工艺参数维**。
         #   缺陷类维度**只做 τ（未命中）判定**，不参与 competition / β 降权。
         #   理由：competition 判的是「规则引用的桶是不是该维度上隶属度最高的桶」
         #   —— 这对工艺参数成立（当前值唯一 ⇒ 归属唯一）；对缺陷类维度**不成立**：
         #   规则库里 low/medium/high 三档**本来就并存**，跨档参与是设计意图
         #   （程度越严重，建议越激进）。
-        #   ⚠️ 若让缺陷维也参与该判定，跨档规则会被打成「档位不符」
+        #   【注意】若让缺陷维也参与该判定，跨档规则会被打成「档位不符」
         #   ⇒ β 被压到 GATE_BETA_MIN（0.2）⇒ 建议被无故稀释（实测 3%~29%），
         #      且诊断里的「档位不符」计数**失真**（统计的是设计内的跨档，不是错配）。
-        #   ⚠️ **保留 τ 判定**：程度差太远时（跨两档 ⇒ μ=exp(-8)≈3.35e-4 < τ）
+        #   【注意】**保留 τ 判定**：程度差太远时（跨两档 ⇒ μ=exp(-8)≈3.35e-4 < τ）
         #   该规则确实不该参与（「极轻微」不该用「严重」的规则）。
         m1_beta = np.ones(shape=(self.rule_nums,), dtype=float)
         m1_unmatched = np.zeros(shape=(self.rule_nums,), dtype=bool)
         m1_boundary = set()
         m1_competition = {}
-        # ★ 逐规则的「档位归属」分类（疗效指标要求**分开统计**）：
+        # 逐规则的「档位归属」分类（疗效指标要求**分开统计**）：
         #   mismatch = 存在某前件 competition < 0（=「档位不符」）
         #   match    = 全部前件 competition ≥ 0（=「档位相符」）
-        #   ⚠️ 计算块里**不许 break**：τ 出局后仍要把其余前件的 competition 算完，
+        #   【注意】计算块里**不许 break**：τ 出局后仍要把其余前件的 competition 算完，
         #      否则分不清「τ 误杀了相符规则」还是「出局的是本就不符的规则」
         #      ⇒ 误杀率（假阴性）永远算不出来（要求双向统计）。
         m1_mismatch = np.zeros(shape=(self.rule_nums,), dtype=bool)
@@ -700,11 +698,11 @@ class NumTskRuleNet:
             competitions = []
             for name, bucket, col_idx in specs:
                 mu_used = float(membership_degrees[col_idx])
-                # ★ 缺陷类维度：只做 τ 判定，不参与 competition / β 降权
+                # 缺陷类维度：只做 τ 判定，不参与 competition / β 降权
                 #   （理由见上方 M-1 段落的「缺陷类维度例外」）
                 if self.pre_dict[name].get('dimension') != DIMENSION_PARAMETER:
                     if mu_used < GATE_TAU:
-                        # ① 未命中 ⇒ 整条规则出局（AND 语义）
+                        # 1. 未命中 ⇒ 整条规则出局（AND 语义）
                         m1_unmatched[i] = True
                     continue
                 p_idx = self.pre_dict[name]['index']
@@ -717,11 +715,11 @@ class NumTskRuleNet:
                     if alt > mu_alt:
                         mu_alt = alt
                 competition = mu_used - mu_alt
-                # ⚠️ competition 无论 μ_used 是否达标都记（误杀率统计要用）
+                # 【注意】competition 无论 μ_used 是否达标都记（误杀率统计要用）
                 competitions.append(competition)
                 if mu_used < GATE_TAU:
-                    # ① 未命中 ⇒ 整条规则出局（AND 语义）
-                    #    ⚠️ 这里**不 break**：见上方 m1_mismatch 的注释
+                    # 1. 未命中 ⇒ 整条规则出局（AND 语义）
+                    #    【注意】这里**不 break**：见上方 m1_mismatch 的注释
                     m1_unmatched[i] = True
                     continue
                 beta_p = competition / GATE_EPSILON
@@ -735,7 +733,7 @@ class NumTskRuleNet:
             if m1_unmatched[i]:
                 m1_beta[i] = 0.0
                 continue
-            # ★ β_r = min（方案 (a)「最弱前件说了算」——与 §5.2 的 min 弱连接同哲学）
+            # β_r = min（方案 (a)「最弱前件说了算」——与 min 弱连接同哲学）
             m1_beta[i] = min(betas) if betas else 1.0
             weakest = min(competitions) if competitions else None
             if weakest is not None:
@@ -745,42 +743,42 @@ class NumTskRuleNet:
 
         # 第三层（分组归一化 + priority × 匹配度加权）
         #
-        # ⚠️ 为什么按【输出变量】分组，而不是全局归一化：
+        # 【注意】为什么按【输出变量】分组，而不是全局归一化：
         #   全局分母让「全池规则条数」变成了每个建议的稀释系数 ——
         #   某个参数只被 1 条规则命中时，它的权重也只有 1/N（N = 全池条数），
         #   推荐值被压到 1/N（例：conf=0.1、结论 +2 被压成 +0.2）。
         #   分组后每个输出参数组内独立归一化 ⇒ 组内权重和恒为 1 ⇒
         #   聚合层裸累加 = **加权平均**，推荐量级与规则总数脱钩。
         #
-        # ⚠️ 匹配度权重（specificity）与 priority 是同类乘数，但含义不同：
+        # 【注意】匹配度权重（specificity）与 priority 是同类乘数，但含义不同：
         #   priority 是**人为设定的优先级**，specificity 是**匹配程度**
         #   （越精确越该被采信）。两者相乘后再归一化。
         spec_weights = np.asarray(
             [specificity_weight(s) for s in self.specificity_array], dtype=float)
-        # ★ M-1 的 β 乘进 raw（权重式）
+        # M-1 的 β 乘进 raw（权重式）
         #   `raw = μ × priority × specificity × β_r`
-        #   ⚠️ β 必须乘在**归一化之前**：若在归一化后再压占比，
+        #   【注意】β 必须乘在**归一化之前**：若在归一化后再压占比，
         #      占比会被重新摊平 ⇒ 降权完全失效。
         raw = (rule_activations * np.asarray(priority_array) * spec_weights
                * m1_beta)
 
-        # ★ 绝对激活度下限（**与池大小无关**）：
+        # 绝对激活度下限（**与池大小无关**）：
         #   原始激活度过低的规则**不参与结论**。
-        #   ⚠️ 这道闸不能省：分组归一化把权重变成了「组内纯相对量」——
+        #   【注意】这道闸不能省：分组归一化把权重变成了「组内纯相对量」——
         #      一条激活度近乎为零的规则（实测：低桶在远处 μ=exp(-8)≈3.35e-4）
         #      只要**独占某个输出参数组**，就会拿到组内占比 1.0 ⇒ 反而独占
         #      100% 的建议权重，把「几乎没匹配上」变成满额建议。
         #      这道闸必须显式存在，否则 C2 回归锁（低激活度不产出结论）失效。
         #   判据用**原始激活度**（不含 priority / specificity 乘数）——
         #   「这条规则到底匹配得多准」与人为权重无关。
-        #   ⚠️ 这道闸（**输入侧绝对强度**）与下面「组内占比」那道闸**量纲不同**：
+        #   【注意】这道闸（**输入侧绝对强度**）与下面「组内占比」那道闸**量纲不同**：
         #      一个是绝对强度，一个是相对份额 ⇒ 各自独立取值
         #      （`MIN_RULE_ACTIVATION` / `MIN_GROUP_SHARE`）。
-        #   ⚠️ **与 M-1 的剔除集重叠**（τ=0.1353 的剔除集**严格包含**本闸）：
+        #   【注意】**与 M-1 的剔除集重叠**（τ=0.1353 的剔除集**严格包含**本闸）：
         #      M-1 要求「全部前件 μ_used ≥ τ」才让规则参与
         #      ⇒ 规则激活度 = min(各前件 μ_used) ≥ τ = 0.1353 > 0.01001
         #      ⇒ 本闸对**有可判级前件**的规则永不触发。
-        #      ⚠️ 但**保留它**：无可判级前件的规则（激活度 0）仍由它兜底剔除。
+        #      【注意】但**保留它**：无可判级前件的规则（激活度 0）仍由它兜底剔除。
         #      （`m1_unmatched` = M-1 的 τ 判未命中 ⇒ 与本闸同一个去路。）
         too_weak = (rule_activations < MIN_RULE_ACTIVATION) | m1_unmatched
 
@@ -806,24 +804,24 @@ class NumTskRuleNet:
             if denom > EPSILON:
                 group_weights[i] = raw[i] / denom
 
-        # ★ 无效激活过滤（**组内占比**下限，与 Mamdani 的结论隶属度下限**同值不同义**）：
+        # 无效激活过滤（**组内占比**下限，与 Mamdani 的结论隶属度下限**同值不同义**）：
         #   权重过低的规则不参与结论层 —— 否则它会以 delta≈0 的形式混进
         #   推荐列表（实测见过 confidence=1.68e-282 的项）。
-        #   ⚠️ 阈值作用在【组内占比】上：占比是「这条规则在它所属参数组里
+        #   【注意】阈值作用在【组内占比】上：占比是「这条规则在它所属参数组里
         #      占多少」的相对量，与全池规模无关 ⇒ 阈值语义稳定。
         #   （绝对强度那道闸在上面 `too_weak` —— 两者量纲不同、缺一不可）
         #
-        # ⚠️ mask 留一份：下面要统计「这道闸剔了多少、剔掉多大份额」
+        # 【注意】mask 留一份：下面要统计「这道闸剔了多少、剔掉多大份额」
         #    ⇒ **放大倍数 = 1/(1−S)**（S = 被剔除规则的总份额，组内口径）。
         #    纯观测，**不设任何阈值、不改任何数值**
         #    （`MIN_GROUP_SHARE` 行）。
         #
-        # ★ 观测拆成两条（**都是只读，不改任何数值**）：
-        #   ① `group_dist`（**debug 级**，每次推理一条）—— 每组的**最小占比**分布。
+        # 观测拆成两条（**都是只读，不改任何数值**）：
+        #   1. `group_dist`（**debug 级**，每次推理一条）—— 每组的**最小占比**分布。
         #      用途：论证「占比闸到底剔了多少」—— 若分布天然远离阈值，
-        #      则「放大倍数护栏」根本不需要存在（先观测后定值，见 review §27.3）。
+        #      则「放大倍数护栏」根本不需要存在（先观测后定值）。
         #      生产默认不输出（DEBUG 才可见）⇒ 不刷屏。
-        #   ② `group_share`（**info 级**，仅在**确实发生剔除**时）—— 剔除明细。
+        #   2. `group_share`（**info 级**，仅在**确实发生剔除**时）—— 剔除明细。
         group_min_share = {}
         group_size = {}
         for i in range(self.rule_nums):
@@ -858,12 +856,12 @@ class NumTskRuleNet:
             if denom > EPSILON:
                 group_weights[i] = group_weights[i] / denom
 
-        # ★ 观测（**只读，不改任何数值**）：占比闸的剔除效果
+        # 观测（**只读，不改任何数值**）：占比闸的剔除效果
         #   「剔除后重新归一化」会把存活规则的组内权重**放大** `1/(1−S)` 倍
         #   （S = 该组被剔除规则的总份额）。
-        #   ⚠️ 这个放大倍数**从未被量化过** ⇒ 这里只**记录**，不设护栏
-        #      （设护栏需要判据；拍一个数值等同无判据硬编码，见 review §27.3）。
-        #   ⚠️ S 直接由 `alive_sums` 反算（剔除前组内占比和恒为 1 ⇒
+        #   【注意】这个放大倍数**从未被量化过** ⇒ 这里只**记录**，不设护栏
+        #      （设护栏需要判据；拍一个数值等同无判据硬编码）。
+        #   【注意】S 直接由 `alive_sums` 反算（剔除前组内占比和恒为 1 ⇒
         #      存活份额 = 1−S）⇒ 不受“占比本来就是 0”的规则干扰。
         dropped_counts = {}
         alive_counts = {}
@@ -894,7 +892,7 @@ class NumTskRuleNet:
             logger.info('[fuzzy.net.group_share] %s',
                         json.dumps({'groups': group_stats}, ensure_ascii=False))
 
-        # ① 分布摘要（debug 级，每次推理一条）
+        # 1. 分布摘要（debug 级，每次推理一条）
         #    「每组的最小占比」= 该组里最弱那条规则的组内份额 ⇒
         #    若它都远高于 `MIN_GROUP_SHARE`，则这道闸在本场景下根本不会剔任何东西。
         if group_min_share:
@@ -912,22 +910,22 @@ class NumTskRuleNet:
                     'threshold': MIN_GROUP_SHARE,
                 }, ensure_ascii=False))
 
-        # ★ M-1 门控观测（**只读，不改任何数值**）：三态分布
+        # M-1 门控观测（**只读，不改任何数值**）：三态分布
         #   诊断项「三态分布（未命中 / 边界 / 明确）」。
-        #   ⚠️ 「边界态」是 **ε 的唯一在线探针**：ε 若被调大，
+        #   【注意】「边界态」是 **ε 的唯一在线探针**：ε 若被调大，
         #      相符规则会开始落进边界态（被误伤降权）⇒ 这条日志就是
-        #      review §26.7 列的 ε 证伪信号（「相符规则上出现 boundary 标记」）。
-        #   ⚠️ 「未命中」是 **τ 的在线探针**：它突然变大 ⇒ τ 压过头了
+        #      ε 的证伪信号（「相符规则上出现 boundary 标记」）。
+        #   【注意】「未命中」是 **τ 的在线探针**：它突然变大 ⇒ τ 压过头了
         #      （或规则库长大后引入了大量「档位不符且偏离大」的规则）。
         if self.rule_nums:
-            # ★ 四态分布（「三态分布」+ 边界态两子情形拆分）：
-            #   unmatched  = ① τ 未命中（规则出局）
-            #   mismatched = ② 命中但**存在**前件 competition < 0（档位不符）
-            #   borderline = ③ 命中、全部 competition ≥ 0，但最小者 < ε
+            # 四态分布（「三态分布」+ 边界态两子情形拆分）：
+            #   unmatched  = τ 未命中（规则出局）
+            #   mismatched = 命中但**存在**前件 competition < 0（档位不符）
+            #   borderline = 命中、全部 competition ≥ 0，但最小者 < ε
             #                （归属一致但领先不足 ⇒ 连续衰减，**不算错配**）
-            #   explicit   = ④ 明确态
-            #   ⚠️ 「错配」与「边界」必须分开：前者治法是**压到 β_min**（硬下限），
-            #    后者是**连续衰减**；混在一起看不出 ε 有没有误伤（§26.7 证伪信号）。
+            #   explicit   = 明确态
+            #   【注意】「错配」与「边界」必须分开：前者治法是**压到 β_min**（硬下限），
+            #    后者是**连续衰减**；混在一起看不出 ε 有没有误伤。
             m1_states = {'unmatched': 0, 'mismatched': 0, 'borderline': 0,
                          'explicit': 0, 'no_gate': 0}
             false_kill = 0
@@ -936,7 +934,7 @@ class NumTskRuleNet:
                     m1_states['no_gate'] += 1
                 elif m1_unmatched[i]:
                     m1_states['unmatched'] += 1
-                    # ★ 误杀（假阴性）：出局但「全部前件 competition ≥ 0」
+                    # 误杀（假阴性）：出局但「全部前件 competition ≥ 0」
                     #   ⇒ 本是相符规则却被 τ 剔掉（要求双向统计）
                     if m1_match[i]:
                         false_kill += 1
@@ -946,16 +944,16 @@ class NumTskRuleNet:
                     m1_states['borderline'] += 1
                 else:
                     m1_states['explicit'] += 1
-            # ★ 核心疗效指标（「档位不符规则参与结论的权重占比」）：
-            #   口径 ①（组内等权）：每组 = 一个输出参数 = 一条推荐
+            # 核心疗效指标（「档位不符规则参与结论的权重占比」）：
+            #   口径 1（组内等权）：每组 = 一个输出参数 = 一条推荐
             #                ⇒ 该组「错配规则组内占比之和」→ 对所有组取均值
-            #   口径 ②（全池 raw 加权）：Σ错配raw / Σ存活raw（跨组可比）
-            #   ⚠️ 这两个口径在 **M-1 旁路时同样可算**（τ=0 ⇒ 无出局，
+            #   口径 2（全池 raw 加权）：Σ错配raw / Σ存活raw（跨组可比）
+            #   【注意】这两个口径在 **M-1 旁路时同样可算**（τ=0 ⇒ 无出局，
             #      β_min=1 ⇒ 错配不降权）⇒ 可直接做 baseline vs M-1 对照。
             group_mismatch = {}
             raw_mismatch = 0.0
             raw_alive = 0.0
-            # ★ 绝对权重分项（review §25.2「干净口径」必需）：
+            # 绝对权重分项（「干净口径」必需）：
             #   Σraw 不符 / Σraw 相符 各自独立 ⇒ 分子分母互不污染
             #   ⇒ 可直接算「不符权重降幅」与「相符权重削减」
             raw_mismatch_sum = 0.0
@@ -1024,7 +1022,7 @@ class NumTskRuleNet:
 
         # 输出组装（只保留有效激活的规则）
         #
-        # ⚠️ 三个列表必须**同步**构建：过滤掉的规则同时从
+        # 【注意】三个列表必须**同步**构建：过滤掉的规则同时从
         #    rule_list / activations_out / calculate_list 中消失，
         #    否则 zip 会把规则与激活度错位配对。
         rule_list = []
@@ -1047,7 +1045,7 @@ class NumTskRuleNet:
             rule_list.append(self.rule_dict[i].r_rule)
             activations_out.append(float(group_weights[i]))
             # 原始激活度（含 M-1 的 β 修正，不含 priority / specificity 乘数）
-            # ⚠️ **含 β** 是口径约定：raw_activation 表达的是
+            # 【注意】**含 β** 是口径约定：raw_activation 表达的是
             #    「这条规则到底匹配得多准」⇒ 必须包含「归属是否一致」这一维，
             #    否则一条被压到 β_min 的**档位不符**规则仍会报出 confidence=1.0
             #    （而它实际只占组内 20% 权重）⇒ 前端会把「把握不大」显示成
@@ -1084,7 +1082,7 @@ __all__ = [
 
 if __name__ == '__main__':
     # 最小可运行 demo：1 条规则 + 1 个论域档案
-    # ⚠️ net 吃的是**契约对象**（NumTskRule / KeywordProfile），不是裸 dict
+    # 【注意】net 吃的是**契约对象**（NumTskRule / KeywordProfile），不是裸 dict
     rule_desc = 'IF inj_pres_1_low THEN inj_pres_1_add_5'
     keywords = [
         KeywordProfile(keyword='inj_pres_1', lvl=3, min_val=0, max_val=200, step=10),

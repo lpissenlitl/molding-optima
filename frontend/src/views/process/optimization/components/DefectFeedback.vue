@@ -98,19 +98,19 @@
           </span>
           <el-select
             v-else
-            :model-value="defect.keyword_id"
+            :model-value="defect.keyword_name"
             :disabled="!keywordsLoaded"
             :loading="!keywordsLoaded"
             placeholder="请选择缺陷类型"
             style="width: 100%;"
             filterable
-            @change="(val: number | null) => onKeywordChange(idx, val)"
+            @change="(val: string | null) => onKeywordChange(idx, val)"
           >
             <el-option
               v-for="kw in sortedKeywords"
               :key="kw.id"
               :label="kw.keyword_alias"
-              :value="kw.id"
+              :value="kw.keyword_name"
             />
           </el-select>
           <div
@@ -319,7 +319,7 @@ function rebuildFromProps(val: DefectFeedbackData[] | undefined) {
     return
   }
   defectList.value = incoming.map((d, i) => {
-    const localId = d.position || `__empty_${i}_${d.keyword_id ?? 'null'}`
+    const localId = d.position || `__empty_${i}`
     if (!evidenceTabMap[localId]) evidenceTabMap[localId] = 'image'
     return { ...d, __local_id: localId }
   })
@@ -329,7 +329,6 @@ function rebuildFromProps(val: DefectFeedbackData[] | undefined) {
 function makeEmptyDefect(): DefectItem {
   return {
     __local_id: `__new_${Math.random().toString(36).slice(2, 10)}`,
-    keyword_id: null,
     keyword_name: null,
     level: null,
     position: '',
@@ -380,7 +379,7 @@ function onTuningResultChange(val: TuningResult) {
 }
 
 function getKeyword(defect: DefectItem): RuleKeyword | null {
-  return props.defectKeywords?.find(k => k.id === defect.keyword_id) ?? null
+  return props.defectKeywords?.find(k => k.keyword_name === defect.keyword_name) ?? null
 }
 
 function getItemTitle(defect: DefectItem, idx: number): string {
@@ -390,14 +389,13 @@ function getItemTitle(defect: DefectItem, idx: number): string {
   return `缺陷 #${idx + 1}：${kw.keyword_alias || kw.keyword_name}`
 }
 
-function onKeywordChange(idx: number, val: number | null) {
+function onKeywordChange(idx: number, val: string | null) {
   const defect = defectList.value[idx]
   if (!defect) return
-  const kw = val === null ? null : props.defectKeywords?.find(k => k.id === val)
+  const kw = val === null ? null : props.defectKeywords?.find(k => k.keyword_name === val)
   if (val !== null && !kw) return
 
-  // 切换 keyword：val=null 表示主动清空；val=number 表示选中
-  defect.keyword_id = val
+  // 切换 keyword：val=null 表示主动清空；val=缺陷码表示选中
   defect.keyword_name = kw ? kw.keyword_name : null
   defect.level = null
   defect.position = ''

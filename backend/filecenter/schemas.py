@@ -1,5 +1,4 @@
-"""
-文件中心相关 Schema 定义 - Pydantic 版本
+"""文件中心相关 Schema 定义 - Pydantic 版本。
 
 """
 from typing import Optional
@@ -9,7 +8,7 @@ from extensions.schemas import AbstractBaseSchema, BaseSchema
 
 
 class FileSchema(BaseSchema):
-    """文件内容 Schema 基类"""
+    """文件内容 Schema 基类。"""
     
     uuid: Optional[str] = Field(None, description="文件唯一标识（UUID）")
     filename: str = Field(..., description="文件名")
@@ -22,7 +21,7 @@ class FileSchema(BaseSchema):
 
 
 class FileListSchema(AbstractBaseSchema):
-    """根据业务信息获取文件列表"""
+    """根据业务信息获取文件列表。"""
     
     business_id: int = Field(..., description="业务ID")
     business_type: str = Field(..., description="业务类型")

@@ -8,7 +8,7 @@ from masterdata.services import selection_service
 
 
 class SelectionOptionsView(BaseView):
-    """远程搜索建议（GET /api/selection-options/）
+    """远程搜索建议（GET /api/selection-options/）。
 
     供前端 autocomplete 取候选值：
     - table / column 由前端 FormItem.query 指定，均受白名单校验
@@ -18,7 +18,7 @@ class SelectionOptionsView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(SelectionOptionsSchema))
     def get(self, request, cleaned_data):
-        """按 table + column 返回候选值列表"""
+        """按 table + column 返回候选值列表。"""
         return selection_service.get_selection_options(
             company_id=request.user.company_id,
             table=cleaned_data.get("table"),

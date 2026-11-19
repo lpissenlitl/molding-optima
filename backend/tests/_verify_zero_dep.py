@@ -11,11 +11,11 @@
 2. 不得有**顶层名泄漏**（`contracts` / `library` / `engine` /
    `fuzzy` / `fuzzy_core` 等不得成为顶层模块名）。
 
-⚠️ 注意口径：只 import `library` **包**，不 import `library.keywords` /
+【注意】注意口径：只 import `library` **包**，不 import `library.keywords` /
    `library.rules` —— 后两者**本来就**依赖 Django ORM（顶层 import
    `process.models.rules`），它们只应在真正访问数据库时被加载。
 
-⚠️ `library.repository`（E16 新增，**资源集合层**）虽然它内部转手 ORM，
+【注意】`library.repository`（E16 新增，**资源集合层**）虽然它内部转手 ORM，
    但它**本身**是「编排层默认实现」—— 编排层只跟**契约**打交道，
    不该直接依赖任何具体实现（含资源集合层）。
    锁住这条，才能保证「新增来源 → 编排层零改动」。
@@ -25,12 +25,12 @@
 import os
 import sys
 
-# ★ backend 根目录必须进 sys.path（其它 tests/ 脚本的同一惯例）：
+# backend 根目录必须进 sys.path（其它 tests/ 脚本的同一惯例）：
 #   直接 `python tests/_verify_zero_dep.py` 时，sys.path[0] 是**脚本所在目录**
 #   （= backend/tests）⇒ 拿不到 `process` / `utils` 等顶层包。
 #   本脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录
 #   ⇒ `import process` 会 ModuleNotFoundError（与本脚本要验的不变量无关）。
-#   ⚠️ 这里**只加路径**，不 import django —— 本脚本验的正是「不触发 ORM」。
+#   【注意】这里**只加路径**，不 import django —— 本脚本验的正是「不触发 ORM」。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _BANNED = [

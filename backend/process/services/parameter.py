@@ -26,7 +26,7 @@
 
 设计原则:
 - 写操作仅凭 parameter_id 定位, 归属校验靠 parameter 自带的 process_condition_id
-- 关系字段（process_condition / parent_param / seq_idx）不允许通过本服务修改
+- 关系字段不允许通过本服务修改（见 PARAMETER_LOCKED_FIELDS）
 - 版本树查询不影响数据（只读）
 """
 import logging
@@ -89,7 +89,7 @@ PARAMETER_LOCKED_FIELDS = frozenset({
 # ============================================================================
 
 def _get_parameter_by_id(parameter_id: int) -> ProcessParameter:
-    """获取工艺参数对象（带 condition + parent 预加载）
+    """获取工艺参数对象（带 condition + parent 预加载）。
 
     Raises:
         BizException: 工艺参数不存在
@@ -103,19 +103,6 @@ def _get_parameter_by_id(parameter_id: int) -> ProcessParameter:
         raise BizException(ERROR_DATA_NOT_FOUND, f"工艺参数不存在: id={parameter_id}")
 
 
-def _serializable_parameter_dict(parameter: ProcessParameter) -> dict:
-    """构造返回的 parameter 字典
-
-    注：to_dict() 已处理主字段；这里补上 parent_param_id（FK 转 _id）。
-    """
-    data = parameter.to_dict()
-    # to_dict() 已经把 process_condition_id 暴露为 process_condition_id
-    # 但 parent_param 可能被 to_dict() 排除（反向关系）；手动补
-    if "parent_param_id" not in data:
-        data["parent_param_id"] = parameter.parent_param_id
-    return data
-
-
 # ============================================================================
 # 单条 CRUD（按 parameter_id）
 # ============================================================================
@@ -126,7 +113,7 @@ def _serializable_parameter_dict(parameter: ProcessParameter) -> dict:
 # ============================================================================
 
 def get_parameter_tree(condition_id: int = None) -> List[dict]:
-    """获取版本树（树形结构）
+    """获取版本树（树形结构）。
 
     业务: 工艺优化页 / 工艺详情页展示调机历史树。
 
@@ -194,7 +181,7 @@ def get_parameter_tree(condition_id: int = None) -> List[dict]:
 
 # ============================================================================
 # parameter 独立服务
-# parameter 是独立业务对象, URL 不嵌套在 /conditions/<id>/parameters/ 之下
+# parameter 是独立业务对象, URL 不嵌套 condition_id (/api/processes/parameters/<int:parameter_id>/)
 # - service 函数一律不带 _in_condition 后缀
 # - condition_id 退化为可选过滤条件 (列查询 / 树查询 场景)
 # - 单条 CRUD 仅凭 parameter_id 定位, 不需 condition_id
@@ -205,7 +192,7 @@ def list_parameters(
     condition_id: int = None,
     parent_seq_idx: int = None,
     seq_idx: int = None,
-    param_code: str = None,
+    parameter_no: str = None,
     param_source: str = None,
     created_after: date = None,
     created_before: date = None,
@@ -213,7 +200,7 @@ def list_parameters(
     page_no: int = None,
     page_size: int = None,
 ) -> Tuple[int, List[dict]]:
-    """列出 parameter (B 方案 GET 端点用, 支持过滤+分页)
+    """列出 parameter（GET 端点用，支持过滤 + 分页）。
 
     condition_id 语义:
       - 传 -> 过滤该 condition 下的 parameter
@@ -227,9 +214,9 @@ def list_parameters(
 
     Args:
         condition_id:   工艺条件 ID (可选, 不传 = 查全表)
-        parent_seq_idx: 按父参数业务编号过滤 (调机树定位场景)
+        parent_seq_idx: 按父参数模次序号过滤 (父节点的 seq_idx，调机树定位场景)
         seq_idx:        按序列序号过滤 (找特定版本)
-        param_code:     工艺参数编号 (icontains 模糊匹配)
+        parameter_no:   工艺参数编号 (icontains 模糊匹配)
         param_source:   参数来源 (manual / algorithm_init / system_inferred / ...)
         created_after:  创建起始日期
         created_before: 创建结束日期
@@ -251,9 +238,9 @@ def list_parameters(
 
     # 过滤映射
     filter_map = {
-        "parent_seq_idx": {"input": parent_seq_idx, "column": "parent_seq_idx", "lookup": "exact"},
+        "parent_seq_idx": {"input": parent_seq_idx, "column": "parent_param__seq_idx", "lookup": "exact"},
         "seq_idx":        {"input": seq_idx,        "column": "seq_idx",        "lookup": "exact"},
-        "param_code":     {"input": param_code,     "column": "param_code",     "lookup": "icontains"},
+        "parameter_no":   {"input": parameter_no,   "column": "parameter_no",   "lookup": "icontains"},
         "param_source":   {"input": param_source,   "column": "param_source",   "lookup": "exact"},
     }
     filter_kwargs = build_filters(filter_map)
@@ -281,12 +268,12 @@ def list_parameters(
     pagination = paginate_queryset(qs, page_no, page_size)
     return (
         pagination["total_count"],
-        [_serializable_parameter_dict(p) for p in pagination["items"]],
+        [p.to_dict() for p in pagination["items"]],
     )
 
 
 def get_parameter(parameter_id: int) -> dict:
-    """获取指定 parameter (B 方案 GET 详情端点用)
+    """获取指定 parameter（GET 详情端点用）。
 
     仅凭 parameter_id 定位（parameter.process_condition_id 自带归属）。
 
@@ -301,17 +288,17 @@ def get_parameter(parameter_id: int) -> dict:
         BizException: parameter 不存在或已软删
     """
     parameter_obj = _get_parameter_by_id(parameter_id)
-    return _serializable_parameter_dict(parameter_obj)
+    return parameter_obj.to_dict()
 
 
 def update_parameter(parameter_id: int, parameter: dict) -> dict:
-    """更新指定 parameter (B 方案 PUT 端点用)
+    """更新指定 parameter（PUT 端点用）。
 
     仅凭 parameter_id 定位（parameter.process_condition_id 自带归属）。
 
     parameter 自适应两种格式, 由本函数智能识别:
     - 含 'setting_process' key → NEST (前端 UI 格式), 调 _frontend_to_condition_dict 转 FLAT
-    - 否则 → FLAT 92 字段 (算法/移植直传), 透传给 parameter.update_info
+    - 否则 → FLAT (算法/移植直传), 透传给 parameter.update_info
 
     两者都经 PARAMETER_LOCKED_FIELDS 过滤：关系字段 / 版本序号 / 来源标记
     不允许通过本服务修改（见模块 docstring 设计原则）。
@@ -372,11 +359,11 @@ def update_parameter(parameter_id: int, parameter: dict) -> dict:
         _logger.info('update_parameter validation: %s', validation.summary())
 
     parameter_obj.update_info(allow_fields=allowed_fields, **integrated.values)
-    return _serializable_parameter_dict(parameter_obj)
+    return parameter_obj.to_dict()
 
 
 def clone_round_from_parameter(parameter_id: int, company_id: int = None) -> dict:
-    """以某一轮为基线，在同一 condition 下新建一轮（clone）
+    """以某一轮为基线，在同一 condition 下新建一轮（clone）。
 
     业务语义：历史轮次一旦落库评价即归档，参数不可改写；
     但用户可能想「回到某一轮重来」—— 本函数以源轮参数为起点新建第 N+1 轮
@@ -438,16 +425,17 @@ def clone_round_from_parameter(parameter_id: int, company_id: int = None) -> dic
     TuningRecord.objects.create(
         process_parameter=new_param,
         defect_feedbacks=[],
+        observations=[],
         result="pending",
         company_id=source.company_id,
         organization_id=source.organization_id,
     )
 
-    return _serializable_parameter_dict(new_param)
+    return new_param.to_dict()
 
 
 def delete_parameter(parameter_id: int) -> None:
-    """软删指定 parameter (B 方案 DELETE 端点用)
+    """软删指定 parameter（DELETE 端点用）。
 
     仅凭 parameter_id 定位（parameter.process_condition_id 自带归属）。
 

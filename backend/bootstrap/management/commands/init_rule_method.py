@@ -1,5 +1,4 @@
-"""
-Django management command: 导入规则方法（RuleMethod / 模糊规则）到数据库
+"""Django management command: 导入规则方法（RuleMethod / 模糊规则）到数据库。
 
 数据源：_data/rule_method_by_library.json（旧系统导出的按库分组的模糊规则清单）
 
@@ -16,7 +15,7 @@ Django management command: 导入规则方法（RuleMethod / 模糊规则）到�
   product_type         →  product_category   ← 字段名修正（旧系统命名不一致）
   is_active (1/0)      →  is_active (bool)
   priority             →  priority            (默认 1)
-  source               →  'expert'            ← 统一记为专家经验（旧数据未区分）
+  source               →  'expert'            ← 统一记为专家经验（存量数据未区分）
 
 库归属：
   - 所有库 owner_type='system'，归属 system_demo 公司
@@ -50,16 +49,15 @@ BASE_LIBRARY_PRIORITY = 100
 # 补充库优先级（低于基础库，作为可选补充）
 SUPPLEMENT_LIBRARY_PRIORITY = 10
 
-# 规则默认 priority（旧 JSON 字段全部为 null）
+# 规则默认 priority（源 JSON 字段全部为 null）
 DEFAULT_RULE_PRIORITY = 1
 
-# 规则默认来源（旧数据未区分，统一记为专家经验）
+# 规则默认来源（存量数据未区分，统一记为专家经验）
 DEFAULT_RULE_SOURCE = 'expert'
 
 
 def build_library_def(json_key: str, json_libraries: dict) -> dict:
-    """
-    根据 JSON 的 library key 生成 RuleLibrary 的定义参数
+    """根据 JSON 的 library key 生成 RuleLibrary 的定义参数。
 
     主库识别规则：JSON 库下所有规则 rule_type 都是 '基础库'
     补充库识别规则：其他（含全部为 '子规则库' 或 混合类型）
@@ -111,8 +109,7 @@ def build_library_def(json_key: str, json_libraries: dict) -> dict:
 
 
 def normalize_is_active(value) -> bool:
-    """
-    JSON 的 is_active 字段兼容多种类型：1/0、true/false、True/False
+    """JSON 的 is_active 字段兼容多种类型：1/0、true/false、True/False。
     缺失时默认为 True（启用）
     """
     if value is None:
@@ -221,7 +218,7 @@ class Command(BaseCommand):
                         'is_active': lib_def['is_active'],
                     },
                 )
-                # 修复历史数据：company_id 为 None 时补齐
+                # company_id 为空的存量库归到 system_demo 公司
                 if not created and library.company_id is None:
                     library.company_id = system_company.id
                     library.save(update_fields=['company_id'])
@@ -233,7 +230,7 @@ class Command(BaseCommand):
             if dry_run:
                 self.stdout.write(f'  [DRY-RUN] 将创建/复用: {lib_def["library_code"]}')
             elif created:
-                # 注意：不要用 ✓（U+2713），Windows 控制台默认 GBK 编码无法输出
+                # 注意：不要用 （U+2713），Windows 控制台默认 GBK 编码无法输出
                 self.stdout.write(self.style.SUCCESS(f'  → 创建规则库'))
                 lib_imported += 1
             else:

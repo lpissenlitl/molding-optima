@@ -1,14 +1,14 @@
 """
 verify_provided_smoke.py
-验证 parameter_optimize.infer_from_provided 的成功路径：
+验证 parameter_optimize.optimize_from_provided 的成功路径：
 - 输入完整三维（mold_info / machine_info / polymer_info）+ parameter + feedback
-- 算法能给出推荐时，输出 new_parameter + suggestion 两个 key
-- new_parameter 无 parameter_id / seq_idx（不落库语义）
+- 算法能给出推荐时，输出 parameter + suggestion 两个 key
+- parameter 键无 parameter_id / seq_idx（不落库语义）
 - suggestion 无 recommendation_id
 - suggestion.source_type 取最高优先级引擎
 
 策略：patch _call_algorithms 走通整条链路（不调真实算法 / 不查 DB），
-再调一次 infer_from_provided，断言返回结构正确。
+再调一次 optimize_from_provided，断言返回结构正确。
 """
 
 import os
@@ -21,8 +21,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 django.setup()
 
 from unittest.mock import patch
-from process.services import parameter_optimize as _opt_mod  # 模块顶层 helper（整改后从类内移出）
-from process.services.parameter_optimize import ParameterOptimizeService
+from process.services import parameter_optimize as _opt_mod  # 模块级函数（service 层无类封装）
+from process.services.policies import PolicyResolution
 from process.algorithms.base import AlgorithmRecommendation
 
 
@@ -39,7 +39,7 @@ def _make_rec(param, current, recommended, source="fuzzy"):
 
 def main():
     print("=" * 70)
-    print("parameter_optimize.infer_from_provided 成功路径测试")
+    print("parameter_optimize.optimize_from_provided 成功路径测试")
     print("=" * 70)
 
     baseline = {
@@ -48,7 +48,7 @@ def main():
         "brl_temp_3": 220.0,
     }
     feedback = {
-        "defect": [{"keyword_id": 15, "keyword_name": "短射", "level": "high", "position": "DL1"}],
+        "defects": [{"keyword_id": 15, "keyword_name": "短射", "level": "high", "position": "DL1"}],
     }
     mold_info = {"product_category": "空调"}
     machine_info = {
@@ -65,8 +65,7 @@ def main():
     }
     polymer_info = {"abbreviation": "PP"}
 
-    # 实例化 service（保持与 view 层调用形式一致）
-    service = ParameterOptimizeService()
+    # service 层为模块级函数（无实例），直接调用模块内公开入口
 
     # 让 _call_algorithms 返回 2 条推荐：1 条匹配 baseline（会被覆盖）+ 1 条不匹配（被丢弃）
     algorithm_result = {
@@ -85,12 +84,19 @@ def main():
         "best_recommendation": _make_rec("inj_pres_1", 60.0, 75.0).to_dict(),
     }
 
+    # 【注意】L2 策略层（场景 / 名额）**本脚本不测**（由 test_decide_direction_layer.py 覆盖）
+    #    ⇒ 桩成「无场景」⇒ 不裁决 ⇒ 所有 in-baseline 推荐都能落地，
+    #    本脚本专注于验证**载荷结构**（覆盖 / 保留 / 丢弃 / suggestion 结构）。
     with patch.object(
         _opt_mod,
         "_call_algorithms",
         return_value=algorithm_result,
+    ), patch.object(
+        _opt_mod,
+        "resolve_policies",
+        return_value=PolicyResolution(),
     ):
-        result = service.infer_from_provided(
+        result = _opt_mod.optimize_from_provided(
             parameter=baseline,
             feedback=feedback,
             mold_info=mold_info,
@@ -100,15 +106,15 @@ def main():
 
     # ---- 1. 顶层结构 ----
     assert isinstance(result, dict), f"result 应为 dict, got {type(result)}"
-    assert "new_parameter" in result, f"missing new_parameter: {list(result.keys())}"
+    assert "parameter" in result, f"missing parameter: {list(result.keys())}"
     assert "suggestion" in result, f"missing suggestion: {list(result.keys())}"
-    print("[1/6] 顶层结构 new_parameter + suggestion OK")
+    print("[1/6] 顶层结构 parameter + suggestion OK")
 
-    # ---- 2. new_parameter 不含落库 ID ----
-    np = result["new_parameter"]
-    assert "parameter_id" not in np, "new_parameter 不应含 parameter_id（不落库）"
-    assert "seq_idx" not in np, "new_parameter 不应含 seq_idx（不落库）"
-    print("[2/6] new_parameter 无 parameter_id / seq_idx OK")
+    # ---- 2. parameter 键不含落库 ID ----
+    np = result["parameter"]
+    assert "parameter_id" not in np, "parameter 键不应含 parameter_id（不落库）"
+    assert "seq_idx" not in np, "parameter 键不应含 seq_idx（不落库）"
+    print("[2/6] parameter 键无 parameter_id / seq_idx OK")
 
     # ---- 3. baseline 字段被覆盖为推荐值 ----
     assert np.get("inj_pres_1") == 75.0, f"inj_pres_1 应被覆盖为 75.0, got {np.get('inj_pres_1')}"
@@ -117,7 +123,7 @@ def main():
     assert np.get("brl_temp_3") == 220.0, f"brl_temp_3 baseline 应保留 220.0, got {np.get('brl_temp_3')}"
     # 不在 baseline 的推荐值被丢弃（无 key，无 None）
     assert "not_in_baseline" not in np, "推荐字段不在 baseline 时应被丢弃"
-    print("[3/6] new_parameter 推荐覆盖 + baseline 保留 + 越界字段丢弃 OK")
+    print("[3/6] parameter 推荐覆盖 + baseline 保留 + 越界字段丢弃 OK")
 
     # ---- 4. suggestion 结构 ----
     sg = result["suggestion"]
@@ -138,23 +144,27 @@ def main():
         assert "rule_refs" in it
     print(f"[5/6] groups={len(groups)} groups, items={len(all_items)} 全部含 3 字段 OK")
 
-    # ---- 6. 实例方法形态（保持与 view 层调用一致） ----
-    # 重调一次，直接通过 service 实例调
+    # ---- 6. 重复调用（模块级函数形态，结果结构一致） ----
+    # 重调一次，确认同一入口重复调用结果结构稳定
     with patch.object(
         _opt_mod,
         "_call_algorithms",
         return_value=algorithm_result,
+    ), patch.object(
+        _opt_mod,
+        "resolve_policies",
+        return_value=PolicyResolution(),
     ):
-        result2 = service.infer_from_provided(
+        result2 = _opt_mod.optimize_from_provided(
             parameter=baseline,
             feedback=feedback,
             mold_info=mold_info,
             machine_info=machine_info,
             polymer_info=polymer_info,
         )
-    assert "new_parameter" in result2
+    assert "parameter" in result2
     assert "suggestion" in result2
-    print("[6/6] 实例方法保持与 view 层一致 OK")
+    print("[6/6] 重复调用结果结构一致 OK")
 
     print("\n=== verify_provided_smoke PASSED ===")
     return True

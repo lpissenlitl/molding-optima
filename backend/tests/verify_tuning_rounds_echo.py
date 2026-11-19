@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""一次性验收：调机轮次回显链路（参数与反馈配对语义）
+"""一次性验收：调机轮次回显链路（参数与反馈配对语义）。
 
 背景：界面语义「第 N 轮 = 参数(N) + 反馈(N)」—— 反馈是该轮参数自身的试模结果。
 
@@ -7,8 +7,8 @@
 1. tuning_result_from_record：库内状态 → 前端评价枚举的反映射
 2. _build_tuning_payload：单轮反馈的回显结构
 3. get_condition_history：每轮 history item 携带【自己那一份】tuning（不串轮）
-4. _create_new_tuning_record：新轮次不预置父轮缺陷（改动前会把父轮缺陷复制过来）
-5. 回归：_update_previous_tuning_record 把缺陷与标签写到被评价的那一轮
+4. _create_new_round：新轮次同时建参数与 pending 记录（不预置父轮缺陷）
+5. 回归：_record_tuning_round 把缺陷与标签写到被评价的那一轮
 6. build_recommendation_suggestion：Recommendation → 前端 Suggestion（算法建议同样按轮锚定）
 """
 import os
@@ -24,7 +24,7 @@ django.setup()
 
 from unittest.mock import patch, MagicMock
 
-from process.models import TuningRecord
+from process.models import ProcessParameter, TuningRecord
 from process.services import condition as cond
 from process.services import parameter_optimize as po
 from process.services.tuning import tuning_result_from_record
@@ -52,20 +52,23 @@ assert empty == {
     "tuning_result": None,
     "result": None,
     "defect_feedbacks": [],
+    "observations": [],
     "result_detail": None,
 }, empty
 
 fake_record = MagicMock(
     result="worse",
     defect_feedbacks=[{"keyword_name": "飞边", "level": "medium"}],
+    observations=[{"param_key": "actual_product_weight", "value": 85.0}],
     result_detail="飞边加重",
 )
 payload = cond._build_tuning_payload(fake_record)
 assert payload["tuning_result"] == "ineffective", payload
 assert payload["result"] == "worse", payload
 assert payload["defect_feedbacks"] == [{"keyword_name": "飞边", "level": "medium"}], payload
+assert payload["observations"] == [{"param_key": "actual_product_weight", "value": 85.0}], payload
 assert payload["result_detail"] == "飞边加重", payload
-print("[2/6] _build_tuning_payload: 无记录回空；result=worst -> tuning_result=ineffective  OK")
+print("[2/6] _build_tuning_payload: 无记录回空；result=worst -> tuning_result=ineffective；observations 透传  OK")
 
 # ---------- 3. get_condition_history：每轮携带自己的 tuning ----------
 class _FakeField:
@@ -86,6 +89,7 @@ def _make_record(pid, result, defects):
     r.process_parameter_id = pid
     r.result = result
     r.defect_feedbacks = defects
+    r.observations = []
     r.result_detail = None
     return r
 
@@ -143,32 +147,46 @@ assert history[0]["tuning"]["suggestion"]["adopted"] is False, history[0]
 assert "suggestion" not in history[1]["tuning"], history[1]
 print("[3/6] get_condition_history: 每轮携带自己的 tuning + suggestion，未试模轮不串前轮数据  OK")
 
-# ---------- 4. _create_new_tuning_record：新轮次不预置父轮缺陷 ----------
+# ---------- 4. create_new_parameter：新轮次同时建参数与 pending 记录 ----------
 parent = MagicMock(id=1)
 parent._meta = MagicMock(fields=[_FakeField("inj_pres_1")])
 new_param = MagicMock(id=2)
 
-with patch.object(TuningRecord.objects, "create") as mc:
-    po._create_new_tuning_record(new_param=new_param, parent_param=parent)
+with patch.object(ProcessParameter.objects, "create") as mp, \
+        patch.object(TuningRecord.objects, "create") as mc:
+    mp.return_value = new_param
+    po._create_new_round(
+        condition=MagicMock(id=9),
+        parent_param=parent,
+        parameters_dict={"inj_pres_1": 55},
+    )
 
 kwargs = mc.call_args.kwargs
 assert kwargs["defect_feedbacks"] == [], f"新轮次不应预置缺陷，实际 {kwargs['defect_feedbacks']!r}"
+assert kwargs["observations"] == [], f"新轮次不应预置实测观察，实际 {kwargs['observations']!r}"
 assert kwargs["result"] == "pending", kwargs
 assert kwargs["process_parameter"] is new_param, kwargs
-print("[4/6] _create_new_tuning_record: 新轮次 defect_feedbacks=[] / result=pending（不复制父轮缺陷）  OK")
+print("[4/6] create_new_round: 新轮次 defect_feedbacks=[] / observations=[] / result=pending（不复制父轮反馈）  OK")
 
 # ---------- 5. 回归：缺陷与标签写到被评价的那一轮 ----------
 fake_rec = MagicMock(result="pending")
-with patch.object(TuningRecord.objects, "filter") as mf:
+with patch.object(TuningRecord.objects, "filter") as mf, \
+        patch.object(po.Recommendation.objects, "create") as mrec:
     mf.return_value.order_by.return_value.first.return_value = fake_rec
-    po._update_previous_tuning_record(
+    po._record_tuning_round(
         parent_param=MagicMock(id=1),
+        changed_fields={},
         defect_feedbacks=[{"keyword_name": "气纹", "level": "low"}],
+        observations=[{"param_key": "actual_product_weight", "value": 85.0}],
         tuning_result="unchanged",
+        algorithm_recommendations=[],
+        source_type="fuzzy_rule",
     )
+assert mrec.called, "记录本轮时应同时挂上算法推荐"
 assert fake_rec.result == "unchanged", fake_rec.result
 assert fake_rec.defect_feedbacks == [{"keyword_name": "气纹", "level": "low"}], fake_rec.defect_feedbacks
-print("[5/6] _update_previous_tuning_record: 缺陷 + unchanged 标签写到被评价轮  OK")
+assert fake_rec.observations == [{"param_key": "actual_product_weight", "value": 85.0}], fake_rec.observations
+print("[5/6] _record_tuning_round: 缺陷 + 实测观察 + unchanged 标签写到被评价轮  OK")
 
 # ---------- 6. 算法建议锚定：Recommendation → 前端 Suggestion ----------
 fake_rec_full = _make_recommendation(101, [{

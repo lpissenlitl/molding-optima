@@ -1,5 +1,4 @@
-"""
-业务 code 自动生成工具
+"""业务 code 自动生成工具。
 
 设计原则：
 - 中文 → 拼音（pypinyin），英文部分保留并转小写
@@ -127,8 +126,7 @@ def auto_code_from_name(
 
 
 def _join_pinyin_parts(parts: list) -> str:
-    """
-    拼接 pinyin parts，处理英文串内部空格
+    """拼接 pinyin parts，处理英文串内部空格。
 
     pypinyin lazy_pinyin 行为：
     - 中文：按字拆分 ['hai', 'xin']
@@ -177,8 +175,7 @@ def ensure_unique_code(
     exists_check,
     max_attempts: int = 999,
 ) -> str:
-    """
-    如果 code 冲突，自动加数字后缀
+    """如果 code 冲突，自动加数字后缀。
 
     Args:
         base_code: 基础 code（如 "hai_xin_mu_ju"）

@@ -1,5 +1,4 @@
-"""
-工艺设置字段定义 + 默认值兜底
+"""工艺设置字段定义 + 默认值兜底。
 
 process_set 是 ProcessInitializer 的第 4 个入参维度，
 与 mold/machine/polymer 性质不同：
@@ -62,7 +61,7 @@ PROCESS_SET_FIELDS: Dict[str, Dict[str, Any]] = {
         'type': int,
         'condition': '可选',
         # sentinel：None = 「未指定」→ 算法层 Level-3 兑底为 0（位置切换）
-        # ⚠️ 不能预填 0：算法层的 Level-1 判定（int 0~3）与 Level-2 字符串兼容
+        # 【注意】不能预填 0：算法层的 Level-1 判定（int 0~3）与 Level-2 字符串兼容
         #    是**互斥**的分支，预填 0 会让 Level-1 必然命中 ⇒ Level-2 永久不可达
         #    （老数据传 VP_switch_mode='时间' 会被静默降级为「位置切换」）
         'default': None,
@@ -112,7 +111,7 @@ PROCESS_SET_DEFAULTS: Dict[str, Any] = {
     # 其他业务参数：保留业务默认
     'brl_temp_stg': 5,  # 行业标准：5 档（= 喷嘴 1 档 + 料筒 4 段）
     # VP 切换模式：sentinel（None = 走算法 Level-3 兑底）
-    # ⚠️ 不能预填 0 —— 会让算法 Level-2 的字符串兼容分支（VP_switch_mode）永久不可达
+    # 【注意】不能预填 0 —— 会让算法 Level-2 的字符串兼容分支（VP_switch_mode）永久不可达
     'vps_mode': None,
     'pre_met_decomp_mode': 0,  # 否（默认不松退）
     'pst_met_decomp_mode': 0,  # 否（默认不松退）
@@ -120,7 +119,7 @@ PROCESS_SET_DEFAULTS: Dict[str, Any] = {
 
 
 class ProcessSetDefaults:
-    """工艺设置默认值（前端不传时填充）
+    """工艺设置默认值（前端不传时填充）。
 
     类似 MaterialDatabase，但针对 process_set 维度。
     在 ProcessInitializer.__init__ 中调用 fill_defaults()，
@@ -131,14 +130,14 @@ class ProcessSetDefaults:
 
     @classmethod
     def fill_defaults(cls, process_set: Dict[str, Any]) -> None:
-        """按 PROCESS_SET_DEFAULTS 填充缺失字段
+        """按 PROCESS_SET_DEFAULTS 填充缺失字段。
 
         Args:
             process_set: 工艺设置 dict（会被直接修改，填充默认值）
 
         Note:
             只填充缺失字段，已存在的字段不会被覆盖。
-            ⚠️ sentinel 字段（默认值为 None）例外：**用户显式传的值一律保留**，
+            【注意】sentinel 字段（默认值为 None）例外：**用户显式传的值一律保留**，
             包括 0（`vps_mode=0` 是合法输入，不能被 None 覆盖）。
         """
         for key, value in cls.DEFAULTS.items():

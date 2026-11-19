@@ -7,12 +7,12 @@
 | 数据库 | `library/repository.py::ResourceRepository` | Django ORM |
 | 本地文件 | `library/files/repository.py::FileResourceRepository` | 纯 JSON（零 ORM） |
 
-⚠️ **为什么单独一个模块**：它同时要 import 两个来源，但**只能在运行时
+【注意】**为什么单独一个模块**：它同时要 import 两个来源，但**只能在运行时
   按需 import** —— 若在模块顶层把两个来源都 import 了，「用文件来源」
   也会把 Django ORM 拖进依赖链，文件通道就失去意义了
   （依赖倒置的实质检验 = 高层不被低层实现拖住）。
 
-⚠️ **配置开关 + 显式注入双支持**：
+【注意】**配置开关 + 显式注入双支持**：
 
 - 配置开关：`settings.FUZZY_LIBRARY_SOURCE`（`'db'` / `'file'`），
   配 `settings.FUZZY_LIBRARY_FILE_DIR` 指定数据目录；
@@ -42,7 +42,7 @@ SETTING_FILE_DIR = 'FUZZY_LIBRARY_FILE_DIR'
 def _setting(name: str, default=None):
     """读 Django settings（未配置 Django 环境时返回默认值）。
 
-    ⚠️ **只捕获 `ImproperlyConfigured`**：Django 未 `setup()` 时访问
+    【注意】**只捕获 `ImproperlyConfigured`**：Django 未 `setup()` 时访问
       settings 会抛这个异常；其它异常（配置写错等）应当暴露出来，
       不能被静默吞成默认值。
     """

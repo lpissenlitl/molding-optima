@@ -33,8 +33,7 @@ def validate_company_info(
     code: str,
     exclude_id: int = None
 ):
-    """
-    公司信息参数校验
+    """公司信息参数校验。
     params:
         name: str 公司名称，必填项
         code: str 公司编码，必填项，需要校验格式
@@ -71,7 +70,7 @@ def create_company(
     is_active: bool = True,
     admin_user: dict = None,
 ):
-    """创建公司"""
+    """创建公司。"""
     name, code = validate_company_info(name, code)
     
     if not admin_user:
@@ -134,7 +133,7 @@ def create_company(
 
 
 def _get_company_by_id(company_id: int) -> Company:
-    """根据公司 ID 获取公司对象"""
+    """根据公司 ID 获取公司对象。"""
     company_id = validate_pk(company_id, "company_id")
     company = Company.objects.filter(id=company_id).first()
     if not company:
@@ -143,13 +142,13 @@ def _get_company_by_id(company_id: int) -> Company:
 
 
 def get_company_info(company_id: int) -> dict:
-    """根据公司 ID 获取公司信息"""
+    """根据公司 ID 获取公司信息。"""
     company = _get_company_by_id(company_id)
     return company.to_dict()
 
 
 def update_company_info(company_id: int, **kwargs):
-    """更新公司信息"""
+    """更新公司信息。"""
     company = _get_company_by_id(company_id)
     name = kwargs.get("name")
     code = kwargs.get("code")
@@ -162,7 +161,7 @@ def update_company_info(company_id: int, **kwargs):
 
 
 def delete_company(company_id: int):
-    """删除公司（软删除）"""
+    """删除公司（软删除）。"""
     company = _get_company_by_id(company_id)
     company.soft_delete()
 
@@ -176,7 +175,7 @@ def get_list_of_company(
     page_size: int = None,
     sort: str = None
 ):
-    """获取公司列表（仅超级管理员可访问）"""
+    """获取公司列表（仅超级管理员可访问）。"""
     filter_map = {
         "name": {"input": name, "column": "name", "lookup": "icontains"},
         "code": {"input": code, "column": "code", "lookup": "icontains"},
@@ -199,7 +198,7 @@ def get_list_of_company(
 
 
 def batch_delete_company(ids: list):
-    """批量删除公司"""
+    """批量删除公司。"""
     ids = validate_id_list(ids, "公司 ID 列表")
     return Company.objects.filter(id__in=ids).update(is_deleted=True, deleted_at=datetime.now())
 
@@ -210,8 +209,7 @@ def validate_organization_info(
     code: str,
     exclude_id: int = None,
 ):
-    """
-    组织机构信息参数校验
+    """组织机构信息参数校验。
     params:
         company_id: int 公司ID，为 None 时，表示创建全局角色
         name: str 组织机构名称，必填项
@@ -245,21 +243,21 @@ def validate_organization_info(
 
 
 def enable_company(company_id: int):
-    """启用公司"""
+    """启用公司。"""
     company = _get_company_by_id(company_id)
     company.is_active = True
     company.save()
 
 
 def disable_company(company_id: int):
-    """禁用公司"""
+    """禁用公司。"""
     company = _get_company_by_id(company_id)
     company.is_active = False
     company.save()
     
 
 def assume_company(user: User, company_id: int):
-    """接管公司（仅超级管理员）"""
+    """接管公司（仅超级管理员）。"""
     if not user.is_superuser:
         raise BizException(ERROR_USER_PERMISSION_DENIED)
     company = _get_company_by_id(company_id)
@@ -269,7 +267,7 @@ def assume_company(user: User, company_id: int):
 
 
 def release_company(user: User, company_id: int):
-    """放弃接管公司（仅超级管理员）"""
+    """放弃接管公司（仅超级管理员）。"""
     if not user.is_superuser:
         raise BizException(ERROR_USER_PERMISSION_DENIED)
     company = _get_company_by_id(company_id)
@@ -291,7 +289,7 @@ def create_organization(
     sort_order: int = None,
     is_active: bool = True
 ):
-    """创建组织"""
+    """创建组织。"""
     if not company_id:
         if parent_id is not None:
             company_id = Organization.objects.filter(id=parent_id).first().company_id
@@ -343,7 +341,7 @@ def get_list_of_organization(
     page_no: int = None,
     page_size: int = None,
 ):
-    """获取组织列表"""  
+    """获取组织列表。"""  
     qs = Organization.objects.filter(
         company_id=company_id
     ).order_by("id").select_related("manager")
@@ -359,7 +357,7 @@ def get_list_of_organization(
 
 
 def _get_organization_by_id(organization_id: int):
-    """根据组织 ID 获取组织对象"""
+    """根据组织 ID 获取组织对象。"""
     organization_id = validate_pk(organization_id, "组织ID")
     organization = Organization.objects.filter(id=organization_id).first()
     if organization is None:
@@ -368,13 +366,13 @@ def _get_organization_by_id(organization_id: int):
 
 
 def get_organization_info(organization_id: int):
-    """根据组织 ID 获取组织信息"""
+    """根据组织 ID 获取组织信息。"""
     organization = _get_organization_by_id(organization_id)
     return organization.to_dict()
 
 
 def update_organization_info(organization_id: int, **kwargs):
-    """更新组织信息"""
+    """更新组织信息。"""
     organization = _get_organization_by_id(organization_id)
     name = kwargs.get("name")
     code = kwargs.get("code")
@@ -401,7 +399,7 @@ def update_organization_info(organization_id: int, **kwargs):
 
 
 def batch_update_organization_structure(org_list: list):
-    """批量更新组织结构"""
+    """批量更新组织结构。"""
     resort_organizations(org_list)
 
 
@@ -456,13 +454,13 @@ def resort_organizations(org_list: list):
 
     
 def delete_organization(organization_id: int):
-    """删除组织（软删除）"""
+    """删除组织（软删除）。"""
     organization = _get_organization_by_id(organization_id)
     organization.soft_delete()
 
 
 def construct_organization_tree(root_org: Organization):
-    """递归构造组织树"""
+    """递归构造组织树。"""
     all_orgs = root_org.get_descendants()
     
     children_map = defaultdict(list)
@@ -486,7 +484,7 @@ def construct_organization_tree(root_org: Organization):
 
 
 def get_organization_tree(company_id: int):
-    """获取组织树"""
+    """获取组织树。"""
     company_id = validate_pk(company_id, "公司ID")
     root_org = Organization.objects.filter(
         company_id=company_id, 
@@ -499,6 +497,6 @@ def get_organization_tree(company_id: int):
 
 
 def batch_delete_organization(ids: list):
-    """批量删除组织"""
+    """批量删除组织。"""
     ids = validate_id_list(ids, "组织 ID 列表")
     return Organization.objects.filter(id__in=ids).update(is_deleted=True, deleted_at=datetime.now())

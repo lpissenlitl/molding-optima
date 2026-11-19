@@ -1,5 +1,4 @@
-"""
-Django management command: 导入专家规则（ExpertRule）到数据库
+"""Django management command: 导入专家规则（ExpertRule）到数据库。
 
 铺两层专家规则：
 - **平台层**（公共大库，owner_type='system'）：从内置 JSON 导入，规则库编码 `expert_rules`
@@ -23,11 +22,11 @@ from utils.data_paths import EXPERT_RULES_JSON, resolve_data_path
 
 
 # ---- 租户私库 demo（分层叠加的租户层示例）----
-# ⚠️ 引擎按 (layer, priority) 排序合并，租户层**后加载** ⇒ **叶子级 key 覆盖**平台层
+# 【注意】引擎按 (layer, priority) 排序合并，租户层**后加载** ⇒ **叶子级 key 覆盖**平台层
 #   （租户只写要改的那个值，平台同组其它值全部保留）。下面三条分别演示：
-#   ① 覆盖平台 MATERIAL_PC_ABS 的注射速度比（同组其它 key 保留）；
-#   ② 覆盖平台 MOLD_TEMP_DEFAULTS 的模温兜底（仅全局兜底，不影响材料推荐值）；
-#   ③ 覆盖平台 GATE_DIRECT 的保压公式（同条件）。
+#   1. 覆盖平台 MATERIAL_PC_ABS 的注射速度比（同组其它 key 保留）；
+#   2. 覆盖平台 MOLD_TEMP_DEFAULTS 的模温兜底（仅全局兜底，不影响材料推荐值）；
+#   3. 覆盖平台 GATE_DIRECT 的保压公式（同条件）。
 TENANT_DEMO_COMPANY_CODE = 'hai_xin_mold_co'
 TENANT_DEMO_LIBRARY_CODE = 'tenant_expert_rules'
 TENANT_DEMO_RULES = [
@@ -137,7 +136,7 @@ class Command(BaseCommand):
                 'company_id': system_company.id,
             }
         )
-        # 修复历史数据：如果库已存在但 company_id 为 None，补齐到 system_demo
+        # company_id 为空的存量库归到 system_demo 公司
         if not created and library.company_id is None:
             library.company_id = system_company.id
             library.save(update_fields=['company_id'])
@@ -216,7 +215,7 @@ class Command(BaseCommand):
     def _import_tenant_demo_rules(self, company_code, force_update=False):
         """导入**租户私库** demo 专家规则（分层叠加的租户层示例）。
 
-        ⚠️ 租户层与平台层的关系：引擎按 (layer, priority) 排序合并、租户层后加载
+        【注意】租户层与平台层的关系：引擎按 (layer, priority) 排序合并、租户层后加载
         ⇒ **叶子级 key 覆盖**平台层（租户只写要改的那个值，平台同组其它值保留）。
         """
         self.stdout.write(self.style.NOTICE('=== 导入租户私库 demo 专家规则 ===\n'))

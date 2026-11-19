@@ -1,4 +1,4 @@
-"""材料物理常量与派生公式（**跨算法包共享的物理归属地**）
+"""材料物理常量与派生公式（**跨算法包共享的物理归属地**）。
 
 为什么有这个文件：
 - 冷却/保压时间的**物理基准**由「制品壁厚 + 材料大类」决定（冷却时间 ∝ 壁厚²），
@@ -16,14 +16,14 @@
 - ``parse_material_family``   材料缩写 → 材料大类
 - ``compute_cool_time``       最大壁厚 + 材料大类 → 基础冷却时间 [s]
 
-⚠️ **常量同源说明（改动时必须同步）**：
+【注意】**常量同源说明（改动时必须同步）**：
 本文件的 ``COOL_FAMILY_FACTOR`` / ``DEFAULT_COOL_FACTOR`` / ``COOL_TIME_MIN``
 与 ``expert/rule_matcher.py::_BUILTIN_DEFAULTS['cooling']`` **同源**
 （行业共识策展数据：Tederic 2026 / Moldflow / 海天工艺手册）。
 专家侧调整系数时，**本文件要同步改** —— 两处算出不同的冷却时间 ⇒
 「专家推导的初值」与「模糊判级的坐标轴」会分叉。
 
-⚠️ **本模块只取物理公式的「基础项」**：
+【注意】**本模块只取物理公式的「基础项」**：
 专家引擎的完整冷却时间是 4 维的
 ``t_cool = 壁厚² × 材料系数 × ΔT_factor × crystallinity_kick``，
 其中 ``ΔT_factor``（5 档温差修正）与 ``crystallinity_kick``（结晶拉长）
@@ -103,7 +103,7 @@ def compute_cool_time(max_thickness: float, family: str = '') -> float:
     物理依据：Fourier 热扩散 —— 冷却时间 ∝ 壁厚² / 热扩散系数，
     材料系数是热扩散系数差异的归一化表达。
 
-    ⚠️ **不含 ΔT_factor（模温差修正）与 crystallinity_kick（结晶拉长）**：
+    【注意】**不含 ΔT_factor（模温差修正）与 crystallinity_kick（结晶拉长）**：
     这两项依赖具体材料参数（推荐熔温 / 模温 / 顶出温度 / 结晶类别），
     在 expert 侧实现；若要纳入完整 4 维公式，应先从 expert 侧抽公共函数。
 

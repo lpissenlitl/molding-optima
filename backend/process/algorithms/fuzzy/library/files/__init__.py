@@ -11,7 +11,7 @@
   协议（**零 ORM**）
 - `export.py`：开发期导出工具，数据库 → 本地文件（**碰 ORM**）
 
-⚠️ **本包不 import 子模块**：与 `library/__init__.py` 同一约定 ——
+【注意】**本包不 import 子模块**：与 `library/__init__.py` 同一约定 ——
 在包初始化时 import 会把「用文件来源」也拖进 Django 依赖链。
 `export.py` 碰 ORM，只能作为脚本单独跑，绝不能被运行时代码 import。
 

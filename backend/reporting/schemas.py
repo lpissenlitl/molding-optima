@@ -9,7 +9,7 @@ from extensions.schemas import BaseSchema
 
 
 class ProcessExportSchema(BaseSchema):
-    """工艺参数导出"""
+    """工艺参数导出。"""
 
     process_condition_ids: List[int] = Field(..., min_length=1, description="工艺条件 ID 列表")
     template: Literal["compact", "default", "detail"] = Field(
@@ -20,7 +20,7 @@ class ProcessExportSchema(BaseSchema):
 
 
 class ExportListSchema(BaseSchema):
-    """列表导出（Excel）"""
+    """列表导出（Excel）。"""
 
     resource: str = Field(
         ...,

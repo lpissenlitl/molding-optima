@@ -3,7 +3,7 @@ verify_initialize_flat.py
 
 验证 initialize 响应的 flat 契约：
 
-- initialize 的 result['process'] 与 optimize 的 new_parameter **同为 flat**
+- initialize 的 result['parameter'] 与 optimize 的 parameter **同为 flat**
 - flat ↔ nested 的形态转换只在后端边界发生一次（process_params_to_flat），
   落库与 HTTP 响应共用同一份 flat，不会各拍一次导致语义漂移
 - 温度段位语义不漂移：喷嘴（noz_temp）与料筒 1..9（brl_temp_1..9）是独立字段
@@ -106,7 +106,7 @@ def main():
         assert nested_key not in flat, f"flat 不应含 nested 数组字段 {nested_key}"
     print("[A5] flat 不含 nested 数组字段 OK")
 
-    # ---- B. infer_from_provided 响应是 flat ----
+    # ---- B. initialize_from_provided 响应是 flat ----
     kernel_result = {
         "param_source": "ai_recommendation",
         "matched_rules": ["DEFAULT"],
@@ -115,20 +115,20 @@ def main():
         "hot_runner": {"valve_num": 0, "valve_time_steps": []},
     }
     with patch.object(ParameterInitializeService, "_infer_kernel", return_value=kernel_result):
-        result = ParameterInitializeService.infer_from_provided(
+        result = ParameterInitializeService.initialize_from_provided(
             mold_info={}, machine_info={}, polymer_info={}
         )
 
-    resp_process = result.get("process")
-    assert isinstance(resp_process, dict), f"process 应为 dict, got {type(resp_process)}"
-    assert "inj_pres_steps" not in resp_process, "响应 process 不应是 nested"
-    assert resp_process.get("inj_pres_1") == 80.0, f"响应 inj_pres_1 应为 80.0, got {resp_process.get('inj_pres_1')}"
-    assert resp_process.get("noz_temp") == 230.0, "响应 noz_temp 应为 230.0"
-    assert resp_process.get("brl_temp_1") == 200.0, "响应 brl_temp_1 应为 200.0"
-    print("[B1] infer_from_provided 响应 process 为 flat OK")
+    resp_parameter = result.get("parameter")
+    assert isinstance(resp_parameter, dict), f"parameter 应为 dict, got {type(resp_parameter)}"
+    assert "inj_pres_steps" not in resp_parameter, "响应 parameter 不应是 nested"
+    assert resp_parameter.get("inj_pres_1") == 80.0, f"响应 inj_pres_1 应为 80.0, got {resp_parameter.get('inj_pres_1')}"
+    assert resp_parameter.get("noz_temp") == 230.0, "响应 noz_temp 应为 230.0"
+    assert resp_parameter.get("brl_temp_1") == 200.0, "响应 brl_temp_1 应为 200.0"
+    print("[B1] initialize_from_provided 响应 parameter 为 flat OK")
 
     # B2 响应 flat 与纯函数输出完全一致（单一事实来源）
-    assert resp_process == flat, "响应 flat 与 process_params_to_flat 输出不一致"
+    assert resp_parameter == flat, "响应 flat 与 process_params_to_flat 输出不一致"
     print("[B2] 响应 flat == process_params_to_flat 输出 OK")
 
     # B3 非工艺字段不受影响（mold_temp / hot_runner 仍是独立顶层 key）

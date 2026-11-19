@@ -48,7 +48,7 @@ NC = '\033[0m'
 # ========== 辅助：构造 context fixture ==========
 
 def _machine():
-    """标准 100MPa/100mm/s 海天级注塑机"""
+    """标准 100MPa/100mm/s 海天级注塑机。"""
     return {
         'screw_diameter': 40,
         'max_set_injection_pressure': 150.0,
@@ -66,7 +66,7 @@ def _machine():
 
 
 def _base_mold(**overrides):
-    """基础薄壁 mold_info + 任意字段覆盖"""
+    """基础薄壁 mold_info + 任意字段覆盖。"""
     m = {
         'product_weight': 50.0,
         'runner_weight': 0.0,           # 默认热流道
@@ -85,7 +85,7 @@ def _base_mold(**overrides):
 
 
 def _base_material(**overrides):
-    """基础 ABS 材料"""
+    """基础 ABS 材料。"""
     m = {
         'abbreviation': 'ABS',
         'recommend_melt_temperature': 240.0,

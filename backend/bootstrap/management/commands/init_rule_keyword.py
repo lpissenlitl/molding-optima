@@ -1,5 +1,4 @@
-"""
-Django management command: 导入 RuleKeyword 主数据
+"""Django management command: 导入 RuleKeyword 主数据。
 
 数据源：_data/rule_keyword_curated.json（旧系统导出的关键词清单，已人工审校）
 
@@ -157,8 +156,7 @@ EXCLUDED_PREFIXES = (
 
 
 def infer_keyword_type(keyword_name: str, description: str, category: str) -> str:
-    """
-    推断 keyword 的物理量类型
+    """推断 keyword 的物理量类型。
 
     优先级：
       1. 关键词名前缀匹配（KEYWORD_TYPE_BY_PREFIX，长前缀优先）
@@ -194,8 +192,7 @@ def infer_keyword_type(keyword_name: str, description: str, category: str) -> st
 
 
 def infer_unit(keyword_name: str, keyword_type: str) -> str:
-    """
-    推断 keyword 的标准单位
+    """推断 keyword 的标准单位。
 
     优先级：
       1. KEYWORD_UNIT_OVERRIDE（特殊关键词，如 MSR → rpm）
@@ -210,7 +207,7 @@ def infer_unit(keyword_name: str, keyword_type: str) -> str:
 
 
 def should_exclude(keyword_name: str) -> bool:
-    """判断是否在排除清单内"""
+    """判断是否在排除清单内。"""
     if keyword_name in EXCLUDED_KEYWORDS:
         return True
     name_lower = keyword_name.lower()

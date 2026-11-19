@@ -1,7 +1,7 @@
 ﻿"""
 ProcessInitializer 松退参数族（#15-#18）smoke test（独立运行，不依赖 Django）
 
-覆盖范围（设计文档 §7）：
+覆盖范围（设计文档）：
   场景 A - PP 通用件（液压+直通+冷流道+侧浇口）→ P=3.32, D=3.32, V=50.0
   场景 B - PA66 含水件（液压+直通+冷流道+侧浇口）→ P=4.32, D=2.16, V=42.5
   场景 C - PC 精密件（液压+直通+冷流道+侧浇口）→ P=3.66, D=2.66, V=37.5
@@ -10,7 +10,7 @@ ProcessInitializer 松退参数族（#15-#18）smoke test（独立运行，不�
   场景 F - 全电机 ABS 直通 → P=0（全电机）, D=3.32, V=20.0
   场景 G - ABS 热流道+侧浇口 → D=6.16（runner_factor=1.60 生效）
   场景 H - ABS 热流道+点浇口 → D=8.01（gate_factor=1.30 生效）
-  场景 I - 🔴 switch 手柄（ABS+锁闭+热流道+针阀式点浇口）→ D=10.47（业内实测 10mm）
+  场景 I - switch 手柄（ABS+锁闭+热流道+针阀式点浇口）→ D=10.47（业内实测 10mm）
   场景 J - 边界钳上限（max_set=100）→ P 钳到 5.0
   场景 K - 边界钳下限（max_set=2）→ P 钳到 1.0
   场景 L - 冷流道场景下 gate_factor 不叠加（gate_factor=1.00）
@@ -45,7 +45,7 @@ NC = '\033[0m'
 
 def _machine(power_method='液压机', nozzle_type='直通型', max_metering_pres=14.0,
              max_decomp_velo=50.0):
-    """标准海天级注塑机（液压+直通+max_meter=14MPa, max_decomp_velo=50mm/s）"""
+    """标准海天级注塑机（液压+直通+max_meter=14MPa, max_decomp_velo=50mm/s）。"""
     return {
         'screw_diameter': 40,
         'max_set_injection_pressure': 150.0,
@@ -64,7 +64,7 @@ def _machine(power_method='液压机', nozzle_type='直通型', max_metering_pre
 
 
 def _base_mold(runner_type='冷流道', runner_weight=30.0, gate_type='侧浇口', **overrides):
-    """基础 mold：冷流道 + 侧浇口"""
+    """基础 mold：冷流道 + 侧浇口。"""
     m = {
         'product_weight': 50.0,
         'runner_weight': runner_weight,
@@ -83,7 +83,7 @@ def _base_mold(runner_type='冷流道', runner_weight=30.0, gate_type='侧浇口
 
 
 def _base_material(abbreviation='ABS', **overrides):
-    """基础材料：ABS"""
+    """基础材料：ABS。"""
     m = {
         'abbreviation': abbreviation,
         'category': '无定形',
@@ -99,7 +99,7 @@ def _base_material(abbreviation='ABS', **overrides):
 
 
 def _run(mold, material, machine=None, process_set=None):
-    """跑一次 derive()，返回 ProcessParams"""
+    """跑一次 derive()，返回 ProcessParams。"""
     if machine is None:
         machine = _machine()
     if process_set is None:
@@ -281,11 +281,11 @@ def test_h_hot_runner_point_gate():
     _assert_close(proc.pst_met_decomp_dist, 8.01, 'D (runner×1.60 × gate×1.30)')
 
 
-# ========== 场景 I：🔴 switch 手柄（ABS+锁闭+热流道+针阀式点浇口）==========
+# ========== 场景 I：switch 手柄（ABS+锁闭+热流道+针阀式点浇口）==========
 # runner_factor=1.60, gate_factor=1.70
 # D=3.5×1.00×1.10×1.60×1.70 = 10.47（业内实测 10mm，误差 4.7%）
 def test_i_switch_handle():
-    print("\n[场景 I] 🔴 switch 手柄（ABS+锁闭+热流道+针阀式点浇口）")
+    print("\n[场景 I] switch 手柄（ABS+锁闭+热流道+针阀式点浇口）")
     proc = _run(
         mold=_base_mold(runner_type='热流道', runner_weight=0, gate_type='针阀式点浇口'),
         material=_base_material(abbreviation='ABS'),
@@ -404,7 +404,7 @@ def main():
     if _failures:
         sys.exit(1)
     else:
-        print(f"{PASS}✅ 全部 smoke test 通过！松退族 #15-#18 实施完成。{NC}")
+        print(f"{PASS}全部 smoke test 通过！松退族 #15-#18 实施完成。{NC}")
         sys.exit(0)
 
 

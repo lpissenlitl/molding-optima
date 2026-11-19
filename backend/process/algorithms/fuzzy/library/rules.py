@@ -5,7 +5,7 @@
 - `RuleQueryService`：查库（依赖 ORM），产出**来源无关记录**（`RuleRecord` / `LibraryRecord`）
 - `ResourceRepository`（`library/repository.py`）负责把规则组织成算法要用的资源
 
-⚠️ **语义类与转换类在本模块之外**（均零 ORM）：
+【注意】**语义类与转换类在本模块之外**（均零 ORM）：
 
 - `RuleService`（规则串语义判定）→ `library/semantics.py`
 - `RuleAdapter` / `RuleRecordAdapter` / `LibraryRecordAdapter`（契约转换）
@@ -45,7 +45,7 @@ __all__ = [
 def _index_add(index: LibraryIndex, lib: RuleLibrary) -> None:
     """把一条库记录并入索引（**同码追加**，重复记录不重复并入）。
 
-    ⚠️ **去重按记录本身**（不是按编码）：同码的两条记录是**两个不同的库**
+    【注意】**去重按记录本身**（不是按编码）：同码的两条记录是**两个不同的库**
       （分属不同租户）⇒ 都必须留在索引里。
     """
     record = LibraryRecordAdapter.to_record(lib)
@@ -75,11 +75,11 @@ class RuleQueryService:
         `priority` 降序稳定排序，同 priority 时候选顺序决定先后。改成批量查询
         会改变同 priority 库的相对顺序，进而改变下游规则遍历顺序。
 
-        ⚠️ **同编码返回全部记录**（不再只取第一条）：`library_code` 是业务分类
+        【注意】**同编码返回全部记录**（不再只取第一条）：`library_code` 是业务分类
           编码，**跨租户可重复**（`add_rule_library` 只校验「同公司内不重复」）
           ⇒ 同码多库是**合法状态**。只取第一条 ⇒ 别家的库被静默丢掉，
           它库里的规则不报错、只是不参与推理。
-          **谁该被看到由编排层的可见性判据裁决**（`assembly.is_library_visible`），
+          **谁该被看到由 service 层给出的库清单裁决**（可见性判据在 service 层），
           取数层不做取舍 —— 取舍一旦在取数层做，两个来源必然分叉。
 
         Args:
@@ -98,7 +98,8 @@ class RuleQueryService:
             )
             if library_type:
                 qs = qs.filter(library_type=library_type)
-            # ⚠️ `order_by('id')` 与旧口径（`qs.first()` 的隐式主键升序）一致
+            # 【注意】`order_by('id')` 等价于 `qs.first()` 的隐式主键升序（排序显式化，
+            #   不依赖 ORM 的隐式默认序）
             for lib in qs.order_by('id'):
                 if lib not in libraries:
                     libraries.append(lib)
@@ -114,14 +115,14 @@ class RuleQueryService:
         返回**来源无关记录** `RuleRecord`（不是 ORM 实例）—— 编排层只认这一种
         形态，数据库来源与文件来源在此汇流。
 
-        ⚠️ **入参用 `library_id`（主键）而不是 ORM 实例**：编排层拿到的是
+        【注意】**入参用 `library_id`（主键）而不是 ORM 实例**：编排层拿到的是
           `LibraryRecord`（来源无关），只有主键能跨来源地定位到库。
 
-        ⚠️ **本方法只取「候选」，不做适用性判定**：聚合物 / 产品两维的筛选
+        【注意】**本方法只取「候选」，不做适用性判定**：聚合物 / 产品两维的筛选
           在编排层（`RuleAssembler.assemble`）用 `RuleService.matches_context`
           统一完成 —— **匹配谓词只在那一处实现**，两个来源共用。
 
-        ⚠️ **「通用」的判定不只看 NULL**：``polymer_abbreviation`` /
+        【注意】**「通用」的判定不只看 NULL**：``polymer_abbreviation`` /
           ``product_category`` **无空串**（只有 NULL 与有值两种），
           但**有值里包含字面值「通用」**
           —— 那是「明确写了适用于所有产品/材料」，业务含义与 NULL 相同
@@ -143,12 +144,12 @@ class RuleQueryService:
     def get_all_libraries() -> List[RuleLibrary]:
         """取**全部**规则库（``is_deleted=False``，按主键升序）。
     
-        ⚠️ **口径与文件来源逐条一致**：`library/files/export.py::export_libraries`
+        【注意】**口径与文件来源逐条一致**：`library/files/export.py::export_libraries`
           用的就是 ``filter(is_deleted=False).order_by('id')`` + **同码全保留**
           ⇒ 两条来源的库索引**内容与顺序完全相同**（顺序决定同 priority 库的
           相对先后，进而决定下游规则遍历顺序）。
     
-        ⚠️ **不过滤 ``is_active``**：停用库保留在索引里（``LibraryRecord.is_active``），
+        【注意】**不过滤 ``is_active``**：停用库保留在索引里（``LibraryRecord.is_active``），
           由 `RuleAssembler.select_libraries` 统一判断 —— 与文件来源
           （`libraries.json` 里带 ``is_active`` 字段、读取时再判）口径一致。
         """
@@ -166,13 +167,13 @@ class RuleQueryService:
         - 否则 ⇒ **候选库**（不按库类型过滤）+ **通用兜底库 `base`**
           （单独按 ``library_type='fuzzy'`` 取，与历史行为一致）。
 
-        ⚠️ **同编码的库全部保留**（不是只留第一条）：`library_code` 是业务分类
+        【注意】**同编码的库全部保留**（不是只留第一条）：`library_code` 是业务分类
           编码，**跨租户可重复** ⇒ 同码多库是合法状态。
           只留第一条 ⇒ 别家的库被静默丢掉，它库里的规则**不报错、只是不参与推理**
           （典型场景：各租户各有一个 `rule_miner` 挖掘私库）。
-          **谁该被看到由编排层的可见性判据裁决**（`assembly.is_library_visible`）。
+          **谁该被看到由 service 层给出的库清单裁决**（可见性判据在 service 层）。
 
-        ⚠️ **兜底库 `base` 也可能同码多条**（系统库 + 租户私库各一个）
+        【注意】**兜底库 `base` 也可能同码多条**（系统库 + 租户私库各一个）
           ⇒ 兜底取全部同码记录，再由可见性判据与编排层过滤。
         """
         index: LibraryIndex = {}

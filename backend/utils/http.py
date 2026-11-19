@@ -40,8 +40,7 @@ def smart_type_convert(value: str):
     return value
 
 def querydict_to_dict(query_dict: QueryDict) -> dict:
-    """
-    将 Django QueryDict 转换为普通字典
+    """将 Django QueryDict 转换为普通字典。
     - 自动识别 xxx[] 后缀字段，去除 [] 后缀
     - 单值列表自动解包（除非字段名包含 'list', 'polymer_info_ids', 'testing_material'）
     - 多值字段保留为列表
@@ -66,8 +65,7 @@ def querydict_to_dict(query_dict: QueryDict) -> dict:
 
 
 def querydict_to_dict_with_type_convert(query_dict: QueryDict) -> dict:
-    """
-    将 Django QueryDict 转换为普通字典
+    """将 Django QueryDict 转换为普通字典。
     - 自动识别 xxx[] 后缀字段，去除 [] 后缀
     - 单值列表自动解包（除非字段名包含 'list', 'polymer_info_ids', 'testing_material'）
     - 多值字段保留为列表
@@ -114,7 +112,7 @@ def parse_get_params(request: HttpRequest) -> dict:
 
 
 def get_client_ip(request: HttpRequest) -> str:
-    """获取客户端 IP """
+    """获取客户端 IP。"""
     # 优先从 X-Forwarded-For 获取
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:

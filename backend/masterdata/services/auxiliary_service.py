@@ -5,7 +5,7 @@ from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND
 
 
 def create_auxiliary_equipment(company_id: int, organization_id: int, **kwargs):
-    """创建辅助设备"""
+    """创建辅助设备。"""
     kwargs["company_id"] = company_id
     kwargs["organization_id"] = organization_id
     auxiliary_equipment = AuxiliaryEquipment.create_with_check(**kwargs)
@@ -13,7 +13,7 @@ def create_auxiliary_equipment(company_id: int, organization_id: int, **kwargs):
 
 
 def _get_auxiliary_equipment(auxiliary_equipment_id: int) -> AuxiliaryEquipment:
-    """获取辅助设备对象"""
+    """获取辅助设备对象。"""
     auxiliary_equipment_id = validate_pk(auxiliary_equipment_id, "辅助设备ID")
     auxiliary_equipment = AuxiliaryEquipment.objects.filter(id=auxiliary_equipment_id).first()
     if not auxiliary_equipment:
@@ -22,13 +22,13 @@ def _get_auxiliary_equipment(auxiliary_equipment_id: int) -> AuxiliaryEquipment:
 
 
 def get_auxiliary_equipment_info(auxiliary_equipment_id: int) -> dict:
-    """获取辅助设备信息"""
+    """获取辅助设备信息。"""
     auxiliary_equipment = _get_auxiliary_equipment(auxiliary_equipment_id)
     return auxiliary_equipment.to_dict()
 
 
 def update_auxiliary_equipment(company_id: int, auxiliary_equipment_id: int, **kwargs) -> dict:
-    """更新辅助设备信息（仅限本公司）"""
+    """更新辅助设备信息（仅限本公司）。"""
     auxiliary_equipment = AuxiliaryEquipment.objects.filter(pk=auxiliary_equipment_id, company_id=company_id, is_deleted=False).first()
     if auxiliary_equipment is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"辅助设备不存在: id={auxiliary_equipment_id}")
@@ -37,7 +37,7 @@ def update_auxiliary_equipment(company_id: int, auxiliary_equipment_id: int, **k
 
 
 def delete_auxiliary_equipment(company_id: int, auxiliary_equipment_id: int) -> None:
-    """删除辅助设备（仅限本公司）"""
+    """删除辅助设备（仅限本公司）。"""
     auxiliary_equipment = AuxiliaryEquipment.objects.filter(pk=auxiliary_equipment_id, company_id=company_id, is_deleted=False).first()
     if auxiliary_equipment is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"辅助设备不存在: id={auxiliary_equipment_id}")
@@ -53,7 +53,7 @@ def get_auxiliary_equipment_list(
     page_size: int = None,
     sort: str = None
 ) -> tuple:
-    """获取辅助设备列表"""
+    """获取辅助设备列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "name": {"input": name, "column": "name", "lookup": "icontains"},
@@ -74,7 +74,7 @@ def get_auxiliary_equipment_list(
 
 
 def batch_delete_auxiliary_equipment(company_id: int, ids: list) -> int:
-    """批量删除辅助设备（仅删本公司存在的）"""
+    """批量删除辅助设备（仅删本公司存在的）。"""
     ids = validate_id_list(ids, "辅助设备ID")
     # 按 company_id 过滤出本公司的 id（防止跨公司删除）
     valid_ids = list(

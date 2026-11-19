@@ -25,7 +25,7 @@ def safe_get(obj: Any, attr_path: str, default: Any = "") -> Any:
         return default
 
 def join_labels(selections: List[Dict[str, Any]]) -> str:
-    """将 selections 中 label 拼接为 '、' 分隔的字符串"""
+    """将 selections 中 label 拼接为 '、' 分隔的字符串。"""
     if not selections:
         return ""
     return "、".join(

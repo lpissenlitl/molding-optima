@@ -1,5 +1,4 @@
-"""
-规则库模型
+"""规则库模型。
 
 包含以下模型：
 - RuleLibrary: 规则库顶层，支持多租户/多产品线隔离
@@ -86,8 +85,7 @@ class RuleLibrary(BusinessBaseModel):
 
 
 class RuleKeyword(BusinessBaseModel):
-    """
-    规则关键词 - 系统级参数元数据定义
+    """规则关键词 - 系统级参数元数据定义。
 
     注意：
     - 取值范围是通用默认值/模拟推荐值，非设备物理极限
@@ -144,9 +142,9 @@ class RuleKeyword(BusinessBaseModel):
     action_max_val = models.FloatField(null=True, blank=True, verbose_name="最大调整值")
 
     # --- 模糊参数 ---
-    # ⚠️ 档位集合与前端 types/rule.ts::FuzzyLevel **严格对齐**：
-    #    现网业务统一收敛到 **3 档**（2026-11-09：RuleKeyword 全量回填
-    #    310 条 5→3，`_data/rule_keyword_curated.json` 同步）。
+    # 【注意】档位集合与前端 types/rule.ts::FuzzyLevel **严格对齐**：
+    #    现网业务统一收敛到 **3 档**（`RuleKeyword.fuzzy_level` 与
+    #    `_data/rule_keyword_curated.json` 已同步）。
     #    引擎侧 5/7 档词表（macros.LEVEL_WORDS_BY_LVL）作为**引擎能力**保留，
     #    但业务数据不再落到它们 ⇒ 业务侧只暴露 3 档。
     #    不提供 9 档：前端没有 9 档命名（ultra_low / ultra_high），
@@ -192,8 +190,7 @@ class RuleKeyword(BusinessBaseModel):
 
 
 class RuleMethod(BusinessBaseModel):
-    """
-    规则方法 - 缺陷→参数调整规则
+    """规则方法 - 缺陷→参数调整规则。
     属于某个规则库，按租户/产品线隔离
     """
 
@@ -255,8 +252,7 @@ class RuleMethod(BusinessBaseModel):
 
 
 class ExpertRule(BusinessBaseModel):
-    """
-    工艺参数初始化系数
+    """工艺参数初始化系数。
     通过 priority + conditions 实现分层覆盖
     """
 

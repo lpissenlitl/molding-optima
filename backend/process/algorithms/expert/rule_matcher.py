@@ -433,7 +433,7 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
         'segment_N_lower_min_tg_plus': 30.0,  # 段 N 下限（Tg+30℃）
         'segment_N_upper_offset': -5.0,       # 段 N 上限（melt-5℃）
     },
-    # ⚠️ **不内置 mold_temp 表**：模温机温度的基线是**材料推荐值**
+    # 【注意】**不内置 mold_temp 表**：模温机温度的基线是**材料推荐值**
     #   （`recommend_mold_temperature`，见 material_db.MATERIAL_DEFAULTS），
     #   内置表与它**重复且残缺**（缺 PMMA/POM/PBT/PEEK/PTFE 及全部增强材料 ⇒
     #   一律落 default 50，高温材料模温机温度被系统性低估 —— PEEK 应 170℃ 却得 50℃）。
@@ -444,9 +444,9 @@ _BUILTIN_DEFAULTS: Dict[str, Any] = {
 
 
 class InitRuleMatcher:
-    """初始化规则匹配器（数据库版）
+    """初始化规则匹配器（数据库版）。
 
-    ⚠️ **专家规则分两层加载**（平台公共大库 + 租户私有库）：
+    【注意】**专家规则分两层加载**（平台公共大库 + 租户私有库）：
 
     | 层 | 库 | 语义 |
     |---|---|---|
@@ -478,7 +478,7 @@ class InitRuleMatcher:
         self.last_matched_codes: List[str] = []
 
     def match(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """匹配规则并返回合并后的嵌套系数字典
+        """匹配规则并返回合并后的嵌套系数字典。
 
         Args:
             context: 匹配上下文
@@ -506,7 +506,7 @@ class InitRuleMatcher:
             return self._build_fallback(context)
 
         # 按「层 → priority」排序
-        # ⚠️ **层优先于 priority**：租户层整体排在平台层之后 ⇒ 同名 key
+        # 【注意】**层优先于 priority**：租户层整体排在平台层之后 ⇒ 同名 key
         #   由**租户覆盖平台**（叶子级覆盖：租户只写要改的那个值，
         #   平台同组的其它值全部保留）。
         #   平台层内部仍按 priority 升序 —— 与改造前逐条一致 ⇒ 现状行为不变。
@@ -536,13 +536,13 @@ class InitRuleMatcher:
         return self._merge_coefficients(_BUILTIN_DEFAULTS, matched_coefficients)
 
     def reload(self) -> None:
-        """清除缓存，强制下次 match 时重新加载"""
+        """清除缓存，强制下次 match 时重新加载。"""
         self._cached_rules = None
 
     # ========== 数据加载 ==========
 
     def _load_rules(self) -> List[Dict[str, Any]]:
-        """加载规则：先 DB，后 JSON；都不行返回空"""
+        """加载规则：先 DB，后 JSON；都不行返回空。"""
         if self._cached_rules is not None:
             return self._cached_rules
 
@@ -589,8 +589,8 @@ class InitRuleMatcher:
             rules: List[Dict[str, Any]] = []
 
             # ---- 平台层（公共大库）：**全部**系统级专家库 ----
-            # ⚠️ `owner_type` 缺失/为空 **按 system 处理**（与模糊引擎同一口径，
-            #   见 `fuzzy/library/assembly.py::is_library_visible`）
+            # 【注意】`owner_type` 缺失/为空 **按 system 处理**（与模糊引擎同一口径：
+            #   归属类型缺失按公共库处理）
             #   —— 不因字段缺失而静默丢掉整库专家规则。
             platform_qs = RuleLibrary.objects.filter(
                 library_type='expert',
@@ -606,7 +606,7 @@ class InitRuleMatcher:
             rules += _collect(platform_qs.order_by('id'), LAYER_PLATFORM)
 
             # ---- 租户层（该租户自己的专家私库）：**后加载 ⇒ 覆盖平台层** ----
-            # ⚠️ **无租户上下文 ⇒ 不加载私库**（第三方集成 / 离线 runner /
+            # 【注意】**无租户上下文 ⇒ 不加载私库**（第三方集成 / 离线 runner /
             #   烟测）：保持现状全量，不静默改变结果。
             if self.company_id is not None:
                 tenant_qs = RuleLibrary.objects.filter(
@@ -637,7 +637,7 @@ class InitRuleMatcher:
 
     @staticmethod
     def _match_conditions(conditions: List[Dict[str, Any]], context: Dict[str, Any]) -> bool:
-        """所有条件 AND 满足返回 True；无条件规则始终匹配"""
+        """所有条件 AND 满足返回 True；无条件规则始终匹配。"""
         if not conditions:
             return True
 
@@ -654,7 +654,7 @@ class InitRuleMatcher:
 
     @staticmethod
     def _get_field_value(field: str, context: Dict[str, Any]) -> Any:
-        """从上下文中提取字段值，支持嵌套字段（polymer.abbreviation 形式）"""
+        """从上下文中提取字段值，支持嵌套字段（polymer.abbreviation 形式）。"""
         parts = field.split('.')
         value = context
         for part in parts:
@@ -668,7 +668,7 @@ class InitRuleMatcher:
 
     @staticmethod
     def _compare(field_value: Any, operator: str, target: Any) -> bool:
-        """单条件比较"""
+        """单条件比较。"""
         try:
             if operator == 'exact':
                 return field_value == target
@@ -690,7 +690,7 @@ class InitRuleMatcher:
 
     @staticmethod
     def _merge_coefficients(base: Dict[str, Any], addition: Dict[str, Any]) -> Dict[str, Any]:
-        """深度合并：嵌套 dict 递归合并，标量值由 addition 覆盖 base"""
+        """深度合并：嵌套 dict 递归合并，标量值由 addition 覆盖 base。"""
         result = {k: v for k, v in (base or {}).items()}
         for key, value in (addition or {}).items():
             if (
@@ -706,5 +706,5 @@ class InitRuleMatcher:
     # ========== 兜底 ==========
 
     def _build_fallback(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """DB 与 JSON 都拿不到数据时的纯内置默认值"""
+        """DB 与 JSON 都拿不到数据时的纯内置默认值。"""
         return {k: {kk: vv for kk, vv in v.items()} for k, v in _BUILTIN_DEFAULTS.items()}

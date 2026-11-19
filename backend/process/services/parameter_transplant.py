@@ -22,13 +22,12 @@ from process.models import ProcessParameter
 # ============================================================
 
 def _is_valid_number(val: Any) -> bool:
-    """检查是否为有效数值"""
+    """检查是否为有效数值。"""
     return isinstance(val, (int, float)) and val is not None and not (val != val)
 
 
 def _get_drive_type_category(drive_system: Optional[str]) -> str:
-    """
-    获取驱动类型分类
+    """获取驱动类型分类。
     Returns: "electric" | "hydraulic"
     """
     if not drive_system:
@@ -52,7 +51,7 @@ def _convert_ratio_value(
     max_set_key: str,
     max_key: str,
 ) -> Optional[float]:
-    """通用比例转换（压力、速度等需双重归一化的参数）"""
+    """通用比例转换（压力、速度等需双重归一化的参数）。"""
     if input_val is None or not _is_valid_number(input_val):
         return None
 
@@ -75,7 +74,7 @@ def _convert_position_by_screw(
     curr_injt: Dict,
     conv_injt: Dict,
 ) -> Optional[float]:
-    """螺杆面积比转换（位置类参数）"""
+    """螺杆面积比转换（位置类参数）。"""
     if input_val is None or not _is_valid_number(input_val):
         return None
 
@@ -93,7 +92,7 @@ def _convert_screw_rotation(
     curr_injt: Dict,
     conv_injt: Dict,
 ) -> Optional[float]:
-    """螺杆转速特殊转换"""
+    """螺杆转速特殊转换。"""
     if input_val is None or not _is_valid_number(input_val):
         return None
 
@@ -115,7 +114,7 @@ def _convert_screw_rotation(
 
 
 def _deep_copy_setting(setting: Dict[str, Any]) -> Dict[str, Any]:
-    """深拷贝 setting_process"""
+    """深拷贝 setting_process。"""
     return copy.deepcopy(setting)
 
 
@@ -124,7 +123,7 @@ def _deep_copy_setting(setting: Dict[str, Any]) -> Dict[str, Any]:
 # ============================================================
 
 def _transplant_injection(origin_inj, origin_injt, target_injt, target_inj):
-    """转换注射参数"""
+    """转换注射参数。"""
     result = {
         "max_stage": target_inj.get("max_stage", 6),
         "injection_time": origin_inj.get("injection_time"),
@@ -163,7 +162,7 @@ def _transplant_injection(origin_inj, origin_injt, target_injt, target_inj):
 
 
 def _transplant_vp_switch(origin_vp, origin_injt, target_injt):
-    """转换 VP 切换参数"""
+    """转换 VP 切换参数。"""
     return {
         "mode": origin_vp.get("mode"),
         "position": _convert_position_by_screw(origin_vp.get("position"), origin_injt, target_injt),
@@ -174,7 +173,7 @@ def _transplant_vp_switch(origin_vp, origin_injt, target_injt):
 
 
 def _transplant_holding(origin_holding, origin_injt, target_injt, target_holding):
-    """转换保压参数"""
+    """转换保压参数。"""
     result = {"max_stage": target_holding.get("max_stage", 5)}
 
     origin_stage = origin_holding.get("stage", 1)
@@ -209,7 +208,7 @@ def _transplant_holding(origin_holding, origin_injt, target_injt, target_holding
 
 
 def _transplant_metering(origin_metering, o_drive, origin_injt, t_drive, target_injt, target_metering):
-    """转换计量参数"""
+    """转换计量参数。"""
     result = {
         "max_stage": target_metering.get("max_stage", 4),
         "pre_decompress_mode": origin_metering.get("pre_decompress_mode"),
@@ -276,7 +275,7 @@ def _transplant_metering(origin_metering, o_drive, origin_injt, t_drive, target_
 
 
 def _transplant_barrel_temperature(origin_temp, target_injt, target_temp):
-    """转换料筒温度"""
+    """转换料筒温度。"""
     result = {"max_stage": target_temp.get("max_stage", 10)}
 
     origin_stage = origin_temp.get("stage", 5)
@@ -323,7 +322,7 @@ def transplant_process(
     target_injection_unit: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    将源机台工艺参数转换为目标机台工艺参数
+    将源机台工艺参数转换为目标机台工艺参数。
     """
     o_drive = _get_drive_type_category(origin_machine.get("drive_system"))
     t_drive = _get_drive_type_category(target_machine.get("drive_system"))

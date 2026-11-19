@@ -31,7 +31,7 @@
 
 ⇒ 把输入值取在**桶中心**即可让激活度精确等于 1.0 ⇒ 推荐值可精确断言。
 
-⚠️ 断言分两类，脚本里用前缀区分：
+【注意】断言分两类，脚本里用前缀区分：
 - ``业务口径`` —— 期望值来自上面的数学口径（改实现 ⇒ 断言失败 = 暴露了变化）
 - ``实现语义`` —— 钉住当前**已确认的行为**（如「档位衰减不改幅度、只改置信度」），
   变更前需业务确认，不是「数学上必须如此」
@@ -43,7 +43,7 @@ import math
 import os
 import sys
 
-# ⚠️ 本脚本**刻意不 import django、不设 DJANGO_SETTINGS_MODULE、不 django.setup()**
+# 【注意】本脚本**刻意不 import django、不设 DJANGO_SETTINGS_MODULE、不 django.setup()**
 #    —— 「脱离 Django 运行」是这一层的核心卖点，必须由下面的 S16 自证。
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND not in sys.path:
@@ -117,7 +117,7 @@ class OfflineRepository:
 
     - ``get_rules``：**只做缺陷名闸门**（业务口径：规则库约定缺陷一定是第一个
       前件，``IF {defect}_{level} AND ...``）。
-      ⚠️ 档位**不过滤** —— 生产侧已把缺陷程度改成「算法输入」进推理网络，
+      【注意】档位**不过滤** —— 生产侧已把缺陷程度改成「算法输入」进推理网络，
       由隶属度表达「越严重越激进」（见 ``RuleService.match_defect_name`` docstring）。
       这里复刻的是**业务口径**（3 行、可对着规则串逐条核对），不是被测实现。
     - ``get_keywords_by_names``：返回内置元数据。
@@ -177,7 +177,7 @@ def ctx(defect_name='SHORTSHOT', level='low', position=None, params=None):
     if position is not None:
         defect['position'] = position
     return {
-        'feedback': {'defect': [defect]},
+        'feedback': {'defects': [defect]},
         'process_parameter': dict(params or {}),
     }
 
@@ -186,9 +186,9 @@ def run(rules, context, boom=False):
     """跑一次引擎，返回推荐列表。"""
     repo = OfflineRepository(rules, boom=boom)
     engine = FuzzyEngine(repository=repo)
-    # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
-    from process.algorithms.defect_selection import ensure_selected_defect
-    ensure_selected_defect(context)
+    # 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
+    from process.algorithms.defect_selection import select_defect
+    context['feedback'] = select_defect(context.get('feedback') or {})
     return engine.recommend(context), engine
 
 
@@ -243,12 +243,12 @@ if recs:
     # μ(medium 中心 0.5, low 中心 0.25) = exp(-0.5·((0.25)/0.125)²) = exp(-2)
     check_float('[实现语义] S2 幅度不变（delta 不含激活度）⇒ 推荐值仍 52.0',
                 r.recommended_value, 52.0)
-    # ⚠️ **M-1 门控后的口径变更**：
+    # 【注意】**M-1 门控后的口径变更**：
     #   档位相邻 ⇒ 归属不一致（competition = μ_used − μ_alt = exp(−2) − 1.0 < 0）
     #   ⇒ β_p = clamp(competition/ε, β_min, 1) = β_min = 0.20
     #   ⇒ `raw_activation`（= activation × β）= exp(−2) × 0.20
     #   ⇒ 置信度从 exp(−2) 降到 exp(−2) × β_min（**降幅 80%**，
-    #      与 review §25.3 预测的「不符权重降幅 80.00%」一致）。
+    #      与评审文档预测的「不符权重降幅 80.00%」一致）。
     check_float('[实现语义] S2 置信度衰减为 exp(-2)×β_min（M-1 降权）',
                 r.confidence, _MU_ONE_BUCKET * BETA_MIN)
     check('[实现语义] S2 相邻档 μ 恰好 = τ ⇒ 不满足「< τ」⇒ 仍命中',
@@ -267,10 +267,10 @@ if recs:
 #   ⇒ 组内占比 A ≈ 0.026354、B ≈ 0.973646
 #   ⇒ delta = 4×0.026354 + 6×0.973646 ≈ 5.947291 ⇒ 推荐值 ≈ 55.947291
 #
-# ⚠️ 错配侧的贡献（单独看）：
+# 【注意】错配侧的贡献（单独看）：
 #   有 M-1：4 × 0.026354 = 0.105418
 #   无 M-1：4 × (exp(−2)/(1+exp(−2))) = 4 × 0.119184 = 0.476738
-#   ⇒ **错配残留降幅 ≈ 77.9%**（真实库口径为 80.00%，见 review §25.3；
+#   ⇒ **错配残留降幅 ≈ 77.9%**（真实库口径为 80.00%，见评审文档；
 #      本构造只含 1 条错配 vs 1 条相符，故与全库口径略有差异）
 _MU_ADJ = _MU_ONE_BUCKET
 _RAW_MISMATCH = _MU_ADJ * BETA_MIN
@@ -398,7 +398,7 @@ if recs:
 # S10~S12 门控三条路径（分界是「档案是否进了 net」，不是「有没有值」）
 # =============================================================================
 
-# S10 路径①：前件是**不可判级**词（worse）⇒ 该前件不作门控 ⇒ 规则仍命中
+# S10 路径1：前件是**不可判级**词（worse）⇒ 该前件不作门控 ⇒ 规则仍命中
 recs, _ = run([rule('IF SHORTSHOT_low AND IV0_worse THEN IV0_add_2')],
                ctx(params={'IV0': 50.0}))
 check('[业务口径] S10 不可判级前件不作门控 ⇒ 规则仍命中', len(recs) == 1,
@@ -406,7 +406,7 @@ check('[业务口径] S10 不可判级前件不作门控 ⇒ 规则仍命中', l
 if recs:
     check_float('[业务口径] S10 推荐值仍 = 52.0', recs[0].recommended_value, 52.0)
 
-# S11 路径②：档案（RuleKeyword）不在 ⇒ 该前件不作门控 ⇒ 规则仍命中
+# S11 路径2：档案（RuleKeyword）不在 ⇒ 该前件不作门控 ⇒ 规则仍命中
 recs, _ = run([rule('IF SHORTSHOT_low AND ZZUNKNOWN_low THEN IV0_add_2')],
                ctx(params={'IV0': 50.0}))
 check('[业务口径] S11 档案不在 ⇒ 前件不作门控 ⇒ 规则仍命中', len(recs) == 1,
@@ -414,7 +414,7 @@ check('[业务口径] S11 档案不在 ⇒ 前件不作门控 ⇒ 规则仍命�
 if recs:
     check_float('[业务口径] S11 推荐值仍 = 52.0', recs[0].recommended_value, 52.0)
 
-# S12 路径③：档案在（IV0 是结论参数，元数据会被拉取）但**输入里没值**
+# S12 路径3：档案在（IV0 是结论参数，元数据会被拉取）但**输入里没值**
 #      ⇒ membership 兜底 ⇒ 激活度低于阈值 ⇒ **整条规则被丢**
 recs, _ = run([rule('IF SHORTSHOT_low AND IV0_low THEN IV0_add_2')],
                ctx(params={}))          # 故意不给 IV0

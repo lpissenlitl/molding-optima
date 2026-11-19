@@ -5,7 +5,7 @@ from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND
 
 
 def create_filler(company_id: int, organization_id: int, **kwargs):
-    """创建填充物"""
+    """创建填充物。"""
     kwargs["company_id"] = company_id
     kwargs["organization_id"] = organization_id
     filler = Filler.create_with_check(**kwargs)
@@ -13,7 +13,7 @@ def create_filler(company_id: int, organization_id: int, **kwargs):
 
 
 def _get_filler_by_id(filler_id: int) -> Filler:
-    """通过 id 获取填充物对象"""
+    """通过 id 获取填充物对象。"""
     filler_id = validate_pk(filler_id, "填充物ID")
     filler = Filler.objects.filter(id=filler_id).first()
     if not filler:
@@ -22,13 +22,13 @@ def _get_filler_by_id(filler_id: int) -> Filler:
 
 
 def get_filler_info(filler_id: int) -> dict:
-    """获取填充物信息"""
+    """获取填充物信息。"""
     filler = _get_filler_by_id(filler_id)
     return filler.to_dict()
 
 
 def update_filler_info(company_id: int, filler_id: int, **kwargs) -> dict:
-    """更新填充物信息（仅限本公司）"""
+    """更新填充物信息（仅限本公司）。"""
     filler = Filler.objects.filter(pk=filler_id, company_id=company_id, is_deleted=False).first()
     if filler is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"填充物不存在: id={filler_id}")
@@ -37,7 +37,7 @@ def update_filler_info(company_id: int, filler_id: int, **kwargs) -> dict:
 
 
 def delete_filler(company_id: int, filler_id: int) -> None:
-    """删除填充物（仅限本公司）"""
+    """删除填充物（仅限本公司）。"""
     filler = Filler.objects.filter(pk=filler_id, company_id=company_id, is_deleted=False).first()
     if filler is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"填充物不存在: id={filler_id}")
@@ -55,7 +55,7 @@ def get_filler_list(
     page_size: int = None,
     sort: str = None
 ):
-    """获取填充物成材列表"""
+    """获取填充物成材列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "name": {"input": name, "column": "name", "lookup": "icontains"},
@@ -78,7 +78,7 @@ def get_filler_list(
 
 
 def batch_delete_filler(company_id: int, ids: list) -> int:
-    """批量删除填充物（仅删本公司存在的）"""
+    """批量删除填充物（仅删本公司存在的）。"""
     ids = validate_id_list(ids, "填充物ID")
     # 按 company_id 过滤出本公司的 id（防止跨公司删除）
     valid_ids = list(

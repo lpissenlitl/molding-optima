@@ -1,9 +1,8 @@
-"""molding-optima 工艺参数 Schema 集中导出
+"""molding-optima 工艺参数 Schema 集中导出。
 
 约定：
 - 每个 schema 按业务对象拆到独立文件（condition.py / parameter.py / record.py / tuning.py / ...）
 - 本文件统一 re-export，外部统一 `from process.schemas import XxxSchema`
-- 跨文件依赖单向: record.py → condition.py (records 写入强验证 condition 字段)
 """
 # ===== 规则中心（规则库 / 规则关键字 / 规则方法 / 专家规则 列表筛选）=====
 from .rule import (

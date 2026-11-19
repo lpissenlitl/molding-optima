@@ -1,6 +1,6 @@
 """策略装配（编排层）—— 第2层的**数据供给**。
 
-职责：从**策略清单文件**（:mod:`process.algorithms.strategies`）取业务知识，
+职责：从**调机策略模块**（:mod:`process.algorithms.tuning_strategy`）取业务知识，
 组装成第2层要的数据形态：
 
 - **实际情况**（``ScenarioContext``）：本轮的缺陷码、实测重量、目标重量、充填缺口
@@ -8,17 +8,16 @@
 - **命中哪个场景**（``ScenarioPolicy``）：条件求值 + 取第一条命中；
 - **字段级优先级表**（``PriorityTable``）：随场景一起来（清单里自带）。
 
-⚠️ **清单里没有 ⇒ 不裁决**（行为与「不接第2层」完全一致）：
-读清单失败 / 无命中策略 ⇒ 场景与优先级表为空 ⇒ 第2层照旧不裁决。
+【注意】**清单里没有 ⇒ 不裁决**（行为与「不接第2层」完全一致）：
+清单为空 / 无命中策略 ⇒ 场景与优先级表为空 ⇒ 第2层照旧不裁决。
 
-⚠️ **本模块不做业务判断** —— 「什么场景、调哪些、留几个」全在清单文件里；
+【注意】**本模块不做业务判断** —— 「什么场景、调哪些、留几个」全在策略模块里；
 本模块只负责取、匹配、组装。
 
-⚠️ **充填量目标不在这里算** —— 它是「结合实际情况算目标」，属第2层的职责
+【注意】**充填量目标不在这里算** —— 它是「结合实际情况算目标」，属第2层的职责
 （:func:`process.algorithms.decide_direction.resolve_direction`）。
 """
 
-import logging
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Optional
 
@@ -29,10 +28,11 @@ from process.algorithms.decide_direction import (
     build_scenario_context,
     select_policy,
 )
-from process.algorithms.stage_order import StageProgress, derive_stage_progress
-from process.algorithms.strategies import load_strategies
-
-_logger = logging.getLogger(__name__)
+from process.algorithms.tuning_strategy import (
+    StageProgress,
+    derive_stage_progress,
+    sorted_scenario_policies,
+)
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class PolicyResolution:
         scenario: 命中的场景策略（``None`` = 无场景 ⇒ 不裁决）。
         priority_table: 字段级优先级表（空表 = 不按字段级排序）。
         stage_progress: **阶段进度**（本轮哪些阶段还有缺陷、当前该推进哪一步）。
-            ⚠️ **只做推导，不做裁决** —— 不参与场景匹配（阶段准入尚未落地）。
+            【注意】**只做推导，不做裁决** —— 由场景条件引用（如 ``filling_stage_first``）。
         trace: 留痕（场景码、命中条件、上下文摘要）。
     """
 
@@ -55,22 +55,33 @@ class PolicyResolution:
     trace: Mapping[str, Any] = field(default_factory=dict)
 
 
+def _selected_defect_code(feedback: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """本轮处理的缺陷码 —— 取自**收敛后**的 ``defects`` 首条。
+
+    无缺陷（或未收敛）⇒ ``None``（条件不命中，不臆造）。
+    """
+    defects = (feedback or {}).get('defects') or ()
+    selected = defects[0] if defects else {}
+    if not isinstance(selected, Mapping):
+        return None
+    return selected.get('keyword_name')
+
+
 def resolve_policies(
     *,
     feedback: Optional[Mapping[str, Any]] = None,
     mold_info: Optional[Mapping[str, Any]] = None,
-    selected_defect: Optional[str] = None,
 ) -> PolicyResolution:
     """取策略清单 → 判定场景 → 组装第2层要的数据。
 
     Args:
-        feedback: 缺陷反馈（缺陷码 + 实测观察）。
+        feedback: **收敛后**的缺陷反馈（``defects`` 只含本轮处理的那条，
+            另带 ``defect_selection`` 留痕）—— 场景条件按它判定。
         mold_info: 模具上下文（制品总重）。
-        selected_defect: **本轮实际处理的缺陷码**（service 预处理层的整理结果）
-            —— 场景条件按它判定（经 ``ScenarioContext.extra`` 注入）。
 
-            ⚠️ **不按 ``defect_codes``（全部缺陷码）判定** —— 多缺陷反馈下
-            「反馈里含此缺陷」≠「本轮处理的是这个缺陷」⇒ 会命中错场景。
+            【注意】场景按 **``selected_defect``（本轮处理的那条）**判定 ——
+            多缺陷反馈下「反馈里含此缺陷」≠「本轮处理的是这个缺陷」
+            ⇒ 会命中错场景。
 
     Returns:
         :class:`PolicyResolution` —— **无命中 ⇒ 场景与优先级表为空**（不裁决）。
@@ -78,25 +89,19 @@ def resolve_policies(
     context = build_scenario_context(
         feedback,
         mold_info,
-        extra={'selected_defect': selected_defect},
+        extra={'selected_defect': _selected_defect_code(feedback)},
     )
 
     # 阶段进度（**只推导，不裁决**）—— 本轮哪些阶段还有缺陷、当前该推进哪一步。
-    # ⚠️ ``current_stage`` 注入 extra ⇒ 场景条件**可以**引用它；
-    #    批次 13.0 起 ``filling_stage_first`` 已引用
-    #    （短射 + 仍在打足阶段 ⇒ 充填量优先）。
+    # 【注意】``current_stage`` 注入 extra ⇒ 场景条件可引用它；
+    #    ``filling_stage_first`` 场景已引用（短射 + 仍在打足阶段 ⇒ 充填量优先）。
     progress = derive_stage_progress(context.defect_codes)
     context = replace(
         context,
         extra={**context.extra, 'current_stage': progress.current},
     )
 
-    try:
-        policies = load_strategies()
-    except Exception as exc:                  # 读清单失败 ⇒ 不裁决（不阻塞优化）
-        _logger.warning('[policy] 读取策略清单失败，本轮不裁决: %s', exc)
-        return PolicyResolution(context=context, stage_progress=progress)
-
+    policies = sorted_scenario_policies()
     if not policies:
         return PolicyResolution(context=context, stage_progress=progress)
 

@@ -1,5 +1,4 @@
-"""
-注塑机相关 Schema 定义 - Pydantic 版本
+"""注塑机相关 Schema 定义 - Pydantic 版本。
 
 """
 from typing import Optional, List
@@ -10,7 +9,7 @@ from extensions.schemas import AbstractBaseSchema, BaseSchema, PaginationBaseSch
 
 
 class InjectionUnitSchema(AbstractBaseSchema):
-    """注射单元"""
+    """注射单元。"""
     
     id: Optional[int] = Field(None, description="射台ID")
     # --- 射台标识 ---
@@ -71,7 +70,7 @@ class InjectionUnitSchema(AbstractBaseSchema):
 
 
 class InjectionMoldingMachineSchema(BaseSchema):
-    """注塑机"""
+    """注塑机。"""
     
     id: Optional[int] = Field(None, description="注塑机ID")
     # --- 状态信息 ---
@@ -164,7 +163,7 @@ class InjectionMoldingMachineSchema(BaseSchema):
 
 
 class InjectionMachineListSchema(PaginationBaseSchema):
-    """注塑机列表"""
+    """注塑机列表。"""
     
     status: Optional[str] = Field(None, description="状态")
     brand: Optional[str] = Field(None, description="品牌")

@@ -3,7 +3,7 @@
 职责：**只把文件读出来并规约成记录**，不做适用性判定、不做契约构造。
 那些都在 `library/assembly.py`（来源无关的共用编排层）。
 
-⚠️ **零 ORM**：本模块不 import 任何 Django 模块 —— 文件来源必须能在
+【注意】**零 ORM**：本模块不 import 任何 Django 模块 —— 文件来源必须能在
   没有数据库的环境里跑（这正是「打通第二条路径」的意义）。
 
 文件布局（默认目录 `library/files/data/`）：
@@ -17,7 +17,7 @@ data/
     └── <库码>.json
 ```
 
-⚠️ **取数口径与数据库来源逐条一致**（这是两条路径能对拍的前提）：
+【注意】**取数口径与数据库来源逐条一致**（这是两条路径能对拍的前提）：
 
 | 环节 | 数据库来源 | 文件来源 |
 |---|---|---|
@@ -57,9 +57,9 @@ SCHEMA_VERSION = 1
 class FileLibraryLoader:
     """本地文件读取器 —— 把 JSON 规约成**来源无关记录**。
 
-    ⚠️ **零 ORM**：不 import 任何 Django 模块。
+    【注意】**零 ORM**：不 import 任何 Django 模块。
 
-    ⚠️ **按 mtime 自动重载**（`auto_reload=True`）：改完 JSON 立即生效，
+    【注意】**按 mtime 自动重载**（`auto_reload=True`）：改完 JSON 立即生效，
       不用重启进程 —— 这是「用本地文件探讨规则与关键词」这条路径的
       核心便利性；关掉它（`auto_reload=False`）则整个会话只读一次。
     """
@@ -113,7 +113,7 @@ class FileLibraryLoader:
     def load_libraries(self) -> LibraryIndex:
         """读库清单，返回 `library_code` → **同码全部** `LibraryRecord` 的索引。
 
-        ⚠️ **同编码多记录全部保留**（不再只留第一条）—— 与数据库来源
+        【注意】**同编码多记录全部保留**（不再只留第一条）—— 与数据库来源
           `RuleQueryService.get_library_index` 的口径一致 ⇒ 两条路径
           选中的库**逐条相同**。
           `library_code` 是业务分类编码、**跨租户可重复** ⇒ 同码多库是合法状态；
@@ -133,7 +133,7 @@ class FileLibraryLoader:
     def load_keywords(self) -> List[Dict[str, Any]]:
         """读关键字元数据（**原始 dict 形态**，未转契约）。
 
-        ⚠️ **不过滤**：与数据库来源一致 —— `RuleKeyword.objects.filter(...)`
+        【注意】**不过滤**：与数据库来源一致 —— `RuleKeyword.objects.filter(...)`
           不带 `is_active` / `is_deleted` 条件 ⇒ 文件侧也不加，
           否则「同一条关键字在两条路径下去留不同」。
         """
@@ -158,7 +158,7 @@ class FileLibraryLoader:
         - 库编码唯一 ⇒ `<库码>.json`（历史命名，已导出的数据目录保持有效）；
         - 同码多库 ⇒ `<库码>__<库主键>.json`（每个库一个文件）。
 
-        ⚠️ **找不到分文件时回退 `<库码>.json`**：兼容「还没有同码库时导出的
+        【注意】**找不到分文件时回退 `<库码>.json`**：兼容「还没有同码库时导出的
           数据目录」⇒ 回退拿到的可能是另一条同码库的规则，
           因此**导出工具一旦遇到同码库必须重跑**（它会先清空规则目录）。
         """
@@ -191,7 +191,7 @@ class FileLibraryLoader:
     ) -> List[RuleRecord]:
         """取某库中「该缺陷的**候选**规则」，转成来源无关记录。
 
-        ⚠️ **与数据库来源 `RuleQueryService.get_methods` 口径逐条一致**：
+        【注意】**与数据库来源 `RuleQueryService.get_methods` 口径逐条一致**：
 
         1. 过滤：``defect_code`` 相等 + ``is_active`` 为真；
         2. 排序：``priority`` 降序、``id`` 升序

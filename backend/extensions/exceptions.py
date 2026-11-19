@@ -29,7 +29,7 @@
 
 
 class BizErrorCode:
-    """业务错误码（不可变对象）"""
+    """业务错误码（不可变对象）。"""
 
     # 应用类型常量
     APP_WEB = 1
@@ -59,7 +59,7 @@ class BizErrorCode:
         message: str,
         app_type: int = APP_WEB,
     ) -> "BizErrorCode":
-        """生成 6 位错误码：app_type(1) + module(2) + error_seq(3)
+        """生成 6 位错误码：app_type(1) + module(2) + error_seq(3)。
 
         Args:
             module: 2 位字符串模块编号（如 "00"=通用、"07"=工艺）
@@ -107,7 +107,7 @@ ERROR_ACCESS_LIMIT      = ERROR_ACCESS_DENIED
 
 
 class BizException(Exception):
-    """业务异常（所有业务异常都应抛出此类型）
+    """业务异常（所有业务异常都应抛出此类型）。
 
     使用规范：
         raise BizException(ERROR_DATA_NOT_FOUND, "用户不存在: id=123")

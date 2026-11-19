@@ -1,5 +1,4 @@
-﻿"""
-工艺参数算法推理引擎
+﻿"""工艺参数算法推理引擎。
 
 包含 20 个参数的物理推导逻辑。
 由 ProcessInitializer 编排层调用，不直接暴露给外部。
@@ -115,8 +114,7 @@ _MULTI_METER_COEF_MAP = {
 
 
 class AlgorithmEngine:
-    """
-    工艺参数算法推理引擎
+    """工艺参数算法推理引擎。
 
     包含所有参数推导的核心逻辑（20 个算法）。
     由 ProcessInitializer 编排层调用，不直接暴露给外部。
@@ -152,8 +150,7 @@ class AlgorithmEngine:
         self._coeffs = coeffs
 
     def derive(self, params: ProductionParams) -> None:
-        """
-        执行所有算法推导
+        """执行所有算法推导。
 
         Args:
             params: ProductionParams 实例，会被就地修改
@@ -1187,7 +1184,7 @@ class AlgorithmEngine:
                 × runner_factor × gate_factor
             D = clamp(D, min_dist, max_dist)
 
-        物理依据：详见设计文档 §3.3
+        物理依据：详见设计文档
             - base_dist: 3.5mm（业内中位）
             - family_dist_factor: 4 档分档（PA 0.65 / 高黏度 0.80 / 基准 1.00 / PVC 1.20）
             - nozzle_dist_factor: 直通 0.95 / 锁闭 1.10
@@ -1279,7 +1276,7 @@ class AlgorithmEngine:
                 × mode_factor × nozzle_factor
             P = clamp(P, min_pressure, max_pressure)
 
-        物理依据：详见设计文档 §3.2
+        物理依据：详见设计文档
             - base_ratio: 0.25（业内中位 2.5/14）
             - family_factor: 4 档分档（PVC 0.50 / PA 1.30 / 高黏度 1.10 / 基准 1.00）
             - mode_factor: 前 0.80 / 后 1.00（仅压力差异化）
@@ -1378,7 +1375,7 @@ class AlgorithmEngine:
             V = max_set_decompression_velocity × family_velo_factor × nozzle_velo_factor
             V = clamp(V, min_velo, max_velo)
 
-        物理依据：详见设计文档 §3.4
+        物理依据：详见设计文档
             - family_velo_factor: 4 档分档（PA 0.85 / 高黏度 0.75 / 基准 1.00 / PVC 1.10）
             - nozzle_velo_factor: 直通 1.00 / 锁闭 0.80
 
@@ -1501,7 +1498,7 @@ class AlgorithmEngine:
         1. 第 1 级 - family_offset[family]（精确值）
         2. 第 2 级 - family_offset_default（兑底）
 
-        物理依据（详见设计文档 §3.1）：
+        物理依据（详见设计文档）：
         - PA66 +5℃：防含水率突变致黏度突降
         - PA6/PA/PET/PBT +3℃：结晶型冷凝阻塞
         - PC/PMMA/POM 0℃：高黏度持平
@@ -1591,7 +1588,7 @@ class AlgorithmEngine:
         1. 第 1 级 - family_decrement[family]（精确值）
         2. 第 2 级 - family_decrement_default（兑底 10.0）
 
-        物理依据（详见设计文档 §3.2）：
+        物理依据（详见设计文档）：
         - PVC 5℃：极平缓防分解
         - PC/PMMA/POM/PA/PET/PBT 8℃：高黏度平缓防降解
         - PP/PE/ABS/PS 10℃：通用中位
@@ -2141,7 +2138,7 @@ class AlgorithmEngine:
         #   Level 1 - 用户明确指定 vps_mode（int 0~3）         → 'explicit'
         #   Level 2 - 字符串兼容（process_set['VP_switch_mode']）   → 'legacy_string'
         #   Level 3 - 默认位置切换（mode=0）                     → 'default'
-        # ⚠️ **必须先判字符串**：process_set 的默认值把 vps_mode 预填为 0，
+        # 【注意】**必须先判字符串**：process_set 的默认值把 vps_mode 预填为 0，
         #    若先判 int → Level 1 必然命中 → Level 2 的字符串兼容分支**永久不可达**
         #    （老数据传 VP_switch_mode='时间' 会被静默降级为「位置切换」，不报错、语义错）
         #    ⇒ 判定顺序：**用户显式传的 int 优先**，其次字符串兼容，最后默认
@@ -2507,9 +2504,9 @@ class AlgorithmEngine:
         proc.noz_temp = round(noz_temp, 1)
 
         # #20 料筒温度分布（4 维物理化：family_decrement × stages × 幂函数k × 双层边界钳制）
-        # ⚠️ brl_temp_stg 是**总档数**（第 1 档 = 喷嘴），料筒段数 = 总档数 - 1
+        # 【注意】brl_temp_stg 是**总档数**（第 1 档 = 喷嘴），料筒段数 = 总档数 - 1
         #    （与前端口径一致：温度表列 = 喷嘴 + 料筒 1..9）
-        # ⚠️ 来源是**工艺设定集**（ProcessSet），不是模具档案：
+        # 【注意】来源是**工艺设定集**（ProcessSet），不是模具档案：
         #    字段契约见 process_set.PROCESS_SET_FIELD_SPEC，缺失时 fill_defaults 兜 5
         proc.brl_temp_stg = ps.get('brl_temp_stg') or 5
         brl_temp_steps, brl_info = self._compute_brl_temp_steps(
@@ -2540,7 +2537,7 @@ class AlgorithmEngine:
     # ========== 模温机工艺参数 ==========
 
     def _derive_mold_temp(self, params: ProductionParams):
-        """推导模温机工艺参数
+        """推导模温机工艺参数。
 
         口径：**规则覆盖 > 材料推荐值 > 兜底**
         1. 规则覆盖：`_coeffs['mold_temp']` 里该材料的键命中
@@ -2550,7 +2547,7 @@ class AlgorithmEngine:
            （spec key；必填 + MaterialDatabase 按材料族兜底 ⇒ 有材料就有值）
         3. 兜底：规则里的 `default`（缺省 50）
 
-        ⚠️ **注意 key 口径**：算法层 dict 用的是 **spec key**
+        【注意】**注意 key 口径**：算法层 dict 用的是 **spec key**
            （`recommend_mold_temperature`，见 specs.POLYMER_INFO_FIELDS 的
            key ↔ attr_name 映射），**不是** ORM 字段名 `recommended_mold_temp` ——
            用错则恒为 None ⇒ 恒走系数表 ⇒ 用户主数据与高温材料
@@ -2577,7 +2574,7 @@ class AlgorithmEngine:
     # ========== 热流道工艺参数 ==========
 
     def _derive_hot_runner(self, params: ProductionParams):
-        """推导热流道工艺参数"""
+        """推导热流道工艺参数。"""
         prod = self.mold
 
         # 算法内部字段（不在 spec 里），未填兑 0
@@ -2589,7 +2586,7 @@ class AlgorithmEngine:
     # ========== 保压时间（按浇口类型分支） ==========
 
     def _calc_hold_time(self, prod: Dict[str, Any]) -> float:
-        """计算保压时间（按浇口类型）
+        """计算保压时间（按浇口类型）。
 
         公式策略与系数来自 GATE_* 规则：
         - GATE_DIRECT: linear  -> 0.5 + 0.1 * avg_thickness
@@ -2633,8 +2630,7 @@ class AlgorithmEngine:
     # ========== 多级参数 ==========
 
     def _apply_multi_stage(self, params: ProductionParams):
-        """
-        应用多级参数
+        """应用多级参数。
 
         根据注射行程自动推荐段数，并应用多级系数：
         - 注射段数：根据注射行程（>=40mm→4段, 20-40mm→3段, 10-20mm→2段, <10mm→1段）
@@ -2709,7 +2705,7 @@ class AlgorithmEngine:
         runner_weight: float,
         total_len: float
     ):
-        """应用多级注射参数"""
+        """应用多级注射参数。"""
         mat = self.material
 
         inj_pres = proc.inj_pres_steps[0] if proc.inj_pres_steps else 0
@@ -2768,7 +2764,7 @@ class AlgorithmEngine:
         runner_percent: float,
         part_percent: float
     ) -> list:
-        """计算冷流道多级注射位置"""
+        """计算冷流道多级注射位置。"""
         positions = []
 
         if inj_stg == 2:
@@ -2807,7 +2803,7 @@ class AlgorithmEngine:
         return positions
 
     def _apply_multi_holding(self, proc: ProcessParams, hold_stg: int):
-        """应用多级保压参数"""
+        """应用多级保压参数。"""
         hold_pres = proc.hold_pres_steps[0] if proc.hold_pres_steps else 0
         hold_velo = proc.hold_spd_steps[0] if proc.hold_spd_steps else 0
         hold_time = proc.hold_time_steps[0] if proc.hold_time_steps else 0
@@ -2822,7 +2818,7 @@ class AlgorithmEngine:
         proc.hold_time_steps = [coefs[2][i] * hold_time for i in range(hold_stg)]
 
     def _apply_multi_metering(self, proc: ProcessParams, met_stg: int, total_len: float):
-        """应用多级计量参数"""
+        """应用多级计量参数。"""
         meter_pres = proc.met_pres_steps[0] if proc.met_pres_steps else 0
         meter_speed = proc.met_rot_spd_steps[0] if proc.met_rot_spd_steps else 0
         meter_back_pres = proc.met_back_pres_steps[0] if proc.met_back_pres_steps else 0
@@ -2841,7 +2837,7 @@ class AlgorithmEngine:
     # ========== 格式化输出 ==========
 
     def _format_output(self, params: ProductionParams):
-        """格式化输出"""
+        """格式化输出。"""
         proc = params.process
 
         # list 元素也可能是 None（设备不支持某段时该位置留空），全部走 None-safe

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """案例离线 runner —— 读 JSON 案例，跑模糊推理，逐位比对期望输出。
 
-⚠️ **全程不访问数据库**：案例数据是自持的（规则 + 论域元数据 + 输入上下文都在
+【注意】**全程不访问数据库**：案例数据是自持的（规则 + 论域元数据 + 输入上下文都在
    JSON 里），通过替换 `FuzzyEngine` 的数据源（`AlgorithmResourceRepository`
    协议）实现离线。脚本会**拦截所有 SQL 执行** —— 一旦有人不小心在链路上碰到
    数据库，立刻报错而不是悄悄连上去（离线这个卖点必须可证，不能只是说说）。
@@ -68,7 +68,7 @@ CASES_DIR = os.path.join(HERE, 'cases')
 class CaseRepository:
     """从案例 JSON 取规则与论域元数据（实现 `AlgorithmResourceRepository` 协议）。
 
-    ⚠️ **零 ORM**：本类不 import 任何 `process.models.*` ——
+    【注意】**零 ORM**：本类不 import 任何 `process.models.*` ——
        数据全部来自案例文件，与数据库无关。
     """
 
@@ -104,7 +104,7 @@ def list_cases():
 def build_repository(case):
     """案例 → 离线仓库（规则与关键词都走**生产适配器**，口径零重复）。"""
     rules = [RuleProfile(**row) for row in case['rules']]
-    # ⚠️ 直接复用生产的 dict 适配器：step 为空时的 `span/3` 推导逻辑
+    # 【注意】直接复用生产的 dict 适配器：step 为空时的 `span/3` 推导逻辑
     #    在适配器里，不在这里重写一遍（避免两处口径漂移）。
     keywords = RuleKeywordAdapter.to_keyword_profiles(case['keywords'])
     return CaseRepository(rules, keywords)
@@ -115,9 +115,9 @@ def build_context(case):
     ctx = dict(case['context'])
     ctx['process_parameter'] = field_names.to_algo_params(
         case['context']['process_parameter'])
-    # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
-    from process.algorithms.defect_selection import ensure_selected_defect
-    ensure_selected_defect(ctx)
+    # 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
+    from process.algorithms.defect_selection import select_defect
+    ctx['feedback'] = select_defect(ctx.get('feedback') or {})
     return ctx
 
 
@@ -180,7 +180,7 @@ def refresh_expected(case_id, case, recs):
     用途：改了规则库 / 论域元数据后，案例的期望值会过时 ⇒ 用它把基线刷成
     当前行为。写出的格式与 `export_case.py` 导出时**完全一致**（便于 diff）。
 
-    ⚠️ **会改写案例文件** —— 刷之前先确认这次改动是有意的。
+    【注意】**会改写案例文件** —— 刷之前先确认这次改动是有意的。
     """
     case['expected']['recommendations'] = [
         {
@@ -205,7 +205,7 @@ def print_case(case, recs):
     print('=' * 74)
     print('案例 %s —— %s' % (case['case_id'], case.get('title', '')))
     print('=' * 74)
-    defect = (case['context'].get('feedback') or {}).get('defect') or []
+    defect = (case['context'].get('feedback') or {}).get('defects') or []
     for d in defect:
         print('缺陷: %s / 程度=%s / 位置=%s'
               % (d.get('keyword_name'), d.get('level'), d.get('position')))

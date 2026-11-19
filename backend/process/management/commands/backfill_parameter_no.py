@@ -1,9 +1,7 @@
-"""工艺参数编号（parameter_no）存量回填命令
+"""工艺参数编号（parameter_no）存量回填命令。
 
-背景：
-    `parameter_no` 是面向用户的业务编号（格式 PP-{YYYYMMDD}-{HHMMSS}-{NNN}），
-    但生成逻辑落地前，历史轮次该字段全为空 ⇒ 调机历史里看不到工艺编号。
-    本命令按记录创建时刻回填，使历史轮次与新建轮次口径一致。
+`parameter_no` 是面向用户的业务编号，格式 `PP-{YYYYMMDD}-{HHMMSS}-{NNN}`。
+本命令按记录创建时刻回填，使历史轮次与新建轮次口径一致。
 
 用法：
     python manage.py backfill_parameter_no                # 预览（默认不写库）

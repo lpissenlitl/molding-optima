@@ -1,5 +1,4 @@
-"""
-molding-optima 基础数据 CRUD 对接测试脚本
+"""molding-optima 基础数据 CRUD 对接测试脚本。
 
 目标：覆盖 project / mold / polymer / filler / injection / auxiliary 六个模块的
 完整 CRUD + 批量删除流程，验证前后端字段是否一致、参数是否对齐。
@@ -10,7 +9,7 @@ molding-optima 基础数据 CRUD 对接测试脚本
     pytest tests/test_smoke_masterdata.py            # pytest 运行
 
 报告输出：
-    - 终端表格（✓/✗/!）
+    - 终端表格（//!）
     - 失败用例详细响应体
     - 末尾汇总
 
@@ -95,7 +94,7 @@ class ApiClient:
             }
 
     def login(self):
-        """登录获取 token"""
+        """登录获取 token。"""
         result = self._request("POST", "/api/login/", data={
             "username": USERNAME,
             "password": PASSWORD,
@@ -107,7 +106,7 @@ class ApiClient:
         return False
 
     def assert_biz_success(self, result: dict, expected_data_keys: Optional[list] = None) -> bool:
-        """判断业务成功：HTTP 200/201 且 body.status == 0"""
+        """判断业务成功：HTTP 200/201 且 body.status == 0。"""
         if not result["ok"]:
             return False
         if result["http_code"] not in (200, 201):
@@ -123,7 +122,7 @@ class ApiClient:
         return True
 
     def record(self, module: str, op: str, result: dict, ok: bool, expected_keys=None):
-        """记录用例结果"""
+        """记录用例结果。"""
         self.results.append({
             "module": module,
             "op": op,
@@ -192,7 +191,7 @@ def build_auxiliary_payload(tag: str) -> dict:
 # ============================================================
 
 def run_module_test(client: ApiClient, module: str, base_path: str, build_payload):
-    """对单个模块跑完整 CRUD + 批量删除流程，返回汇总"""
+    """对单个模块跑完整 CRUD + 批量删除流程，返回汇总。"""
     print(f"\n{'='*60}\n[{module}] CRUD 测试开始\n{'='*60}")
 
     # 1) Create
@@ -330,13 +329,13 @@ def print_report(client: ApiClient):
                 print(f"  expected_keys: {r['expected_keys']}")
             print()
     if not has_fail:
-        print("无失败用例 ✓")
+        print("无失败用例 ")
 
     print(f"\n{'='*60}\n接口对接总结\n{'='*60}")
     if failed == 0:
-        print("✓ 所有用例通过，前后端接口完全对接")
+        print("所有用例通过，前后端接口完全对接")
     else:
-        print(f"✗ {failed} 个用例失败，需修复前后端字段不一致 / 接口路径错误等问题")
+        print(f"{failed} 个用例失败，需修复前后端字段不一致 / 接口路径错误等问题")
     print()
 
 

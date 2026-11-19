@@ -11,16 +11,7 @@
     TuningRecord（DB） -> collect -> MiningSample（JSONL 语料）
         -> mine -> MiningRule（DB，pending 待审核）
 
-⚠️ **为什么要有这个命令（而 `mine_rules` 不够用）**
-    `mine_rules` 是「无条件跑一遍」的命令，适合手工排查与首次灌库；
-    定时调度需要的是「**攒够最小样本数再挖**」—— 样本不足时 Apriori
-    挖不出东西，反复空跑纯属浪费；而没有新经验进来时指标不会变，
-    重算也是白算。
-
-⚠️ **调度由运维侧 cron 拉起**（本项目无任务队列基础设施）：
-    ```cron
-    0 * * * * cd /path/to/backend && python manage.py mine_rules_scheduled
-    ```
+触发条件（攒够最小样本数再挖）与 cron 配置见 docs/mining-review-landing.md §6.5。
 """
 
 from django.core.management.base import BaseCommand
@@ -92,6 +83,6 @@ class Command(BaseCommand):
             f"失败 {result['failed']}"
         )
         if result['failed']:
-            # ⚠️ 有公司失败时以非零退出码结束 —— 让 cron / 监控能发现
+            # 【注意】有公司失败时以非零退出码结束 —— 让 cron / 监控能发现
             self.stderr.write('存在挖掘失败的公司，请检查日志')
             raise SystemExit(1)

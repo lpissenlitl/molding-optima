@@ -17,7 +17,7 @@ FUZZY_CORE = os.path.dirname(HERE)
 BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(FUZZY_CORE))))
 
 # 只把 backend 根目录（包的父目录）加进 sys.path。
-# ⚠️ 不要把 `fuzzy/` 目录加进来：那等于宣布「该目录下每个带 __init__.py 的子目录
+# 【注意】不要把 `fuzzy/` 目录加进来：那等于宣布「该目录下每个带 __init__.py 的子目录
 #    都是顶层包」，于是包内子模块（`fuzzy_core` / `library` …）泄漏成
 #    顶层名，将来撞名即**静默劫持**。内核一律用完整点分路径导入。
 sys.path.insert(0, BACKEND_ROOT)
@@ -63,7 +63,7 @@ def _assert_close(actual, expected, label, eps=1e-3):
 def _numtsk_net(rule_array, keywords, priorities):
     """按当前 net 契约构造数值层网络（规则对象 + KeywordProfile）。
 
-    ⚠️ net 不吃裸 dict：规则串由调用方转成 `NumTskRule`，
+    【注意】net 不吃裸 dict：规则串由调用方转成 `NumTskRule`，
     优先级随规则档案走（不单独传优先级数组）。
     """
     rules = [
@@ -156,7 +156,7 @@ def test_numtsk_inference():
         rule_str, activation, adjustments, raw_activation = results[0]
         _assert_eq('inj_pres_1' in adjustments, True, 'adjustments contains target')
         _assert_eq(float(activation) > 0, True, 'activation > 0')
-        # ⚠️ 第 4 项是**原始激活度**（前件隶属度之积，不含 priority/specificity）
+        # 【注意】第 4 项是**原始激活度**（前件隶属度之积，不含 priority/specificity）
         #    ⇒ 置信度用它；它必须落在 (0, 1]。
         _assert_eq(0 < float(raw_activation) <= 1.0, True,
                    'raw_activation in (0, 1]')

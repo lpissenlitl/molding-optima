@@ -1,4 +1,4 @@
-"""调参记录模型"""
+"""调参记录模型。"""
 
 from django.db import models
 
@@ -6,11 +6,11 @@ from extensions.models import BusinessBaseModel
 
 
 class TuningRecord(BusinessBaseModel):
-    """
-    工艺调整记录 - 记录一次工艺调整与试模结果
+    """工艺调整记录 - 记录一次工艺调整与试模结果。
 
     用于追踪工艺调整过程，包含：
     - 缺陷反馈（一次试模可能多个缺陷）
+    - 实测观察（本轮试模的实测值）
     - 调整记录（规范化训练样本）
     - 试模结果（迭代状态）
     - 调整前参数快照（独立存储）
@@ -18,6 +18,8 @@ class TuningRecord(BusinessBaseModel):
     设计说明：
     - 与 ProcessParameter 1:1 同步创建（业务层保证，FK 不加 unique）
     - 缺陷反馈以 JSON 数组存储，支持多个缺陷
+    - 实测观察与缺陷分开存：合格态清空缺陷但保留实测观察
+      （合格与否与实测值无关 —— 充填缺口等派生量在合格态同样有意义）
     - adjustments 是规范化训练样本，系统自动生成，用户不可定义结构
     - previous_parameter 存储调整前 OLD parameter 的参数
     - 迭代状态：pending → improved/worse → qualified/unqualified
@@ -53,6 +55,15 @@ class TuningRecord(BusinessBaseModel):
         help_text="一次试模可能包含多个缺陷，JSON数组格式"
     )
 
+    # --- 实测观察（JSON 数组）---
+    # 本轮试模的实测值（与「有没有缺陷」无关）
+    # [{"param_key": "actual_product_weight", "value": 85.0}]
+    observations = models.JSONField(
+        default=list,
+        verbose_name="实测观察列表",
+        help_text="本轮试模的实测观察项（param_key / value）"
+    )
+
     # --- 调整记录（JSON，系统自动生成）---
     # adjustments 是规范化训练样本，由系统计算 OLD vs NEW diff 生成
     # 字段名补充说明：取代原 note 字段
@@ -71,7 +82,7 @@ class TuningRecord(BusinessBaseModel):
     #         }
     #     ],
     #     "tuning_context": {
-    #         "iteration": 3,
+    #         "iteration": 3,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
     #         "previous_result": "worse"
     #     }
     # }

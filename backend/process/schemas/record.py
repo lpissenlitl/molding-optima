@@ -1,6 +1,6 @@
-"""molding-optima 工艺记录 Schema 定义
+"""molding-optima 工艺记录 Schema 定义。
 
-对应 URL 段: processes/records/  业务对象 ID: condition_id
+对应 URL 段: /api/processes/records/  业务对象 ID: condition_id
 (具体路由见 process/urls.py 的 records 段)
 
 records 段业务: 工艺条件 CRUD + 工艺参数只读子视图 (parameter-list / parameter-tree)
@@ -8,11 +8,11 @@ records 段业务: 工艺条件 CRUD + 工艺参数只读子视图 (parameter-li
 
 schema 契约:
 - ProcessRecordListSchema            列表 (继承 ProcessConditionListSchema, 视图维度 view_type="parameter")
-- ProcessConditionAndParameterSchema 创建 (POST /records/, condition + 可选 parameter)
-- ProcessConditionWriteSchema        更新 condition (PUT /records/<id>/, 仅 condition)
-- ProcessRecordBatchDeleteSchema     批量删除 (DELETE /records/actions/batch-delete/)
+- ProcessConditionAndParameterSchema 创建 (POST /api/processes/records/, condition + 可选 parameter)
+- ProcessConditionWriteSchema        更新 condition (PUT /api/processes/records/<int:condition_id>/, 仅 condition)
+- ProcessRecordBatchDeleteSchema     批量删除 (DELETE /api/processes/records/actions/batch-delete/)
 
-注: parameter 的读写走 parameters 段 (单段 URL /api/processes/parameters/<parameter_id>/),
+注: parameter 的读写走 parameters 段 (单段 URL /api/processes/parameters/<int:parameter_id>/),
     其写入契约见 parameter.py::ProcessParameterUpdateSchema。
 """
 from typing import Optional
@@ -26,23 +26,13 @@ from .parameter import ProcessParameterNestSchema
 
 
 class ProcessConditionAndParameterSchema(BaseSchema):
-    """工艺条件 + 第一条 parameter (POST /records/ 写入契约)
+    """工艺条件 + 第一条 parameter (POST /api/processes/records/ 写入契约)。
 
-    命名按"结构"而非"段归属"——业务上 records 段创建契约 (POST /records/),
-    schema 描述"condition + parameter 组合", 便于跨段复用。
-
-    condition:  必填 (强验证, 10 字段, 与 ProcessCondition model 对齐)
+    condition:  必填 (强验证, 与 ProcessCondition model 对齐)
     parameter:  可选 (parameter 业务容器, 当前含 setting_process, 未来可扩展)
-
-    设计选择:
-    - 保留 parameter 包装层 (不顶层平铺 setting_process)
-    - parameter Optional: 不传则不创建空 parameter, 避免数据库污染
-      (业务上用户可能先建 condition 骨架, 后续填数据再调 PUT /records/<id>/parameter/<id>/)
-    - 100% 真实流量来自前端 UI (NEST)
-    - 算法 / 移植 / 优化请直接用 ProcessParameterSchema (92 字段 FLAT)
     """
 
-    condition: ProcessConditionSchema = Field(..., description="工艺条件 (强验证, 10 字段)")
+    condition: ProcessConditionSchema = Field(..., description="工艺条件 (强验证)")
     parameter: ProcessParameterNestSchema = Field(
         None,
         description=(
@@ -54,33 +44,21 @@ class ProcessConditionAndParameterSchema(BaseSchema):
 
 
 class ProcessConditionWriteSchema(BaseSchema):
-    """工艺条件写入 (PUT /records/<condition_id/ 写入契约, 仅 condition)
+    """工艺条件写入 (PUT /api/processes/records/<int:condition_id>/ 写入契约, 仅 condition)
 
-    注: parameter 更新走独立端点 PUT /records/<condition_id>/parameter/<parameter_id>/
+    注: parameter 更新走独立端点 PUT /api/processes/parameters/<int:parameter_id>/
 
-    ┌────────────────────────────────────────────────────────────────────┐
-    │ 允许修改 (B 方案基础业务逻辑):                                         │
-    │   - status           状态流转 (draft / active / archived)            │
-    │   - process_context  前端可控覆盖输入                                  │
-    ├────────────────────────────────────────────────────────────────────┤
-    │ 禁止修改 (业务身份锁, service 拦截) :                                  │
-    │   - condition_no         service 自动生成, 不允许覆盖                 │
-    │   - origin_type          业务身份 (manual_creation / ai_recommend…),   │
-    │                          改 == 改变业务身份                            │
-    │   - process_context_snapshot 后端快照, 创建时锁定, 不允许覆盖          │
-    │   - mold_id / shot_index                                              │
-    │   - injection_machine_id / injection_index                            │
-    │   - polymer_id                                                         │
-    │     改则违反"同一三联 (mold+machine+polymer) 应对应不同 condition"       │
-    │     业务约束 → 应新建 condition 而非修改                               │
-    └────────────────────────────────────────────────────────────────────┘
+    允许修改: status (状态流转) / process_context (前端可控覆盖输入)。
+
+    禁止修改 (业务身份锁): 传入时被**静默忽略**, 原值保持不变;
+    字段清单见 services/condition.py::CONDITION_LOCKED_FIELDS。
     """
 
-    condition: ProcessConditionSchema = Field(..., description="工艺条件 (强验证, 10 字段)")
+    condition: ProcessConditionSchema = Field(..., description="工艺条件 (强验证)")
 
 
 class ProcessRecordListSchema(ProcessConditionListSchema):
-    """工艺记录列表查询条件
+    """工艺记录列表查询条件。
 
     继承 ProcessConditionListSchema (按 condition 字段过滤)。
     增加 view_type 字段区分业务视图:
@@ -98,6 +76,6 @@ class ProcessRecordListSchema(ProcessConditionListSchema):
 
 
 class ProcessRecordBatchDeleteSchema(BaseSchema):
-    """批量删除工艺记录（按 condition_id, 级联软删其下 parameter）"""
+    """批量删除工艺记录（按 condition_id, 级联软删其下 parameter）。"""
 
     ids: list[int] = Field(..., min_length=1, description="工艺条件 ID 列表")

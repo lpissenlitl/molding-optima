@@ -1,15 +1,8 @@
-"""规则中心列表查询条件 Schema
+"""规则中心列表查询条件 Schema。
 
-背景：规则库 / 规则关键字 / 规则方法 / 专家规则列表接口原先复用通用
-`PaginationBaseSchema`，而它只声明 `page_no / page_size / sort` ⇒ 前端传的
-筛选参数（`owner_type` / `library_type` / `library_name` / `is_active` /
-`keyword_type` / `rule_code` …）在校验阶段被**直接丢弃**，导致列表页筛选框
-全部失效（个别接口靠 view 里手工 `request.GET.get` 兜住了部分参数，
-漏掉的那些则静默失效）。
-
-本文件为规则中心补齐列表专用 Schema，字段名与
-`process.services.rule` 对应 service 的形参**一一对应**（view 层用
-`**cleaned_data` 透传 ⇒ 名字必须严格对齐，否则会 TypeError）。
+本文件是规则中心列表专用 Schema，字段名与 `process.services.rule` 对应 service
+的形参**一一对应**（view 层用 `**cleaned_data` 透传 ⇒ 名字必须严格对齐，
+否则会 TypeError）。
 """
 from typing import Optional
 

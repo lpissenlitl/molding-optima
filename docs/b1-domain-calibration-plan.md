@@ -167,7 +167,7 @@ MP0 论域 [0, 10]（设备上限替换后），当前值 18 ⇒ 上界外 80%
 | 概念 | 职责 | 落地位置 | 状态 |
 |---|---|---|---|
 | **物理天花板**（设备 `max_set_*`） | ① **裁剪推荐值**（建议不得超它） | `engine._apply_machine_limits` | ✅ 已实现 |
-| | ② **越限阻断**（超了就 400） | `parameter_optimize._guard_blocking_over_limits` | ✅ 已实现 |
+| | ② **越限阻断**（超了就 400） | `parameter_optimize._guard_over_limit_settings` | ✅ 已实现 |
 | | ③ **设定值类的判级论域上界** | `specs.resolve_domain_limits` | ✅ **保留**（本节更正的对象） |
 | **判级基准** | 划分 low/medium/high 的坐标区间 | 温度类=材料区间 / 位置类=设备行程 / 产品类=制品级物理基准 / **设定值类=设备上限（唯一例外）** | ✅ 已实现 |
 

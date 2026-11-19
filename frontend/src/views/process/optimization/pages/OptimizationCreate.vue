@@ -142,7 +142,7 @@
                   缺陷反馈
                 </div>
                 <DefectFeedback
-                  v-model="activeRound.feedback.defect"
+                  v-model="activeRound.feedback.defects"
                   v-model:tuning-result="activeRound.feedback.tuning_result"
                   :has-comparison="activeRound.type !== 'initial'"
                   :defect-keywords="defectKeywords"
@@ -323,7 +323,7 @@ function makeRound(type: 'initial' | 'optimized' | 'manual' = 'initial') {
     // 该轮自身的算法建议（Recommendation 锚在该轮参数上；历史轮次回显时从后端还原）
     suggestion: null as Suggestion | null,
     feedback: {
-      defect: [] as any,
+      defects: [] as any,
       tuning_result: null as any,
       observations: [] as any,
     },
@@ -507,10 +507,9 @@ async function restoreFromServer(conditionId: number): Promise<boolean> {
           }
         : null,
       feedback: {
-        defect: (t?.defect_feedbacks ?? []) as any,
+        defects: (t?.defect_feedbacks ?? []) as any,
         tuning_result: t?.tuning_result ?? null,
-        // 实测观察后端不落库（tuning-feedback schema 明确不存），回显为空
-        observations: [] as any,
+        observations: (t?.observations ?? []) as any,
       },
     }
   })
@@ -603,21 +602,23 @@ function applyInferResultToForm(result: any) {
   const data = result?.data
   if (!data) return
 
-  if (data.condition_id) form.condition.id = data.condition_id
-  if (data.condition_no) form.condition.condition_no = data.condition_no
+  if (data.condition) {
+    form.condition.id = data.condition.id
+    form.condition.condition_no = data.condition.condition_no
+  }
 
   if (!activeRound.value) return
 
-  if (data.parameter_id != null) {
-    activeRound.value.parameter_id = data.parameter_id
+  if (data.parameter?.id != null) {
+    activeRound.value.parameter_id = data.parameter.id
     // 同步更新 created_at：占位 round 的时间点不准，parameter_id 写入才是真正创建时刻
     activeRound.value.created_at = new Date().toISOString()
   }
-  if (data.seq_idx != null) {
-    activeRound.value.seq_idx = data.seq_idx
+  if (data.parameter?.seq_idx != null) {
+    activeRound.value.seq_idx = data.parameter.seq_idx
   }
-  if (data.process) {
-    activeRound.value.parameter = parameterFromFlat(data.process)
+  if (data.parameter) {
+    activeRound.value.parameter = parameterFromFlat(data.parameter)
   }
 }
 
@@ -659,7 +660,7 @@ interface FeedbackValidation {
   error?: string
 }
 function validateFeedback(feedback: any): FeedbackValidation {
-  const defects = feedback?.defect
+  const defects = feedback?.defects
   const list = Array.isArray(defects) ? defects : []
   if (!feedback?.tuning_result) {
     return { ok: false, error: '请选择本轮工艺效果评价' }
@@ -745,7 +746,7 @@ async function getOptimizedProcess() {
   }
 
   // 无缺陷时算法没有优化对象（后端会 fail-fast 报「推荐算法暂不可用」，对用户是误导）
-  if (!(activeRound.value?.feedback?.defect?.length)) {
+  if (!(activeRound.value?.feedback?.defects?.length)) {
     ElMessage.warning('本轮未填写缺陷，暂无优化建议')
     return
   }
@@ -773,9 +774,9 @@ async function getOptimizedProcess() {
       return
     }
 
-    // 响应有效性校验：new_parameter / suggestion.groups 缺失时不进下一轮（排查走服务端日志）
+    // 响应有效性校验：parameter / suggestion.groups 缺失时不进下一轮（排查走服务端日志）
     const hasNewParameter = !!(
-      inferData.new_parameter && inferData.new_parameter.parameter_id != null
+      inferData.parameter && inferData.parameter.id != null
     )
     const hasSuggestion = Array.isArray(inferData.suggestion?.groups)
       && inferData.suggestion.groups.length > 0
@@ -786,12 +787,12 @@ async function getOptimizedProcess() {
     }
 
     const newRound = makeRound('optimized')
-    if (inferData.new_parameter) {
-      newRound.parameter_id = inferData.new_parameter.parameter_id ?? null
-      newRound.seq_idx = inferData.new_parameter.seq_idx ?? null
+    if (inferData.parameter) {
+      newRound.parameter_id = inferData.parameter.id ?? null
+      newRound.seq_idx = inferData.parameter.seq_idx ?? null
       // 关键：flat → nested 后填入新轮次，否则表格停留在空模板（settingProcessForm 全 null）静默空白
-      newRound.parameter = parameterFromFlat(inferData.new_parameter)
-      if (!hasFlatParameterContent(inferData.new_parameter)) {
+      newRound.parameter = parameterFromFlat(inferData.parameter)
+      if (!hasFlatParameterContent(inferData.parameter)) {
         ElMessage.warning('优化响应未携带工艺参数字段，参数表可能为空，请检查服务端日志')
       }
     }
@@ -808,7 +809,7 @@ async function getOptimizedProcess() {
     }
 
     const groupCount = inferData.suggestion.groups.length
-    const seqIdx = inferData.new_parameter?.seq_idx ?? '-'
+    const seqIdx = inferData.parameter?.seq_idx ?? '-'
     // 面向用户只说「第几轮」，不暴露数据库主键（parameter_id 是内部标识）
     ElMessage.success(
       `优化工艺已生成（第 ${seqIdx} 轮），建议 ${groupCount} 类`,
@@ -842,7 +843,7 @@ async function onSubmit() {
       ? undefined
       : (isEmptyFlatParameter(flatParameter) ? undefined : flatParameter)
     const res: any = await tuningFeedback(activeRound.value.parameter_id, {
-      defect_feedbacks: feedback.defect ?? [],
+      defect_feedbacks: feedback.defects ?? [],
       observations: feedback.observations ?? [],
       tuning_result: feedback.tuning_result ?? null,
       parameter: parameterPayload,

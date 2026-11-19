@@ -6,19 +6,19 @@
         ↓ approve（管理员）
     RuleMethod（生效，参与试模推荐）
 
-⚠️ **为什么审核与落地要分开两步**
+【注意】**为什么审核与落地要分开两步**
     - 候选规则是**统计关联**（「缺陷 + 参数变更 ⇒ 结果」），未经人工确认
       不能直接当成**工艺因果**写进生效规则库；
     - 但「通过」必须**一步到位**地产生生效规则，否则审核人点完「通过」
       还要再去规则库手工建一条 —— 两步之间必然漂移（谁建、建成什么样）。
 
-⚠️ **为什么「通过」要求规则一定能落地**
+【注意】**为什么「通过」要求规则一定能落地**
     落地翻译器会剔除三类规则：非正向后件（`unqualified` / `worse`）、
     没有参数变更、动作方向与当前档位相悖。
     这类规则「审核通过」在语义上是矛盾的（通过了却没生效）⇒
     服务层直接拒绝，**状态保持 pending**，让管理员去看详情里的落地预览。
 
-⚠️ **租户隔离比规则主数据更严**
+【注意】**租户隔离比规则主数据更严**
     规则关键词会把「系统演示公司」的公共词典并进来（`rule.get_list_of_rule_keyword`），
     但候选规则**必须严格按公司隔离** —— 挖掘语料来自本公司的调机流水，
     混入别家公司的规则既没有依据，也会让置信度失真。
@@ -69,7 +69,7 @@ _LANDED_DESC_MAX = 500
 def _scope(queryset, company_id, is_superuser):
     """按公司隔离候选规则。
 
-    ⚠️ **平台超管未接管时（company_id=None）看全部**；
+    【注意】**平台超管未接管时（company_id=None）看全部**；
        已接管则一律跟租户走（与 `rule.get_list_of_rule_keyword` 同口径，
        但**不并入系统演示公司** —— 候选规则是本公司挖掘产物）。
     """
@@ -106,7 +106,7 @@ def _defect_text(defects) -> str:
 def serialize_mining_rule(rule: MiningRule, with_evidence: bool = False) -> Dict:
     """候选规则 → 字典（面向前端展示）。
 
-    ⚠️ **不直接用 `to_dict()`**：那会把 `company_id` / `organization_id` /
+    【注意】**不直接用 `to_dict()`**：那会把 `company_id` / `organization_id` /
        `is_deleted` 等内部字段一并吐给前端，且不提供 `defect_text`
        这类展示用聚合字段。
     """
@@ -192,7 +192,7 @@ def get_mining_rule_list(
 def _resolve_company(rule: MiningRule, company_id) -> Optional[int]:
     """算档位要用的公司 id。
 
-    ⚠️ **平台超管未接管时用规则自身的公司** ——
+    【注意】**平台超管未接管时用规则自身的公司** ——
        `RuleKeyword`（量程 / 档位词表）是按公司登记的，
        用超管自己的 company_id（None）算会一条参数都查不到。
     """
@@ -275,7 +275,7 @@ def approve_mining_rule(
 ) -> Dict:
     """通过候选规则 ⇒ 落地为 `RuleMethod`（`source='rule_miner'`）。
 
-    ⚠️ **通过与落地在同一个事务里** —— 落地失败（翻译不出规则）
+    【注意】**通过与落地在同一个事务里** —— 落地失败（翻译不出规则）
        就要整体回滚，状态保持 pending，不能出现「通过了但没生效」的中间态。
 
     Args:
@@ -346,7 +346,7 @@ def reject_mining_rule(
 ) -> Dict:
     """驳回候选规则。
 
-    ⚠️ **驳回必须写意见** —— 没有理由的驳回对规则挖掘没有反馈价值，
+    【注意】**驳回必须写意见** —— 没有理由的驳回对规则挖掘没有反馈价值，
        也让候选规则表变成只进不出的黑洞。
     """
     rule = _get_rule(mining_rule_id, company_id, is_superuser)

@@ -25,7 +25,7 @@ import re
 # ============================================================
 
 def _get_mold_by_id(mold_id: int) -> Mold:
-    """根据模具ID获取模具对象（含关联数据预加载）"""
+    """根据模具ID获取模具对象（含关联数据预加载）。"""
     mold_id = validate_pk(mold_id, "模具ID")
     mold = Mold.objects.filter(
         pk=mold_id
@@ -39,12 +39,12 @@ def _get_mold_by_id(mold_id: int) -> Mold:
 
 
 def _build_mold_dict(mold: Mold) -> dict:
-    """构建模具完整数据（含关联系统）"""
+    """构建模具完整数据（含关联系统）。"""
     return mold.to_dict(include_rvs=True)
 
 
 def _validate_mold_no_unique(company_id: int, mold_no: str, exclude_id: int = None):
-    """校验模具编号唯一性"""
+    """校验模具编号唯一性。"""
     if not mold_no:
         raise BizException(ERROR_REQUIRED_FIELD, "模具编号必须存在，且不能为空")
     qs = Mold.objects.filter(mold_no=mold_no, company_id=company_id)
@@ -55,7 +55,7 @@ def _validate_mold_no_unique(company_id: int, mold_no: str, exclude_id: int = No
 
 
 def _sync_gates(cavity: Cavity, incoming_gates: list):
-    """同步浇口数据：删除不在 incoming 中的，创建/更新 incoming 中的"""
+    """同步浇口数据：删除不在 incoming 中的，创建/更新 incoming 中的。"""
     incoming_ids = {g.get("id") for g in incoming_gates if g.get("id") is not None}
     # 删除
     for gate in cavity.gates.all():
@@ -71,7 +71,7 @@ def _sync_gates(cavity: Cavity, incoming_gates: list):
 
 
 def _sync_cavities(gating_system: GatingSystem, incoming_cavities: list):
-    """同步型腔数据：删除不在 incoming 中的，创建/更新 incoming 中的（含浇口）"""
+    """同步型腔数据：删除不在 incoming 中的，创建/更新 incoming 中的（含浇口）。"""
     incoming_ids = {c.get("id") for c in incoming_cavities if c.get("id") is not None}
     # 删除
     for cavity in gating_system.cavities.all():
@@ -90,7 +90,7 @@ def _sync_cavities(gating_system: GatingSystem, incoming_cavities: list):
 
 
 def _sync_gating_systems(mold: Mold, incoming_gating_systems: list):
-    """同步浇注系统数据：删除不在 incoming 中的，创建/更新 incoming 中的（含型腔、浇口）"""
+    """同步浇注系统数据：删除不在 incoming 中的，创建/更新 incoming 中的（含型腔、浇口）。"""
     incoming_ids = {g.get("id") for g in incoming_gating_systems if g.get("id") is not None}
     # 删除
     for gating_system in mold.gating_systems.all():
@@ -113,8 +113,7 @@ def _sync_gating_systems(mold: Mold, incoming_gating_systems: list):
 # ============================================================
 
 def create_mold(user: User, **kwargs):
-    """
-    创建模具
+    """创建模具。
     注意：此方法暂时需要 user，因为可能自动创建项目（create_project 需要 operator 写审计字段）
     """
     company_id = user.company_id
@@ -152,13 +151,13 @@ def create_mold(user: User, **kwargs):
 
 
 def get_mold_info(mold_id: int) -> dict:
-    """获取模具信息"""
+    """获取模具信息。"""
     mold = _get_mold_by_id(mold_id)
     return _build_mold_dict(mold)
 
 
 def update_mold_info(company_id: int, mold_id: int, **kwargs) -> dict:
-    """更新模具信息"""
+    """更新模具信息。"""
     mold = _get_mold_by_id(mold_id)
     _validate_mold_no_unique(company_id, kwargs.get("mold_no"), exclude_id=mold_id)
 
@@ -181,7 +180,7 @@ def update_mold_info(company_id: int, mold_id: int, **kwargs) -> dict:
 
 
 def delete_mold(company_id: int, mold_id: int) -> None:
-    """删除模具（仅限本公司）"""
+    """删除模具（仅限本公司）。"""
     mold = Mold.objects.filter(pk=mold_id, company_id=company_id, is_deleted=False).first()
     if mold is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"模具不存在: id={mold_id}")
@@ -201,7 +200,7 @@ def get_mold_list(
     page_size: int = None,
     sort: str = None,
 ) -> tuple:
-    """获取模具列表"""
+    """获取模具列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "mold_no": {"input": mold_no, "column": "mold_no", "lookup": "icontains"},
@@ -233,7 +232,7 @@ def get_mold_list(
 
 
 def batch_delete_mold(company_id: int, ids: list) -> int:
-    """批量删除模具（仅删本公司存在的）"""
+    """批量删除模具（仅删本公司存在的）。"""
     ids = validate_id_list(ids, "模具ID列表")
     # 按 company_id 过滤出本公司的 id（防止跨公司删除）
     valid_ids = list(

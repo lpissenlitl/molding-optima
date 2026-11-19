@@ -1,4 +1,4 @@
-"""租户 Token 加密/解密工具
+"""租户 Token 加密/解密工具。
 使用 XOR + Base64 编码生成短 token
 """
 
@@ -11,31 +11,30 @@ from django.conf import settings
 
 
 class TenantTokenCrypto:
-    """租户 Token 加密/解密工具"""
+    """租户 Token 加密/解密工具。"""
 
     CHECKSUM_LEN = 16  # 校验和字节数
 
     @staticmethod
     def _get_key_bytes() -> bytes:
-        """获取密钥字节"""
+        """获取密钥字节。"""
         secret = getattr(settings, 'TENANT_TOKEN_SECRET', None) or settings.SECRET_KEY
         return secret.encode()
 
     @staticmethod
     def _xor(data: bytes, key: bytes) -> bytes:
-        """XOR 异或运算"""
+        """XOR 异或运算。"""
         key_len = len(key)
         return bytes(b ^ key[i % key_len] for i, b in enumerate(data))
 
     @staticmethod
     def _checksum(data: bytes) -> bytes:
-        """HMAC-SHA256 校验和"""
+        """HMAC-SHA256 校验和。"""
         return hmac.new(TenantTokenCrypto._get_key_bytes(), data, hashlib.sha256).digest()[:TenantTokenCrypto.CHECKSUM_LEN]
 
     @staticmethod
     def encrypt(tenant_slug: str, expiry_seconds: int = None) -> str:
-        """
-        加密 tenant_slug 为 token
+        """加密 tenant_slug 为 token。
 
         Token 格式: Base64 编码字符串
         示例: H0gSTF1Nal8sIlUsMSUDSjJTJXkcMUsj3UokD8ZaD
@@ -52,8 +51,7 @@ class TenantTokenCrypto:
 
     @staticmethod
     def decrypt(token: str) -> dict:
-        """
-        解密 token 获取 payload
+        """解密 token 获取 payload。
 
         Raises:
             ValueError: token 无效、已过期或格式错误
@@ -94,7 +92,7 @@ class TenantTokenCrypto:
 
     @staticmethod
     def decrypt_tenant_slug(token: str) -> str:
-        """解密 token 直接获取 tenant_slug"""
+        """解密 token 直接获取 tenant_slug。"""
         return TenantTokenCrypto.decrypt(token)['tenant_slug']
 
 

@@ -44,7 +44,7 @@ _logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# 业务身份锁：condition 哪些字段禁止通过 PUT 修改 (B 方案基础业务逻辑)
+# 业务身份锁：condition 哪些字段禁止通过 PUT 修改
 # ============================================================================
 # 业务划分:
 # - 业务身份锁:  origin_type (manual_creation / ai_recommendation / ...) / condition_no
@@ -55,11 +55,11 @@ _logger = logging.getLogger(__name__)
 #   改则违反"同一三联 (mold+machine+polymer) 应对应不同 condition" 的业务约束
 #     如需调整主关联, 应新建 condition 而非修改
 #
-# 允许修改的业务字段 (B 方案:
+# 允许修改的业务字段:
 # - status           状态流转 (draft / active / archived)
 # - process_context  前端可控覆盖输入 (后端不自动改, 仅前端可补)
 #
-# 注: 本常量仅护 service 逻辑; 补全 1. Docstring + 2. IllegalArgument 错误信息 。
+# 注: 锁定字段被传入时**静默忽略**（不抛错），原值保持不变。
 CONDITION_LOCKED_FIELDS = frozenset({
     # 系统生成
     "condition_no",
@@ -81,7 +81,7 @@ CONDITION_LOCKED_FIELDS = frozenset({
 # ============================================================================
 
 def _frontend_to_condition_dict(setting_process: dict) -> dict:
-    """前端嵌套结构 setting_process → DB 扁平字段
+    """前端嵌套结构 setting_process → DB 扁平字段。
 
     Args:
         setting_process: 前端嵌套结构
@@ -199,7 +199,7 @@ def _frontend_to_condition_dict(setting_process: dict) -> dict:
 
 
 def _condition_to_frontend_payload(parameter, injection_unit=None) -> dict:
-    """DB 扁平字段 → 前端嵌套结构 setting_process
+    """DB 扁平字段 → 前端嵌套结构 setting_process。
 
     Args:
         parameter: ProcessParameter 模型实例
@@ -383,7 +383,7 @@ def _condition_to_frontend_payload(parameter, injection_unit=None) -> dict:
 # ============================================================================
 
 def _create_process_condition(company_id: int, organization_id: int, **kwargs):
-    """创建 ProcessCondition（含 process_context_snapshot 构建）
+    """创建 ProcessCondition（含 process_context_snapshot 构建）。
 
     与 molding-expert 差异：
     - 注射单元通过 injection_machine + injection_index 业务规则推导
@@ -492,7 +492,7 @@ def _create_process_condition(company_id: int, organization_id: int, **kwargs):
 
 
 def _get_process_condition_by_id(condition_id: int, company_id: int = None) -> ProcessCondition:
-    """获取 ProcessCondition ORM 对象（私有）
+    """获取 ProcessCondition ORM 对象（私有）。
 
     Args:
         condition_id: 工艺条件 ID
@@ -523,19 +523,19 @@ def _get_process_condition_by_id(condition_id: int, company_id: int = None) -> P
 
 @transaction.atomic
 def create_condition(company_id: int, organization_id: int, **kwargs):
-    """创建工艺条件 + 可选第一条工艺参数
+    """创建工艺条件 + 可选第一条工艺参数。
 
     Args:
         kwargs:
             - condition: dict 工艺条件字段 (必填)
-            - parameter: dict 含 setting_process 的前端嵌套结构 或 flat 92 字段 (可选)
+            - parameter: dict 含 setting_process 的前端嵌套结构 或 flat 字段 (可选)
 
     Returns:
         dict: condition 详情（含 parameter, 如有）
 
     业务场景:
     - 完整创建: condition + parameter 一起传 (用户已填好参数)
-    - 骨架创建: 只传 condition (后续调 PUT /records/<id>/ 填数据)
+    - 骨架创建: 只传 condition (后续调 PUT /api/processes/records/<int:condition_id>/ 填数据)
     """
     condition_kwargs = kwargs.get("condition")
     parameter = kwargs.get("parameter")
@@ -559,7 +559,6 @@ def create_condition(company_id: int, organization_id: int, **kwargs):
         "company_id": company_id,
         "organization_id": organization_id,
         "process_condition_id": condition.id,
-        "param_code": generate_unique_code("PPARA"),
         "param_source": "unknown",
     })
     ProcessParameter.create_with_check(**parameter_kwargs)
@@ -568,7 +567,7 @@ def create_condition(company_id: int, organization_id: int, **kwargs):
 
 @transaction.atomic
 def update_condition(condition_id: int, company_id: int = None, **kwargs):
-    """更新工艺条件 (仅 condition, B 方案拆分后)
+    """更新工艺条件（仅 condition 字段）。
 
     Args:
         condition_id: 工艺条件 ID
@@ -576,19 +575,10 @@ def update_condition(condition_id: int, company_id: int = None, **kwargs):
         kwargs:
             - condition: dict 要更新的 condition 字段
 
-    允许修改的字段 (详见 schemas/record.py ProcessConditionWriteSchema):
-    - status           状态流转 (draft / active / archived)
-    - process_context  前端可控覆盖输入
-
-    禁止修改的字段 (业务身份锁, 由 CONDITION_LOCKED_FIELDS 定义):
-    - condition_no / origin_type / process_context_snapshot  (身份 + 后端快照)
-    - mold_id / injection_machine_id / polymer_id / shot_index / injection_index  (主关联)
-
-    注: 锁定字段被传入时静默忽略（不抛错），保持原值不变。
-    这样前端可以无脑发整个 condition 对象，后端过滤掉不允许修改的字段。
+    允许/锁定字段清单与静默忽略策略见本文件 CONDITION_LOCKED_FIELDS 上方说明。
     如需调整主关联 (模具/机器/材料/射次)，请新建一条工艺条件。
 
-    注: parameter 更新走独立端点 (PUT /parameters/<parameter_id>/),
+    注: parameter 更新走独立端点 (PUT /api/processes/parameters/<int:parameter_id>/),
         详见 services/parameter.py 的 update_parameter。
     """
     condition = _get_process_condition_by_id(condition_id, company_id=company_id)
@@ -614,16 +604,14 @@ def update_record(
     parameter_data: dict = None,
     company_id: int = None,
 ) -> dict:
-    """业务级更新工艺记录 (condition [+ 最新 parameter], 业务身份锁)
+    """业务级更新工艺记录 (condition [+ 最新 parameter], 业务身份锁)。
 
-    业务身份锁字段拦截（与 update_condition 一致）:
-    - 允许: status, process_context
-    - 锁定: condition_no / origin_type / process_context_snapshot /
-            mold_id / injection_machine_id / polymer_id / shot_index / injection_index
+    业务身份锁字段被 update_condition **静默忽略**（不抛错），
+    允许/锁定字段清单见本文件 CONDITION_LOCKED_FIELDS 上方说明。
 
     Args:
         condition_id: 工艺条件 ID
-        condition_data: condition 字段（业务身份锁字段会被 update_condition 拦截）
+        condition_data: condition 字段（业务身份锁字段被 update_condition 静默忽略）
         parameter_data: parameter 业务容器 (Optional)
             - 不传或空 → 仅改 condition
             - 传 setting_process → 改 condition + 改 condition 下"最新 parameter"
@@ -634,15 +622,14 @@ def update_record(
 
     注: 写操作在事务中（@transaction.atomic）保证 condition + parameter 双写原子性。
 
-    实现思路（参考 ConditionDetailView.put / ParameterDetailView.put 设计）:
-    - condition 部分复用 update_condition（业务身份锁拦截逻辑仅维护一处）
+    实现:
+    - condition 部分复用 update_condition（业务身份锁逻辑仅维护一处）
     - parameter 部分复用 parameter_service.update_parameter（单段 PUT, 按 parameter_id 定位,
       NEST 格式自动识别 + 转 FLAT）
-    - 不需新建 service, 仅组合调用现有 2 个 service
     """
     # 1. condition 部分（走 update_condition 的业务身份锁逻辑）
     if condition_data:
-        # update_condition 会拦截 CONDITION_LOCKED_FIELDS 中的字段, 抛 BizException
+        # 业务身份锁字段被 update_condition 静默忽略 (不抛错), 前端可无脑发整个 condition
         update_condition(condition_id, company_id=company_id, condition=condition_data)
 
     # 2. parameter 部分（找 latest, 调 parameter_service.update_parameter）
@@ -665,14 +652,14 @@ def update_record(
 
 @transaction.atomic
 def delete_condition(condition_id: int, company_id: int = None):
-    """软删工艺条件（级联软删 parameter）"""
+    """软删工艺条件（级联软删 parameter）。"""
     condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     condition.soft_delete()
 
 
 @transaction.atomic
 def batch_delete_condition(ids: list, company_id: int = None):
-    """批量软删工艺条件
+    """批量软删工艺条件。
 
     company_id 不为 None 时只软删属于该租户的记录（其他租户的 id 静默跳过）。
     """
@@ -689,7 +676,7 @@ def batch_delete_condition(ids: list, company_id: int = None):
 # ============================================================================
 
 def _fk_info(obj) -> dict | None:
-    """FK 关联对象 → dict；关联为空时返回 None
+    """FK 关联对象 → dict；关联为空时返回 None。
 
     condition 的 mold / injection_machine / polymer 三个 FK 都允许为空
     （如 mining demo 种子只建编号不挂主数据）。直接 obj.to_dict() 会在
@@ -700,7 +687,7 @@ def _fk_info(obj) -> dict | None:
 
 
 def get_condition(condition_id: int, view_type: str = "parameter", company_id: int = None) -> dict:
-    """获取工艺条件详情
+    """获取工艺条件详情。
 
     Args:
         condition_id: 工艺条件 ID
@@ -741,7 +728,7 @@ def get_condition(condition_id: int, view_type: str = "parameter", company_id: i
 
 
 def get_condition_frontend(condition_id: int, company_id: int = None) -> dict:
-    """获取工艺条件详情（前端嵌套结构格式）
+    """获取工艺条件详情（前端嵌套结构格式）。
 
     company_id 不为 None 时按租户过滤（防跨租户读取）。
 
@@ -779,17 +766,17 @@ def get_condition_frontend(condition_id: int, company_id: int = None) -> dict:
 
 
 def get_condition_with_parameter_list(condition_id: int, company_id: int = None) -> dict:
-    """获取工艺条件 + 该条件下全部 parameter (平铺)
+    """获取工艺条件 + 该条件下全部 parameter (平铺)。
 
-    业务 (records/<id>/parameter-list/ 端点支撑):
+    业务 (/api/processes/records/<int:condition_id>/parameter-list/ 端点支撑):
     - 响应: {condition, parameters[]}
     - parameters 按 seq_idx, id 排序 (稳定序列)
     - 不分页, 一次返回该 condition 下所有 parameter (1–50 条, 性能可接受)
 
     与现有接口区别:
-    - records/<id>/                -> condition + 最新 1 条 (摘要视图)
-    - conditions/<id>/parameters/  -> 仅 parameter 列表 (数据级, 含分页/过滤)
-    - records/<id>/parameter-list/ -> condition + 全部 parameter (业务级一体化)
+    - /api/processes/records/<int:condition_id>/                -> condition + 最新 1 条 (摘要视图)
+    - /api/processes/parameters/                                 -> 仅 parameter 列表 (数据级, 含分页/过滤)
+    - /api/processes/records/<int:condition_id>/parameter-list/ -> condition + 全部 parameter (业务级一体化)
     """
     condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     parameters = ProcessParameter.objects.filter(
@@ -804,15 +791,15 @@ def get_condition_with_parameter_list(condition_id: int, company_id: int = None)
 
 
 def get_condition_with_parameter_tree(condition_id: int, company_id: int = None) -> dict:
-    """获取工艺条件 + 该条件下全部 parameter (树形)
+    """获取工艺条件 + 该条件下全部 parameter (树形)。
 
-    业务 (records/<id>/parameter-tree/ 端点支撑):
+    业务 (/api/processes/records/<int:condition_id>/parameter-tree/ 端点支撑):
     - 响应: {condition, parameter_tree[]}
     - parameter_tree 复用 parameter_service.get_parameter_tree 的树形输出
 
     与现有接口区别:
-    - conditions/<id>/parameter-tree/  -> 仅 parameter 树 (数据级)
-    - records/<id>/parameter-tree/     -> condition + parameter 树 (业务级一体化)
+    - /api/processes/records/<int:condition_id>/parameter-tree/ -> condition + parameter 树 (业务级一体化)
+    - 数据级 parameter 树路由暂未挂出 (view + service 保留)
     """
     condition = _get_process_condition_by_id(condition_id, company_id=company_id)
     # 局部引用避免循环导入风险 (condition.py 与 parameter.py 互依)
@@ -853,7 +840,7 @@ def get_condition_list(
     page_no: int = None,
     page_size: int = None,
 ) -> Tuple[int, List[dict]]:
-    """获取工艺条件列表（按 view_type 区分应用场景）
+    """获取工艺条件列表（按 view_type 区分应用场景）。
 
     Args:
         view_type:
@@ -957,7 +944,7 @@ def get_condition_list(
 
 
 def _param_source_to_origin_category(param_source: str) -> str:
-    """将 ProcessParameter.param_source 归一为 origin_category
+    """将 ProcessParameter.param_source 归一为 origin_category。
 
     业务语义:
     - manual        人工调机 (人工录入 + 人工调整 + 外部导入)
@@ -979,7 +966,7 @@ def _param_source_to_origin_category(param_source: str) -> str:
 # ============================================================================
 
 def get_condition_with_history(condition_id: int) -> dict:
-    """获取工艺条件详情（含调机轮次）
+    """获取工艺条件详情（含调机轮次）。
 
     业务：工艺优化页加载时使用，展示 condition + 关联的 parameter 数量。
     """
@@ -1008,14 +995,14 @@ def _build_tuning_payload(
     parameter: Optional[ProcessParameter] = None,
     recommendation: Optional[Recommendation] = None,
 ) -> dict:
-    """单个 parameter 的回显 payload：该轮自身的试模反馈 + 该轮自身的算法建议
+    """单个 parameter 的回显 payload：该轮自身的试模反馈 + 该轮自身的算法建议。
 
     配对语义：界面上的「第 N 轮」= 参数(N) + 反馈(N) —— 反馈是该轮参数自身的试模结果，
     因此一条 TuningRecord 只对应它自己那一个 parameter，不跨轮。
 
     tuning_result 已从库内存储词反映射为前端枚举；pending 回 None（未评价）。
 
-    recommendation 同样按锚点语义归本轮：Recommendation 挂在它所属的 parameter 上，
+    recommendation 同样按锚点语义归本轮：Recommendation 挂在**被建议的那个参数**上，
     重建为前端 Suggestion 结构（含 is_adopted 训练标签）。
     """
     if record is None:
@@ -1023,6 +1010,7 @@ def _build_tuning_payload(
             "tuning_result": None,
             "result": None,
             "defect_feedbacks": [],
+            "observations": [],
             "result_detail": None,
         }
     else:
@@ -1030,6 +1018,7 @@ def _build_tuning_payload(
             "tuning_result": tuning_result_from_record(record.result),
             "result": record.result,
             "defect_feedbacks": record.defect_feedbacks or [],
+            "observations": record.observations or [],
             "result_detail": record.result_detail,
         }
 
@@ -1040,7 +1029,7 @@ def _build_tuning_payload(
 
 
 def get_condition_history(condition_id: int, company_id: int = None) -> dict:
-    """获取某工艺的调机历史（时间线，按 created_at 倒序）
+    """获取某工艺的调机历史（时间线，按 created_at 倒序）。
 
     业务: 调机记录页的弹窗数据源 + 智能调机页的历史轮次回显数据源
     (每个 parameter = 一轮调机), 按发生时间从新到旧排列。
@@ -1098,7 +1087,7 @@ def get_condition_history(condition_id: int, company_id: int = None) -> dict:
 
 @transaction.atomic
 def update_condition_info(condition_id: int, **params):
-    """更新工艺条件字段（不涉及 parameter）
+    """更新工艺条件字段（不涉及 parameter）。
 
     注：业务上 condition 一旦创建不轻易变更；如需调整建议新建 condition。
     """
@@ -1117,7 +1106,7 @@ def update_condition_info(condition_id: int, **params):
 # ============================================================================
 
 # 中文缺陷名 → 英文缺陷码译文表
-# ⚠️ **权威源 = RuleKeyword.keyword_name**（规则库 17 类缺陷码）—— chain 用它
+# 【注意】**权威源 = RuleKeyword.keyword_name**（规则库 17 类缺陷码）—— chain 用它
 #    查规则库（``RuleMethod.defect_code`` 与 ``keyword_name`` 同码）。
 #    中文名逐条取自规则库条目的 ``description``。
 DEFECT_NAME_MAP = {
@@ -1137,7 +1126,7 @@ DEFECT_NAME_MAP = {
     "尺寸偏小": "UNDERSIZE",
     "浇口印": "GATEMARK",
     "阴阳面": "SHADING",
-    # ⚠️ 规则库**无「色差」这一类缺陷** ⇒ 保留原名（查不到规则 ⇒ 无推荐）。
+    # 【注意】规则库**无「色差」这一类缺陷** ⇒ 保留原名（查不到规则 ⇒ 无推荐）。
     "色差": "COLOR_SHIFT",
 }
 
@@ -1164,7 +1153,7 @@ PROCESS_PARAM_FIELDS = (
 
 
 def _translate_defect_name(chinese_name: str) -> str:
-    """中文缺陷名 → 英文 defect_code（供 FuzzyEngine 查询 RuleMethod）"""
+    """中文缺陷名 → 英文 defect_code（供 FuzzyEngine 查询 RuleMethod）。"""
     if not chinese_name:
         return ""
     if chinese_name in DEFECT_NAME_MAP:
@@ -1173,7 +1162,7 @@ def _translate_defect_name(chinese_name: str) -> str:
 
 
 def _extract_process_parameters(current_params: list) -> dict:
-    """从 ProcessParameter 列表提取数值型工艺参数（chain 输入）"""
+    """从 ProcessParameter 列表提取数值型工艺参数（chain 输入）。"""
     snapshot = {}
     if not current_params:
         return snapshot
@@ -1190,7 +1179,7 @@ def _build_optimization_context(
     current_params: list,
     target_defect: str,
 ) -> dict:
-    """构造 chain 调度所需的 context"""
+    """构造 chain 调度所需的 context。"""
     defect_name_en = _translate_defect_name(target_defect) if target_defect else ""
     parameter_snapshot = _extract_process_parameters(current_params)
 
@@ -1209,19 +1198,15 @@ def _build_optimization_context(
     except Exception as e:  # noqa: BLE001
         _logger.warning("[condition] iteration_trend 分析失败: %s", e)
 
-    overrides = {}
-    snapshot = getattr(condition, "process_context_snapshot", None) or {}
-    if isinstance(snapshot, dict):
-        overrides = snapshot.get("overrides", {}) or {}
 
     return {
         "defect_name": defect_name_en,
         "feedback": {
-            "defect": [
+            "defects": [
                 {
                     "defect_name": defect_name_en,
                     "defect_name_zh": target_defect,
-                    # ⚠️ 缺陷选取的**有效性判据** = 有非空 ``keyword_name``
+                    # 【注意】缺陷选取的**有效性判据** = 有非空 ``keyword_name``
                     #    ⇒ 缺它 ⇒ 选不出缺陷 ⇒ 引擎拿不到缺陷类型（无推荐）。
                     "keyword_name": defect_name_en,
                 }
@@ -1229,19 +1214,16 @@ def _build_optimization_context(
         },
         "process_parameter": parameter_snapshot,
         "iteration_trend": trend_dict,
-        "polymer_abbreviation": overrides.get("polymer_abbreviation"),
-        "product_category": overrides.get("product_category"),
-        "rule_library_code": overrides.get("rule_library_code"),
         # 当前租户（**规则库可见性上下文**）—— 系统库对所有租户公用，
         # 租户私库只对归属租户可见（判据在算法侧共用编排层）。
-        # ⚠️ **两条算法入口都要传**：只传一条 ⇒ 同一条规则在不同入口的
+        # 【注意】**两条算法入口都要传**：只传一条 ⇒ 同一条规则在不同入口的
         #    可见性不一致（不报错，只是结果悄悄不同）。
         "company_id": getattr(condition, "company_id", None),
     }
 
 
 def _infer_direction(current_value, recommended_value) -> str:
-    """根据当前值与推荐值推断调整方向"""
+    """根据当前值与推荐值推断调整方向。"""
     if current_value is None or recommended_value is None:
         return "adjust"
     if recommended_value > current_value:
@@ -1252,7 +1234,7 @@ def _infer_direction(current_value, recommended_value) -> str:
 
 
 def _recommendations_to_adjustments(recommendations: list, context: dict) -> List[dict]:
-    """AlgorithmRecommendation 列表 → 旧版 adjustments 格式（保持 API 兼容）"""
+    """AlgorithmRecommendation 列表 → adjustments 格式（响应契约保持兼容）。"""
     parameter_snapshot = context.get("process_parameter") or {}
     adjustments: List[dict] = []
     for rec in recommendations:
@@ -1270,7 +1252,7 @@ def _recommendations_to_adjustments(recommendations: list, context: dict) -> Lis
 
 
 def _adjustment_direction(rec, current_value) -> str:
-    """推荐方向 → 旧版 adjustments 的值域（increase / decrease / adjust）
+    """推荐方向 → adjustments 的值域（increase / decrease / adjust）。
 
     优先用 ``AlgorithmRecommendation.direction``：经验推理只给方向不给数值，
     从 current/recommended 推不出来，推出来的永远是 ``adjust``。
@@ -1284,7 +1266,7 @@ def _adjustment_direction(rec, current_value) -> str:
 
 
 def _run_optimization_chain(context: dict) -> Tuple[List[dict], str]:
-    """运行优化 chain
+    """运行优化 chain。
 
     调度顺序：
       1. 取出 AlgorithmRegistry 中 algorithm_type='optimization' 的算法
@@ -1294,11 +1276,11 @@ def _run_optimization_chain(context: dict) -> Tuple[List[dict], str]:
       4. empirical 也不可用 → 抛 BizException(OPERATION_FAILED)
     """
     from process.algorithms.base import AlgorithmRegistry
-    from process.algorithms.defect_selection import ensure_selected_defect
+    from process.algorithms.defect_selection import select_defect
 
-    # 缺陷选取：**统一在调用方整理一次**（service 预处理层的等价外提）——
-    # 引擎只读 context['selected_defect']，不再各自挑缺陷。
-    ensure_selected_defect(context)
+    # 缺陷选取：**统一在调用方收敛一次**（service 预处理层的等价外提）——
+    # 引擎只读 context['feedback']（defects 已收敛成一条），不再各自挑缺陷。
+    context['feedback'] = select_defect(context.get('feedback') or {})
 
     candidates = AlgorithmRegistry.get_algorithms_by_type("optimization")
     if not candidates:
@@ -1363,7 +1345,7 @@ def preview_optimization(
     condition_id: int,
     target_defect: str = None,
 ) -> dict:
-    """工艺优化预览（不落库，仅返回建议）
+    """工艺优化预览（不落库，仅返回建议）。
 
     Args:
         condition_id: 工艺条件 ID
@@ -1381,8 +1363,8 @@ def preview_optimization(
     Raises:
         BizException(OPERATION_FAILED): 整个 chain 都无可用推荐
 
-    注：与 parameter_optimize.optimize 的区别 —— preview_optimization 不落库，
-        仅返回建议。落库的完整 infer 走 parameter_optimize service。
+    注：与 parameter_optimize.optimize_from_condition 的区别 —— preview_optimization 不落库，
+        仅返回建议。落库的完整调优走 parameter_optimize service。
     """
     condition = ProcessCondition.objects.filter(
         id=condition_id, is_deleted=False,

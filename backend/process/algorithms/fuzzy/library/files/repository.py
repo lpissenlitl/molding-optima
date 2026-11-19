@@ -6,10 +6,10 @@
 两者对外契约**完全一致** ⇒ 编排层（`engine.py`）可以互换，不用知道
 当前用的是哪个来源。
 
-⚠️ **零 ORM**：本模块不 import 任何 Django 模块 —— 文件来源必须能在
+【注意】**零 ORM**：本模块不 import 任何 Django 模块 —— 文件来源必须能在
   没有数据库的环境里跑。
 
-⚠️ **共用编排层**：选库（`RuleAssembler.select_libraries`）与组装
+【注意】**共用编排层**：选库（`RuleAssembler.select_libraries`）与组装
   （`RuleAssembler.assemble`）都调 `library/assembly.py` 里的同一份实现
   ⇒ 两条路径的**选库结果、特异级、去重、排序必然一致**。
   本模块只负责两步：**选库索引从哪来** + **规则条目从哪来**。
@@ -85,9 +85,11 @@ class FileResourceRepository:
         （本仓库的 `load_libraries()` 本来就是全量索引，
         适用性交由 `RuleService.matches_context` / `resolve_specificity` 判定）。
         """
+        if context.libraries:
+            return RuleAssembler.select_libraries_from(context.libraries)
         codes = RuleAssembler.library_code_candidates(context)
         index = self._loader.load_libraries()
-        return RuleAssembler.select_libraries(codes, index, context)
+        return RuleAssembler.select_libraries(codes, index)
 
     def get_rules(self, context: RuleQueryContext) -> List[RuleProfile]:
         """按上下文匹配拉出规则，组装成内核输入契约。
@@ -97,15 +99,13 @@ class FileResourceRepository:
         判定（`RuleService.matches_context`）、同一套去重与排序
         （`RuleAssembler.assemble`）。
         """
-        codes = RuleAssembler.library_code_candidates(context)
-        index = self._loader.load_libraries()
-        libraries = RuleAssembler.select_libraries(codes, index, context)
+        libraries = self.select_libraries(context)
         if not libraries:
             logger.warning('[%s] 未找到任何可用规则库: %s',
                            self.SOURCE_LABEL, context)
             return []
 
-        # ⚠️ **按库主键归档**（不按库编码）：库编码跨租户可重复 ⇒ 同码两库
+        # 【注意】**按库主键归档**（不按库编码）：库编码跨租户可重复 ⇒ 同码两库
         #   按编码归档会互相覆盖（后取的那库顶掉前一个），
         #   别家的规则被**静默张冠李戴**（不报错，只是结果不同）。
         methods_by_library: Dict[int, List] = {}

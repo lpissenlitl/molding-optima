@@ -118,8 +118,7 @@ class ProcessInitializer:
         return getattr(self, '_engine', None)
 
     def derive(self) -> ProductionParams:
-        """
-        推导初始工艺参数
+        """推导初始工艺参数。
 
         流程：
         1. 数据校验（DataValidator）— __init__ 已完成，derive 不重复

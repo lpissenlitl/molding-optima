@@ -11,7 +11,7 @@
 `library.repository` / `library.semantics`（那三者会形成环或把数据库拖进编排层）。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Protocol, runtime_checkable
 
 from process.algorithms.fuzzy.fuzzy_core.profiles import KeywordProfile, RuleProfile
@@ -41,7 +41,7 @@ class LibraryRecord:
     library_id : Optional[int]
         来源侧主键（数据库来源为 ORM 主键；文件来源为导出时记录的原主键，
         便于回溯）。
-        ⚠️ **不是「库身份」的判据，但它是「按库归档规则」的键** ——
+        【注意】**不是「库身份」的判据，但它是「按库归档规则」的键** ——
           同一编码下可能有多条库记录（跨租户可重复），取规则必须按主键
           分库取，否则同码两库会互相覆盖（张冠李戴）。
     source_ref : str
@@ -49,7 +49,7 @@ class LibraryRecord:
     owner_type : str
         归属类型（'system' 系统级 / 'tenant' 租户级）。
         **可见性判据**：系统库全平台公用；租户私库只对归属租户可见。
-        ⚠️ **缺失归属信息 ⇒ 按 'system' 处理**（保持既有可见行为，
+        【注意】**缺失归属信息 ⇒ 按 'system' 处理**（保持既有可见行为，
         不因字段缺失而静默踢掉整库规则）。
     company_id : Optional[int]
         归属公司主键（租户私库的归属租户）。
@@ -69,13 +69,13 @@ class LibraryRecord:
 
 #: 规则库索引：**库编码 → 同码的全部库记录**（保持来源顺序）。
 #:
-#: ⚠️ **不是「编码 → 一条记录」**：`library_code` 是业务分类编码，
+#: 【注意】**不是「编码 → 一条记录」**：`library_code` 是业务分类编码，
 #:   **跨租户可重复**（模型注释 + `add_rule_library` 只校验「同公司内不重复」）
 #:   ⇒ 同码多记录是**合法状态**，索引必须全部装下。
 #:   若按编码去重（只留第一条），别家的库会被**静默丢掉** ——
 #:   不报错，只是它库里的规则不参与推理。
 #:
-#: ⚠️ **谁该被看到由可见性判据裁决**（`assembly.RuleAssembler.is_library_visible`），
+#: 【注意】**谁该被看到由可见性判据裁决**（service 层按租户归属给出库清单），
 #:   取数层不做取舍 —— 否则「取舍」会在两个来源各写一遍，必然分叉。
 LibraryIndex = Dict[str, List[LibraryRecord]]
 
@@ -119,7 +119,7 @@ class RuleQueryContext:
     defect_name: 缺陷名称（英文 keyword_name，如 'SHORTSHOT'），与
         `RuleMethod.defect_code` 对齐。
     defect_level: 缺陷严重程度（low / medium / high）。档位写在规则串的第一个
-        前件里（`IF SHORTSHOT_low AND ...`）—— 1646 条规则实测全部如此。
+        前件里（`IF SHORTSHOT_low AND ...`）—— 全部规则如此。
         None 表示不按档位过滤。
     defect_position: 缺陷位置（`DL` + 缺陷名 + 段号）。本期不参与规则筛选，仅透传。
     polymer_abbreviation: 当前聚合物的缩写（如 'PE'）。None 或「通用」表示不指定
@@ -128,11 +128,10 @@ class RuleQueryContext:
         「哪条规则适用于当前产品/材料」由**规则级**判定决定
         （`RuleService.matches_context` + `resolve_specificity`），
         而不是靠一张写死的「产品 → 库」映射表提前做掉。
-    company_id: 当前租户公司主键（**可见性上下文**）—— 系统库对所有租户
-        公用，租户私库只对归属租户可见（判据在 `assembly.RuleAssembler`，
-        两条来源共用一处）。
-        None = **无租户上下文**（第三方集成 / 离线 runner / examples 导出）
-        ⇒ **不过滤**（保持现状全量），不改变既有行为。
+    libraries: 本轮可见的规则库档案（由调用方给定）—— 算法侧只按这份清单
+        取规则。可见性（系统库对所有租户公用、租户私库只对归属租户可见）
+        由 service 层按租户归属判定，算法侧不持有租户概念。
+        空清单 = 调用方未给定 ⇒ 走默认路径，只吃公共库。
     """
     defect_name: str
     defect_level: Optional[str] = None
@@ -140,7 +139,7 @@ class RuleQueryContext:
     polymer_abbreviation: Optional[str] = None
     product_category: Optional[str] = None
     rule_library_code: Optional[str] = None
-    company_id: Optional[int] = None
+    libraries: List[LibraryRecord] = field(default_factory=list)
 
 
 # --- 契约 ---
@@ -160,7 +159,7 @@ class AlgorithmResourceRepository(Protocol):
     （数据库来源）；第二个实现是 `library/files/repository.py`
     （文件来源）—— 两者可互换。
 
-    ⚠️ **标了 `@runtime_checkable`**：允许用 `isinstance` 校验实现方
+    【注意】**标了 `@runtime_checkable`**：允许用 `isinstance` 校验实现方
       （只校验方法是否存在，不校验签名）⇒ 两条来源的「契约满足」可被自动断言。
     """
 

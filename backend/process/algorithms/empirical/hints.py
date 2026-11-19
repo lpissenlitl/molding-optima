@@ -1,5 +1,4 @@
-﻿"""
-经验推理数据表
+"""经验推理数据表。
 
 来源：原 process/services/optimization_advice.py 的 DEFECT_OPTIMIZATION_HINTS 字典
       （工程师多年经验沉淀的工艺优化提示）
@@ -9,7 +8,7 @@
   - 与 RuleMethod.defect_code、RuleKeyword.keyword_name 对齐
   - 与 fuzzy 规则库的前件词完全一致（同是 17 个缺陷）
   - 历史实现用中文缺陷名（短射 / 缩水 / ...），而反馈传进来的是
-    `feedback.defect[].keyword_name`（英文码），两者永远匹配不上，
+    `feedback.defects[].keyword_name`（英文码），两者永远匹配不上，
     经验引擎恒定返回空推荐
 - 字典的 value 包含两个 list：
   - increase: 推荐调高的参数代码列表

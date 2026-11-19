@@ -244,8 +244,10 @@ export interface TuningRoundFeedback {
   tuning_result: TuningResult
   /** 库内原始状态：improved / worse / unchanged / qualified / unqualified / pending */
   result: string | null
-  /** 该轮试模看到的缺陷（每项含 keyword_id / keyword_name / level / position / position_3d） */
+  /** 该轮试模看到的缺陷（每项含 keyword_name / level / position / position_3d） */
   defect_feedbacks: any[]
+  /** 该轮实测观察（param_key / value） */
+  observations?: { param_key: string; value: number | null }[]
   /** 结果详情文本 */
   result_detail: string | null
   /** 该轮自身的算法建议（Recommendation 锚在该轮参数上） */
@@ -280,7 +282,7 @@ export interface TuningRoundItem {
 export const processTransplant = (data: { source_parameter_id: number; target_machine_spec: any }) =>
   request({ url: '/api/processes/algorithms/transplant/', method: 'post', data })
 
-/** 工艺参数初始化（Mode B：基于 masterdata ID 算法生成 + 落库），返回 condition_id / parameter_id / seq_idx / process */
+/** 工艺参数初始化（Mode B：基于 masterdata ID 算法生成 + 落库），返回 condition / parameter（落库后的完整对象） */
 
 export const processInitializationFromMasterdata = (data: {
   mold_id: number
@@ -292,14 +294,14 @@ export const processInitializationFromMasterdata = (data: {
 }) =>
   request({ url: '/api/processes/algorithms/initialize/', method: 'post', data })
 
-/** 工艺优化 infer（调机迭代核心接口）：必填 condition_id / parent_seq_idx，返回 new_parameter / suggestion；入参 parameter 若用户在 settingProcessForm 改了参数，先由前端 parameterToFlat 翻译为 ProcessParameterFlat 再传入（对齐后端 ProcessParameterSchema），没改则传 undefined（service 从 ORM 反查 parent_param 作 baseline） */
+/** 工艺优化 infer（调机迭代核心接口）：必填 condition_id / parent_seq_idx，返回 parameter（落库后的完整对象）/ suggestion；入参 parameter 若用户在 settingProcessForm 改了参数，先由前端 parameterToFlat 翻译为 ProcessParameterFlat 再传入（对齐后端 ProcessParameterSchema），没改则传 undefined（service 从 ORM 反查 parent_param 作 baseline） */
 
 export const processOptimizationInfer = (data: {
   condition_id: number
   parent_seq_idx: number
   parameter?: ProcessParameterFlat
   feedback?: {
-    defect?: any[]
+    defects?: any[]
     observations?: any[]
     tuning_result?: TuningResult
   }

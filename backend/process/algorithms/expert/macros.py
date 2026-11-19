@@ -1,5 +1,4 @@
-﻿"""
-工艺参数宏定义
+﻿"""工艺参数宏定义。
 
 包含工艺初始化和推理过程中使用的各种常量、比例系数、映射字典
 """
@@ -120,8 +119,7 @@ HS_DEFECT_TYPES = {
 # ==================== 浇口类型 → 保压时间计算 ====================
 def calc_hold_time_by_gate(gate_type: str, avg_thickness: float, gate_radius: float = None,
                            gate_length: float = None, gate_width: float = None) -> float:
-    """
-    根据浇口类型和壁厚计算保压时间
+    """根据浇口类型和壁厚计算保压时间。
 
     Args:
         gate_type: 浇口类型（直浇口/点浇口/侧浇口/护耳式浇口/其他）

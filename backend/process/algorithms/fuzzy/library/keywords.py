@@ -7,7 +7,7 @@
 （ORM 侧 `unique_together = (company, keyword_name)`），与规则的隔离维度不同，
 故分文件。
 
-⚠️ `RuleKeywordAdapter`（契约转换，零 ORM）**实际住在 `library/adapters.py`**，
+【注意】`RuleKeywordAdapter`（契约转换，零 ORM）**实际住在 `library/adapters.py`**，
 本模块只是**兼容导出**（`library.keywords.RuleKeywordAdapter` 路径不变）。
 
 放在 adapters 而非本模块的原因：文件来源（`library/files/`）要用同一个转换器把

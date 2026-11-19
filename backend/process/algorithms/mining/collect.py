@@ -3,7 +3,7 @@
 与 `samples.py::FileSampleRepository`（文件来源）实现同一个
 `MiningSampleRepository` 协议 ⇒ 两个来源可互换，挖掘内核无感知。
 
-⚠️ **源侧数据与样本的映射**
+【注意】**源侧数据与样本的映射**
     `TuningRecord.adjustments` 本就是「规范化训练样本」（见模型注释），
     结构与 `SampleRecord` 几乎一一对应：
 
@@ -13,15 +13,15 @@
     | `changes[]`             | `changes[]`  |
     | `result`（模型字段）     | `label`      |
 
-⚠️ **只收「已出结果 + 有变更」的样本**
+【注意】**只收「已出结果 + 有变更」的样本**
     - `result` 为 pending 的轮次没有结论 ⇒ 不构成证据
     - 无变更的轮次没有可学习的动作 ⇒ 挖不出任何规则
     这两个判定统一由 `SampleRecord.is_usable()` 承担 ⇒ 语料里不掺不可用样本。
 
-    ⚠️ **不要求有缺陷**：合格态的产品没有缺陷（业务规则会清空缺陷反馈），
+    【注意】**不要求有缺陷**：合格态的产品没有缺陷（业务规则会清空缺陷反馈），
     若强制「有缺陷」，所有合格样本都会被丢弃 ⇒ 语料只剩不合格样本。
 
-⚠️ **模型 import 放在方法内**
+【注意】**模型 import 放在方法内**
     本模块被 `mining/__init__.py` 导出，若在模块顶层 import `process.models`，
     未 `setup()` 的离线 runner 会因 AppRegistryNotReady 崩掉 ⇒ 模型延迟导入。
 """
@@ -87,13 +87,13 @@ class TuningRecordCollector:
         """调机记录 → 样本档案。"""
         adjustments = record.adjustments or {}
 
-        # ⚠️ **缺陷与等级同源于 `defect_feedbacks`**
+        # 【注意】**缺陷与等级同源于 `defect_feedbacks`**
         #    （每项 = ``keyword_name`` + ``level``）⇒ 合成一项取，天然不会错配。
-        #    ⚠️ 不取 `adjustments['defects']` 作名单：那是缺陷名的**快照**
+        #    【注意】不取 `adjustments['defects']` 作名单：那是缺陷名的**快照**
         #       （`build_adjustments` 只投影名字、丢掉了 level），
         #       且 `TuningService.add_defect_feedback` 直接追写缺陷反馈时
         #       **不重算 adjustments** ⇒ 两者会滞后不一致。
-        #    ⚠️ 合格态的样本没有缺陷 ⇒ 该列表为空，属正常。
+        #    【注意】合格态的样本没有缺陷 ⇒ 该列表为空，属正常。
         defects: List[Dict] = []
         for feedback in (record.defect_feedbacks or []):
             if not isinstance(feedback, dict):

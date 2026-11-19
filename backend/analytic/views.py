@@ -19,7 +19,7 @@ from analytic.services import statistics
 
 
 class ProcessStatisticsView(BaseView):
-    """工艺统计聚合（近 30 天趋势 + 起源类型分布）
+    """工艺统计聚合（近 30 天趋势 + 起源类型分布）。
 
     GET /api/analytic/process-statistics/
 

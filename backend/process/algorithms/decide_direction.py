@@ -1,4 +1,4 @@
-"""第2层：结合实际情况，确定**明确的调整方向**
+"""第2层：结合实际情况，确定**明确的调整方向**。
 
 这一层回答一个问题：**算法给的那一堆平级建议，到底这一轮要调哪几个、调到什么值、
 按什么次序调、谁让位。**
@@ -12,7 +12,7 @@
 输出（:class:`Direction`）：**明确的调整方向** —— 一串「字段名 + 目标值」，
 加上让位 / 暂缓的理由与依据（留痕）。
 
-⚠️ **本层不整合参数**：方向定了之后，「怎么把它落成自洽的参数集」是第3层
+【注意】**本层不整合参数**：方向定了之后，「怎么把它落成自洽的参数集」是第3层
 （:mod:`process.algorithms.integrate_params`）的事；「合不合理」是第4层
 （:mod:`process.algorithms.check_params`）的事。
 
@@ -75,7 +75,7 @@ class ScenarioContext:
     """**实际情况** —— 本轮的事实（场景判定的输入）。
 
     Attributes:
-        defect_codes: 本轮反馈里的缺陷码（英文名，如 ``SHORTSHOT``）。
+        defect_codes: 推导所用的缺陷码（英文名，如 ``SHORTSHOT``）。
         actual_weight: 实测制品重量 [g]。
         target_weight: 制品总重 [g]。
         fill_gap: 充填缺口 [g]（``target − actual``；缺任一 ⇒ ``None``）。
@@ -112,7 +112,7 @@ def build_scenario_context(
     """由反馈与模具上下文构造**实际情况**（派生量的唯一出处）。
 
     Args:
-        feedback: 缺陷反馈（``defect[]`` / ``observations[]``）。
+        feedback: 缺陷反馈（``defects[]`` / ``observations[]``）。
         mold_info: 模具上下文（取 ``total_product_weight``）。
         extra: **附加字段**（条件可引用的额外键，如 ``selected_defect``）。
 
@@ -123,7 +123,7 @@ def build_scenario_context(
     mold_info = mold_info or {}
 
     defect_codes: List[str] = []
-    for item in feedback.get('defect') or ():
+    for item in feedback.get('defects') or ():
         if not isinstance(item, Mapping):
             continue
         code = item.get('keyword_name')
@@ -152,8 +152,8 @@ def match_conditions(
 ) -> bool:
     """条件求值（**AND**）—— 全部成立才命中；空条件 = 无条件命中。
 
-    ⚠️ **缺数据 ⇒ 不命中**（不臆造）：引用了拿不到的量 ⇒ 该条不成立。
-    ⚠️ **未知操作符 ⇒ 不命中**（不猜）：条件写错时表现为「这条策略没生效」，
+    【注意】**缺数据 ⇒ 不命中**（不臆造）：引用了拿不到的量 ⇒ 该条不成立。
+    【注意】**未知操作符 ⇒ 不命中**（不猜）：条件写错时表现为「这条策略没生效」，
     而不是「静默按默认语义放过」。
 
     Args:
@@ -184,7 +184,7 @@ def select_policy(
 ) -> Optional['ScenarioPolicy']:
     """选出**第一条命中**的策略（候选须已按「优先级」排好序）。
 
-    ⚠️ **取第一条而非合并**：一条策略 = 一套完整的经验组合；
+    【注意】**取第一条而非合并**：一条策略 = 一套完整的经验组合；
     合并多条的语义（谁覆盖谁）会随条数增加而含糊 ⇒ 留到有需求时再定。
 
     Args:
@@ -272,7 +272,7 @@ def _contains(haystack: Any, needle: Any) -> bool:
 def _is_in_set(value: Any, container: Any) -> bool:
     """**单值 ∈ 集合**（与 :func:`_contains` 方向相反：字段值是单值，目标是容器）。
 
-    ⚠️ **容器不能是字符串** —— 否则 ``'SHO' in 'SHORTSHOT'`` 会变成子串匹配。
+    【注意】**容器不能是字符串** —— 否则 ``'SHO' in 'SHORTSHOT'`` 会变成子串匹配。
     """
     if isinstance(container, (str, bytes, Mapping)):
         return False
@@ -285,14 +285,14 @@ def _is_in_set(value: Any, container: Any) -> bool:
 def _any_in_set(field_value: Any, container: Any) -> bool:
     """**集合中任一元素 ∈ 目标集合**（字段值是集合，目标也是集合）。
 
-    ⚠️ 与 :func:`_is_in_set` **方向相反**，两者并存不混：
+    【注意】与 :func:`_is_in_set` **方向相反**，两者并存不混：
 
     - ``in_set``  —— 字段值是**单值**：``'SHRINKAGE' in ('SHRINKAGE', ...)``
     - ``in_any``  —— 字段值是**集合**（如 ``defect_codes``）：
       ``('A','B')`` 与 ``('B',)`` ⇒ 命中（``'B'`` 在里面）
 
-    ⚠️ **字段值不能是字符串** —— 否则会逐字符匹配（``'SHO'`` 的每个字符）。
-    ⚠️ **容器不能是字符串** —— 否则退化成子串匹配。
+    【注意】**字段值不能是字符串** —— 否则会逐字符匹配（``'SHO'`` 的每个字符）。
+    【注意】**容器不能是字符串** —— 否则退化成子串匹配。
     """
     if isinstance(field_value, (str, bytes)) or isinstance(container, (str, bytes, Mapping)):
         return False
@@ -376,7 +376,7 @@ class ScenarioPolicy:
     3. **留几个**（:attr:`max_items`）：名额用满 ⇒ 暂缓；
     4. **目标怎么算**（:attr:`target_mode`）：按规则增量，还是按充填量比例解算行程。
 
-    ⚠️ **与优先级表的分工**：优先级表回答「字段之间谁先谁后」（字段级），
+    【注意】**与优先级表的分工**：优先级表回答「字段之间谁先谁后」（字段级），
     场景策略回答「这一轮是哪种情形」（轮次级）。两者都是**数据**，
     本模块只提供裁决机制。
 
@@ -385,7 +385,7 @@ class ScenarioPolicy:
         allowed_params: 准入白名单（**空 = 不限制**，默认全允许）。
         blocked_params: 禁入清单（**空 = 不禁**）—— 不在其内的候选让位，
             理由「基线项 ⇒ 不参与阶段调机」。
-            ⚠️ 与 :attr:`allowed_params` 的分工：**白名单是场景范围**（这个场景
+            【注意】与 :attr:`allowed_params` 的分工：**白名单是场景范围**（这个场景
             该动哪些），**禁入清单是基线项**（任何场景都不该动，如注射速度）。
             二者不是一回事 —— 白名单可空（不限制），禁入清单独立生效。
         preferred_params: 场景优先集（按序，越前越优先）。
@@ -411,7 +411,7 @@ class ScenarioPolicy:
 
     @property
     def uses_fill_ratio(self) -> bool:
-        """是否按**充填量比例**解算行程（旧版的「按重量比例重算行程」）。"""
+        """是否按**充填量比例**解算行程。"""
         return self.target_mode == 'fill_ratio'
 
 
@@ -444,9 +444,9 @@ class StrategyDecision:
         - ``yielded``：明确让位（原因 = 让位理由）；
         - ``deferred``：名额用满暂缓（原因 = 暂缓理由）。
 
-        ⚠️ **不在候选集**（没进第2层：零变化 / 译不出 / 不在参数表里）
+        【注意】**不在候选集**（没进第2层：零变化 / 译不出 / 不在参数表里）
         ⇒ 返回 ``(None, '')`` ⇒ 调用方据此判断「这条建议没有裁决状态」
-        （含**旧数据**：状态字段是批次 12.9 才加的，历史轮次没有）。
+        （历史轮次没有裁决状态字段）。
         """
         if name in self.kept:
             return 'adopted', self.kept_reasons.get(name, '')
@@ -459,10 +459,10 @@ class StrategyDecision:
     def to_trace(self) -> Dict[str, object]:
         """决策留痕载荷（写进调用方的诊断出口）。
 
-        ⚠️ **让位与暂缓都要留痕** —— 二者都是「明确决定不做」，
+        【注意】**让位与暂缓都要留痕** —— 二者都是「明确决定不做」，
         少任何一项都会让留痕答不出「它为什么没落地」。
 
-        ⚠️ **保留项也要带依据** —— 否则反馈回来时只能证伪「调了这些量」，
+        【注意】**保留项也要带依据** —— 否则反馈回来时只能证伪「调了这些量」，
         证伪不了「为什么按这个次序调」。
         """
         return {
@@ -503,27 +503,27 @@ def resolve_priority(
       9. **保留项也留依据**（:attr:`StrategyDecision.kept_reasons`）——
          没有依据，反馈回来只能证伪「调了这些量」，证伪不了「为什么按这个次序调」。
 
-    ⚠️ **禁入排在准入之前**：基线项是**全局**理由（任何场景都不该动），
+    【注意】**禁入排在准入之前**：基线项是**全局**理由（任何场景都不该动），
     比“本场景不允许”更强 ⇒ 同时命中两者时，留痕要写**基线项**，
     否则更强的理由会被场景理由掩盖。
 
-    ⚠️ **四类让位/暂缓理由分开**：目标已达成 / 本场景不允许 / 基线项 / 名额已满 ——
+    【注意】**四类让位/暂缓理由分开**：目标已达成 / 本场景不允许 / 基线项 / 名额已满 ——
     「为什么没落地」必须能分辨是哪一类。
     （「本轮落不了地」是第五类，见 ``veto_params``。）
 
-    ⚠️ **无场景 ⇒ 行为与「不接第2层」完全一致**（表为空 ⇒ 全部候选保留、原序）。
+    【注意】**无场景 ⇒ 行为与「不接第2层」完全一致**（表为空 ⇒ 全部候选保留、原序）。
 
     Args:
         candidates: 候选调整的字段名（业务字段名）。
         table: 数据化优先级表。
         satisfied: 已达成目标的字段名。
-            ⚠️ **本模块不判定目标是否达成** —— 那是业务判据，
+            【注意】**本模块不判定目标是否达成** —— 那是业务判据，
             必须由调用方从派生输入量表算出后传入。
         max_items: 本轮最多执行的项数（``None`` 表示不限）；
             场景策略里给了名额时，以场景的为准。
         scenario: 场景策略（``None`` = 无场景，只按优先级表裁决）。
         veto_params: **本轮落不了地**的候选 → 让位理由（字段名 → 理由）。
-            ⚠️ 判据由调用方给（物理关系在底座
+            【注意】判据由调用方给（物理关系在底座
             :func:`process.algorithms.anchors.unlandable_params`）——
             本模块只读，不内置物理知识。
 
@@ -787,7 +787,7 @@ def resolve_direction(
        ``MEL`` 是算法侧的**标**，先翻成计量位置（决策量）；
        场景要求按充填量比例时，直接落**行程目标**（不再走 MEL 增量口径）。
 
-    ⚠️ **表为空且无场景 ⇒ 不裁决** ⇒ 保留集 = 原候选集、原序
+    【注意】**表为空且无场景 ⇒ 不裁决** ⇒ 保留集 = 原候选集、原序
     ⇒ **行为与「不接第2层」完全一致**。
 
     Args:
@@ -818,14 +818,14 @@ def resolve_direction(
     mel_targets: List[Any] = []
     fill_target: Optional[FillTarget] = None
 
-    # ① 先写非 MEL 的保留项（按裁决次序）
+    # 1. 先写非 MEL 的保留项（按裁决次序）
     for name in decision.kept:
         if name == G1_AUTO_FIELD or name not in targets:
             continue
         decisions.append((name, targets[name]))
         values[name] = targets[name]
 
-    # ② MEL 是算法侧的**标** ⇒ 最后翻成决策量（计量位置）
+    # 2. MEL 是算法侧的**标** ⇒ 最后翻成决策量（计量位置）
     if G1_AUTO_FIELD in decision.kept and G1_AUTO_FIELD in targets:
         mel_value = targets[G1_AUTO_FIELD]
         resolved_fill = None
@@ -856,16 +856,16 @@ def apply_mel_targets(
 ) -> Tuple[str, ...]:
     """把 **MEL 目标**翻成**决策量**（计量末段位置），就地写入 ``params``。
 
-    「**先定 ML，再确定 MEL**」（用户口径，2026-11-12）：``MEL`` 是算法侧的
+    「**先定 ML，再确定 MEL**」（用户口径）：``MEL`` 是算法侧的
     **标**（由 ``ML_N + DDAM`` 算出），机台上真正会被调的是计量位置 ⇒ 算法
     说「调 MEL」时，先把目标落成计量位置（决策量），``MEL`` 再由它算出。
 
-    **推算只用「旧值 + 调整量」**（用户口径，2026-11-12）：
+    **推算只用「旧值 + 调整量」**（用户口径）：
 
     .. code-block:: text
 
-        ① ML_N 基准 = 原MEL − 原DDAM
-        ② ML_N_新   = 基准 + ΔMEL
+        1. ML_N 基准 = 原MEL − 原DDAM
+        2. ML_N_新   = 基准 + ΔMEL
 
     ⇒ ``ΔDDAM`` **不叠加**到计量位置，它落在 ``MEL`` 那一侧。
 

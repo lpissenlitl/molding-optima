@@ -176,7 +176,7 @@ def test_candidates_drop_the_unlandable_suggestions():
     assert candidates.targets == {'inj_spd_1': 45.0}
 
 
-# --- 场景层（旧版机制的落点）-------------------------------------------------
+# --- 场景层（场景策略的落点）-------------------------------------------------
 
 #: 带 VPTL 的基线 —— 充填量比例解算需要注射行程（``ML_N − VPTL``）
 FILL_BASE = {
@@ -194,7 +194,7 @@ CURRENT_STROKE = 57.29
 
 
 def test_scenario_preferred_params_lead_the_order():
-    """场景优先集把充填成形提到最前（旧版的「把 MEL 提首位」）。
+    """场景优先集把充填成形提到最前。
 
     参照系：``ScenarioPolicy.preferred_params`` —— 场景是**轮次级**策略，
     排在字段级优先级之前；次序仍然来自**数据**，不在代码里。
@@ -246,7 +246,7 @@ def test_scenario_allowed_params_yield_the_rest():
 
 
 def test_scenario_max_items_overrides_call_level_limit():
-    """场景名额**覆盖**调用级名额（旧版的「一轮只调一个量」）。
+    """场景名额**覆盖**调用级名额。
 
     参照系：``resolve_priority`` 的名额口径（第 4 条）。
     """
@@ -293,7 +293,7 @@ def test_no_scenario_keeps_previous_behavior():
     assert direction.decision.yielded == {}
 
 
-# --- 充填量目标（旧版的「按重量比例重算行程」）---------------------------------
+# --- 充填量目标（按重量比例重算行程）---------------------------------
 
 
 def test_fill_target_scales_stroke_by_weight_ratio():
@@ -360,7 +360,7 @@ def test_without_fill_target_mel_uses_delta():
 # --- 场景判定（第2层的入口：这一轮属于哪类情形）-------------------------------
 
 
-#: 旧版的「充填成形优先」触发条件（短射 + 充填不足）
+#: 「充填成形优先」触发条件（短射 + 充填不足）
 FILLING_CONDITIONS = [
     {'field': 'defect_codes', 'operator': 'contains', 'value': 'SHORTSHOT'},
     {'field': 'fill_gap', 'operator': 'gt', 'value': 0},
@@ -373,7 +373,7 @@ def _feedback(defect='SHORTSHOT', actual_weight=None):
     if actual_weight is not None:
         observations.append({'param_key': 'actual_product_weight', 'value': actual_weight})
     return {
-        'defect': [{'keyword_name': defect, 'level': 'low'}] if defect else [],
+        'defects': [{'keyword_name': defect, 'level': 'low'}] if defect else [],
         'observations': observations,
     }
 

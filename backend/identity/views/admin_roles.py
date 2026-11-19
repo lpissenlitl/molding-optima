@@ -11,7 +11,7 @@ from identity.decorators import require_admin
 
 
 class AdminRoleDetailView(BaseView):
-    """管理员操作角色"""
+    """管理员操作角色。"""
     
     @method_decorator(require_admin)
     def get(self, request, role_id):
@@ -28,7 +28,7 @@ class AdminRoleDetailView(BaseView):
         
 
 class AdminRoleListView(BaseView):
-    """管理员获取角色列表"""
+    """管理员获取角色列表。"""
     
     @method_decorator(require_admin)
     @method_decorator(validate_parameters(RoleListSchema))
@@ -42,7 +42,7 @@ class AdminRoleListView(BaseView):
     @method_decorator(require_admin)
     @method_decorator(validate_parameters(RoleSchema))
     def post(self, request, cleaned_data):
-        """管理员创建角色"""
+        """管理员创建角色。"""
         return role_service.create_role(
             operator=request.user,
             **cleaned_data
@@ -51,7 +51,7 @@ class AdminRoleListView(BaseView):
     @method_decorator(require_admin)
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
-        """管理员批量删除角色"""
+        """管理员批量删除角色。"""
         return role_service.batch_delete_role(**cleaned_data)
 
 
@@ -59,7 +59,7 @@ class AdminRoleEnableView(BaseView):
     
     @method_decorator(require_admin)
     def put(self, request, role_id):
-        """启用角色"""
+        """启用角色。"""
         return role_service.enable_role(role_id=role_id)
 
 
@@ -67,7 +67,7 @@ class AdminRoleDisableView(BaseView):
     
     @method_decorator(require_admin)
     def put(self, request, role_id):
-        """禁用角色"""
+        """禁用角色。"""
         return role_service.disable_role(role_id=role_id)
 
 
@@ -75,7 +75,7 @@ class AdminRolePermissionTreeView(BaseView):
     
     @method_decorator(require_admin)
     def get(self, request):
-        """获取角色权限树"""
+        """获取角色权限树。"""
         return role_service.get_permission_tree(
             company_id=request.user.company_id,
             tier_level=request.user.company.tier_level,

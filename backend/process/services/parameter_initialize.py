@@ -1,24 +1,23 @@
-"""
-工艺参数初始化推理服务
+"""工艺参数初始化推理服务。
 
 对应接口：
 - POST /api/processes/algorithms/initialize/                  业务主流程：基于 masterdata ID 推理初始工艺
 - POST /api/processes/algorithms/initialize-from-condition/   业务另一场景：基于源 condition 复制初始工艺
 - POST /api/processes/algorithms/initialize-from-provided/    纯推理：调用方提供完整 4 维 dict
 
-4 步逻辑：入口适配 → 数据前处理 → 推理算法 → 输出后处理。
+流程逻辑：入口适配 → 数据前处理 → 推理算法 → 输出后处理。
 术语：4 维上下文统一顺序 mold → machine → polymer → process_set；一律用 "mold" 不用 "product"
 （mold_info 覆盖模具级 + 产品/浇口/壁厚派生）。
 process_context 记录本次接口调用的入参快照（shot_index / injection_index / process_set），
 便于事后审计与调用复现——ORM 表达不了。
 
 Service 层职责：
-- Step 1 入口适配：masterdata ID → ORM 实例
-- Step 2 数据前处理：ORM → process_context_snapshot（完整快照，便于历史回溯）
-- Step 4 输出后处理：4 维算法结果 → 拍扁为 ProcessParameter + TuningRecord 落库
-- Step 3 推理算法：委托给 algorithms/expert/ProcessInitializer（含 DataValidator）
+- 入口适配：masterdata ID → ORM 实例
+- 数据前处理：ORM → process_context_snapshot（完整快照，便于历史回溯）
+- 输出后处理：4 维算法结果 → 拍扁为 ProcessParameter + TuningRecord 落库
+- 推理算法：委托给 algorithms/expert/ProcessInitializer（含 DataValidator）
   校验失败 raise ValueError，service 层转 BizException 400
-- Step 3.5 机台能力校验：位置类参数超出机台注射行程 ⇒ BizException 400
+- 机台能力校验：位置类参数超出机台注射行程 ⇒ BizException 400
   （算出来的初值机台根本设不进去 ⇒ 不产出错参数）
 """
 
@@ -40,15 +39,15 @@ from process.algorithms.expert.specs import (
     MACHINE_INFO_FIELDS,
     POLYMER_INFO_FIELDS,
 )
-# 越限识别口径复用模糊推理层（唯一真相源，不在本 service 里另写一套判据）：
-#   resolve_position_limits  —— 机台实测注射行程 → 位置类上限
-#   detect_over_stroke_limits —— 位置类超行程识别（纯函数）
-#   to_algo_params           —— 业务字段名 → 算法字段名（位置类参数按算法名匹配）
 from process.algorithms.integrate_params import (  # 第3层：整合参数
     integrate,
     numeric_snapshot,
 )
 from process.algorithms.check_params import validate  # 第4层：校验参数合理性
+# 越限识别口径复用模糊推理层（唯一真相源，不在本 service 里另写一套判据）：
+#   resolve_position_limits  —— 机台实测注射行程 → 位置类上限
+#   detect_over_stroke_limits —— 位置类超行程识别（纯函数）
+#   to_algo_params           —— 业务字段名 → 算法字段名（位置类参数按算法名匹配）
 from process.algorithms.fuzzy.field_names import to_algo_params
 from process.algorithms.fuzzy.over_limit import detect_over_stroke_limits
 from process.algorithms.fuzzy.specs import resolve_position_limits
@@ -83,7 +82,7 @@ def _build_mold_snapshot(
     mold,
     shot_index: int = 0,
 ) -> Dict[str, Any]:
-    """从 Mold 主表 + 选定的 GatingSystem 构建完整 mold 快照
+    """从 Mold 主表 + 选定的 GatingSystem 构建完整 mold 快照。
 
     Args:
         mold: Mold ORM 实例
@@ -129,7 +128,7 @@ def _build_machine_snapshot(
     machine,
     injection_index: int = 0,
 ) -> Dict[str, Any]:
-    """从 InjectionMoldingMachine 主表 + 选定的 InjectionUnit 构建完整 machine 快照
+    """从 InjectionMoldingMachine 主表 + 选定的 InjectionUnit 构建完整 machine 快照。
 
     Args:
         machine: InjectionMoldingMachine ORM 实例
@@ -160,7 +159,7 @@ def _build_machine_snapshot(
 
 
 def _build_polymer_snapshot(polymer) -> Dict[str, Any]:
-    """从 Polymer 构建完整 polymer 快照（Polymer 无 1:N 关系，扁平即可）
+    """从 Polymer 构建完整 polymer 快照（Polymer 无 1:N 关系，扁平即可）。
 
     Returns:
         {"polymer": {Polymer 全部字段}}
@@ -178,7 +177,7 @@ def _build_process_context_snapshot(
     shot_index: int = 0,
     injection_index: int = 0,
 ) -> Dict[str, Any]:
-    """聚合 4 个维度的快照为完整的 process_context_snapshot
+    """聚合 4 个维度的快照为完整的 process_context_snapshot。
 
     顶层额外字段：
       - version: 快照格式版本
@@ -212,7 +211,7 @@ def _build_process_context_snapshot(
 
 
 def _resolve_mold_data_sources(mold_snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """解析 mold snapshot 的数据源（按 source_model 拆解）
+    """解析 mold snapshot 的数据源（按 source_model 拆解）。
 
     路由关系：
         source_model='Mold'         → snapshot['mold']
@@ -240,7 +239,7 @@ def _resolve_mold_data_sources(mold_snapshot: Dict[str, Any]) -> Dict[str, Dict[
 def _build_mold_info_from_snapshot(
     mold_snapshot: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """从 mold 快照构建算法入参 mold_info（Step 2b）
+    """从 mold 快照构建算法入参 mold_info。
 
     Args:
         mold_snapshot: _build_mold_snapshot 的返回值
@@ -302,7 +301,7 @@ def _build_mold_info_from_snapshot(
 def _build_machine_info_from_snapshot(
     machine_snapshot: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """从 machine 快照构建算法入参 machine_info（Step 2b）
+    """从 machine 快照构建算法入参 machine_info。
 
     Args:
         machine_snapshot: _build_machine_snapshot 的返回值
@@ -346,7 +345,7 @@ def _build_machine_info_from_snapshot(
 def _build_polymer_info_from_snapshot(
     polymer_snapshot: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """从 polymer 快照构建算法入参 polymer_info（Step 2b）
+    """从 polymer 快照构建算法入参 polymer_info。
 
     Args:
         polymer_snapshot: _build_polymer_snapshot 的返回值
@@ -372,7 +371,7 @@ def _build_polymer_info_from_snapshot(
 
 
 def _param_label(business_name: str) -> str:
-    """业务字段名 → 中文标签（取 ProcessParameter 字段的 verbose_name）
+    """业务字段名 → 中文标签（取 ProcessParameter 字段的 verbose_name）。
 
     例：``met_end_pos`` → ``熔胶终止位置``。
 
@@ -393,7 +392,7 @@ def _param_label(business_name: str) -> str:
 
 
 def _format_limit_number(value: Any) -> str:
-    """上限 / 需用值的展示格式：整数不带小数尾巴（'100' 而不是 '100.0000'）
+    """上限 / 需用值的展示格式：整数不带小数尾巴（'100' 而不是 '100.0000'）。
 
     与 ``parameter_optimize._format_limit_number`` 同口径（数值展示格式一致）。
     两处各写一份：它们分属不同 service 的**局部展示工具**，
@@ -411,7 +410,7 @@ def _guard_over_stroke(
     process_flat: Dict[str, Any],
     machine_info: Dict[str, Any],
 ) -> None:
-    """位置类超行程守卫 —— **机台能力校验**（超了直接 400 拒绝，不产出错参数）
+    """位置类超行程守卫 —— **机台能力校验**（超了直接 400 拒绝，不产出错参数）。
 
     与优化链路的越限处理**判据相同、处理方式不同**：
 
@@ -420,13 +419,13 @@ def _guard_over_stroke(
     - 这边（初始化）：算出来的**初值本身就是超行程的** ⇒ 落到参数表里就是
       让操作工去设一个机台根本设不进去的值 ⇒ **拒绝**，
       文案指向「换机」而不是「改个值」。
-      ⚠️ **以产品为目标**（产品形态已定）⇒ 出路只有「换行程更大的机」，
+      【注意】**以产品为目标**（产品形态已定）⇒ 出路只有「换行程更大的机」，
       不给「减轻制品重量 / 减少型腔数」这类迁就设备的建议。
 
     判据复用越限识别层的唯一口径（``fuzzy/over_limit.detect_over_stroke_limits``），
     上限取设备实测的最大注射行程（``fuzzy/specs.resolve_position_limits``）。
 
-    ⚠️ 缺机台行程（``max_injection_stroke`` 没录）⇒ **不判**：缺数据不等于
+    【注意】缺机台行程（``max_injection_stroke`` 没录）⇒ **不判**：缺数据不等于
     参数不合理（同 ``resolve_position_limits`` 的既定口径）。
 
     Args:
@@ -446,7 +445,7 @@ def _guard_over_stroke(
 
     # 多个位置参数同时超出行程（注射位置 / 计量位置 / 终止位置）⇒ 合并成一条：
     # 它们说的是同一件事（这个产品在本机做不出来），逐条提示只会刷屏。
-    # ⚠️ 文案三段式：**事实**（哪个参数、超多少）→ **出路**（换更大的机）。
+    # 【注意】文案三段式：**事实**（哪个参数、超多少）→ **出路**（换更大的机）。
     #    「本机做不出来」的结论由错误码标题承担（当前设备无法生产该制品），
     #    正文不再重复；出路只给「换机」—— 产品是既定的，不迁就设备。
     top = max(items, key=lambda item: item.exceeded_by)
@@ -463,7 +462,7 @@ def _guard_over_stroke(
     raise BizException(ERROR_PROCESS_OVER_STROKE, message)
 
 
-# Step 2 快照路径：ORM → snapshot → 4 维算法入参
+# 快照路径：ORM → snapshot → 4 维算法入参
 # 快照保留完整 masterdata 上下文（便于反查/复现/历史回溯），两个 Mode 共享同一套 snapshot builders。
 # initialize-from-provided 入口跳过这一步（前端已直接提供完整 4 维 dict）。
 
@@ -508,7 +507,7 @@ _COPYABLE_PARAM_FIELDS = (
 
 
 class ParameterInitializeService:
-    """工艺参数初始化推理服务（4 步逻辑对应 4 个公开入口）
+    """工艺参数初始化推理服务（3 个公开入口）。
 
     字段约定：
       - process_context_snapshot: 后端自动构建的不可变快照（完整 masterdata 上下文）
@@ -516,10 +515,9 @@ class ParameterInitializeService:
 
     入口见模块 docstring。
     """
-    # --- from_masterdata 入口（Step 1-4 完整链路：入口适配 + 快照 + 推理 + 落库） ---
-    @classmethod
-    def infer(
-        cls,
+    # --- initialize_from_masterdata 入口（完整链路：入口适配 + 快照 + 推理 + 落库） ---
+    @staticmethod
+    def initialize_from_masterdata(
         mold_id: int,
         injection_machine_id: int,
         polymer_id: int,
@@ -529,7 +527,7 @@ class ParameterInitializeService:
         company_id: Optional[int] = None,
         organization_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """【from_masterdata】基于 masterdata ID 入口（首次推理 + 建档）
+        """【from_masterdata】基于 masterdata ID 入口（首次推理 + 建档）。
 
         status / origin_type 由后端固定为 draft / ai_recommendation。
         condition_no 由 service 层自动生成（后端不可用户改）。
@@ -571,7 +569,7 @@ class ParameterInitializeService:
             polymer_info = _build_polymer_info_from_snapshot(polymer_snapshot)
 
             # Step 3: 推理算法
-            result = cls._infer_kernel(
+            result = ParameterInitializeService._infer_kernel(
                 mold_info=mold_info,
                 machine_info=machine_info,
                 polymer_info=polymer_info,
@@ -613,15 +611,11 @@ class ParameterInitializeService:
             parameter = _create_process_parameter(
                 condition, result, company_id=company_id, organization_id=organization_id
             )
-            result['condition_id'] = condition.id
-            result['parameter_id'] = parameter.id
-            # 补上 seq_idx：前端进入下一个 infer 调用需要作为 parent_seq_idx
-            result['seq_idx'] = parameter.seq_idx
-            result['shot_index'] = shot_index
-            result['injection_index'] = injection_index
-            # D1 契约统一：对外响应里的工艺参数一律 flat（与 optimize 的 new_parameter 同形）。
-            # 落库用的 nested 形态已被 _create_process_parameter 消费完毕，这里才替换。
-            result['process'] = process_params_to_flat(result['process'])
+            # 对外响应 = 落库后的 condition / parameter 完整对象（与 optimize 同形）；
+            # 顶层只留对外字段（零散 id 与 parameter 的 nested 形态不进响应，见 docs/optimize-api-contract.md §8）
+            result = {k: v for k, v in result.items() if k not in ('process', 'param_source')}
+            result['condition'] = condition.to_dict()
+            result['parameter'] = parameter.to_dict()
 
             logger.info(
                 "from_masterdata 完成: condition_id=%s, parameter_id=%s, shot_index=%s, injection_index=%s, rules=%s",
@@ -629,16 +623,15 @@ class ParameterInitializeService:
             )
         return result
 
-    # ---------- from_source_condition 入口 ----------
-    @classmethod
-    def infer_from_condition(
-        cls,
+    # ---------- initialize_from_condition 入口 ----------
+    @staticmethod
+    def initialize_from_condition(
         source_condition_id: int,
         process_set: Optional[Dict[str, Any]] = None,
         company_id: Optional[int] = None,
         organization_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """【from_source_condition】基于源 condition 复制初始工艺参数（不调推理算法）
+        """【from_condition】基于源 condition 复制初始工艺参数（不调推理算法）。
 
         复用已有合格工艺为新工艺起点，snapshot 用最新 masterdata 重建。
         输出：Condition(origin_type='legacy_import') + 拷贝自源 param 的 ProcessParameter。
@@ -731,43 +724,40 @@ class ParameterInitializeService:
                 source_condition_id, new_condition.id, new_parameter.id, source_param.id,
             )
 
+            # 本入口复制源参数、不跑推理 ⇒ 没有推理产物
             return {
-                "condition_id": new_condition.id,
-                "parameter_id": new_parameter.id,
-                "source_condition_id": source_condition_id,
-                "source_parameter_id": source_param.id,
-                "shot_index": source_shot_index,
-                "injection_index": source_injection_index,
-                "param_source": "template_copy",
+                "condition": new_condition.to_dict(),
+                "parameter": new_parameter.to_dict(),
             }
 
-    # --- initialize-from-provided 入口（只跑 Step 3，跳过 Step 1 适配和 Step 4 落库） ---
-    @classmethod
-    def infer_from_provided(
-        cls,
+    # --- initialize_from_provided 入口（只跑推理算法，跳过入口适配和落库） ---
+    @staticmethod
+    def initialize_from_provided(
         mold_info: Dict[str, Any],
         machine_info: Dict[str, Any],
         polymer_info: Dict[str, Any],
         process_set: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """【from_provided】纯推理入口：不查 DB、不落库、4 维 dict 直传（Provided）
+        """【from_provided】纯推理入口：不查 DB、不落库、4 维 dict 直传（Provided）。
 
         适用场景：第三方集成（无 masterdata）、算法试算。
         service 既不查 DB，也不写 DB。
         """
-        result = cls._infer_kernel(
+        result = ParameterInitializeService._infer_kernel(
             mold_info=mold_info,
             machine_info=machine_info,
             polymer_info=polymer_info,
             process_set=process_set,
         )
-        # D1 契约统一：对外响应里的工艺参数一律 flat（与 optimize 的 new_parameter 同形）
-        result['process'] = process_params_to_flat(result['process'])
+        # 对外响应里的工艺参数一律 flat（与 optimize 的 parameter 同形）；顶层不保留 nested 的 process
+        flat = process_params_to_flat(result['process'])
+        result = {k: v for k, v in result.items() if k != 'process'}
+        result['parameter'] = flat
         # 机台能力校验（与 from_masterdata 同口径）：位置类超行程 ⇒ 400 拒绝
-        _guard_over_stroke(result['process'], machine_info)
+        _guard_over_stroke(result['parameter'], machine_info)
         return result
 
-    # --- 核心算法（Step 3）—— 私有方法，三个入口共用 ---
+    # --- 核心算法 —— 私有方法，三个入口共用 ---
     @staticmethod
     def _infer_kernel(
         mold_info: Dict[str, Any],
@@ -776,9 +766,10 @@ class ParameterInitializeService:
         process_set: Optional[Dict[str, Any]] = None,
         company_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """【Step 3】纯算法推理：4 维输入 → 4 维参数输出（不查 DB、不写 DB、不涉及 ID）
+        """纯算法推理：4 维输入 → 4 维参数输出（不查 DB、不写 DB、不涉及 ID）。
 
-        三个公开入口（infer / infer_from_condition / infer_from_provided）共用本方法；
+        三个公开入口（initialize_from_masterdata / initialize_from_condition /
+        initialize_from_provided）共用本方法；
         不依赖 self/cls，无副作用（其他 _helper 全是模块顶层函数）。
         对应 parameter_optimize.py 的 _infer_kernel（同构、同名）。
 
@@ -798,7 +789,7 @@ class ParameterInitializeService:
             }
         """
         process_set = process_set or {}
-        # 每次新建实例（不做类级缓存）—— 实测无性能问题（用户手动触发，低频）
+        # 每次新建实例（不做类级缓存）—— 用户手动触发，低频，无性能问题
         rule_matcher = InitRuleMatcher(company_id=company_id)
 
         logger.info(
@@ -841,7 +832,7 @@ class ParameterInitializeService:
 
 
 def _auto_condition_no(mold_id: int, shot_index: int) -> str:
-    """自动生成 condition_no：格式 C-{mold_id}-S{shot_index}-{ts}"""
+    """自动生成 condition_no：格式 C-{mold_id}-S{shot_index}-{ts}。"""
     ts = int(time.time() * 1000000) % 1000000
     return f"C-{mold_id}-S{shot_index}-{ts:06d}"
 
@@ -852,7 +843,7 @@ def _auto_condition_no(mold_id: int, shot_index: int) -> str:
 #   落库（ProcessParameter ORM）与对外 HTTP 响应都走本函数
 #   ⇒ 落库的值与前端看到的值必然一致，不会出现「两处各拍一次」的语义漂移。
 #
-# ⚠️ 温度段位语义说明：
+# 【注意】温度段位语义说明：
 #   nested 的 brl_temp_steps[0] 是「料筒 1 段」，而前端 nested 结构约定
 #   sections[0]=喷嘴、sections[1..9]=料筒 1..9 —— nested 下二者无法对齐。
 #   flat 用 noz_temp + brl_temp_1..9 两个独立字段表达，歧义消失。
@@ -887,7 +878,7 @@ _FLAT_STEPS_MAPPINGS = [
 
 
 def process_params_to_flat(proc_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """算法 nested 工艺参数 → flat 字段镜像（与 ProcessParameter ORM 一一对应）
+    """算法 nested 工艺参数 → flat 字段镜像（与 ProcessParameter ORM 一一对应）。
 
     Args:
         proc_dict: ProcessParams.to_dict() 形态（含 inj_spd_steps 等数组字段）
@@ -916,7 +907,7 @@ def _create_process_parameter(
     company_id: Optional[int] = None,
     organization_id: Optional[int] = None,
 ):
-    """把推理结果拍扁为 ProcessParameter 字段并落库（Step 4 后处理）
+    """把推理结果拍扁为 ProcessParameter 字段并落库（输出后处理）。
 
     接收 _infer_kernel 的返回 dict（4 维输出）。
 
@@ -924,12 +915,12 @@ def _create_process_parameter(
         本方法负责创建 ProcessParameter + 同步创建 TuningRecord；ProcessCondition
         由调用方负责创建。两者必须在同一个 `with transaction.atomic():` 里依次
         创建——任何一个报错都回滚，保证「工艺条件 ↔ 工艺参数 ↔ 试模记录」
-        三元组的不可分性。详见 infer / infer_from_condition
-        入口实现。
+        三元组的不可分性。详见 initialize_from_masterdata /
+        initialize_from_condition 入口实现。
 
     业务契约：
         每个 ProcessParameter 同步创建 1 条 TuningRecord（result=pending），
-        保证后续 optimization/infer/ 路径的 _update_previous_tuning_record
+        保证后续 optimize_from_condition 路径的 parameter_optimize._record_tuning_round
         能找到上一轮记录，避免「父参数缺少 TuningRecord」WARNING。
     """
     proc_dict = params_result['process']
@@ -951,11 +942,12 @@ def _create_process_parameter(
         **integrated.values, company_id=company_id, organization_id=organization_id
     )
 
-    # 同步创建初始 TuningRecord（pending 状态，无缺陷反馈）
-    # 业务契约：ProcessParameter ↔ TuningRecord 1:1（见 parameter_optimize._create_new_tuning_record）
+    # 同步创建初始 TuningRecord（pending 状态，无缺陷反馈与实测观察）
+    # 业务契约：ProcessParameter ↔ TuningRecord 1:1（见 parameter_optimize._create_new_round）
     TuningRecord.objects.create(
         process_parameter=new_param,
         defect_feedbacks=[],
+        observations=[],
         result="pending",
         company_id=company_id,
         organization_id=organization_id,
@@ -970,7 +962,7 @@ def _copy_process_parameter(
     company_id: Optional[int] = None,
     organization_id: Optional[int] = None,
 ):
-    """从 source_param 拷贝业务字段，创建新 ProcessParameter 挂到 target_condition
+    """从 source_param 拷贝业务字段，创建新 ProcessParameter 挂到 target_condition。
 
     不拷贝的字段：
       - pk / id / created_at / updated_at / is_deleted / created_by / ...（系统字段）
@@ -1007,6 +999,7 @@ def _copy_process_parameter(
     TuningRecord.objects.create(
         process_parameter=new_param,
         defect_feedbacks=[],
+        observations=[],
         result="pending",
         company_id=company_id,
         organization_id=organization_id,

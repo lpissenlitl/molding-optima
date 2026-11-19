@@ -1,9 +1,8 @@
-﻿"""
-模糊推理引擎 - 主入口
+﻿"""模糊推理引擎 - 主入口。
 
 基于模糊规则进行缺陷修正推荐。
 
-⚠️ 这里的"层"按**结论形态**划分（这条规则的结论能不能算出数值），
+【注意】这里的"层"按**结论形态**划分（这条规则的结论能不能算出数值），
    与规则库层级（base / 产品库 / specificity）**完全无关**：
 
 - 数值层 (NumTskRuleNet)   → 数值/百分比结论（``X_add_3.8`` / ``X_reduce_30%``）
@@ -17,7 +16,7 @@ from dataclasses import replace
 from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
-# ⚠️ **物理常量来自中立层**（`algorithms/material_physics.py`）：材料大类解析是
+# 【注意】**物理常量来自中立层**（`algorithms/material_physics.py`）：材料大类解析是
 #    **物理事实**，不属于任何算法包的私有口径 ⇒ 与专家引擎共用同一份。
 from process.algorithms.material_physics import (
     DEFAULT_COOL_FACTOR,
@@ -84,7 +83,7 @@ FIELD_SOURCE_GUESSED = 'guessed'
 # 说的是「**这个论域的边界最终从哪来**」，与 `FIELD_SOURCE_GUESSED`
 # （说的是「**关键字元数据**从哪来」）是两回事 ⇒ 两个字段**独立**填写。
 #
-# ⚠️ **禁止静默兜底**：凡是没拿到权威源的参数，都必须落到下面这些
+# 【注意】**禁止静默兜底**：凡是没拿到权威源的参数，都必须落到下面这些
 #    **明确的**标签上，并在诊断清单里可见 ⇒ 不允许「不知道论域从哪来，
 #    却看起来像个正常值」。
 DOMAIN_SOURCE_DEVICE = 'device'                  # 设备实测可设上限（设定值类）
@@ -116,9 +115,9 @@ def _product_limit_for(
     param_name: str,
     product_limits: Dict[str, Tuple[float, float]],
 ) -> Optional[Tuple[float, float]]:
-    """算法参数名 → 该参数的产品域论域边界（无权威源返回 None）
+    """算法参数名 → 该参数的产品域论域边界（无权威源返回 None）。
 
-    ⚠️ **两级匹配**（时间类既有整段也有分段，与位置类同形）：
+    【注意】**两级匹配**（时间类既有整段也有分段，与位置类同形）：
     - 整段参数（``CT`` / ``IT`` / ``ID``）→ **精确匹配**；
     - 分段参数（``PT0``~``PT4``）→ **族前缀匹配**
       （族前缀由 :func:`specs.param_family` 的正则取 ⇒ 命名规则仍是单一真相源）。
@@ -165,24 +164,24 @@ class FuzzyEngine(AlgorithmBase):
                 这样 `import engine` 不会把 Django ORM 拖进来，
                 编排层可以在没有数据库环境时被 import 和调用。
 
-                ⚠️ **显式注入优先于配置**：传了实例就只用它，
+                【注意】**显式注入优先于配置**：传了实例就只用它，
                   忽略 `FUZZY_LIBRARY_SOURCE`。
         """
         self._repo = repository
-        # ⚠️ 诊断数据**不放实例属性** —— 本引擎是模块级单例（见文件末尾
+        # 【注意】诊断数据**不放实例属性** —— 本引擎是模块级单例（见文件末尾
         #    `AlgorithmRegistry.register`），放实例属性会让并发请求互相清空/串写
         #    （已实测复现：A 的条目被 B 覆盖）。生产路径走**每请求一个**的容器
         #    （`diagnostics.request_diagnostics()`），见 `diagnostics.py`。
         # 这个 `_last_diag` 是「最近一次请求的诊断」的槽位：请求结束后仍能读到
         # （诊断脚本 / 快照脚本依赖这个约定）。
-        # ⚠️ 并发下它会被别的请求覆盖 ⇒ 生产**不依赖**它（诊断已由
+        # 【注意】并发下它会被别的请求覆盖 ⇒ 生产**不依赖**它（诊断已由
         #    `request_diagnostics` 打成结构化日志）。
         self._last_diag = Diagnostic()
 
     def _get_repository(self) -> AlgorithmResourceRepository:
         """取资源仓库契约（默认实现延迟导入）。
 
-        ⚠️ 默认实现由 `library/provider.py::resolve_repository` 按配置选：
+        【注意】默认实现由 `library/provider.py::resolve_repository` 按配置选：
           数据库来源（默认）或本地文件来源（`FUZZY_LIBRARY_SOURCE='file'`）。
         """
         if self._repo is None:
@@ -199,8 +198,8 @@ class FuzzyEngine(AlgorithmBase):
 
         Args:
             context: {
-                'feedback': {                        # 反馈 dict（含 defect / observations / tuning_result）
-                    'defect': [...],
+                'feedback': {                        # 反馈 dict（含 defects / observations / tuning_result）
+                    'defects': [...],
                     'observations': [...],
                     'tuning_result': str | None,
                 },
@@ -248,15 +247,15 @@ class FuzzyEngine(AlgorithmBase):
         4) 并行推理 —— 数值层走 TSK，提示层走文本建议 / Mamdani（层间互不影响）
         5) 合并     —— 同参数聚合 + 跨层覆盖
 
-        ⓪ 越限识别（**输入体检**，插在最前面）：详见下方注释。
+        0) 越限识别（**输入体检**，插在最前面）：详见下方注释。
         """
-        # ⓪ 输入体检 —— **识别**当前值超出机台可设定上限的参数。
+        # 0) 输入体检 —— **识别**当前值超出机台可设定上限的参数。
         #
         # 为什么放在**最前面**（而不是跟着推理走）：
         #   它回答的是「**进来的参数本身**合不合规」，与「本次有没有规则可推」无关 ——
         #   即使因为无缺陷 / 无规则而提前返回，越限这条事实也该被记录下来。
         #
-        # ⚠️ **只识别，不处理**（用户口径：「首先要做到的点是能识别超限，
+        # 【注意】**只识别，不处理**（用户口径：「首先要做到的点是能识别超限，
         #    再考虑别的问题」）：不告警、不拒绝、不改建议 ⇒ 对外输出零变化。
         #    不同参数类型的处理不一样（设定值类 = 设备安全红线；温度类 = 材料降解；
         #    时间类 = 无设备约束）⇒ **处理方式留待后续分层决策**，
@@ -279,7 +278,7 @@ class FuzzyEngine(AlgorithmBase):
         #   位置类的上限 = 设备实测的最大注射行程；当前值超出行程 ⇒
         #   **这个产品在这台设备上做不出来**（实测 MEL 56/70 行超行程：
         #   行程 200mm 而产品充填需 291mm）⇒ 用户改不了 ⇒ **只留痕、永不阻断**。
-        #   ⚠️ 与设定值类超限的**处理方式不能统一**：那边是「用户把参数设错了」
+        #   【注意】与设定值类超限的**处理方式不能统一**：那边是「用户把参数设错了」
         #      （改个值就好）⇒ 值得拦；这边是「产品与机台能力不匹配」⇒ 拦了没出路。
         position_limits = resolve_position_limits(context.get('machine_info') or {})
         stroke_over_limits = detect_over_stroke_limits(
@@ -295,12 +294,11 @@ class FuzzyEngine(AlgorithmBase):
                  for i in stroke_over_limits[:5]])
 
         # 1) 认缺陷 —— **选取已在 service 预处理层做完**（只做一次）
-        #    （见 `services/parameter_optimize.py::_prepare_defect_selection`）
+        #    （见 `services/parameter_optimize.py::_resolve_defect_selection`）
         #    ⇒ 本引擎**不再自己挑缺陷**，只读整理结果。
         # 选取依据留痕（决策级，与 `field_reports` / `diagnostics` 那两个
-        # 规则级清单分开）—— 记的是预处理层给的完整 trace。
-        selected = context.get('selected_defect') or {}
-        trace = selected.get('trace')
+        # 规则级清单分开）—— 记的是预处理层写回 feedback 的完整 trace。
+        trace = (context.get('feedback') or {}).get('defect_selection')
         if trace:
             self._diag.selections.append(trace)
 
@@ -323,8 +321,8 @@ class FuzzyEngine(AlgorithmBase):
             polymer_abbreviation=(context.get('polymer_info') or {}).get('abbreviation'),
             product_category=(context.get('mold_info') or {}).get('product_category'),
             rule_library_code=context.get('rule_library_code'),
-            # 当前租户（可见性上下文）—— 缺上下文（None）⇒ 不过滤
-            company_id=context.get('company_id'),
+            # 本轮可见的规则库（由 service 层按租户归属决定）
+            libraries=context.get('libraries'),
         )
         try:
             all_rules = repo.get_rules(query_ctx)
@@ -353,9 +351,9 @@ class FuzzyEngine(AlgorithmBase):
             k: v for k, v in (context.get('process_parameter') or {}).items()
             if v is not None
         }
-        # ⚠️ 编排层**不传** `iteration_trend` ⇒ 恒为 'unknown' ⇒ 系数恒 1.0。
+        # 【注意】编排层**不传** `iteration_trend` ⇒ 恒为 'unknown' ⇒ 系数恒 1.0。
         #    该乘数策略已判定**业务上不成立**（历史趋势 ≠ 本次建议幅度），
-        #    故**刻意不接线**。
+        #    故**刻意不启用**。
         trend = context.get('iteration_trend', {}) or {}
         adjustment_factor = self._trend_to_factor(trend.get('trend', 'unknown'))
 
@@ -371,16 +369,15 @@ class FuzzyEngine(AlgorithmBase):
             context.get('polymer_info') or {})
         #    位置类论域上界 = **设备实测的最大注射行程**（权威源 = 设备维度）：
         #    注射位置 IL / 计量位置 ML / 储料终止位置 MEL / VP 切换位置 VPTL
-        #    —— 旧版（read_machine_setting_para）一律以行程为上界；当前版早期
-        #    漏接 ⇒ 位置类一直用规则库种子域（IL [0,150] / MEL [0,200]），
-        #    真实值 27~716 ⇒ 越界 ⇒ 这组「充填量第一优先」的规则恒失活。
+        #    【注意】位置类真实值域可达 27~716，远超规则库种子域（IL [0,150] / MEL [0,200]）
+        #    ⇒ 回落经验域时这组「充填量第一优先」的规则会失活。
         #    缺权威源（机台没录行程）⇒ 回落经验域，不报错、不阻塞。
-        #    ⚠️ `position_limits` 已在「⓪ 输入体检」处算好 ⇒ **识别与论域共用
+        #    【注意】`position_limits` 已在「0) 输入体检」处算好 ⇒ **识别与论域共用
         #       同一份**（不会各自算一遍而漂移）。
         #    产品类论域 = **制品级物理推导基准**（权威源 = 产品维度）：
         #    冷却时间 CT 的判级上界 = f(制品最大壁厚, 材料大类)
         #    —— 冷却时间 ∝ 壁厚²（Fourier 热扩散）⇒ 厚壁件要冷却更久。
-        #    ⚠️ 这是**判级基准**、不是设备天花板：冷却时间没有机台可设上限
+        #    【注意】这是**判级基准**、不是设备天花板：冷却时间没有机台可设上限
         #    （机台 HMI 不提供）⇒ 与设备域语义不同、不可混用。
         #    缺权威源（型腔壁厚没录）⇒ 回落经验域，不报错、不阻塞。
         product_limits = resolve_product_limits(
@@ -408,7 +405,7 @@ class FuzzyEngine(AlgorithmBase):
 
         # 6) 机台物理上限裁剪：推荐值不得超出这台机 HMI 可设定的范围
         #    （规则库论域普遍宽于机台上限，不裁会给出操作工输不进去的值）
-        #    复用第 ⓪ 步已解析的 `param_limits`（同一份上限，不重算）
+        #    复用第 0 步已解析的 `param_limits`（同一份上限，不重算）
         return self._apply_machine_limits(recommendations, param_limits)
 
     def _apply_machine_limits(
@@ -416,7 +413,7 @@ class FuzzyEngine(AlgorithmBase):
         recommendations: List[AlgorithmRecommendation],
         limits: Dict[str, float],
     ) -> List[AlgorithmRecommendation]:
-        """按机台物理上限裁剪推荐值（越限则封顶，方向重算）
+        """按机台物理上限裁剪推荐值（越限则封顶，方向重算）。
 
         规则库论域上界普遍**宽于**机台 HMI 可设定范围（实测注射压力论域 0~200，
         同一台机上限 100），不裁剪就会给出操作工根本输不进去的推荐值。
@@ -474,9 +471,9 @@ class FuzzyEngine(AlgorithmBase):
         if not self._extract_defect_context(context):
             return False
 
-        # ⚠️ 编排层不传 `iteration_trend` ⇒ 该分支在 optimize 链**不生效**；
+        # 【注意】编排层不传 `iteration_trend` ⇒ 该分支在 optimize 链**不生效**；
         #    condition 链会传（见 condition.py）⇒ 那里终态时 fuzzy 不参与 chain。
-        #    接线前必须先解决「终态无推荐 ⇒ fail-fast 报『算法暂不可用』」的问题。
+        #    启用该分支前必须先解决「终态无推荐 ⇒ fail-fast 报『算法暂不可用』」的问题。
         trend = context.get('iteration_trend', {}) or {}
         if trend.get('trend') == 'final':
             return False
@@ -493,7 +490,7 @@ class FuzzyEngine(AlgorithmBase):
     # -----------------------------------------------------------------------
     # 诊断数据读取（兼容层）
     #
-    # ⚠️ 这两个属性是**读取入口**，不是数据存储位置 —— 真实存储在
+    # 【注意】这两个属性是**读取入口**，不是数据存储位置 —— 真实存储在
     #    **每请求一个**的诊断容器里（见 `diagnostics.py`）。
     #    生产代码要取诊断请用 `diagnostics.current_diagnostic()`。
     # -----------------------------------------------------------------------
@@ -527,19 +524,21 @@ class FuzzyEngine(AlgorithmBase):
     def _extract_defect_context(context: dict) -> Dict[str, Any]:
         """从 feedback 里取缺陷上下文（缺陷名 / 严重程度 / 位置）。
 
-        前端 DefectFeedback 传的是 `{keyword_id, keyword_name, level, position}`：
+        缺陷上下文只含算法消费的三个字段：
         - `keyword_name`：英文缺陷码（SHORTSHOT / FLASH / ...），
           与 `RuleMethod.defect_code`、`RuleKeyword.keyword_name` 对齐
         - `level`：严重程度（low / medium / high），与规则前件的档位词一致
         - `position`：缺陷位置（`DL` + 缺陷名 + 段号）
 
-        ⚠️ **选取不在本引擎** —— 缺陷选取由 service 预处理层做**一次**
-           （`services/parameter_optimize.py::_prepare_defect_selection`），
-           结果随 context 的 ``selected_defect`` 下传；本方法**只读、不挑**。
+        【注意】**选取不在本引擎** —— 缺陷选取由 service 预处理层做**一次**
+           （`services/parameter_optimize.py::_resolve_defect_selection`），
+           结果写回 ``feedback``（``defects`` 只剩本轮处理的那条）；
+           本方法**只读、不挑**。
            返回形状保持不变（`defect_name` / `level` / `position`）。
         """
-        selected = context.get('selected_defect') or {}
-        defect_name = selected.get('defect_name')
+        defects = (context.get('feedback') or {}).get('defects') or []
+        selected = defects[0] if defects else {}
+        defect_name = selected.get('keyword_name') if isinstance(selected, dict) else None
         if not defect_name:
             return {}
         return {
@@ -552,11 +551,11 @@ class FuzzyEngine(AlgorithmBase):
     def _trend_to_factor(trend: str) -> float:
         """迭代趋势 → 调整系数。
 
-        ⚠️ **刻意未接线**：编排层不传 `iteration_trend`
+        【注意】**刻意未启用**：编排层不传 `iteration_trend`
         ⇒ 本函数实际恒返回 1.0。理由 —— 历史趋势反映的是
         **过去几轮整体走向**，拿它当**本次建议幅度**的全局乘数在业务上不成立
         （时间错配 / 手段错配 / 全局 vs 局部），且系数 0.5 / 1.2 无业务出处。
-        保留函数与调用点只为不破坏既有结构；**不要**在未定义业务口径前接线。
+        保留函数与调用点只为不破坏既有结构；**不要**在未定义业务口径前启用。
         """
         return {
             'worsening': 0.5,
@@ -574,7 +573,7 @@ class FuzzyEngine(AlgorithmBase):
         但测试替身与 `backend/tests/` 离线脚本仍可能给裸 dict / 简易对象
         —— 这里三种都收，**且非契约形态一律记 warning**（不静默降级）。
 
-        ⚠️ **为什么保留兜底而不是删分支**：删掉会让那些脚本当场崩
+        【注意】**为什么保留兜底而不是删分支**：删掉会让那些脚本当场崩
         （`tests/fuzzy_kernel/_snapshot_core.py` 的仓库替身返回的就是裸 dict）。
         ⇒ 保留兼容，但**留痕**：契约被违反时看得见，而不是安静地按默认值造档案
         （默认值会把论域错成 0~1 ⇒ 规则永远匹配不上）。
@@ -642,7 +641,7 @@ class FuzzyEngine(AlgorithmBase):
         缺权威源（材料区间 / 设备行程 / 制品壁厚缺失）⇒ **回落经验域**，
         不报错、不阻塞。
 
-        ⚠️ **B1-4：论域来源统一分支** —— 每个档案都会被打上
+        【注意】**B1-4：论域来源统一分支** —— 每个档案都会被打上
         ``domain_source`` 标记（这个论域的边界**最终从哪来**）：
 
         - ``device`` —— 设定值类：论域上界 = 设备实测可设上限
@@ -678,7 +677,7 @@ class FuzzyEngine(AlgorithmBase):
             source = DOMAIN_SOURCE_EXPERIENCE
 
             # (1) 必填等级字段：论域上界替换成设备实测值
-            #     ⚠️ **H1 守卫**：设备上限已低于当前设定值 ⇒ **不替换**（保留经验域）。
+            #     【注意】**H1 守卫**：设备上限已低于当前设定值 ⇒ **不替换**（保留经验域）。
             #        拿设备上限当判级上界时，当前状态会落到论域之外 ⇒ 档位方向算反。
             device_max = self._device_limit_below_current(
                 kp, domain_limits, current)
@@ -700,9 +699,9 @@ class FuzzyEngine(AlgorithmBase):
                 source = DOMAIN_SOURCE_DEVICE
 
             # (2) 位置类字段：论域替换成 [0, 设备实测行程]
-            # ⚠️ 返回**新档案**，不修改传入对象（行程逐请求不同，
+            # 【注意】返回**新档案**，不修改传入对象（行程逐请求不同，
             #    就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
-            # ⚠️ 当前值超出设备行程 ⇒ 该参数回落经验论域（**G6 守卫**）：
+            # 【注意】当前值超出设备行程 ⇒ 该参数回落经验论域（**G6 守卫**）：
             #    「制品超机台能力」是**选机 / 录数据**层面的事，算法不阻断，
             #    但要**留痕**（别静默把脏数据当合法值判档）。
             stroke_limit = lookup_position_limit(kp.keyword, position_limits or {})
@@ -712,7 +711,7 @@ class FuzzyEngine(AlgorithmBase):
                 source = DOMAIN_SOURCE_STROKE
             elif (stroke_limit is not None and current is not None
                   and current > stroke_limit):
-                # ⚠️ 这里的判据与 `_apply_position_bound` 内的 G6 判据**同源**
+                # 【注意】这里的判据与 `_apply_position_bound` 内的 G6 判据**同源**
                 #    （同一个 `lookup_position_limit` 取值、同一个「>」比较）
                 #    —— 本段只负责**留痕**，判档行为仍由那个方法决定。
                 source = DOMAIN_SOURCE_KEPT_EXPERIENCE
@@ -730,7 +729,7 @@ class FuzzyEngine(AlgorithmBase):
                     kp.keyword, current, stroke_limit)
 
             # (3) 温度类字段：论域替换成材料温度区间（权威源 = 材料）
-            # ⚠️ 返回**新档案**，不修改传入对象（材料区间逐请求不同，
+            # 【注意】返回**新档案**，不修改传入对象（材料区间逐请求不同，
             #    就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
             before_temperature = kp
             kp = self._apply_temperature_bound(kp, temperature_limits)
@@ -738,9 +737,9 @@ class FuzzyEngine(AlgorithmBase):
                 source = DOMAIN_SOURCE_MATERIAL
 
             # (4) 产品类字段：论域替换成 [0, 制品级物理推导基准]（权威源 = 产品）
-            # ⚠️ 返回**新档案**，不修改传入对象（壁厚 / 材料逐请求不同，
+            # 【注意】返回**新档案**，不修改传入对象（壁厚 / 材料逐请求不同，
             #    就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
-            # ⚠️ **G7 守卫**：当前设定值 > 产品域上界 ⇒ **不替换**（保留经验域）：
+            # 【注意】**G7 守卫**：当前设定值 > 产品域上界 ⇒ **不替换**（保留经验域）：
             #    产品域上界是「刚好冷却到位」的物理时间；若当前设定已比它更长，
             #    说明该件的壁厚 / 材料基准与实际不符 ⇒ 用经验域更安全。
             #    判据用严格「>」（相等时落在上界、判成最高档是物理正确的）。
@@ -766,7 +765,7 @@ class FuzzyEngine(AlgorithmBase):
                     '⇒ 保留经验论域（该件的壁厚/材料基准与实际不符）',
                     kp.keyword, current, product_max)
 
-            # ⚠️ 用 `replace` 产出新档案，而不是就地写字段：档案可能来自
+            # 【注意】用 `replace` 产出新档案，而不是就地写字段：档案可能来自
             #    仓库缓存 / 共享对象 ⇒ 就地写会跨请求串数据（H2）。
             resolved.append(replace(kp, domain_source=source))
         keyword_profiles = resolved
@@ -785,14 +784,14 @@ class FuzzyEngine(AlgorithmBase):
                 continue
             # 推测论域上界：优先用**设备实测值**（与权威论域同一口径）；
             # 没有对应的必填字段时退回「当前值 × 2」（当前值落在论域中档）。
-            # ⚠️ 必须给**正下限**：当前值为 0 时 `current * 2` = 0 ⇒ 论域退化成
+            # 【注意】必须给**正下限**：当前值为 0 时 `current * 2` = 0 ⇒ 论域退化成
             #    [0, 0]（σ=0 ⇒ 隶属度恒 0/nan）；当前值为负时区间倒挂 [0, 负数]。
             #    两种情况都会让该字段的门控失效（内核侧只告警，见 features.py）。
             #    只在「算出来的上界非正」时兜底 —— 正数路径逐位不变。
             max_val = current * 2
             if max_val <= 0.0:
                 max_val = 0.01
-            # ⚠️ **论域来源**（不是元数据来源）：推测档案的论域边界可能取自
+            # 【注意】**论域来源**（不是元数据来源）：推测档案的论域边界可能取自
             #    权威源（设备值 / 材料区间 / 行程）⇒ 照实标记。
             domain_source = DOMAIN_SOURCE_GUESSED
             device_max = lookup_param_limit(name, domain_limits or {})
@@ -821,18 +820,17 @@ class FuzzyEngine(AlgorithmBase):
             keyword_profiles.append(KeywordProfile(
                 keyword=name,
                 # 档位数按关键字的模糊等级 —— 现网统一收敛到 **3 档**
-                # （RuleKeyword.fuzzy_level 全量回填 5→3，2026-11-09）
                 # ⇒ 推测论域按主流档位 3 档
                 lvl=3,
                 min_val=min_val,
                 max_val=max_val,
                 step=max((max_val - min_val) / 3.0, 0.01),
                 # 标记这是【推测】出来的论域，不是 RuleKeyword 权威元数据
-                # ⚠️ 温度类的**论域边界**已取材料区间（权威），但**关键字元数据**
+                # 【注意】温度类的**论域边界**已取材料区间（权威），但**关键字元数据**
                 #    （档位数等）仍无权威来源 ⇒ 仍标 guessed，
                 #    让「字段体检」能如实报出「这个字段缺元数据」。
                 meta_source=FIELD_SOURCE_GUESSED,
-                # ⚠️ 与 `meta_source` **独立**：那个说「关键字元数据」的来源，
+                # 【注意】与 `meta_source` **独立**：那个说「关键字元数据」的来源，
                 #    这个说「论域边界」的来源。
                 domain_source=domain_source,
             ))
@@ -854,10 +852,10 @@ class FuzzyEngine(AlgorithmBase):
         ⇒ 命中时**不替换**上界（保留经验域），并在诊断里留痕
         ``domain_source='kept_experience_domain'``。
 
-        ⚠️ **不用当前值去顶边界**：把上界改成当前值等于「拿实测值定论域」，
+        【注意】**不用当前值去顶边界**：把上界改成当前值等于「拿实测值定论域」，
         既没有工艺依据，也会让当前值永远落在最高档。
 
-        ⚠️ 判据用「当前值 **>** 设备上限」而不是「≥」：相等时当前值恰在论域
+        【注意】判据用「当前值 **>** 设备上限」而不是「≥」：相等时当前值恰在论域
         上边界（判成最高档）是**物理正确**的，回落经验域反而会把它判成最低档。
         位置类的超行程守卫（G6）用的是同一套语义。
 
@@ -892,7 +890,7 @@ class FuzzyEngine(AlgorithmBase):
         只对**必填等级**字段生效（见 :func:`specs.resolve_domain_limits`）：
         下界仍是经验域下界（RuleKeyword.range_min），**只换上界**。
 
-        ⚠️ **H1 守卫不在这里**：设备上限已低于当前设定值时，调用方
+        【注意】**H1 守卫不在这里**：设备上限已低于当前设定值时，调用方
         （:meth:`_load_keyword_profiles`）会先拦下、保留经验域并留痕
         ⇒ 本方法只负责「替换」这一个动作。
 
@@ -951,12 +949,12 @@ class FuzzyEngine(AlgorithmBase):
         2. **整段替换**而不是裁剪（材料窗口就是该场景的合理工艺区间）；
         3. **返回新档案**，不改传入对象。
 
-        ⚠️ **为什么必须返回新档案（而不是就地改）**：
+        【注意】**为什么必须返回新档案（而不是就地改）**：
            材料区间**逐请求不同**（每台机跑的材料不一样），而 `KeywordProfile`
            可能来自仓库缓存 / 共享对象 ⇒ 就地改会把 A 材料的区间泄漏到
            B 材料的请求里（这正是 H2「跨请求污染」那类隐患）。
 
-        ⚠️ **为什么不需要「当前值越界守卫」**（设备那套 H1 有，这里没有）：
+        【注意】**为什么不需要「当前值越界守卫」**（设备那套 H1 有，这里没有）：
            温度是**双边窗口** —— 当前值低于材料下限，判「低」档的**方向是对的**
            （确实该升温）；只有设备上限那套才会出现「上限 ≤ 当前值 ⇒ 域整个
            落在当前值下方 ⇒ 方向算反」的问题。
@@ -1030,7 +1028,7 @@ class FuzzyEngine(AlgorithmBase):
         - 经验档位表本身**保留**（``RuleKeyword.range_min/max`` 不动）⇒
           回落经验论域时仍是原口径。
 
-        ⚠️ **当前值超出设备行程 ⇒ 回落经验论域**（视同缺权威源）：
+        【注意】**当前值超出设备行程 ⇒ 回落经验论域**（视同缺权威源）：
           当前值超出设备物理行程 = **这个产品在这台设备上做不出来**
           （实测 MEL 56/70 行超行程）⇒ 该参数判不出档（论域上界 < 当前值
           ⇒ 隶属度趋 0）⇒ 回落经验论域**不改变判档结果**，只是让「回落」
@@ -1089,7 +1087,7 @@ class FuzzyEngine(AlgorithmBase):
     def _product_upper_bound(
         bounds: Optional[Tuple[float, float]],
     ) -> Optional[float]:
-        """产品域边界的**有效上界**（区间缺失 / 非法 ⇒ None）
+        """产品域边界的**有效上界**（区间缺失 / 非法 ⇒ None）。
 
         供 **G7 守卫**的留痕使用：只有「区间本身合法」时，
         「当前值 > 上界」才真的是 G7（而不是数据脏导致的上界不可信）。
@@ -1122,7 +1120,7 @@ class FuzzyEngine(AlgorithmBase):
            [0,120] 的 0 只是档位起点）、不是物理下限 ⇒ 冷却时间 0 有物理意义
            （等于不冷却）。
 
-        ⚠️ **G7 守卫：当前值 > 产品域上界 ⇒ 回落经验论域**：
+        【注意】**G7 守卫：当前值 > 产品域上界 ⇒ 回落经验论域**：
           产品域上界是「刚好冷却到位」的物理时间；若当前设定已比它更长，
           说明该件的壁厚 / 材料基准与实际不符 ⇒ 用经验域更安全。
           判据用严格「>」（相等时落在上界、判成最高档是**物理正确**的，
@@ -1233,7 +1231,7 @@ class FuzzyEngine(AlgorithmBase):
                         论域（lvl=3；当前值非正时兜底为 [0, 0.01]）
         - ``unknown``  ：既无权威元数据也无当前值 ⇒ 规则少了一个门控条件，激活度偏高
 
-        ⚠️ 必填等级字段的**论域上界会被替换成设备实测值**（见
+        【注意】必填等级字段的**论域上界会被替换成设备实测值**（见
         :func:`_load_keyword_profiles`；设备上限已低于当前设定值时除外 ——
         H1 守卫保留经验域）；**位置类字段的论域上界会被替换成设备
         实测的最大注射行程**；**温度类字段的论域会被整体替换成
@@ -1283,8 +1281,8 @@ class FuzzyEngine(AlgorithmBase):
             kp.keyword for kp in keyword_profiles
             if kp.domain_source in (DOMAIN_SOURCE_EXPERIENCE,
                                     DOMAIN_SOURCE_KEPT_EXPERIENCE))
-        # 时间类本轮**显式**回落经验域 ⇒ 单列出来（产品维度接线的输入清单）
-        # ⚠️ CT 已接产品域 ⇒ 它的 domain_source 是 'product' ⇒ **天然不在此清单**；
+        # 时间类**显式**回落经验域 ⇒ 单列出来（产品维度接入的输入清单）
+        # 【注意】CT 已接产品域 ⇒ 它的 domain_source 是 'product' ⇒ **天然不在此清单**；
         #    清单里剩下的就是「还没拿到权威源」的时间类（PT / IT / ID）。
         time_domain_params = sorted(
             kp.keyword for kp in keyword_profiles
@@ -1309,8 +1307,8 @@ class FuzzyEngine(AlgorithmBase):
                 '[FuzzyEngine][%s] %d 个参数靠经验域兜底（无权威源，待补）: %s',
                 layer, len(fallback_params), fallback_params)
         if time_domain_params:
-            # ⚠️ 措辞随接线进展更新：CT 已接产品域（见下一条日志），
-            #    这里剩下的是**尚无权威源**的时间类（PT / IT / ID）。
+            # 【注意】CT 已接产品域（见下一条日志），这里剩下的是**尚无权威源**的时间类
+            #    （PT / IT / ID）。
             logger.info(
                 '[FuzzyEngine][%s] %d 个时间类参数回落经验域'
                 '（尚无制品级/权威源基准）: %s',
@@ -1320,7 +1318,7 @@ class FuzzyEngine(AlgorithmBase):
                 '[FuzzyEngine][%s] %d 个参数已接产品域（制品级物理推导基准）: %s',
                 layer, len(product_domain_params), product_domain_params)
 
-        # ⚠️ **合并进已有条目**（不新增 field_reports 条目）：既有断言
+        # 【注意】**合并进已有条目**（不新增 field_reports 条目）：既有断言
         #    「两次 `_build_field_context` ⇒ `_field_reports` 恰好 2 条」依赖
         #    条目数不变 ⇒ 来源矩阵作为**附加键**挂在同一条目上。
         #    黄金快照只记 `_diagnostics`（规则级），不含 field_reports ⇒ 零影响。
@@ -1381,11 +1379,11 @@ class FuzzyEngine(AlgorithmBase):
         且规则库里 DL 前件的档位**恒为 high**（实测 20 条 100% 一致）
         ⇒ 取 high 档中心。
 
-        ⚠️ 返回值只喂给推理网络，**绝不能混进 `process_parameter`** ——
+        【注意】返回值只喂给推理网络，**绝不能混进 `process_parameter`** ——
         后者会被 `to_recommendations` 当作「当前参数集合」，混进缺陷名会在
         推荐结果里冒出 SHORTSHOT 这种非参数条目。
 
-        ⚠️ 反馈里没有值的维度**不产出数值**（例如用户没填缺陷位置）⇒
+        【注意】反馈里没有值的维度**不产出数值**（例如用户没填缺陷位置）⇒
         对应维度不会被建论域 ⇒ 其前件不作为门控。
         """
         inputs: Dict[str, float] = {}
@@ -1397,7 +1395,7 @@ class FuzzyEngine(AlgorithmBase):
         if defect_name and level:
             kp = defect_profiles.get(defect_name)
             if kp is not None:
-                # ⚠️ 档位词可能在**当前等级数下无法解析**（5/7 档独有词、
+                # 【注意】档位词可能在**当前等级数下无法解析**（5/7 档独有词、
                 #    编号轨越界词）⇒ 直接送进来会让**整个缺陷维度掉出
                 #    推理网络**（静默失活：不报错、结果合理、就是少了
                 #    缺陷相关建议）⇒ 先降级到语义最近的合法档位。
@@ -1430,7 +1428,7 @@ class FuzzyEngine(AlgorithmBase):
     ) -> None:
         """档位词降级留痕（**幂等**）。
 
-        ⚠️ **幂等是必需的**：`_build_defect_inputs` 在一次 `recommend()` 内
+        【注意】**幂等是必需的**：`_build_defect_inputs` 在一次 `recommend()` 内
         会被调用 **2 次**（`_infer_numeric_layer` 与 `_dedupe_advice_items`
         各一次）⇒ 直接 append 会产生重复记录。
         ⇒ 按 `(guard, param, origin_level)` 查重，同一次请求只留 1 条。
@@ -1522,12 +1520,12 @@ class FuzzyEngine(AlgorithmBase):
             for param, value in adjustments.items():
                 out.append(RuleAdjustment(
                     param_name=param,
-                    # ⚠️ activation 是**组内占比**（同参数组内各规则占比之和 = 1）
+                    # 【注意】activation 是**组内占比**（同参数组内各规则占比之和 = 1）
                     #    ⇒ 这里乘出来的是“该规则在它所属参数组里的贡献份额”，
                     #    聚合层裸累加 = 组内加权平均。
                     delta=float(value) * float(activation),
                     activation=float(activation),
-                    # ⚠️ raw_activation 是**原始激活度**（前件隶属度之积），
+                    # 【注意】raw_activation 是**原始激活度**（前件隶属度之积），
                     #    不含 priority / specificity 乘数 ⇒ 置信度用它。
                     raw_activation=float(raw_activation),
                     layer='numeric',
@@ -1567,7 +1565,7 @@ class FuzzyEngine(AlgorithmBase):
         out: List[RuleAdjustment] = []
 
         # 1) 检查/弹窗类 → 文本建议
-        #    ⚠️ 先按缺陷程度去重（规则库里同一句检查提示按档位各写了一遍）
+        #    【注意】先按缺陷程度去重（规则库里同一句检查提示按档位各写了一遍）
         advice_items = self._dedupe_advice_items(
             filtered.advice_items, defect_ctx, filtered.defect_param_names)
         for item in advice_items:
@@ -1592,7 +1590,7 @@ class FuzzyEngine(AlgorithmBase):
 
         try:
             net = FuzzyRuleNet(mamdani_rules, keyword_profiles)
-            # ⚠️ 传副本：内核不得改调用方的参数字典（口径同数值层）
+            # 【注意】传副本：内核不得改调用方的参数字典（口径同数值层）
             results = net.predict(dict(process_parameter), top_k=len(mamdani_rules))
         except Exception as e:
             logger.exception('[FuzzyEngine] FuzzyRuleNet 推理失败: %s', e)
@@ -1634,7 +1632,7 @@ class FuzzyEngine(AlgorithmBase):
         **不同**检查项（「检查锁模力」+「检查模温」）是两条独立建议，都该保留。
 
         选谁：按缺陷维 μ（高斯隶属度）取最大者。
-        ⚠️ **不是按档位字符串精确匹配**：规则库只写 low/medium/high 三档，
+        【注意】**不是按档位字符串精确匹配**：规则库只写 low/medium/high 三档，
         而档位词表仍保留 5/7 档的独有词（macros.LEVEL_WORDS_BY_LVL）
         ⇒ 精确匹配会在传入「极轻微 / 极严重」这类 5 档词时把提示**全部切光**
         （同一理由见 ``library/semantics.py::match_defect_name``）。
@@ -1678,7 +1676,7 @@ class FuzzyEngine(AlgorithmBase):
     ) -> float:
         """一条检查建议在缺陷维上的隶属度。
 
-        ⚠️ **解析不出时返回 1.0**（视为「最匹配」）—— 宁可不去重，
+        【注意】**解析不出时返回 1.0**（视为「最匹配」）—— 宁可不去重，
         也不要把本该保留的检查项删掉（退化行为 = 改造前的样子）。
 
         规则串的第一个前件是缺陷名（规则库约定，1646 条实测 100% 一致）。

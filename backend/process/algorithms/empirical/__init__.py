@@ -1,5 +1,4 @@
-"""
-经验推理算法模块
+"""经验推理算法模块。
 
 algorithm_type='optimization'，由 condition service 编排 chain（兜底）。
 基于工程师经验编码的硬编码工艺知识。

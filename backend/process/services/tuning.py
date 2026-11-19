@@ -1,5 +1,4 @@
-"""
-调参记录服务
+"""调参记录服务。
 
 提供 TuningRecord 的 CRUD 操作和趋势分析
 
@@ -18,7 +17,7 @@ _logger = logging.getLogger(__name__)
 
 
 # 前端 tuning_result 枚举 → TuningRecord.result choices 映射
-# 唯一真相源：parameter_optimize._update_previous_tuning_record 复用此表，
+# 唯一真相源：parameter_optimize._record_tuning_round 复用此表，
 # 避免两处映射各写一份而漂移（unchanged 一度只在一侧生效）。
 TUNING_RESULT_MAP = {
     "effective": "improved",
@@ -41,14 +40,14 @@ TUNING_RESULT_REVERSE_MAP = {
 
 
 def tuning_result_from_record(result: Optional[str]) -> Optional[str]:
-    """TuningRecord.result → 前端 tuning_result 枚举（未评价返回 None）"""
+    """TuningRecord.result → 前端 tuning_result 枚举（未评价返回 None）。"""
     if not result:
         return None
     return TUNING_RESULT_REVERSE_MAP.get(result)
 
 
 def is_qualified_result(tuning_result: Optional[str]) -> bool:
-    """tuning_result 是否为「合格」
+    """tuning_result 是否为「合格」。
 
     合格态的产品没有缺陷 ⇒ 提交的缺陷信息一律丢弃，且不进入缺陷驱动的优化流程。
     """
@@ -56,7 +55,7 @@ def is_qualified_result(tuning_result: Optional[str]) -> bool:
 
 
 def is_record_sealed(record: Optional[TuningRecord]) -> bool:
-    """归档判据（纯函数，可离线判一条记录）
+    """归档判据（纯函数，可离线判一条记录）。
 
     有评价记录且 ``result != 'pending'`` ⇒ 该轮已归档（参数锁死，评价仍可改）。
     """
@@ -64,12 +63,12 @@ def is_record_sealed(record: Optional[TuningRecord]) -> bool:
 
 
 def is_round_sealed(parameter: ProcessParameter) -> bool:
-    """该调机轮次是否已归档（参数锁死，评价仍可改）
+    """该调机轮次是否已归档（参数锁死，评价仍可改）。
 
     判据：存在 TuningRecord 且 ``result != 'pending'``（判据本体见 is_record_sealed）。
 
     为什么不是「有 TuningRecord 就算归档」：
-    infer 建新轮时会预建一条 ``pending`` 的 TuningRecord（等该轮自身的试模反馈），
+    optimize_from_condition 建新轮时会预建一条 ``pending`` 的 TuningRecord（等该轮自身的试模反馈），
     那条记录表示「这一轮已建、还没评价」⇒ 参数仍允许改。
 
     为什么「评价仍可改」：
@@ -102,7 +101,7 @@ NON_SNAPSHOT_FIELDS = frozenset({
 
 
 def snapshot_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
-    """从 ProcessParameter 取标量工艺字段（排除元数据与业务字段）
+    """从 ProcessParameter 取标量工艺字段（排除元数据与业务字段）。
 
     快照一旦落库即不可变，是 diff 的基准端。
     """
@@ -120,9 +119,9 @@ def snapshot_parameter(parameter: ProcessParameter) -> Dict[str, Any]:
 
 
 def _current_snapshot(parameter: ProcessParameter) -> Dict[str, Any]:
-    """取参数的当前快照（重新读库，避开调用方持有的旧实例）
+    """取参数的当前快照（重新读库，避开调用方持有的旧实例）。
 
-    ⚠️ 必须重新读：调用方（view / service）手上的 parameter 实例可能是
+    【注意】必须重新读：调用方（view / service）手上的 parameter 实例可能是
     本次写入**之前**取的，直接用它会把刚写入的值漏掉。
     """
     fresh = ProcessParameter.objects.filter(id=parameter.id).first()
@@ -133,13 +132,13 @@ def _diff_snapshots(
     old: Dict[str, Any],
     new: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
-    """两个快照的差异 = 本轮变更
+    """两个快照的差异 = 本轮变更。
 
-    ⚠️ **只比两边都存在的键**：`snapshot_parameter` 跳过 None 值，
+    【注意】**只比两边都存在的键**：`snapshot_parameter` 跳过 None 值，
     「某字段消失」无法区分「被清空」与「本来就没有」⇒ 不产出条目
     （宁可少记，也不要记一条含义不明的变更）。
 
-    ⚠️ **不区分变更来源**：算法派生与人工原地调整在本函数看来没有区别 ——
+    【注意】**不区分变更来源**：算法派生与人工原地调整在本函数看来没有区别 ——
     变更就是两个快照的客观差异；「算法建议是否被采纳」由
     Recommendation.is_adopted 承载，不在这里重复。
     """
@@ -177,7 +176,7 @@ def build_adjustments(
     - ``defects``：本轮试模的缺陷名（合格态已由业务规则清空 ⇒ 空列表）
     - ``tuning_context``：模次序号 + 变更前的基线结果
 
-    ⚠️ **OLD 侧必须是 ``record.previous_parameter``**（父节点**派生时**的快照），
+    【注意】**OLD 侧必须是 ``record.previous_parameter``**（父节点**派生时**的快照），
     不能用父节点的当前值 —— 父节点可能已被人工原地改过，用当前值算就错了。
 
     Args:
@@ -215,23 +214,23 @@ def build_adjustments(
 
 
 class TuningService:
-    """调参记录服务"""
+    """调参记录服务。"""
 
     @staticmethod
     def upsert_tuning_record(
         parameter: ProcessParameter,
         defect_feedbacks: Optional[List[Dict[str, Any]]] = None,
+        observations: Optional[List[Dict[str, Any]]] = None,
         tuning_result: Optional[str] = None,
         result_detail: Optional[str] = None,
     ) -> Tuple[TuningRecord, bool]:
-        """
-        业务 1:1 创建或更新 parameter 关联的 TuningRecord
+        """业务 1:1 创建或更新 parameter 关联的 TuningRecord。
 
         业务说明：
-        - 本方法供 POST /api/processes/tunings/feedback/ 调用
-        - 业务层保证每 parameter 至少有 1 条 TuningRecord（infer 已创建）
+        - 本方法供 POST /api/processes/parameters/<int:parameter_id>/tuning-feedback/ 调用
+        - 业务层保证每 parameter 至少有 1 条 TuningRecord（optimize_from_condition 已创建）
         - 用户保存当前试模结果 → 覆盖更新
-        - 若 infer 链路未运行过（本参数无 TuningRecord）→ 新建一条
+        - 若 optimize_from_condition 链路未运行过（本参数无 TuningRecord）→ 新建一条
 
         mapping 规则（与 parameter_optimize 一致，共用 TUNING_RESULT_MAP）：
         - effective       → improved
@@ -243,6 +242,8 @@ class TuningService:
         Args:
             parameter: 工艺参数
             defect_feedbacks: 缺陷反馈列表（None 不更新）
+            observations: 实测观察列表（None 不更新；**合格态也保留** ——
+                实测值与「有没有缺陷」无关）
             tuning_result: 前端的 effective/ineffective/unchanged/qualified/unqualified/pending
             result_detail: 结果详情（None 不更新）
 
@@ -268,25 +269,28 @@ class TuningService:
             # 只更新非 None 字段（保护业务字段不被误清）
             if defect_feedbacks is not None:
                 existing.defect_feedbacks = defect_feedbacks
+            if observations is not None:
+                existing.observations = observations
             if result_value is not None:
                 existing.result = result_value
             if result_detail is not None:
                 existing.result_detail = result_detail
             # 规范化训练样本：变更（两快照差异）+ 本轮缺陷 + 上下文
-            # ⚠️ existing 是从库里查的，其 process_parameter 会重新读库
+            # 【注意】existing 是从库里查的，其 process_parameter 会重新读库
             #    ⇒ 拿到的是最新值（含同一事务里刚写入的人工调整）
             existing.adjustments = build_adjustments(existing)
             existing.save()
             return existing, False
 
-        # 新建（infer 未运行时本路径生效）
+        # 新建（optimize_from_condition 未运行时本路径生效）
         record = TuningRecord.objects.create(
             process_parameter=parameter,
             defect_feedbacks=defect_feedbacks if defect_feedbacks is not None else [],
+            observations=observations if observations is not None else [],
             result=result_value or "pending",
             result_detail=result_detail,
         )
-        # ⚠️ 刚 create 的 record 缓存的是调用方传入的 parameter 实例
+        # 【注意】刚 create 的 record 缓存的是调用方传入的 parameter 实例
         #    （可能是本次写入之前的旧值）⇒ 快照必须重新读库
         record.adjustments = build_adjustments(record, _current_snapshot(parameter))
         record.save(update_fields=["adjustments", "updated_at"])
@@ -300,20 +304,21 @@ class TuningService:
     def create_tuning_record(
         parameter: ProcessParameter,
         defect_feedbacks: List[dict] = None,
+        observations: List[dict] = None,
         result: str = 'pending',
         result_detail: str = None,
         previous_parameter: dict = None,
     ) -> TuningRecord:
-        """
-        创建调参记录
+        """创建调参记录。
 
         业务说明：
         - 本方法通常由业务层调用，同步创建 TuningRecord 与 parameter
-        - previous_parameter 通常在创建时为空，由 infer/manual-adjust 后续填充
+        - previous_parameter 通常在创建时为空，由 optimize_from_condition/manual-adjust 后续填充
 
         Args:
             parameter: 工艺参数
             defect_feedbacks: 缺陷反馈列表
+            observations: 实测观察列表
             result: 试模结果 (pending/improved/worse/unchanged/qualified/unqualified)
             result_detail: 结果详情，描述具体效果
             previous_parameter: 调整前的参数快照（OLD parameter.parameters）
@@ -323,10 +328,13 @@ class TuningService:
         """
         if defect_feedbacks is None:
             defect_feedbacks = []
+        if observations is None:
+            observations = []
 
         return TuningRecord.objects.create(
             process_parameter=parameter,
             defect_feedbacks=defect_feedbacks,
+            observations=observations,
             result=result,
             result_detail=result_detail,
             previous_parameter=previous_parameter,
@@ -334,13 +342,12 @@ class TuningService:
 
     @staticmethod
     def _build_parameter_snapshot(parameter: ProcessParameter) -> dict:
-        """
-        从 ProcessParameter 构建快照
+        """从 ProcessParameter 构建快照。
 
         Deprecated：
         - 本方法仅作为工具方法保留
         - 创建 TuningRecord 时不自动调用（previous_parameter 为空）
-        - infer/manual-adjust 调用时应直接从 parameter.parameters 获取快照
+        - optimize_from_condition/manual-adjust 调用时应直接从 parameter.parameters 获取快照
         """
         snapshot = {}
         for field in parameter._meta.fields:
@@ -354,14 +361,14 @@ class TuningService:
 
     @staticmethod
     def get_tuning_records(parameter: ProcessParameter) -> List[TuningRecord]:
-        """获取参数的所有调参记录"""
+        """获取参数的所有调参记录。"""
         return list(TuningRecord.objects.filter(
             process_parameter=parameter
         ).order_by('-created_at'))
 
     @staticmethod
     def get_latest_record(parameter: ProcessParameter) -> Optional[TuningRecord]:
-        """获取最新的调参记录"""
+        """获取最新的调参记录。"""
         return TuningRecord.objects.filter(
             process_parameter=parameter
         ).order_by('-created_at').first()
@@ -372,8 +379,7 @@ class TuningService:
         result: str,
         result_detail: str = None,
     ) -> TuningRecord:
-        """
-        更新试模结果
+        """更新试模结果。
 
         备注：
         - adjustments 是系统自动生成的，不允许用户手工修改
@@ -389,8 +395,7 @@ class TuningService:
         record: TuningRecord,
         defect_feedback: dict
     ) -> TuningRecord:
-        """
-        添加缺陷反馈
+        """添加缺陷反馈。
 
         Args:
             record: 调参记录
@@ -415,8 +420,7 @@ class TuningService:
         parameter_id: int = None,
         limit: int = None
     ) -> List[TuningRecord]:
-        """
-        获取成功的调参记录
+        """获取成功的调参记录。
 
         用于规则学习
         """
@@ -434,8 +438,7 @@ class TuningService:
 
     @staticmethod
     def get_defect_summary(parameter: ProcessParameter) -> dict:
-        """
-        获取缺陷汇总
+        """获取缺陷汇总。
 
         返回格式：
         {
@@ -473,8 +476,7 @@ class TuningService:
     @staticmethod
     @dataclass
     class IterationTrend:
-        """
-        迭代趋势分析结果
+        """迭代趋势分析结果。
 
         Attributes:
             trend: 趋势方向 (improving/worsening/stable/final)
@@ -493,8 +495,7 @@ class TuningService:
 
     @staticmethod
     def analyze_iteration_trend(parameter: ProcessParameter) -> 'TuningService.IterationTrend':
-        """
-        分析迭代趋势
+        """分析迭代趋势。
 
         基于历史调参记录分析趋势，用于指导引擎选择策略：
         - improving: 持续改善，继续当前方向

@@ -1,5 +1,4 @@
-﻿"""
-AI 推理类算法基类 + 注册中心
+﻿"""AI 推理类算法基类 + 注册中心。
 
 本目录（process/algorithms/）是所有 AI 推理类算法的统一实现库：
 - 三个业务场景的算法都物理集中在这里
@@ -55,7 +54,7 @@ class AlgorithmRecommendation:
     direction: Optional[str] = None
 
     def to_dict(self) -> dict:
-        """转换为字典"""
+        """转换为字典。"""
         return {
             'param': self.param_name,
             'current_value': self.current_value,
@@ -68,8 +67,7 @@ class AlgorithmRecommendation:
 
 
 class AlgorithmBase(ABC):
-    """
-    AI 推理类算法基类
+    """AI 推理类算法基类。
 
     所有 process/algorithms/ 下的算法都应继承本类。
 
@@ -118,8 +116,7 @@ class AlgorithmBase(ABC):
 
     @abstractmethod
     def is_available(self, context: dict) -> bool:
-        """
-        判断当前算法是否适用于此场景
+        """判断当前算法是否适用于此场景。
 
         Args:
             context: 推理上下文
@@ -157,8 +154,7 @@ class AlgorithmRegistry:
 
     @classmethod
     def register(cls, algorithm_subtype: str, algorithm: AlgorithmBase):
-        """
-        注册算法
+        """注册算法。
 
         Args:
             algorithm_subtype: 算法子类型
@@ -168,8 +164,7 @@ class AlgorithmRegistry:
 
     @classmethod
     def get_algorithm(cls, algorithm_subtype: str) -> Optional[AlgorithmBase]:
-        """
-        获取指定子类型的算法
+        """获取指定子类型的算法。
 
         Args:
             algorithm_subtype: 算法子类型
@@ -205,8 +200,7 @@ class AlgorithmRegistry:
 
     @classmethod
     def get_available_algorithms(cls, context: dict) -> List[AlgorithmBase]:
-        """
-        获取所有当前 context 下可用的算法
+        """获取所有当前 context 下可用的算法。
 
         Args:
             context: 推理上下文
@@ -222,8 +216,7 @@ class AlgorithmRegistry:
 
     @classmethod
     def get_priority(cls, algorithm_subtype: str) -> int:
-        """
-        获取算法优先级
+        """获取算法优先级。
 
         Args:
             algorithm_subtype: 算法子类型
@@ -235,8 +228,7 @@ class AlgorithmRegistry:
 
     @classmethod
     def set_priority(cls, algorithm_subtype: str, priority: int):
-        """
-        设置算法优先级
+        """设置算法优先级。
 
         Args:
             algorithm_subtype: 算法子类型
@@ -246,8 +238,7 @@ class AlgorithmRegistry:
 
     @classmethod
     def list_algorithms(cls) -> List[Dict[str, Any]]:
-        """
-        列出所有已注册的算法
+        """列出所有已注册的算法。
 
         Returns:
             算法信息列表

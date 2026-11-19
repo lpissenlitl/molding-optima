@@ -8,7 +8,7 @@ from utils.identifier import auto_code_from_name, COMPANY_SUFFIXES, ORGANIZATION
 
 
 class Company(BaseModel):
-    """公司表"""
+    """公司表。"""
     name = models.CharField(max_length=255, verbose_name="公司名称")
     code = models.CharField(
         null=True, blank=True, max_length=30,
@@ -29,12 +29,12 @@ class Company(BaseModel):
     )
 
     def is_accessible(self) -> bool:
-        """判断公司是否处于可访问状态"""
+        """判断公司是否处于可访问状态。"""
         return self.is_active \
             and (self.expires_at is None or self.expires_at > datetime.now())
 
     def save(self, *args, **kwargs):
-        """保存前自动生成 code（如果未提供）"""
+        """保存前自动生成 code（如果未提供）。"""
         if not self.code and self.name:
             self.code = auto_code_from_name(self.name)
         super().save(*args, **kwargs)
@@ -45,7 +45,7 @@ class Company(BaseModel):
 
 
 class Organization(BaseModel):
-    """组织表"""
+    """组织表。"""
     name = models.CharField(max_length=255, verbose_name="组织名称")
     code = models.CharField(
         null=True, blank=True, max_length=30,
@@ -92,7 +92,7 @@ class Organization(BaseModel):
     is_active = models.BooleanField(default=True, verbose_name="是否激活")
     
     def get_ancestors(self):
-        """获取所有上级组织"""
+        """获取所有上级组织。"""
         ancestors = []
         parent = self.parent
         while parent:
@@ -101,13 +101,12 @@ class Organization(BaseModel):
         return ancestors[::-1]
     
     def get_descendants(self):
-        """获取所有下级组织"""
+        """获取所有下级组织。"""
         return Organization.objects.filter(path__startswith=f"{self.path}/", company=self.company)
 
     @classmethod
     def get_manager_name_map(cls, org_names: list):
-        """
-        批量获取组织负责人姓名映射
+        """批量获取组织负责人姓名映射。
         
         Args:
             org_names: 组织名称列表
@@ -121,7 +120,7 @@ class Organization(BaseModel):
         return {org.name: (org.manager.engineer_name if org.manager else None) for org in orgs}
 
     def save(self, *args, **kwargs):
-        """保存前自动生成 code（如果未提供）
+        """保存前自动生成 code（如果未提供）。
 
         Organization 使用公司级 + 组织级后缀剥离，提取核心名称
         """
@@ -139,7 +138,7 @@ class Organization(BaseModel):
 
 
 class AccessibleOrganization(BaseModel):
-    """可访问组织表"""
+    """可访问组织表。"""
     user = models.ForeignKey(
         "identity.User", 
         on_delete=models.CASCADE

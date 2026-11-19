@@ -1,4 +1,4 @@
-"""molding-optima 工艺参数初始化 Schema 定义
+"""molding-optima 工艺参数初始化 Schema 定义。
 
 包含：
 - 3 个推理/初始化请求（按入口类型排列：masterdata ID / 源 condition / 调用方提供）：
@@ -14,10 +14,9 @@ from extensions.schemas import BaseSchema
 
 
 class MachineInfoSchema(BaseSchema):
-    """设备信息（推理输入）
+    """设备信息（推理输入）。
 
-    单射设计：工艺推理时一台机台只取一个 InjectionUnit（按 injection_index 选取），
-    因此 injection_unit 的字段被扁平化到 machine_info 同一层，避免 view 层做二次融合。
+    注射单元（InjectionUnit）的字段扁平化到本层同一级（按 injection_index 选取的射台）。
 
     包含：
     - 机器本身：power_method（动力方式）
@@ -42,7 +41,7 @@ class MachineInfoSchema(BaseSchema):
 
 
 class PolymerInfoSchema(BaseSchema):
-    """材料信息（推理输入）"""
+    """材料信息（推理输入）。"""
 
     abbreviation: Optional[str] = Field(None, description="材料简称（ABS/PC/PC+ABS...）")
     recommend_melt_temperature: Optional[float] = Field(None, description="推荐熔体温度")
@@ -53,10 +52,9 @@ class PolymerInfoSchema(BaseSchema):
 
 
 class MoldInfoSchema(BaseSchema):
-    """模具信息（推理输入）
+    """模具信息（推理输入）。
 
-    单射设计：工艺推理时一个 mold 只取第一个 cavity / gate，
-    因此 product / cavity / gate 的字段被扁平化到 mold_info 同一层。
+    product / cavity / gate 的字段扁平化到本层同一级（取第一个 cavity / gate）。
 
     包含：
     - 模具级：shot_count
@@ -93,7 +91,7 @@ class MoldInfoSchema(BaseSchema):
 
 
 class ProcessSetSchema(BaseSchema):
-    """工艺设置（推理输入）
+    """工艺设置（推理输入）。
 
     独立维度：与机器/模具/材料无关，是推理时需要的"工艺元数据"。
     """
@@ -113,7 +111,7 @@ class ProcessSetSchema(BaseSchema):
 
 
 class ProcessInitializeFromMasterdataSchema(BaseSchema):
-    """【业务主流程】基于 masterdata ID 调推理 + 建档
+    """【业务主流程】基于 masterdata ID 调推理 + 建档。
 
     POST /api/processes/algorithms/initialize/
 
@@ -121,9 +119,7 @@ class ProcessInitializeFromMasterdataSchema(BaseSchema):
       "基于 masterdata ID 创建一个新的工艺条件（ProcessCondition），
        并基于该条件生成初始工艺参数（ProcessParameter）"
 
-    Step 1 入口适配：3 个 masterdata ID + shot_index + injection_index
-    Step 2 数据前处理：service 层从 ORM 构建完整快照 (process_context_snapshot)
-    Step 3+4 推理算法 + 落库：创建 Condition（存完整快照）+ ProcessParameter
+    落库产物：ProcessCondition（含完整快照 process_context_snapshot）+ ProcessParameter。
 
     shot_index / injection_index 的角色：
       - shot_index       = 模具的"第几射"（多射模具：0=第一射, 1=第二射, ...）
@@ -133,6 +129,14 @@ class ProcessInitializeFromMasterdataSchema(BaseSchema):
         精确选取子项，构建完整快照
 
     status / origin_type / condition_no 由后端自动生成。
+
+    响应（落库后的实体镜像）：
+    {
+        "condition": {...},          # 工艺条件（ORM 镜像，含 id / condition_no / shot_index）
+        "parameter": {...},          # 工艺参数（ORM 镜像，含 id / seq_idx / parameter_no）
+        "matched_rules": [...],
+        "mold_temp": {...}, "hot_runner": {...}
+    }
     """
 
     mold_id: int = Field(..., description="模具 ID（必填）")
@@ -152,7 +156,7 @@ class ProcessInitializeFromMasterdataSchema(BaseSchema):
 
 
 class ProcessInitializeFromConditionSchema(BaseSchema):
-    """【业务另一场景】基于源 condition_id 复制初始工艺参数
+    """【业务另一场景】基于源 condition_id 复制初始工艺参数。
 
     POST /api/processes/algorithms/initialize-from-condition/
 
@@ -169,6 +173,12 @@ class ProcessInitializeFromConditionSchema(BaseSchema):
 
     status / origin_type 由后端固定为 draft / legacy_import。
     process_context 由后端自动写入（调用入参快照）。
+
+    响应（落库后的实体镜像）：
+    {
+        "condition": {...},          # 工艺条件（ORM 镜像，含 id / condition_no / shot_index）
+        "parameter": {...}           # 工艺参数（ORM 镜像，含 id / seq_idx / parameter_no）
+    }
     """
 
     source_condition_id: int = Field(
@@ -180,7 +190,7 @@ class ProcessInitializeFromConditionSchema(BaseSchema):
 
 
 class ProcessInitializeFromProvidedSchema(BaseSchema):
-    """【纯推理，不查库不落库】工艺参数纯推理请求
+    """【纯推理，不查库不落库】工艺参数纯推理请求。
 
     适用场景：
     - 第三方系统集成：调用方提供完整数据，后端纯推理
@@ -199,10 +209,9 @@ class ProcessInitializeFromProvidedSchema(BaseSchema):
     响应：
     {
         "param_source": "algorithm_init",
-        "condition_id": null,                 # 纯推理不创建 Condition
         "matched_rules": [...],
-        "process": {...}, "mold_temp": {...}, "hot_runner": {...},
-        "summary": {...}
+        "parameter": {...},          # 工艺参数（flat，与 optimize 的 parameter 同形）
+        "mold_temp": {...}, "hot_runner": {...}
     }
     """
 

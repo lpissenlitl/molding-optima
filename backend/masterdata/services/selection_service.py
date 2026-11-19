@@ -31,7 +31,7 @@ MAX_LIMIT = 100
 
 
 def _resolve_model(table: str):
-    """按白名单解析 table → model"""
+    """按白名单解析 table → model。"""
     key = (table or "").strip()
     if key not in TABLE_MODEL_MAP:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, f"不支持的 table: {table!r}")
@@ -40,7 +40,7 @@ def _resolve_model(table: str):
 
 
 def _check_column(model, column: str) -> str:
-    """校验 column 是该 model 的文本字段，返回规范化后的列名"""
+    """校验 column 是该 model 的文本字段，返回规范化后的列名。"""
     name = (column or "").strip()
     if not name:
         raise BizException(ERROR_ILLEGAL_ARGUMENT, "column 不能为空")
@@ -60,7 +60,7 @@ def get_selection_options(
     input_text: str = "",
     limit=None,
 ) -> list:
-    """返回候选值列表 [{"value": ...}, ...]
+    """返回候选值列表 [{"value": ...}, ...]。
 
     Args:
         company_id: 租户隔离字段（取 request.user.company_id）

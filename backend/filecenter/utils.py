@@ -29,8 +29,7 @@ except ImportError:
 
 
 def build_mold_dir(mold: Mold):
-    """
-    构建模具相关文件存储目录
+    """构建模具相关文件存储目录。
     根据模具的创建日期，模具编号 生成文件存储目录
     
     Args:
@@ -177,7 +176,7 @@ def build_temp_chunk_dir(tenant_slug: str, finally_md5: str) -> str:
 
 def sanitize_folder_name(name: str, max_length: int = 50) -> str:
     """
-    将任意字符串转换为安全的文件/文件夹名片段
+    将任意字符串转换为安全的文件/文件夹名片段。
     """
     if not isinstance(name, str):
         name = str(name)

@@ -92,8 +92,7 @@ def validate_role_info(
     code: str,
     exclude_id: int = None
 ):
-    """
-    角色信息参数校验
+    """角色信息参数校验。
     params:
         company_id: int 公司ID，为 None 时，表示创建全局角色
         name: str 角色名称，必填项
@@ -127,7 +126,7 @@ def create_role(
     permission_codes: list = None,
     company_id: int = None,
 ):
-    """创建角色
+    """创建角色。
 
     :param company_id: 公司 ID。None 时使用 operator 所在公司（创建租户角色时由
         create_company 传入）。
@@ -200,7 +199,7 @@ def build_permission_tree(
 
 
 def get_permission_tree(company_id: int, tier_level: int, user_permissions: list) -> list[dict]:
-    """根据用户权限获取权限树，在创建角色和编辑角色时使用"""
+    """根据用户权限获取权限树，在创建角色和编辑角色时使用。"""
     perm_level = tier_level or 1
     exclude_codes = set(ADMIN_PERMISSION_CODES)
     include_codes = set(user_permissions)
@@ -213,7 +212,7 @@ def get_permission_tree(company_id: int, tier_level: int, user_permissions: list
 
 
 def _get_role_by_id(role_id: int) -> Role:
-    """根据角色 ID 获取角色"""
+    """根据角色 ID 获取角色。"""
     role_id = validate_pk(role_id, "role_id")
     role = Role.objects.filter(id=role_id).prefetch_related('permissions').first()
     if not role:
@@ -222,7 +221,7 @@ def _get_role_by_id(role_id: int) -> Role:
 
 
 def get_role_info(role_id: int) -> dict:
-    """获取角色信息"""
+    """获取角色信息。"""
     role = _get_role_by_id(role_id)
     return {
         **role.to_dict(),
@@ -231,7 +230,7 @@ def get_role_info(role_id: int) -> dict:
 
 
 def update_role_info(role_id: int, **kwargs):
-    """更新角色信息"""
+    """更新角色信息。"""
     role = _get_role_by_id(role_id)
     if "name" in kwargs or "code" in kwargs:
         name = kwargs.get("name")
@@ -249,21 +248,21 @@ def update_role_info(role_id: int, **kwargs):
 
 
 def enable_role(role_id: int):
-    """启用角色"""
+    """启用角色。"""
     role = _get_role_by_id(role_id)
     role.is_active = True
     role.save()
 
 
 def disable_role(role_id: int):
-    """禁用角色"""
+    """禁用角色。"""
     role = _get_role_by_id(role_id)
     role.is_active = False
     role.save()
 
 
 def delete_role(role_id: int):
-    """删除角色"""
+    """删除角色。"""
     role = _get_role_by_id(role_id)
     role.soft_delete()
 
@@ -275,7 +274,7 @@ def get_role_list(
     page_size: int = None,
     sort: str = None
 ):
-    """获取角色列表"""
+    """获取角色列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "name": {"input": name, "column": "name", "lookup": "icontains"},
@@ -296,7 +295,7 @@ def get_role_list(
 
 
 def batch_delete_role(ids: list):
-    """批量删除角色"""
+    """批量删除角色。"""
     ids = validate_id_list(ids, "角色 ID 列表")
     return Role.objects.filter(
         id__in=ids, 

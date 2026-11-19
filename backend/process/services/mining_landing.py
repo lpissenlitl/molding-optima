@@ -1,6 +1,6 @@
 """候选规则落地 —— 把审核通过的候选规则翻译成 RuleMethod（生效规则）。
 
-⚠️ **为什么落地是「翻译」而不是「直接写」**
+【注意】**为什么落地是「翻译」而不是「直接写」**
     挖掘内核产出的是**统计关联**（「缺陷 + 参数变更 ⇒ 结果」），
     而 `RuleMethod.rule_description` 是**模糊规则的语法**
     （`IF <条件> THEN <动作>`）—— 两者结构不同：
@@ -23,19 +23,19 @@
     3. **动作量**：调整多少 —— 用证据样本的平均幅度，并受
        `RuleKeyword.action_max_val`（最大调整值）与 `step`（模糊步长）约束
 
-⚠️ **只落地「正向 + 有动作」的规则**
+【注意】**只落地「正向 + 有动作」的规则**
     - 后件必须是 `qualified` / `improved`（正向信号）
       —— `unqualified` / `worse` 是**反面经验**，RuleMethod 的语法只能表达
       「建议这样调」，写进去等于建议一个已知有害的操作 ⇒ 只留在候选表里
     - 必须有参数变更 —— 没有变更就没有可建议的动作
       —— 形如「有短射 ⇒ 会改善」这种规则没有可落地的动作
 
-⚠️ **一条候选规则可落地成多条 RuleMethod**
+【注意】**一条候选规则可落地成多条 RuleMethod**
     候选规则的前件可能含多个变更（如「同时调高注射压力1 与降保压压力1」），
     而模糊规则的 THEN 只表达**一个**动作 ⇒ 每个变更各出一条规则，
     条件部分相同、动作部分不同。
 
-⚠️ **落在专用规则库里**
+【注意】**落在专用规则库里**
     公司目前没有「主模糊规则库」，挖掘规则与专家维护的规则混在一起会互相污染
     ⇒ 每公司一个专用模糊库（`library_code='rule_miner'`），不存在则建。
 """
@@ -105,7 +105,7 @@ class LandingPlan:
 def resolve_level_word(keyword: RuleKeyword, value: float) -> Optional[str]:
     """参数值 → 该字段自己的档位词。
 
-    ⚠️ **档位词表由字段的 `fuzzy_level` 决定**（3 档 low/medium/high、
+    【注意】**档位词表由字段的 `fuzzy_level` 决定**（3 档 low/medium/high、
        5 档 very_low…very_high、7 档 extremely_low…）——
        同一个 ``low`` 在 3 档字段是桶 0、在 5 档字段是桶 1 ⇒ 必须按字段自己的
        词表定位，不能用全局静态表（见 `fuzzy_core.macros`）。
@@ -224,7 +224,7 @@ def _build_defect_conditions(
     """缺陷条件词（``SHORTSHOT_medium``）。
 
     等级取自候选规则的 `defects[].level`（证据样本众数）。
-    ⚠️ 等级若不在该缺陷字段自己的档位词表里（缺陷多为 5 档，
+    【注意】等级若不在该缺陷字段自己的档位词表里（缺陷多为 5 档，
     现网数据出现 ``very_low``），引擎会因「合法档位词但该字段档数不够」
     把**整条规则**作废 ⇒ 这里直接剔除该条件并说明原因。
     """
@@ -305,7 +305,7 @@ def _build_one_rule(
 
     keyword = RuleKeyword.objects.filter(
         company_id=company_id,
-        # ⚠️ **按算法字段名查**：`RuleKeyword.keyword_name` 存的是**算法命名空间**
+        # 【注意】**按算法字段名查**：`RuleKeyword.keyword_name` 存的是**算法命名空间**
         #    （`IP0` / `PP0` / `BT1`），不是业务字段名（`inj_pres_1`）——
         #    用业务名查会一条都查不到 ⇒ 每条规则都会被误判为「参数未登记」。
         keyword_name=algo_name,
@@ -430,7 +430,7 @@ def _build_explanation(
 def ensure_mining_library(company_id: int) -> RuleLibrary:
     """取（或建）该公司的挖掘规则专用模糊规则库。
 
-    ⚠️ 挖掘规则与专家维护的规则混在一起会互相污染（优先级语义不同、
+    【注意】挖掘规则与专家维护的规则混在一起会互相污染（优先级语义不同、
        维护节奏不同）⇒ 单独建库。
     """
     library = RuleLibrary.objects.filter(
@@ -458,18 +458,18 @@ def ensure_mining_library(company_id: int) -> RuleLibrary:
 def ensure_public_mining_library() -> RuleLibrary:
     """取（或建）**全平台公用**的公共挖掘规则库。
 
-    ⚠️ **与 `ensure_mining_library` 是两件事**：
+    【注意】**与 `ensure_mining_library` 是两件事**：
        - `ensure_mining_library` 建的是**租户私库**（`owner_type='tenant'`，
          归属该租户）—— 挖掘审核通过后先落在租户自己的库里，
          只有该租户看得见；
        - 本函数建的是**系统库**（`owner_type='system'`，归属系统演示公司）——
          平台超管把验证过的经验**晋升**到这里后，**所有租户**都能用。
 
-    ⚠️ **系统公司必须通过 code 反查，不能硬编码 id**：
+    【注意】**系统公司必须通过 code 反查，不能硬编码 id**：
        `identity.const.SYSTEM_DEMO_COMPANY_CODE` 是全库唯一的约定，
        硬编码 id 会在不同环境（演示 / 生产）指向不存在的公司。
 
-    ⚠️ **公共库的 `library_code` 必须全局唯一**：
+    【注意】**公共库的 `library_code` 必须全局唯一**：
        算法侧取库索引时同编码只保留**第一条**（`library/rules.py::
        get_library_index` 用 `setdefault`）⇒ 公共库若与租户私库同码，
        就会被静默挤掉 ⇒ 公共库用独立编码 `rule_miner_public`。

@@ -8,8 +8,7 @@ from extensions.exceptions import BizException, ERROR_DATA_NOT_FOUND
 
 
 def create_project(company_id: int, organization_id: int, operator: User = None, **kwargs):
-    """
-    创建项目
+    """创建项目。
     operator: 操作人（审计字段 created_by），可选
     """
     kwargs.setdefault("project_code", generate_unique_code("PRJ"))
@@ -22,7 +21,7 @@ def create_project(company_id: int, organization_id: int, operator: User = None,
 
 
 def _get_project_by_id(project_id: int) -> Project:
-    """根据项目ID获取项目对象"""
+    """根据项目ID获取项目对象。"""
     project_id = validate_pk(project_id, "项目ID")
     project = Project.objects.filter(pk=project_id).first()
     if not project:
@@ -31,13 +30,13 @@ def _get_project_by_id(project_id: int) -> Project:
 
 
 def get_project_info(project_id: int) -> dict:
-    """获取项目信息"""
+    """获取项目信息。"""
     project = _get_project_by_id(project_id)
     return project.to_dict()
 
 
 def update_project_info(company_id: int, project_id: int, **kwargs) -> dict:
-    """更新项目信息（仅限本公司）"""
+    """更新项目信息（仅限本公司）。"""
     project = Project.objects.filter(pk=project_id, company_id=company_id, is_deleted=False).first()
     if project is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"项目不存在: id={project_id}")
@@ -46,7 +45,7 @@ def update_project_info(company_id: int, project_id: int, **kwargs) -> dict:
 
 
 def delete_project(company_id: int, project_id: int) -> None:
-    """删除项目（仅限本公司）"""
+    """删除项目（仅限本公司）。"""
     project = Project.objects.filter(pk=project_id, company_id=company_id, is_deleted=False).first()
     if project is None:
         raise BizException(ERROR_DATA_NOT_FOUND, f"项目不存在: id={project_id}")
@@ -68,7 +67,7 @@ def get_project_list(
     page_size: int = None,
     sort: str = None
 ) -> tuple:
-    """获取项目列表"""
+    """获取项目列表。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "project_code": {"input": project_code, "column": "project_code", "lookup": "icontains"},
@@ -102,7 +101,7 @@ def get_project_list(
 
 
 def batch_delete_project(company_id: int, ids: list) -> int:
-    """批量删除项目（仅删本公司存在的）"""
+    """批量删除项目（仅删本公司存在的）。"""
     ids = validate_id_list(ids, "项目ID")
     # 按 company_id 过滤出本公司的 id（防止跨公司删除）
     valid_ids = list(

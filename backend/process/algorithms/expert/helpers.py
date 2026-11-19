@@ -1,5 +1,4 @@
-﻿"""
-工艺参数推导工具函数
+﻿"""工艺参数推导工具函数。
 
 纯技术实现，无业务语义。可独立测试。
 
@@ -23,8 +22,7 @@ except ImportError:
 
 
 def compute_screw_cross_area(screw_diameter: float) -> float:
-    """
-    计算螺杆截面积 [mm²]
+    """计算螺杆截面积 [mm²]。
 
     公式：A = π × D² / 4
 
@@ -42,8 +40,7 @@ def compute_total_injection_length(
     melt_density: float,
     screw_diameter: float,
 ) -> float:
-    """
-    计算完整理论注射行程 [mm]
+    """计算完整理论注射行程 [mm]。
 
     推导：质量守恒 + 圆柱几何
         injection_volume = total_weight / melt_density    # [cm³]
@@ -67,8 +64,7 @@ def compute_cushion_length(
     cushion_ratio: float = 0.25,
     cushion_min_abs: int = 5,
 ) -> int:
-    """
-    计算料垫长度（螺杆最终停止位置）[mm]
+    """计算料垫长度（螺杆最终停止位置）[mm]。
 
     公式：cushion_len = max(ceil(D / ratio), cushion_min_abs)
 
@@ -94,8 +90,7 @@ def compute_cushion_length(
 
 
 def parse_material_family(abbreviation: str) -> str:
-    """
-    从材料完整名称解析出材料大类
+    """从材料完整名称解析出材料大类。
 
     例："PA66+GF30" → "PA"，"PC+ABS" → "PC"，"PET" → "PET"，
        "HDPE" → "PE"，"PVC" → "PVC"
@@ -131,8 +126,7 @@ def parse_material_family(abbreviation: str) -> str:
 
 
 def get_coeff(coeffs: Dict[str, Any], group: str, key: str, default: Any = None) -> Any:
-    """
-    从合并系数字典中安全读取指定键值
+    """从合并系数字典中安全读取指定键值。
 
     Args:
         coeffs: 分组合并系数字典

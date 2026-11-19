@@ -47,7 +47,7 @@ NC = '\033[0m'
 # ========== 辅助：构造 context fixture ==========
 
 def _machine(power_method='液压机', nozzle_type='直通型', max_metering_pres=20.0):
-    """标准海天级注塑机（液压+直通+max=20）"""
+    """标准海天级注塑机（液压+直通+max=20）。"""
     return {
         'screw_diameter': 40,
         'max_set_injection_pressure': 150.0,
@@ -65,7 +65,7 @@ def _machine(power_method='液压机', nozzle_type='直通型', max_metering_pre
 
 
 def _base_mold(**overrides):
-    """基础 ABS mold（max_thickness=2.0, medium）"""
+    """基础 ABS mold（max_thickness=2.0, medium）。"""
     m = {
         'product_weight': 50.0,
         'runner_weight': 0.0,
@@ -84,7 +84,7 @@ def _base_mold(**overrides):
 
 
 def _base_material(**overrides):
-    """基础 ABS 材料（字段命名与数据库一致）
+    """基础 ABS 材料（字段命名与数据库一致）。
 
     说明：代码中所有材料参数字段名与数据库字段命名保持一致。
     测试 fixture 走 algorithm 输入路径，使用与数据库同名的字段名以避免认知差异。
@@ -168,7 +168,7 @@ def _assert_le(actual, max_val, label):
 # ========== 场景 A：PP 通用件（液压 + 直通）==========
 
 def test_scenario_a_pp_low_viscosity():
-    """PP 低黏度结晶材料：family_factor=0.6，应得到 6.6"""
+    """PP 低黏度结晶材料：family_factor=0.6，应得到 6.6。"""
     print("\n=== 场景 A: PP 通用件（液压 + 直通）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PP')
@@ -180,7 +180,7 @@ def test_scenario_a_pp_low_viscosity():
 # ========== 场景 B：PC 精密件（液压 + 直通）==========
 
 def test_scenario_b_pc_medium_viscosity():
-    """PC 高黏度：family_factor=1.0，应得到 11.0（基准）"""
+    """PC 高黏度：family_factor=1.0，应得到 11.0（基准）。"""
     print("\n=== 场景 B: PC 精密件（液压 + 直通）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PC')
@@ -192,7 +192,7 @@ def test_scenario_b_pc_medium_viscosity():
 # ========== 场景 C：PA66 含水件（液压 + 直通）==========
 
 def test_scenario_c_pa66_high_viscosity():
-    """PA66 高黏度+吸湿：family_factor=1.3，应得到 14.3"""
+    """PA66 高黏度+吸湿：family_factor=1.3，应得到 14.3。"""
     print("\n=== 场景 C: PA66 含水件（液压 + 直通）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PA66')
@@ -204,7 +204,7 @@ def test_scenario_c_pa66_high_viscosity():
 # ========== 场景 D：全电机 ABS 精密件 ==========
 
 def test_scenario_d_electric_machine():
-    """全电机无油缸：meter_pres 应为 0（HMI 不显示）"""
+    """全电机无油缸：meter_pres 应为 0（HMI 不显示）。"""
     print("\n=== 场景 D: 全电机 ABS 精密件===")
     mold = _base_mold()
     material = _base_material(abbreviation='ABS')
@@ -216,7 +216,7 @@ def test_scenario_d_electric_machine():
 # ========== 场景 E：锁闭喷嘴 PC 精密件 ==========
 
 def test_scenario_e_locking_nozzle():
-    """锁闭喷嘴：nozzle_factor=1.10，PC 应得到 13.2"""
+    """锁闭喷嘴：nozzle_factor=1.10，PC 应得到 13.2。"""
     print("\n=== 场景 E: 锁闭喷嘴 PC 精密件===")
     mold = _base_mold()
     material = _base_material(abbreviation='PC')
@@ -230,7 +230,7 @@ def test_scenario_e_locking_nozzle():
 # ========== 场景 F：未知材料保守兜底 ==========
 
 def test_scenario_f_unknown_material_default():
-    """未知 family：fallback 到 default=1.0，应得到 11.0"""
+    """未知 family：fallback 到 default=1.0，应得到 11.0。"""
     print("\n=== 场景 F: 未知材料保守兜底===")
     mold = _base_mold()
     material = _base_material(abbreviation='XXX')  # 未知材料
@@ -242,7 +242,7 @@ def test_scenario_f_unknown_material_default():
 # ========== 场景 G：边界守门 ==========
 
 def test_scenario_g_boundary_clamp():
-    """边界守门：钳制下限/上限是否生效"""
+    """边界守门：钳制下限/上限是否生效。"""
     print("\n=== 场景 G: 边界守门===")
 
     # G1：极小 max + PVC（family=0.5）→ 应被钳到 meter_pres_min=3.0
@@ -303,7 +303,7 @@ def test_scenario_g_boundary_clamp():
 # ========== 场景 H：动力源分支回归（保持原代码行为）==========
 
 def test_scenario_h_electric_baseline():
-    """全电机回归：原代码全电机=0，物理正确（不应破坏）"""
+    """全电机回归：原代码全电机=0，物理正确（不应破坏）。"""
     print("\n=== 场景 H: 动力源分支回归（保持原代码逻辑）===")
     mold = _base_mold()
     material = _base_material(abbreviation='PC')
@@ -334,9 +334,9 @@ def _print_summary():
     fail_count = len(_failures)
     print("\n" + "=" * 70)
     if fail_count == 0:
-        print(f"  {PASS}✓ 全部通过{NC}  ({len(_passes)}/{total})")
+        print(f"  {PASS}全部通过{NC}  ({len(_passes)}/{total})")
     else:
-        print(f"  {FAIL}✗ 有失败{NC}  ({fail_count}/{total} 失败)")
+        print(f"  {FAIL}有失败{NC}  ({fail_count}/{total} 失败)")
     print("=" * 70)
     return fail_count
 

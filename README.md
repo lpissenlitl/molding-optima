@@ -142,6 +142,7 @@ npm run dev  # 默认端口 9527，自动代理 /api → 8200
 | 文档 | 用途 |
 |---|---|
 | [architecture.md](./architecture.md) | **架构文档**（模块划分 + ADR 决策记录 + 算法落地状态）|
+| [code-comment-standard.md](./code-comment-standard.md) | **代码注释规范**（注释的唯一真相源，写/评/清理注释均以此为准）|
 | [frontend/README.md](./frontend/README.md) | 前端详细文档 |
 
 ---

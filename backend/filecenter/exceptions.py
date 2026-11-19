@@ -1,4 +1,4 @@
-"""文件中心模块（FileCenter）业务错误码定义
+"""文件中心模块（FileCenter）业务错误码定义。
 
 模块编号：09（与 extensions/exceptions.py 中的 MOD_COMMON 同级）
 

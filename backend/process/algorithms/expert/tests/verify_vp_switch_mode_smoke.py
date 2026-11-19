@@ -46,7 +46,7 @@ NC = '\033[0m'
 # ========== 辅助：构造 context fixture ==========
 
 def _machine():
-    """标准海天级注塑机"""
+    """标准海天级注塑机。"""
     return {
         'screw_diameter': 40,
         'max_set_injection_pressure': 150.0,
@@ -64,7 +64,7 @@ def _machine():
 
 
 def _base_mold(**overrides):
-    """基础 ABS mold（max_thickness=2.0, medium）"""
+    """基础 ABS mold（max_thickness=2.0, medium）。"""
     m = {
         'product_weight': 50.0,
         'runner_weight': 0.0,
@@ -83,7 +83,7 @@ def _base_mold(**overrides):
 
 
 def _base_material(**overrides):
-    """基础 ABS 材料"""
+    """基础 ABS 材料。"""
     m = {
         'abbreviation': 'ABS',
         'recommend_melt_temperature': 240.0,
@@ -308,7 +308,7 @@ def main():
             print(f)
         sys.exit(1)
     else:
-        print(f"\n{PASS}✓ All smoke test assertions passed!{NC}")
+        print(f"\n{PASS}All smoke test assertions passed!{NC}")
         sys.exit(0)
 
 

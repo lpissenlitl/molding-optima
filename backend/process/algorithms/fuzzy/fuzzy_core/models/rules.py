@@ -4,9 +4,9 @@
 
 五层流程：
 
-    ① 读取(ORM) → ② 契约化(RuleProfile) → ③ 适用性筛选
-    → ④ **filter：拆一次 → 分类 → 建对象**（本模块的类在这里被创建）
-    → ⑤ 推理（Mamdani / 0 阶 TSK）
+    1. 读取(ORM) → 2. 契约化(RuleProfile) → 3. 适用性筛选
+    → 4. **filter：拆一次 → 分类 → 建对象**（本模块的类在这里被创建）
+    → 5. 推理（Mamdani / 0 阶 TSK）
 
 第 4 层的**唯一入口**是 `fuzzy_core.rules_filter.build_rule_objects`：
 它负责拆解规则串（每条规则只拆一次），并把拆解产物交给本模块的类。
@@ -17,14 +17,14 @@
 - `FuzzyRule`   提示层（Mamdani）：结论**全收**（等级词结论）
 - `NumTskRule` 数值层（0 阶 TSK）：结论**两路分流**（popup 隔离 / 数值）
 
-⚠️ **代数式结论（`X=a*Y+b*Z`）不在内核支持范围**：它在第 4 层 filter
+【注意】**代数式结论（`X=a*Y+b*Z`）不在内核支持范围**：它在第 4 层 filter
 就被判为 advisory（无 action）⇒ 不会进 `NumTskRule` ⇒ 数值层拿不到这类结论。
 filter 层对此**显式跳过并留痕**（见 `rules_filter.build_rule_objects`）。
 
-⚠️ 二者**不做继承**：`RuleProfile` 不是基类。规则档案与解析产物是**组合**
+【注意】二者**不做继承**：`RuleProfile` 不是基类。规则档案与解析产物是**组合**
    关系（规则对象持有 profile 引用），契约层不被内核反向污染。
 
-⚠️ 词法底座统一在 `fuzzy_core.parsing`（`parse_rule` / `classify_name`），
+【注意】词法底座统一在 `fuzzy_core.parsing`（`parse_rule` / `classify_name`），
    本模块不重复实现切词逻辑。
 """
 
@@ -139,7 +139,7 @@ class NumTskRule:
       1. ``_popup_xxx``              → r_extra（只作提示，不进数值矩阵）
       2. ``_add_10`` / ``_reduce_5%`` → r_solutions（数值结论）
 
-    ⚠️ 代数式结论（``X=a*Y+b*Z``）**不在此处理** —— 它在第 4 层 filter
+    【注意】代数式结论（``X=a*Y+b*Z``）**不在此处理** —— 它在第 4 层 filter
        就被判为 advisory 并跳过（内核不支持该形态），不会走到这里。
     """
 

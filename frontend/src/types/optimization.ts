@@ -29,7 +29,7 @@ export interface RoundForm {
      *   qualified/unqualified 表达；历史数据里的 DEFECTFREE 仍可正常回显
      * - 空数组 [] 表示本轮未记录缺陷（可与"合格"评价共存）
      */
-    defect?: DefectFeedbackData[]
+    defects?: DefectFeedbackData[]
     /** 调机效果评价（对该轮工艺参数的整体评价）*/
     tuning_result?: TuningResult
     /** 实测观察（制品实际重量 + 7 项注塑机周期实测）*/
@@ -89,7 +89,7 @@ export interface CycleObservation {
  * 缺陷反馈数据
  *
  * 数据约束：
- * - keyword_id / keyword_name：可空（用户未选时为 null；后端匹配走 keyword_name）
+ * - keyword_name：可空（用户未选时为 null；后端匹配走 keyword_name）
  * - level：当 keyword_name='DEFECTFREE' 时存 null；其他情况按 fuzzy_level 选词
  *   （DEFECTFREE 已下线为可选类型，此约束仅用于兼容历史数据）
  * - position：缺陷位置（产品区域描述，如 "DL飞边3"）；DEFECTFREE 时存空字符串
@@ -98,7 +98,6 @@ export interface CycleObservation {
  * 整体为 null 表示用户跳过（与“无缺陷”语义不同）；非 null 即有效反馈
  */
 export interface DefectFeedbackData {
-  keyword_id: number | null
   keyword_name: string | null
   level: string | null
   position: string

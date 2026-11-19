@@ -479,7 +479,7 @@ class RuleQueryContext:   # <- 无 company_id 字段
 三条**不改变既有行为**的兜底：
 
 1. **`company_id is None` ⇒ 不过滤**（返回 True）
-   —— 第三方集成（`infer_from_provided`）、离线 runner、examples 导出都**没有租户上下文**
+   —— 第三方集成（`optimize_from_provided`）、离线 runner、examples 导出都**没有租户上下文**
    ⇒ 缺上下文时保持现状全量，不静默改变结果。
 2. **按「库归属」判定，不按「规则归属」**
    —— 规则的 `company_id` 保留原租户值作溯源（晋升后仍记着来自哪家租户），
@@ -500,9 +500,9 @@ class RuleQueryContext:   # <- 无 company_id 字段
 
 | 入口 | `company_id` 来源 |
 |---|---|
-| `parameter_optimize.infer()` | `condition_orm.company_id` |
+| `parameter_optimize.optimize_from_condition()` | `condition_orm.company_id` |
 | `condition._build_optimization_context()` | `condition.company_id` |
-| `parameter_optimize.infer_from_provided()` | **None**（第三方集成 / 算法试算 / 烟测 ⇒ 无租户上下文 ⇒ 不过滤） |
+| `parameter_optimize.optimize_from_provided()` | **None**（第三方集成 / 算法试算 / 烟测 ⇒ 无租户上下文 ⇒ 不过滤） |
 
 ### 9.3 公共库与晋升
 
@@ -829,10 +829,10 @@ library = RuleLibrary.objects.filter(
 | 合并 | `expert/rule_matcher.py::match` | 按 `priority` 升序 | 按 **`(layer, priority)`** 升序 ⇒ 层优先于 priority |
 | 构造 | `expert/rule_matcher.py::InitRuleMatcher.__init__` | `(library_code='expert_rules')` | `(library_code=None, company_id=None)`；`library_code` 降为**可选过滤**（默认不限编码） |
 | 上下文 | `services/parameter_initialize.py::_infer_kernel` | 无 `company_id` | 新增 `company_id` 形参 ⇒ 透传给 `InitRuleMatcher` |
-| 入口 | `services/parameter_initialize.py::infer` | —— | 传入 `company_id`（view 已有 `request.user.company_id`） |
+| 入口 | `services/parameter_initialize.py::initialize_from_masterdata` | —— | 传入 `company_id`（view 已有 `request.user.company_id`） |
 
-> ⚠️ `infer_from_condition` **不跑推理算法**（Step 3 跳过，直接拷贝源参数）
-> ⇒ 无需传 `company_id`；`infer_from_provided`（第三方集成 / 离线）
+> ⚠️ `initialize_from_condition` **不跑推理算法**（Step 3 跳过，直接拷贝源参数）
+> ⇒ 无需传 `company_id`；`initialize_from_provided`（第三方集成 / 离线）
 > **无租户上下文** ⇒ 只用平台层。
 
 ### 12.4 写权限口径（配套改动，否则方案 A 落不了地）

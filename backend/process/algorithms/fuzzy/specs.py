@@ -10,7 +10,7 @@
   它的 target_key 就是 ORM 字段名；service 侧按本契约的白名单
   （`source_model` + `attr_name`）从 ORM 提取，不走 `_to_full_dict(InjectionUnit)`
   （那会把 ORM 元数据也传给算法）。
-- ⚠️ 别把 process_parameter 也当成本契约的一部分：工艺参数走的是**另一套**
+- 【注意】别把 process_parameter 也当成本契约的一部分：工艺参数走的是**另一套**
   命名空间——由算法侧命名契约 `field_names.to_algo_params` 翻译
   （业务 1-based → 算法 0-based，如 `inj_spd_1` → `IV0`），
   见 `process/algorithms/fuzzy/field_names.py`。
@@ -28,7 +28,7 @@
 - 仍兼作**推荐值物理天花板**（裁剪，见 PARAM_LIMIT_FIELDS）—— 两者同源，
   不是两套互不相干的数据。
 
-⚠️ 必填与替换**只对必填等级字段生效**（用户口径）：
+【注意】必填与替换**只对必填等级字段生效**（用户口径）：
 > 「我们定义必填的字段，必须校验并且替换，其余字段的论域可以用默认值」
 
 ⇒ 必填等级（`必填` / `液压机必填`）字段：缺失即报错，且论域上界替换成设备实测值；
@@ -36,11 +36,11 @@
   论域保持 RuleKeyword 默认域（range_min / range_max），**不动**。
 判定入口：:func:`is_required_limit_field` / :func:`resolve_domain_limits`。
 
-⚠️ 反过来 `drive_system` **不是必填**：它既不参与论域也不参与裁剪，只用于判定
+【注意】反过来 `drive_system` **不是必填**：它既不参与论域也不参与裁剪，只用于判定
 「液压机必填」这一等级；缺失时按「非液压机」处理（计量类字段一律不要求，
 宽松放过 —— 宁可少一项要求，也不误伤液压机）。
 
-⚠️ **单位不在算法层考虑**（用户口径）：
+【注意】**单位不在算法层考虑**（用户口径）：
 > 「我们取的就是界面值，不需要关心单位，当然我们也有单位，但是并不需要在算法这里考虑」
 
 ⇒ 这里取的就是 **HMI 面板显示值**，算法侧**直接用**：不做单位换算、不做单位一致性
@@ -64,7 +64,7 @@ condition 的 5 个等级、「液压机必填」的驱动判定、condition_whe
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-# ⚠️ **层 0 反向依赖上层包**：
+# 【注意】**层 0 反向依赖上层包**：
 #   `specs.py` 属【层 0 对外契约】，却 `from ..field_contract import` ⇒
 #   层 0 反向依赖上层 `algorithms/` 包 ⇒ 打破「层 0 零依赖」的分层约定。
 #
@@ -79,7 +79,7 @@ from ..field_contract import (
     derive_required_fields,
     drive_system_to_power_method,
 )
-# ⚠️ **物理常量来自中立层**（`algorithms/material_physics.py`）：
+# 【注意】**物理常量来自中立层**（`algorithms/material_physics.py`）：
 #    冷却时间 ∝ 最大壁厚²、材料大类系数是**物理事实**，不属于任何算法包的私有口径
 #    ⇒ 专家引擎（推导初值）与模糊引擎（标定判级论域）共用同一份，
 #    依赖方向恒为「算法包 → algorithms 根」（算法包之间不互相 import）。
@@ -176,14 +176,11 @@ OPTIMIZE_MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
     },
     # --- 论域上界：位置类（注射位置 IL / 计量位置 ML / 储料终止位置 MEL /
     #     VP 切换位置 VPTL）—— 权威源 = 最大注射行程 ----------------------
-    # 旧版口径（inovance-cooperation 的 `read_machine_setting_para`）：
-    #   IL0~IL5 / ML0~ML3 / VPTL / MEL 的论域上界**一律**取
-    #   `max_injection_stroke`（最大注射行程），缺失即报错。
-    # 当前版早期把这块漏接了 ⇒ 位置类一直用 RuleKeyword 种子默认域
-    #   （IL [0,150] / MEL [0,200]），而真实值 27~716 ⇒ 大面积越界
-    # ⇒ IL / MEL 这组「充填量第一优先」的规则恒失活。
+    # 【注意】位置类真实值域可达 27~716，远超 RuleKeyword 种子默认域
+    #    （IL [0,150] / MEL [0,200]）⇒ 用经验域会大面积越界，
+    #    IL / MEL 这组「充填量第一优先」的规则会失活。
     #
-    # ⚠️ condition = 「可选」而不是「必填」：行程是**设备能力参数**
+    # 【注意】condition = 「可选」而不是「必填」：行程是**设备能力参数**
     #    （不是 HMI 可设值），业务侧未必录入；缺失 ⇒ 回落经验论域
     #    （不报错、不阻塞）—— 与温度类同一口径。
     "max_injection_stroke": {
@@ -191,7 +188,7 @@ OPTIMIZE_MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         "source": "InjectionUnit.max_injection_stroke",
         "attr_name": "max_injection_stroke",
         "desc": "最大注射行程 [mm]（螺杆向前推进的最大距离）；位置类**判级论域上界来源**"
-                "（旧版口径：注射位置 / 计量位置 / 储料终止位置 / VP 切换位置"
+                "（注射位置 / 计量位置 / 储料终止位置 / VP 切换位置"
                 "一律以行程为上界）；缺失 ⇒ 回落经验论域（不阻塞）",
         "type": float,
         "condition": "可选",
@@ -305,7 +302,7 @@ OPTIMIZE_POLYMER_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
 #    冷却时间 ∝ 最大壁厚²（Fourier 热扩散）⇒ 没有壁厚就没有冷却时间的判级基准
 #    （见 :func:`resolve_product_limits`）。
 #
-# ⚠️ **制品级字段来自 Mold 下的关联表**（不是 Mold 主表）：
+# 【注意】**制品级字段来自 Mold 下的关联表**（不是 Mold 主表）：
 #    ``GatingSystem``（流道）→ ``Cavity``（型腔）→ ``Gate``（浇口）
 #    ⇒ service 层按「逐级取第一个」展开后交给 `_extract_orm_fields_by_spec`
 #    （见 ``parameter_optimize._extract_mold_info``）；某一级缺失 ⇒ 该字段缺失
@@ -390,18 +387,18 @@ OPTIMIZE_MOLD_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
 }
 
 # ============================================================================
-# 缺陷反馈（feedback.defect[]）字段字典
+# 缺陷反馈（feedback.defects[]）字段字典
 # ============================================================================
 #
 # 与前三个维度的**结构差异**：这是一个**列表**（每一项缺陷各一份），
 # 且有两个字段是**条件必填** —— DEFECTFREE（无缺陷）时前端不展示
 # 程度/位置输入框，这两项免校验。
 #
-# ⚠️ 「条件必填」用 condition_when 的 `keyword_name__nin` 表达：
+# 【注意】「条件必填」用 condition_when 的 `keyword_name__nin` 表达：
 #   `eval_condition_when` 只在**同一个 info_dict 内**求值 ⇒ 列表项天然成立
 #   （每项在自己的 dict 里评估自己的 keyword_name）。
 #
-# ⚠️ 校验口径与**算法的消费口径对齐**（每一条都有算法侧的理由）：
+# 【注意】校验口径与**算法的消费口径对齐**（每一条都有算法侧的理由）：
 #   - keyword_name 必填  —— 查规则的唯一键，缺了必然查不到规则
 #   - level 必填且合法    —— 决定命中哪一套调整方案；非法值放行会导致该缺陷的
 #                           规则被全过滤，对外只会报「无可用规则」，
@@ -410,7 +407,7 @@ OPTIMIZE_MOLD_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
 #                           算法侧作为 IF 条件变量使用
 
 # 「无缺陷」sentinel keyword 名称（前端合法选项，本身不参与规则匹配）
-# 单一真相源：定义在契约层，service 层原先的本地常量已改为从这里取。
+# 单一真相源：定义在契约层，service 层直接引用这里。
 DEFECTFREE_KEYWORD_NAME = "DEFECTFREE"
 
 
@@ -420,7 +417,7 @@ def _validate_defect_level_value(value: Any, info_dict: Dict[str, Any]) -> Optio
     返回错误描述（**不含**「第 N 项缺陷」前缀 —— 那是维度名，由机制统一拼）；
     返回 None 表示合法。
 
-    ⚠️ 词表引用 `VALID_DEFECT_LEVEL_WORDS_TEXT`（定义在本文件后段）——
+    【注意】词表引用 `VALID_DEFECT_LEVEL_WORDS_TEXT`（定义在本文件后段）——
        函数体在**调用时**才求值全局名，模块加载顺序不影响。
     """
     if is_level_word(value):
@@ -453,16 +450,6 @@ OPTIMIZE_FEEDBACK_FIELDS: Dict[str, Dict[str, Any]] = {
         "condition_when": {"keyword_name__nin": [DEFECTFREE_KEYWORD_NAME]},
         "missing_desc": "未填写缺陷位置",
     },
-    "keyword_id": {
-        "desc": "缺陷 ID",
-        "type": int,
-        "condition": "可选",
-    },
-    "position_3d": {
-        "desc": "缺陷三维位置",
-        "type": dict,
-        "condition": "可选",
-    },
 }
 
 
@@ -472,7 +459,7 @@ def audit_feedback_defects(defects: Any, allow_empty: bool = False) -> List[str]
     与 `OptimizeDataValidator.validate` 的三个维度分开审计：**列表项维度**
     每一项各审一份，问题描述带「第 N 项」。
 
-    ⚠️ 返回清单而不是抛异常 —— 对外文案（`BizException`）由 service 层决定，
+    【注意】返回清单而不是抛异常 —— 对外文案（`BizException`）由 service 层决定，
     算法层不 import 业务异常（与 `OptimizeDataValidator` 的分工一致）。
 
     Args:
@@ -500,7 +487,7 @@ REQUIRED_OPTIMIZE_MOLD_FIELDS = derive_required_fields(OPTIMIZE_MOLD_INFO_FIELDS
 
 
 class OptimizeDataValidator:
-    """调优算法入参校验器（纯本算法实现，不依赖其它算法包）
+    """调优算法入参校验器（纯本算法实现，不依赖其它算法包）。
 
     位置：算法层入口。任何调用方（service / 第三方 / CLI）进 fuzzy 前都必须过这里，
     因此必填约束不依赖 pydantic schema，也不依赖某个具体 View。
@@ -552,12 +539,12 @@ class OptimizeDataValidator:
 # 判定集合直接取 fuzzy_core.parsing.ALL_LEVEL_WORDS（= is_level_word 的依据），
 # 不另起一套——两处真相源必然分叉。
 #
-# ⚠️ 职责边界：接口层只负责「输入是不是合法档位词」，**不**负责
+# 【注意】职责边界：接口层只负责「输入是不是合法档位词」，**不**负责
 #   「规则库有没有这一档」。缺陷档位**不用于筛规则**
 #   （library.rules.RuleService.match_defect_name 只比缺陷名，不比档位）——
 #   档位已作为**算法输入**进推理网络，由隶属度表达「越严重越激进」；
 #   5/7 档独有词（very_low 等）在此语义上完全正确，接口层不该拦。
-#   ⚠️ 现网业务已统一收敛到 3 档（RuleKeyword.fuzzy_level 全量 5→3），
+#   【注意】现网业务已统一收敛到 3 档（RuleKeyword.fuzzy_level 全量 5→3），
 #      但**本表保留 5/7 档词**：它是**接口入参**的合法词集合，收窄会让
 #      历史客户端（仍传 very_low 等）直接 400，而不是降级处理。
 _LEVEL_WORD_DISPLAY_ORDER = (
@@ -567,7 +554,7 @@ _LEVEL_WORD_DISPLAY_ORDER = (
 
 
 def _build_valid_level_words() -> Tuple[str, ...]:
-    """合法档位词（按语义顺序排列，供错误提示展示）"""
+    """合法档位词（按语义顺序排列，供错误提示展示）。"""
     ordered = [w for w in _LEVEL_WORD_DISPLAY_ORDER if w in ALL_LEVEL_WORDS]
     ordered += sorted(w for w in ALL_LEVEL_WORDS if w not in ordered)
     return tuple(ordered)
@@ -577,7 +564,7 @@ VALID_DEFECT_LEVEL_WORDS: Tuple[str, ...] = _build_valid_level_words()
 
 
 def _build_level_words_text(words: Tuple[str, ...]) -> str:
-    """档位词展示文本：把 level1..level7 这类连续编号词折叠为区间
+    """档位词展示文本：把 level1..level7 这类连续编号词折叠为区间。
 
     不折叠的话提示会变成 15 个词的串（8 个语义词 + 7 个编号词），
     在界面上过长反而看不清重点。
@@ -622,7 +609,7 @@ def is_valid_defect_level_word(word: Any) -> bool:
 #
 # 未列入的参数族没有机台上限（注射位置 IL / 料筒温度 BT / 喷嘴温度 NT / 模温 MT 等），
 # 不参与裁剪。
-# ⚠️ 位置类（IL / ML / MEL / VPTL）的**判级论域**另走 `POSITION_DOMAIN_FIELDS`
+# 【注意】位置类（IL / ML / MEL / VPTL）的**判级论域**另走 `POSITION_DOMAIN_FIELDS`
 #    （权威源 = 最大注射行程），但同样**不参与裁剪** —— 位置不是可调建议项。
 PARAM_LIMIT_FIELDS: Dict[str, str] = {
     "IP":  "max_set_injection_pressure",      # 注射压力
@@ -659,7 +646,7 @@ def is_required_limit_field(field_name: str) -> bool:
 
 
 def resolve_domain_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
-    """machine_info → {算法参数前缀: 判级论域上界}（**只含必填等级字段**）
+    """machine_info → {算法参数前缀: 判级论域上界}（**只含必填等级字段**）。
 
     用户口径：
     > 「我们定义必填的字段，必须校验并且替换，其余字段的论域可以用默认值」
@@ -668,7 +655,7 @@ def resolve_domain_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
       有值 ⇒ **替换**判级论域上界；
     ⇒ 其余字段的论域保持 RuleKeyword 默认域（range_min / range_max），不动。
 
-    ⚠️ **H1 守卫在引擎层**：设备上限已低于当前设定值时，引擎**不**拿它当
+    【注意】**H1 守卫在引擎层**：设备上限已低于当前设定值时，引擎**不**拿它当
     判级上界（保留经验域 + 留痕 ``kept_experience_domain``）——
     见 ``engine.FuzzyEngine._device_limit_below_current``。
 
@@ -700,7 +687,7 @@ def resolve_domain_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
 
 
 def resolve_param_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
-    """machine_info → {算法参数前缀: 机台物理上限值}
+    """machine_info → {算法参数前缀: 机台物理上限值}。
 
     只取 machine_info 里**实际有值**的上限字段。缺失的不补默认值：
     缺上限 ⇒ 该参数不裁剪（由调用方记 warning），
@@ -733,7 +720,7 @@ def resolve_param_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
 #     （`PARAM_LIMIT_FIELDS` 里没有温度族，也是有原因的）；
 #   - 材料的熔体/模温区间是**物理红线**：超出即降解 / 变色 / 成型不良。
 #
-# ⚠️ **只列「整段」温度参数，不列分段温度参数**（实测收窄，见 §B1-1）：
+# 【注意】**只列「整段」温度参数，不列分段温度参数**：
 #   - `NT` 喷嘴温度 / `BT` 整体料筒温度 / `ET` 下料口温度 = **熔体侧**温度
 #   - `MT` 模具温度 = **模温侧**温度
 #   - `BT1..BT9` / `MT0..MT19` / `HRT0..HRT49` = **分段加热器设定值**，
@@ -741,7 +728,7 @@ def resolve_param_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
 #     后段本就低于熔体下限）⇒ 材料熔体区间**不是**它们的权威源；
 #     套上去会让后段恒落在论域外 ⇒ 相关规则恒失活（把「可判档」变成「判不出」）。
 #
-# ⚠️ 为什么用**显式名单**而不是 `RuleKeyword.keyword_type`：
+# 【注意】为什么用**显式名单**而不是 `RuleKeyword.keyword_type`：
 #   `keyword_type='temperature'` 覆盖 83 个参数（含 79 个分段），但它
 #   **区分不了熔体侧与模温侧**（`NT` 与 `MT` 的 keyword_type 完全相同），
 #   也区分不了「整段」与「分段」⇒ 用它会把这张表建错。
@@ -760,14 +747,14 @@ TEMPERATURE_DOMAIN_FIELDS: Dict[str, Tuple[str, str]] = {
 def resolve_temperature_limits(
     polymer_info: Dict[str, Any],
 ) -> Dict[str, Tuple[float, float]]:
-    """polymer_info → {算法参数名: (论域下界, 论域上界)}（温度类）
+    """polymer_info → {算法参数名: (论域下界, 论域上界)}（温度类）。
 
     温度类的**判级基准**取材料温度区间（权威源 = 材料维度，见
     :data:`TEMPERATURE_DOMAIN_FIELDS`）。与 :func:`resolve_domain_limits`
     （设备实测值换论域上界）**分属两套语义**：
     设备回答「机器能设多高」，材料回答「这个料在这个场景下该在什么温度窗口」。
 
-    ⚠️ **缺权威源不报错、不阻塞**（既定口径：温度类字段的 condition 是「推荐」
+    【注意】**缺权威源不报错、不阻塞**（既定口径：温度类字段的 condition 是「推荐」
     不是「必填」）⇒ 缺值 / 区间倒挂 / 非数值 ⇒ **该参数不产出**，
     调用方据此**回落经验域**（`RuleKeyword.range_min/max`）照常推理。
 
@@ -799,7 +786,7 @@ def resolve_temperature_limits(
 
 
 def param_family(param_name: str) -> Optional[str]:
-    """算法参数名 → 参数族前缀（无族前缀返回 None）
+    """算法参数名 → 参数族前缀（无族前缀返回 None）。
 
     上限是**按族**给的（``{'IP': 100.0, 'IV': 80.0}``），所以任何要按上限
     判断参数的代码都需要「参数名 → 族」这一步。原先只有
@@ -828,7 +815,7 @@ def lookup_param_limit(
     param_name: str,
     limits: Dict[str, float],
 ) -> Optional[float]:
-    """算法参数名 → 该参数的机台物理上限（无上限返回 None）
+    """算法参数名 → 该参数的机台物理上限（无上限返回 None）。
 
     Args:
         param_name: 算法侧参数名（如 'IP0' / 'IV1' / 'MSR2'）
@@ -849,20 +836,19 @@ def lookup_param_limit(
 # 位置类论域 —— 设备实测上限（权威源 = 设备维度：最大注射行程）
 # ============================================================================
 # 位置类（注射位置 IL / 计量位置 ML / 储料终止位置 MEL / VP 切换位置 VPTL）的
-# 判级上界取**最大注射行程**（`InjectionUnit.max_injection_stroke`）——
-# 旧版口径（`read_machine_setting_para`）：IL0~IL5 / ML0~ML3 / VPTL / MEL 的
-# 论域上界**一律**取该值（缺失即报错）。当前版早期漏接 ⇒ 位置类一直用
-# RuleKeyword 种子默认域（IL [0,150] / MEL [0,200]），真实值 27~716
-# ⇒ 越界 ⇒ IL / MEL 这组「充填量第一优先」的规则恒失活。
+# 判级上界取**最大注射行程**（`InjectionUnit.max_injection_stroke`）：
+# IL0~IL5 / ML0~ML3 / VPTL / MEL 的论域上界**一律**取该值。
+# 【注意】位置类真实值域 27~716，远超 RuleKeyword 种子默认域（IL [0,150] / MEL [0,200]）
+# ⇒ 用经验域会越界 ⇒ IL / MEL 这组「充填量第一优先」的规则会失活。
 #
-# ⚠️ **为什么不复用 `PARAM_LIMIT_FIELDS`（族机制）**：
+# 【注意】**为什么不复用 `PARAM_LIMIT_FIELDS`（族机制）**：
 #   那张表是「按族前缀给上限」的，服务于**推荐值裁剪 / 越限识别**；
 #   族前缀靠正则 `^([A-Za-z]+)(\d+)$` 取 ⇒ **整段参数取不到族**
 #   （`MEL` / `VPTL` 没有数字后缀）⇒ 位置类一半的参数进不了那张表。
 #   温度类已有同形先例（`TEMPERATURE_DOMAIN_FIELDS`）⇒ 这里照抄其范式，
 #   各走各的名单，不把两种语义混在一张表里。
 #
-# ⚠️ **上下界都取行程口径**（判级论域 = [0, 行程]，与 `_apply_device_bound`
+# 【注意】**上下界都取行程口径**（判级论域 = [0, 行程]，与 `_apply_device_bound`
 #   的「只换上界」口径**不同**）：
 #   经验下界（如 VPTL 的 30）是**档位语义**、不是物理下限 ⇒ 真实值 13.92
 #   低于它时判不出档、规则恒失活；物理上 0mm 总是可设定的（用户口径：
@@ -870,7 +856,7 @@ def lookup_param_limit(
 #   经验档位表本身**保留**（`RuleKeyword.range_min/max` 不动）⇒
 #   回落经验论域时仍是原口径。
 #
-# ⚠️ **不是所有 position 类参数都该接行程**（实测 2026-11-09）：
+# 【注意】**不是所有 position 类参数都该接行程**（按现网真实值量级判定）：
 #   判据 = **真实值量级是否接近该上限**。
 #   - `VPTL` 真实值 13.92~42.46 vs 行程 200 ⇒ 接（经验域 [30,60] 太窄，真实值被夹在角落）
 #   - `MEL` / `IL0` / `ML0` 真实值 122~758 ⇒ 接（但**多数工况值超行程** ⇒ 需配套 G6 守卫）
@@ -882,17 +868,17 @@ POSITION_DOMAIN_FIELDS: Dict[str, str] = {
     "ML":   "max_injection_stroke",   # 计量位置（分段：ML0~ML3）
     "MEL":  "max_injection_stroke",   # 储料终止位置（整段）
     "VPTL": "max_injection_stroke",   # VP 切换位置（整段）
-    # ⚠️ `DDAM` **故意不在本表**：真实值 3.64~5.6，经验域 [0,30] 已覆盖 ⇒ 接行程反而不利。
+    # 【注意】`DDAM` **故意不在本表**：真实值 3.64~5.6，经验域 [0,30] 已覆盖 ⇒ 接行程反而不利。
 }
 
 
 def resolve_position_limits(machine_info: Dict[str, Any]) -> Dict[str, float]:
-    """machine_info → {位置类参数名 / 族前缀: 论域上界}
+    """machine_info → {位置类参数名 / 族前缀: 论域上界}。
 
     位置类的**判级上界**取设备实测的最大注射行程（权威源 = 设备维度，见
     :data:`POSITION_DOMAIN_FIELDS`）。
 
-    ⚠️ **缺权威源不报错、不阻塞**（既定口径：`max_injection_stroke` 的 condition
+    【注意】**缺权威源不报错、不阻塞**（既定口径：`max_injection_stroke` 的 condition
     是「可选」—— 行程是设备能力参数，业务侧未必录入）⇒ 缺值 / 非数值 /
     非正数 ⇒ **不产出**，调用方据此**回落经验域**（`RuleKeyword.range_min/max`）。
 
@@ -923,9 +909,9 @@ def lookup_position_limit(
     param_name: str,
     limits: Dict[str, float],
 ) -> Optional[float]:
-    """算法参数名 → 该位置类参数的设备实测论域上界（无上界返回 None）
+    """算法参数名 → 该位置类参数的设备实测论域上界（无上界返回 None）。
 
-    ⚠️ **两级匹配**（位置类既有分段也有整段）：
+    【注意】**两级匹配**（位置类既有分段也有整段）：
     - 整段参数（``MEL`` / ``VPTL``）→ **精确匹配**；
     - 分段参数（``IL0``~``IL5`` / ``ML0``~``ML3``）→ **族前缀匹配**
       （族前缀仍由 :func:`param_family` 的正则取 ⇒ 命名规则仍是单一真相源）。
@@ -958,9 +944,9 @@ def lookup_position_limit(
 #   ⇒ 制品级数据（型腔壁厚）**已接进模糊引擎的入参契约**
 #   （``OPTIMIZE_MOLD_INFO_FIELDS`` 新增 ``max_wall_thickness`` 等 5 项）
 #   ⇒ **CT 已接产品域**（见下方 :data:`PRODUCT_DOMAIN_FIELDS`），
-#   **PT / IT / ID 仍回落经验域**（本轮实测判定不划算，见产品域章节）。
+#   **PT / IT / ID 仍回落经验域**（判定不划算，理由见下方产品域常量）。
 #
-# ⚠️ **为什么用显式名单而不是 `RuleKeyword.keyword_type`**：
+# 【注意】**为什么用显式名单而不是 `RuleKeyword.keyword_type`**：
 #   `keyword_type='time'`（由 ``init_rule_keyword.py::infer_keyword_type``
 #   按「前缀 + 描述」推断）覆盖 **20 个**参数，但其中 9 个
 #   （``SCT0..SCT8`` 阀口开启时间 / ``DTAM`` ``DTBM`` 松退时间 / ``MD`` 储料延迟）
@@ -968,19 +954,19 @@ def lookup_position_limit(
 #   ⇒ **根本不参与判级**，标注它们只会让诊断清单变噪。
 #   ⇒ 本表只收「时间类 ∧ **有工艺值来源**」= 11 个（PT0~PT4 / IT / CT / ID）。
 #
-# ⚠️ **名单按「族 + 整段」给，不按参数逐个列**：
+# 【注意】**名单按「族 + 整段」给，不按参数逐个列**：
 #   ``PT`` 是族前缀（保压时间分段 PT0~PT4）；``IT`` / ``CT`` / ``ID`` 是整段。
 #   参数级增删不用改本表（新增 PT5 之类的分段会自动命中 ``PT`` 族）。
 #
-# 📌 **实测事实（2026-11-10，规则库 1646 条）**：
-#   时间类是**前件引用最多的族**，合计 **329 次**：
+# 【注意】**时间类的经验域双向错位**：
+#   时间类是**前件引用最多的族**（合计 **329 次**引用）：
 #   ``PT0`` 147 / ``CT`` 93 / ``IT`` 85 / ``PT1`` 4
-#   ⇒ 而本轮时间类的经验域**双向错位**：
+#   ⇒ 而时间类的经验域**双向错位**：
 #   ``CT``[0,120] vs 真实 5~9.5（4.2%~7.9% 分位，恒判最低档）；
 #   ``IT``[0,20] vs 真实 1.4~4.75（7%~23.8%）；
 #   ``PT0``[0,10] vs 真实 1.88~**60**（18.8%~**600%**，主力值越界）。
-#   ⇒ 这正是 B1-4 只做「登记 + 可见化」的原因：**精度问题要等产品维度接线**
-#   （与 B1-2c 同源），本轮动它会直接改变推荐输出。
+#   ⇒ 本表只做「登记 + 可见化」：**精度问题要等产品维度权威源接入**，
+#   动它会直接改变推荐输出。
 TIME_DOMAIN_FIELDS: Dict[str, str] = {
     "PT": "保压时间（分段：PT0~PT4）",
     "IT": "注射时间",
@@ -990,9 +976,9 @@ TIME_DOMAIN_FIELDS: Dict[str, str] = {
 
 
 def is_time_domain_field(param_name: str) -> bool:
-    """该参数是否属于**时间类**（仅用于诊断标注，不参与论域替换）
+    """该参数是否属于**时间类**（仅用于诊断标注，不参与论域替换）。
 
-    ⚠️ **两级匹配**（时间类既有分段也有整段，与位置类同形）：
+    【注意】**两级匹配**（时间类既有分段也有整段，与位置类同形）：
     - 整段参数（``CT`` / ``IT`` / ``ID``）→ **精确匹配**；
     - 分段参数（``PT0``~``PT4``）→ **族前缀匹配**
       （族前缀由 :func:`param_family` 的正则取 ⇒ 命名规则仍是单一真相源）。
@@ -1022,17 +1008,17 @@ def is_time_domain_field(param_name: str) -> bool:
 # **中立层** ``algorithms/material_physics.py`` ⇒ 两个算法包共用同一份常量，
 # 不会出现「专家推导的初值」与「模糊判级的坐标轴」两套口径。
 #
-# ⚠️ **本轮只接 CT 一个参数**（实测判定，其余三个不做）：
+# 【注意】**本轮只接 CT 一个参数**（实测判定，其余三个不做）：
 #   - ``PT``（保压时间）：接产品域后**区分度恶化**（66.7% → 98.1%），
 #     只换来可判率 75.9% → 100% ⇒ 不划算；
 #   - ``IT``（注射时间）：缺可靠的产品级基准（充填时间还要流长 + 流量）；
 #   - ``ID``（注射延迟时间）：真实值 54/54 全为 0.20 ⇒ 任何论域都恒判同档
 #     ⇒ 数学上无解。
 #
-# ⚠️ **下界统一取 0**（与位置类同口径）：时间类的经验下界是**档位语义**、
+# 【注意】**下界统一取 0**（与位置类同口径）：时间类的经验下界是**档位语义**、
 #   不是物理下限 ⇒ 冷却时间 0 有物理意义（不冷却）。
 #
-# ⚠️ **上界 = 「刚好冷却到位」的物理时间**，不是设备天花板：
+# 【注意】**上界 = 「刚好冷却到位」的物理时间**，不是设备天花板：
 #   冷却时间没有机台可设上限（机台 HMI 不提供），设备上限只对**设定值类**
 #   （压力 / 速度 / 转速）有意义 ⇒ 产品域与设备域**语义不同、不可混用**。
 PRODUCT_DOMAIN_FIELDS: Dict[str, str] = {
@@ -1044,7 +1030,7 @@ def resolve_product_limits(
     mold_info: Dict[str, Any],
     polymer_info: Dict[str, Any],
 ) -> Dict[str, Tuple[float, float]]:
-    """mold_info + polymer_info → {算法参数名: (论域下界, 论域上界)}（产品维度）
+    """mold_info + polymer_info → {算法参数名: (论域下界, 论域上界)}（产品维度）。
 
     冷却时间的**判级基准**取「制品最大壁厚 + 材料大类」推导出的物理冷却时间
     （权威源 = 产品维度，见 :data:`PRODUCT_DOMAIN_FIELDS`）。
@@ -1053,11 +1039,11 @@ def resolve_product_limits(
     材料回答「这个料该在什么温度窗口」，设备回答「机器能走多远」，
     产品回答「这个件该冷却多久」。
 
-    ⚠️ **缺权威源不报错、不阻塞**（既定口径：制品级字段的 condition 是「可选」
+    【注意】**缺权威源不报错、不阻塞**（既定口径：制品级字段的 condition 是「可选」
     而不是「必填」）⇒ 缺壁厚 / 非数值 / 非正数 ⇒ **该参数不产出**，
     调用方据此**回落经验域**（`RuleKeyword.range_min/max`）照常推理。
 
-    ⚠️ **材料大类识别不出 ⇒ 用默认系数**（`DEFAULT_COOL_FACTOR`），不报错 ——
+    【注意】**材料大类识别不出 ⇒ 用默认系数**（`DEFAULT_COOL_FACTOR`），不报错 ——
     与专家引擎 `family_cool_factor_map.get(family, default_cool_factor)` 口径一致；
     **留痕由调用方（engine）负责**（诊断标 ``product_family_unknown``）。
 
@@ -1092,7 +1078,7 @@ def resolve_product_limits(
 # TODO（论域改造时一并处理）：
 # 1. 温度类字段升级为「条件必填」：需先让 field_contract 支持从外部注入触发上下文
 #    （如 context["involved_params"]），再按本次是否涉及温度参数决定等级。
-#    ⚠️ 温度类**没有设备上限字段**（HMI 不提供料筒/喷嘴/模具温度的可设上限），
+#    【注意】温度类**没有设备上限字段**（HMI 不提供料筒/喷嘴/模具温度的可设上限），
 #    所以它们的论域**改取材料温度区间**（见 `resolve_temperature_limits`），
 #    不再依赖 RuleKeyword 经验域。
 # 2. engine.py 的 keyword 兜底分支读本维度的 max_set_*：

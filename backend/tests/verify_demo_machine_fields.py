@@ -15,7 +15,7 @@ verify_demo_machine_fields.py
     3. 按 fuzzy 契约（OPTIMIZE_MACHINE_INFO_FIELDS）提取 machine_info 并跑
        OptimizeDataValidator（含真实 polymer / mold 上下文）
     4. 额外校验数据自洽性：HMI 可设定上限 ≤ 设备极限
-    5. 端到端：跑一遍真实的工艺参数推理（infer），验证不再被入参校验拦截
+    5. 端到端：跑一遍真实的工艺参数推理（initialize_from_masterdata），验证不再被入参校验拦截
        （推理会写库，这里包在事务里回滚，不留脏数据）
 
 用法：
@@ -58,7 +58,7 @@ _LIMIT_PAIRS = (
 
 
 def _extract_by_spec(spec, machine, unit):
-    """按 spec 的 (source_model, attr_name) 从 ORM 提取扁平 dict"""
+    """按 spec 的 (source_model, attr_name) 从 ORM 提取扁平 dict。"""
     result = {}
     for target_key, field_spec in spec.items():
         attr_name = field_spec.get("attr_name")
@@ -157,7 +157,7 @@ def main():
 
     # ---- 4. 端到端：真实跑一遍工艺参数推理（写库后回滚）----
     print("\n" + "=" * 70)
-    print("端到端：工艺参数推理（ParameterInitializeService.infer）")
+    print("端到端：工艺参数推理（ParameterInitializeService.initialize_from_masterdata）")
     print("=" * 70)
     e2e_failures = _verify_end_to_end(mold, polymer, machines)
     failures.extend(e2e_failures)
@@ -172,7 +172,7 @@ def main():
 
 
 def _verify_end_to_end(mold, polymer, machines):
-    """端到端推理验证（事务内跑 + 回滚，不留脏数据）"""
+    """端到端推理验证（事务内跑 + 回滚，不留脏数据）。"""
     from django.db import transaction
 
     failures = []
@@ -181,7 +181,7 @@ def _verify_end_to_end(mold, polymer, machines):
         for injection_index in range(unit_count):
             try:
                 with transaction.atomic():
-                    result = ParameterInitializeService.infer(
+                    result = ParameterInitializeService.initialize_from_masterdata(
                         mold_id=mold.id,
                         injection_machine_id=machine.id,
                         polymer_id=polymer.id,
@@ -190,7 +190,7 @@ def _verify_end_to_end(mold, polymer, machines):
                     )
                     transaction.set_rollback(True)
                 print(f"  [OK] {machine.device_no} 射台#{injection_index + 1} "
-                      f"推理成功（condition_id={result.get('condition_id')}）")
+                      f"推理成功（condition_id={(result.get('condition') or {}).get('id')}）")
             except Exception as e:
                 failures.append(f"[e2e] {machine.device_no} 射台#{injection_index + 1}: {e}")
                 print(f"  [FAIL] {machine.device_no} 射台#{injection_index + 1}: {e}")

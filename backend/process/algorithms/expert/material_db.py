@@ -1,5 +1,4 @@
-"""
-材料族智能默认值——按 abbreviation 查材料物理参数
+"""材料族智能默认值——按 abbreviation 查材料物理参数。
 
 兑底范围【仅限材料参数】polymer_info：
 - 材料族推荐值是「行业经验值」（PP density=0.91, melt_temp=220）
@@ -81,13 +80,13 @@ MATERIAL_DEFAULTS: Dict[str, Dict[str, float]] = {
 
 
 class MaterialDatabase:
-    """材料族默认物理参数（智能兜底）"""
+    """材料族默认物理参数（智能兜底）。"""
 
     DEFAULTS = MATERIAL_DEFAULTS
 
     @classmethod
     def get_defaults(cls, abbreviation: str) -> Dict[str, float]:
-        """按 abbreviation 查材料族默认值
+        """按 abbreviation 查材料族默认值。
 
         Returns:
             材料族默认参数字典；无匹配返回空 dict
@@ -124,7 +123,7 @@ class MaterialDatabase:
 
     @classmethod
     def fill_defaults(cls, material_info: Dict[str, Any]) -> None:
-        """智能填充：缺失字段按 abbreviation 查材料族
+        """智能填充：缺失字段按 abbreviation 查材料族。
 
         Args:
             material_info: 材料信息 dict（会被直接修改，填充默认值）
@@ -143,7 +142,7 @@ class MaterialDatabase:
 
     @classmethod
     def has_defaults(cls, abbreviation: str) -> bool:
-        """检查材料族是否有默认参数（用于业务侧补充提示）"""
+        """检查材料族是否有默认参数（用于业务侧补充提示）。"""
         return bool(cls.get_defaults(abbreviation))
 
 

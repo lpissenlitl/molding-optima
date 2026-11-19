@@ -1,18 +1,18 @@
-"""Step 1 边界验证：_to_full_dict（ORM → 完整 dict，不裁剪字段）
+"""Step 1 边界验证：_to_full_dict（ORM → 完整 dict，不裁剪字段）。
 
 覆盖：
 - _to_full_dict(None) → {}
 - _to_full_dict(ORM 实例) → 含全部非关系字段（含 ORM 元数据 / 业务字段）
 - _to_full_dict 排除 ORM 关系字段（避免对象嵌套 / FK _id 冲突）
-- _build_condition_data 已删除（build condition 移到 Step 2 _build_engine_context）
-- _serialize_parameter 已删除（Step 1 直接用 _to_full_dict）
+- _build_condition_data 不存在（build condition 职责在 Step 2 _build_engine_context）
+- _serialize_parameter 不存在（Step 1 直接用 _to_full_dict）
 """
 
 import os
 import sys
 from unittest.mock import MagicMock
 
-# ★ backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
+# backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
 #   直接 `python tests/verify_step1_full_dict.py` 时，sys.path[0] 是脚本所在目录
 #   （= backend/tests）⇒ 拿不到 `_moldx` 等顶层包。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,7 +25,6 @@ django.setup()
 
 from process.models import ProcessParameter, ProcessCondition
 from process.services.parameter_optimize import (
-    ParameterOptimizeService,
     _to_full_dict,
 )
 
@@ -83,29 +82,29 @@ print(f"[3] ORM 元数据 / 业务字段 / 工艺字段都保留: OK ({len(expec
 # ---------- 验证 _serialize_parameter 不存在（Step 1 直接用 _to_full_dict）----------
 from process.services import parameter_optimize as service_module
 
-assert not hasattr(service_module.ParameterOptimizeService, "_serialize_parameter"), (
-    "_serialize_parameter 应已删除（Step 1 直接用 _to_full_dict）"
+assert not hasattr(service_module, "_serialize_parameter"), (
+    "_serialize_parameter 不应存在（Step 1 直接用 _to_full_dict）"
 )
-print(f"[4] _serialize_parameter 已删除（Step 1 直接用 _to_full_dict）: OK")
+print(f"[4] _serialize_parameter 不存在（Step 1 直接用 _to_full_dict）: OK")
 
 
 # ---------- 验证 _build_condition_data 不存在（build condition 职责在 Step 2）----------
-assert not hasattr(service_module.ParameterOptimizeService, "_build_condition_data"), (
-    "_build_condition_data 应已删除（build condition 移到 Step 2 _build_engine_context）"
+assert not hasattr(service_module, "_build_condition_data"), (
+    "_build_condition_data 不应存在（build condition 职责在 Step 2 _build_engine_context）"
 )
-assert not hasattr(service_module.ParameterOptimizeService, "_serialize_condition"), (
-    "_serialize_condition 应已删除"
+assert not hasattr(service_module, "_serialize_condition"), (
+    "_serialize_condition 不应存在"
 )
-assert not hasattr(service_module.ParameterOptimizeService, "_serialize_machine"), (
-    "_serialize_machine 应已删除"
+assert not hasattr(service_module, "_serialize_machine"), (
+    "_serialize_machine 不应存在"
 )
-assert not hasattr(service_module.ParameterOptimizeService, "_serialize_polymer"), (
-    "_serialize_polymer 应已删除"
+assert not hasattr(service_module, "_serialize_polymer"), (
+    "_serialize_polymer 不应存在"
 )
-assert not hasattr(service_module.ParameterOptimizeService, "_serialize_mold"), (
-    "_serialize_mold 应已删除"
+assert not hasattr(service_module, "_serialize_mold"), (
+    "_serialize_mold 不应存在"
 )
-print(f"\n[5] _build_condition_data + 4 个 _serialize_* 已删除: OK")
+print(f"\n[5] _build_condition_data + 4 个 _serialize_* 不存在: OK")
 
 
 print()

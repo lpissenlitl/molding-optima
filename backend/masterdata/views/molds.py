@@ -11,7 +11,7 @@ class MoldDetailView(BaseView):
     
     @method_decorator(require_login)
     def get(self, request, mold_id):
-        """获取模具信息"""
+        """获取模具信息。"""
         return mold_service.get_mold_info(
             mold_id=mold_id
         )
@@ -19,7 +19,7 @@ class MoldDetailView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(MoldSchema))
     def put(self, request, mold_id, cleaned_data):
-        """修改模具信息"""
+        """修改模具信息。"""
         return mold_service.update_mold_info(
             company_id=request.user.company_id,
             mold_id=mold_id,
@@ -28,7 +28,7 @@ class MoldDetailView(BaseView):
     
     @method_decorator(require_login)
     def delete(self, request, mold_id):
-        """删除模具信息"""
+        """删除模具信息。"""
         return mold_service.delete_mold(
             company_id=request.user.company_id,
             mold_id=mold_id
@@ -40,7 +40,7 @@ class MoldListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(MoldSchema))
     def post(self, request, cleaned_data):
-        """创建模具"""
+        """创建模具。"""
         return mold_service.create_mold(
             user=request.user,
             **cleaned_data
@@ -49,7 +49,7 @@ class MoldListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(MoldListSchema))
     def get(self, request, cleaned_data):
-        """获取模具列表"""
+        """获取模具列表。"""
         total, results = mold_service.get_mold_list(
             company_id=request.user.company_id,
             **cleaned_data
@@ -59,7 +59,7 @@ class MoldListView(BaseView):
     @method_decorator(require_login)
     @method_decorator(validate_parameters(BatchDeleteSchema))
     def delete(self, request, cleaned_data):
-        """批量删除模具"""
+        """批量删除模具。"""
         return mold_service.batch_delete_mold(
             company_id=request.user.company_id,
             **cleaned_data

@@ -1,5 +1,4 @@
-﻿"""
-经验推理引擎 - 基于工程师经验编码的硬编码工艺知识
+﻿"""经验推理引擎 - 基于工程师经验编码的硬编码工艺知识。
 
 数据来源：
 - engines/empirical/hints.py 的 EMPIRICAL_HINTS 字典
@@ -33,20 +32,20 @@ from process.algorithms.empirical.hints import EMPIRICAL_HINTS
 logger = logging.getLogger(__name__)
 
 
-def _log_selection(selected: dict) -> None:
+def _log_selection(trace: dict) -> None:
     """缺陷选取留痕（结构化日志）。
 
     本引擎没有 per-request 诊断容器（那是 fuzzy 的机制，见
     `process/algorithms/fuzzy/diagnostics.py`），故用标准日志出口。
 
-    ⚠️ **只在有项被跳过时才打** —— 正常路径（选中的缺陷有效）不产生任何日志噪音；
+    【注意】**只在有项被跳过时才打** —— 正常路径（选中的缺陷有效）不产生任何日志噪音；
     有跳过才说明「为什么放弃了后面的缺陷」，那才是需要被看见的情况。
 
-    ⚠️ 选取**不在本引擎**（service 预处理层做一次，见
-    `services/parameter_optimize.py::_prepare_defect_selection`）⇒ 本函数
-    只转述预处理层给的 trace。
+    【注意】选取**不在本引擎**（service 预处理层做一次，见
+    `services/parameter_optimize.py::_resolve_defect_selection`）⇒ 本函数
+    只转述预处理层写回 feedback 的 trace。
     """
-    trace = (selected or {}).get('trace') or {}
+    trace = trace or {}
     if not (trace.get('skipped') or []):
         return
     logger.info('[EmpiricalReasoning] 缺陷选取 %s',
@@ -54,12 +53,11 @@ def _log_selection(selected: dict) -> None:
 
 
 class EmpiricalReasoning(AlgorithmBase):
-    """
-    经验推理引擎 - 工程师硬编码的工艺知识
+    """经验推理引擎 - 工程师硬编码的工艺知识。
 
     输入：
-        context.selected_defect: 预处理层整理出的本轮缺陷
-            （含 defect_name / level / position）
+        context.feedback: 缺陷反馈（**已收敛** —— defects 只剩本轮处理的那条，
+            含 keyword_name / level / position）
 
     输出：
         AlgorithmRecommendation 列表（increase / decrease 方向）
@@ -77,13 +75,12 @@ class EmpiricalReasoning(AlgorithmBase):
         self.hints = hints if hints is not None else EMPIRICAL_HINTS
 
     def recommend(self, context: dict) -> List[AlgorithmRecommendation]:
-        """
-        根据缺陷返回硬编码的工艺调整方向
+        """根据缺陷返回硬编码的工艺调整方向。
 
         Args:
             context: {
                 'feedback': {
-                    'defect': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}, ...]
+                    'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}, ...]
                 },
                 'process_parameter': {...}   # 可选，用于填充 current_value
             }
@@ -92,16 +89,18 @@ class EmpiricalReasoning(AlgorithmBase):
             AlgorithmRecommendation 列表
         """
         # 缺陷 —— **选取已在 service 预处理层做完**（只做一次）
-        # （见 `services/parameter_optimize.py::_prepare_defect_selection`）
+        # （见 `services/parameter_optimize.py::_resolve_defect_selection`）
         # ⇒ 本引擎**不再自己挑缺陷**，只读整理结果。
         # 反馈传的是 keyword_name（SHORTSHOT / SHRINKAGE / ...），
         # 与 RuleMethod.defect_code、RuleKeyword.keyword_name 对齐。
         # 历史实现读的是中文 defect_name / defect_name_zh，
         # 与 hints 表的英文 key 永远对不上 → 经验引擎恒返回空。
-        selected = context.get('selected_defect') or {}
-        _log_selection(selected)
+        feedback = context.get('feedback') or {}
+        defects = feedback.get('defects') or []
+        selected = defects[0] if defects else {}
+        _log_selection(feedback.get('defect_selection'))
 
-        defect_name = selected.get('defect_name')
+        defect_name = selected.get('keyword_name') if isinstance(selected, dict) else None
         if not defect_name:
             return []
 
@@ -147,9 +146,11 @@ class EmpiricalReasoning(AlgorithmBase):
         注：此方法仅判断"是否能调用"，是否真返回推荐由 recommend() 决定
         """
         # 缺陷码取 keyword_name（英文码，与 hints 表 key 对齐）
-        # ⚠️ 不留痕：`is_available` 会被 chain 调度频繁调用，每次都打日志是噪音。
+        # 【注意】不留痕：`is_available` 会被 chain 调度频繁调用，每次都打日志是噪音。
         #    留痕只发生在 `recommend()`（真正做决策的地方）。
-        defect_name = (context.get('selected_defect') or {}).get('defect_name')
+        defects = (context.get('feedback') or {}).get('defects') or []
+        selected = defects[0] if defects else {}
+        defect_name = selected.get('keyword_name') if isinstance(selected, dict) else None
         if not defect_name:
             return False
         return defect_name in self.hints

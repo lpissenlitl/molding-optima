@@ -44,7 +44,7 @@ NC = '\033[0m'
 # ========== 辅助：构造 context fixture ==========
 
 def _machine(max_hold_velo=100.0):
-    """标准海天级注塑机（max_hold_velo 可调）"""
+    """标准海天级注塑机（max_hold_velo 可调）。"""
     return {
         'screw_diameter': 40,
         'max_set_injection_pressure': 150.0,
@@ -62,7 +62,7 @@ def _machine(max_hold_velo=100.0):
 
 
 def _base_mold(**overrides):
-    """基础 ABS mold（max_thickness=2.0, medium）"""
+    """基础 ABS mold（max_thickness=2.0, medium）。"""
     m = {
         'product_weight': 50.0,
         'runner_weight': 0.0,
@@ -81,7 +81,7 @@ def _base_mold(**overrides):
 
 
 def _base_material(**overrides):
-    """基础 ABS 材料"""
+    """基础 ABS 材料。"""
     m = {
         'abbreviation': 'ABS',
         'recommend_melt_temperature': 240.0,
@@ -294,7 +294,7 @@ def test_scenario_d_conservation_check():
     # product_weight=50g, melt_density=0.95, screw_diameter=40mm）
     # replenish_len ≈ 0.035 × 50 / 0.95 / (π × 40² / 4) × 1000 ≈ 1.5~3 mm
     # 保守估算：replenish_len ≈ 3 mm
-    # 守恒：v × t = 11.0 × 295 ≈ 3245 mm >> 3 mm ✓
+    # 守恒：v × t = 11.0 × 295 ≈ 3245 mm >> 3 mm 
     estimated_replenish_len = 3.0  # mm
     vt_product = hold_spd_total * hold_time_total
     print(f"  [debug conservation] hold_spd_total={hold_spd_total:.3f}mm/s × hold_time={hold_time_total:.3f}s "

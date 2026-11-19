@@ -39,7 +39,7 @@ KEYWORDS = [
 class FakeRepo:
     """完全离线的规则仓库（不 import ORM，不连 DB）。
 
-    ⚠️ 契约（`library/contracts.py`）：`get_rules` → `List[RuleProfile]`，
+    【注意】契约（`library/contracts.py`）：`get_rules` → `List[RuleProfile]`，
     `get_keywords_by_names` → `List[KeywordProfile]`。
     """
 
@@ -81,14 +81,14 @@ def make_rule(rule_str):
 
 
 CONTEXT = {
-    'feedback': {'defect': [{'keyword_name': 'SHORTSHOT', 'level': 'low'}]},
+    'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'low'}]},
     'process_parameter': {'IV0': 10.0},
     'iteration_trend': {'trend': 'stable'},
 }
 
-# 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
-from process.algorithms.defect_selection import ensure_selected_defect  # noqa: E402
-ensure_selected_defect(CONTEXT)
+# 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
+from process.algorithms.defect_selection import select_defect  # noqa: E402
+CONTEXT['feedback'] = select_defect(CONTEXT.get('feedback') or {})
 
 failures = []
 

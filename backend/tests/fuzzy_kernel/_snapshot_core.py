@@ -42,13 +42,13 @@ from process.algorithms.fuzzy.fuzzy_core.models.rules import NumTskRule  # noqa:
 from process.algorithms.fuzzy.fuzzy_core.parsing import parse_rule  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.profiles import RuleProfile  # noqa: E402
 from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
-from process.algorithms.defect_selection import ensure_selected_defect  # noqa: E402
+from process.algorithms.defect_selection import select_defect  # noqa: E402
 from process.algorithms.fuzzy.library.rules import RuleService  # noqa: E402
 
 OUT = sys.argv[1]
 snap = {}
 
-# ⚠️ 口径适配：E24-4 删掉了 `f_name` 位置参数（只写不读的假契约），
+# 【注意】口径适配：E24-4 删掉了 `f_name` 位置参数（只写不读的假契约），
 #    而基线副本跑的是**改前**版本（签名多一个 f_name）。
 #    这里按实际签名选择调用形式 —— 被测对象的数值产出必须两版完全一致，
 #    该一致性由「三方对拍」单独断言。
@@ -116,10 +116,9 @@ put('defuzz_face', defz)
 
 # ---------------- 4. 完整推理链路 ----------------
 class Kw(dict):
-    """既能当 dict 用（`kw['keyword']`，旧内核契约），也能当契约对象用
-    （`kw.keyword`，新内核契约）。
+    """既能当 dict 用（`kw['keyword']`），也能当契约对象用（`kw.keyword`）。
 
-    本快照要在**改造前 / 改造后**跑**同一份脚本** ⇒ 仓库返回值必须同时
+    本快照要跨内核版本跑**同一份脚本** ⇒ 仓库返回值必须同时
     满足两侧的读法。
     """
 
@@ -187,7 +186,7 @@ def mk(spec_rule, priority=1.0, kind=None):
     """构造规则档案。
 
     `spec_rule` 可以是规则串，也可以是 `(规则串, specificity)` 二元组 ——
-    ⚠️ 批 B 之前本函数把 `specificity=4` **写死** ⇒ 31 个场景全是「通用规则」，
+    【注意】批 B 之前本函数把 `specificity=4` **写死** ⇒ 31 个场景全是「通用规则」，
        特异级权重一次都没被测到。故现在允许逐条指定。
 
     `kind=None` 时按**结论形态自动判定**（与来源层 `RuleService` 同一口径）——
@@ -257,13 +256,13 @@ SCENARIOS = [
 ]
 
 CONTEXTS = [
-    ('ctx_low', {'feedback': {'defect': [{'keyword_name': 'SHORTSHOT', 'level': 'low'}]},
+    ('ctx_low', {'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'low'}]},
                  'process_parameter': {'IV0': 10.0, 'inj_pres_1': 20.0},
                  'iteration_trend': {'trend': 'stable'}}),
-    ('ctx_high', {'feedback': {'defect': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}]},
+    ('ctx_high', {'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}]},
                   'process_parameter': {'IV0': 90.0, 'inj_pres_1': 180.0},
                   'iteration_trend': {'trend': 'stable'}}),
-    ('ctx_mid', {'feedback': {'defect': [{'keyword_name': 'SHORTSHOT', 'level': 'medium'}]},
+    ('ctx_mid', {'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'medium'}]},
                  'process_parameter': {'IV0': 50.0, 'inj_pres_1': 100.0},
                  'iteration_trend': {'trend': 'stable'}}),
 ]
@@ -273,8 +272,8 @@ for sname, rules in SCENARIOS:
     for cname, ctx in CONTEXTS:
         repo = FakeRepo([mk(r) for r in rules])
         engine = FuzzyEngine(repository=repo)
-        # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
-        ensure_selected_defect(ctx)
+        # 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
+        ctx['feedback'] = select_defect(ctx.get('feedback') or {})
         recs = engine.recommend(ctx)
         key = '%s|%s' % (sname, cname)
         infer[key] = {
@@ -282,7 +281,7 @@ for sname, rules in SCENARIOS:
                 {
                     'param_name': r.param_name,
                     'direction': r.direction,
-                    # ⚠️ 数值必须进快照：之前只记了 param_name / direction / reason，
+                    # 【注意】数值必须进快照：之前只记了 param_name / direction / reason，
                     #    ⇒ 快照对**推荐值量级**与**置信度**的任何变化都是瞎的，
                     #    批 B 的量级修正在这里完全看不见。
                     'current_value': repr(getattr(r, 'current_value', None)),
@@ -302,13 +301,14 @@ put('infer', infer)
 
 # 逐规则激活度（tsk_inference 返回 (results, extra_dict)，
 # results 元素 = (rule_str, group_weight, {param: value}, raw_activation)）
-# ⚠️ 第 4 项（原始激活度）是后加的 —— 快照脚本要能在**旧副本**上跑，
+# 【注意】第 4 项（原始激活度）并非所有内核副本都有 —— 快照脚本要能在**旧副本**上跑，
 #    故按元素长度自适应。
 from process.algorithms.fuzzy.fuzzy_core.models.nets import NumTskRuleNet  # noqa: E402
 
-# net 签名自适应：改造前是 (rule_array, keyword_array, priority_array)，
-# 改造后是 (rules: List[NumTskRule], keywords: List[KeywordProfile])。
-# 快照必须在**同一份脚本**里跑改造前后两侧 ⇒ 按签名探测分支。
+# net 签名自适应：两种形态都支持 ——
+#   (rule_array, keyword_array, priority_array)
+#   (rules: List[NumTskRule], keywords: List[KeywordProfile])
+# 快照必须在**同一份脚本**里跨内核版本跑 ⇒ 按签名探测分支。
 _NET_HAS_PRIORITY_ARG = (
     len(inspect.signature(NumTskRuleNet.__init__).parameters) >= 4)
 
@@ -316,14 +316,14 @@ _NET_HAS_PRIORITY_ARG = (
 def _has_check_conclusion(rule_str: str) -> bool:
     """规则结论里有没有检查/弹窗类（`X_adjust_提示语` / `X_popup_xxx`）。
 
-    ⚠️ 这道闸在**生产路径**上由分类层负责：
-      - 改造前：数值层网络自己挡（`NumTskRuleNet._is_check_rule`）
-      - 改造后：第 4 层 filter 判为提示类，根本不进数值层
+    【注意】这道闸在**生产路径**上由分类层负责：
+      - 第 4 层 filter 判为提示类，根本不进数值层
+      - 旧副本内核：由数值层网络自己挡（`NumTskRuleNet._is_check_rule`）
 
     本探针是**直接构造 net**（绕过了分类层）⇒ 必须自己复刻这道闸，
     否则测的是「net 收到了非法输入」—— 那是分类层的职责，不是 net 的。
 
-    ⚠️ 该闸在**改造前**是 net 内部行为，对 net 的可见效果与「提前挡掉」完全
+    【注意】该闸在**改造前**是 net 内部行为，对 net 的可见效果与「提前挡掉」完全
     一致（不占下标、不进矩阵、不进 extra_dict）⇒ 两侧探针同口径。
     """
     for sol in parse_rule(rule_str)['solutions']:
@@ -335,8 +335,8 @@ def _has_check_conclusion(rule_str: str) -> bool:
 def make_numtsk_net(rule_strs, keywords, priorities):
     """按当前 net 的签名构造数值层网络（两侧通用，语义一致）。
 
-    ⚠️ 只喂「数值层该收」的规则（见 `_has_check_conclusion`）。
-    ⚠️ `rule_strs` 元素可以是规则串，也可以是 `(规则串, specificity)` 二元组
+    【注意】只喂「数值层该收」的规则（见 `_has_check_conclusion`）。
+    【注意】`rule_strs` 元素可以是规则串，也可以是 `(规则串, specificity)` 二元组
        （批 B 补的特异级覆盖用）。
     """
     kept = []

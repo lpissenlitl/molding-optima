@@ -5,11 +5,11 @@
 - `RuleAdapter`：`RuleRecord` → `RuleProfile`（规则侧）
 - `RuleKeywordAdapter`：ORM 实例 / dict → `KeywordProfile`（关键字侧）
 
-⚠️ **为什么独立成文件**：转换器必须能被**零 ORM** 地引入 —— 文件来源
+【注意】**为什么独立成文件**：转换器必须能被**零 ORM** 地引入 —— 文件来源
 （`library/files/`）要用它们把本地数据规约成内核契约，不能因为一个转换器
 就把 Django ORM 拖进来。
 
-⚠️ **转换器接受来源无关的输入**：
+【注意】**转换器接受来源无关的输入**：
 - `RuleAdapter` 收 `RuleRecord`（`library/contracts.py`），**不收 ORM 实例** ——
   数据库来源先把 `RuleMethod` 规约成 `RuleRecord`，文件来源把 JSON 规约成
   `RuleRecord`，转换器只认后者 ⇒ 两个来源的契约构造口径完全一致。
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 class RuleRecordAdapter:
     """ORM `RuleMethod`（鸭子类型）→ `RuleRecord`（来源无关记录）。纯转换器。
 
-    ⚠️ **不 import ORM**：只按属性名读取（`getattr`），因此本类零 ORM 依赖，
+    【注意】**不 import ORM**：只按属性名读取（`getattr`），因此本类零 ORM 依赖，
       可与文件来源的转换器同处一个文件。
 
     `source_ref` 格式与原实现保持一致（`RuleMethod:<id>`）⇒ 溯源信息不因
@@ -65,11 +65,11 @@ class RuleRecordAdapter:
     def from_dict(data: Dict[str, Any], library_code: str = '') -> RuleRecord:
         """dict（文件来源）→ `RuleRecord`。纯转换器。
 
-        ⚠️ **与 `to_record` 的字段口径逐条一致**（包括 ``priority`` 的
+        【注意】**与 `to_record` 的字段口径逐条一致**（包括 ``priority`` 的
           ``or 1.0`` 归一）—— 两侧转出来的记录**逐字段相等** ⇒ 编排层
           在两条路径下的行为必然相同。
 
-        ⚠️ ``source_ref`` 用 ``file:<库码>#<规则主键>`` 格式（与数据库来源的
+        【注意】``source_ref`` 用 ``file:<库码>#<规则主键>`` 格式（与数据库来源的
           ``RuleMethod:<id>`` 区分开）⇒ 溯源时能一眼看出这条规则来自哪个通道。
         """
         return RuleRecord(
@@ -88,14 +88,14 @@ class RuleRecordAdapter:
 class LibraryRecordAdapter:
     """ORM `RuleLibrary`（鸭子类型）→ `LibraryRecord`（来源无关记录）。纯转换器。
 
-    ⚠️ **不 import ORM**：只按属性名读取（`getattr`）。
+    【注意】**不 import ORM**：只按属性名读取（`getattr`）。
     """
 
     @staticmethod
     def to_record(library: Any) -> LibraryRecord:
         """ORM `RuleLibrary` → `LibraryRecord`。
 
-        ⚠️ **归属字段（`owner_type` / `company_id`）也要带上**：可见性判据
+        【注意】**归属字段（`owner_type` / `company_id`）也要带上**：可见性判据
           落在共用编排层（`assembly.RuleAssembler`），而编排层零 ORM ⇒
           归属信息必须一路带到 `LibraryRecord` 里。
         """
@@ -115,7 +115,7 @@ class LibraryRecordAdapter:
     def from_dict(data: Dict[str, Any]) -> LibraryRecord:
         """dict（文件来源）→ `LibraryRecord`。纯转换器。
 
-        ⚠️ **与 `to_record` 的字段口径逐条一致**（含 ``library_type`` 的
+        【注意】**与 `to_record` 的字段口径逐条一致**（含 ``library_type`` 的
           ``or ''`` 归一、``priority`` 的 ``or 0`` 归一、``owner_type`` 的
           ``or 'system'`` 归一）⇒ 两侧转出来的记录**逐字段相等**
           ⇒ 选库与排序在两条路径下的结果必然相同。
@@ -144,7 +144,7 @@ class RuleAdapter:
     `RuleService.classify_conclusion_kind` 判定 —— 语义判定归 `RuleService`，
     本类只负责把来源侧字段搬进契约档案。
 
-    ⚠️ **本类也是规则串的唯一解析点**：拆一次，把产物放进 `RuleProfile.parsed`，
+    【注意】**本类也是规则串的唯一解析点**：拆一次，把产物放进 `RuleProfile.parsed`，
     下游（编排层 / 内核第 4 层）一律复用 ⇒ 同一条规则串在整条链路上只拆一次。
     """
 
@@ -163,7 +163,7 @@ class RuleAdapter:
         rule_description = (record.rule_description or '').strip()
         if not rule_description:
             return None
-        # ★ 规则串**只拆一次**：拆解产物随档案一起传给下游
+        # 规则串**只拆一次**：拆解产物随档案一起传给下游
         #   （编排层判缺陷名、内核第 4 层建对象都直接复用它）。
         #   拆解是纯函数，结果只与规则串有关 ⇒ 拆一次无损。
         parsed = RuleService.parse_rule(rule_description)
@@ -198,7 +198,7 @@ class RuleKeywordAdapter:
     def to_keyword_profiles(keywords: List[Any]) -> List[KeywordProfile]:
         """ORM 实例 / dict 列表 → `KeywordProfile` 列表。
 
-        ⚠️ **论域不可用的条目会被跳过**（并留一条 warning），而不是让整批崩掉。
+        【注意】**论域不可用的条目会被跳过**（并留一条 warning），而不是让整批崩掉。
 
         历史行为：一条 `range_min/range_max` 缺失或非数值的 keyword ⇒
         `float(None)` 抛 TypeError ⇒ 整个 `get_keywords_by_names` 失败 ⇒
@@ -218,7 +218,7 @@ class RuleKeywordAdapter:
     def _derive_step(min_val: float, max_val: float, source: str) -> float:
         """论域跨度 → step（跨度 / 3，下限 0.01）。
 
-        ⚠️ **不留裸 except**：算不出来就记一条 warning 再退回 1.0。
+        【注意】**不留裸 except**：算不出来就记一条 warning 再退回 1.0。
         静默兜底会让「论域取错」变得不可查 —— 与 `nets.py` 的
         「禁止静默降级」是同一原则。
         """
@@ -277,11 +277,11 @@ class RuleKeywordAdapter:
     def _normalize_dimension(value: Any) -> str:
         """维度角色归一（ORM ``category`` / dict ``dimension`` → 合法取值）。
 
-        ⚠️ **为什么必须归一**：``KeywordProfile.dimension`` 参与内核 M-1 的
+        【注意】**为什么必须归一**：``KeywordProfile.dimension`` 参与内核 M-1 的
         「是否参与档位归属判定」分支 ⇒ 取值非法会让内核走错分支。
         未知取值一律当**工艺参数维**（最保守：行为与改造前一致）。
 
-        ⚠️ **为什么 ORM 侧读 ``category``**：``RuleKeyword.category`` 的取值
+        【注意】**为什么 ORM 侧读 ``category``**：``RuleKeyword.category`` 的取值
         恰好就是三个维度角色（``parameter`` / ``defect`` / ``defect_position``）
         ⇒ 不必另建字段，也不会出现两套分类口径。
         """

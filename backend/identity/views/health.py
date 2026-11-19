@@ -1,5 +1,4 @@
-"""
-服务健康检查接口
+"""服务健康检查接口。
 
 设计要点：
 - 无需鉴权（@login_not_required）：让前端在登录前就能探测后端可用性
@@ -12,7 +11,7 @@ from extensions.views import BaseView
 
 
 class HealthView(BaseView):
-    """GET /api/health/ — 服务健康检查（公开接口）"""
+    """GET /api/health/ — 服务健康检查（公开接口）。"""
 
     def get(self, request):
         return {

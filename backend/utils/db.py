@@ -82,8 +82,7 @@ def paginate_queryset(
 
 
 def build_filters(filter_map: dict):
-    """
-    根据 filter_map 构建 Django ORM 查询条件
+    """根据 filter_map 构建 Django ORM 查询条件。
     支持 exact, icontains, isnull 等 lookup
     """
     filters = {}

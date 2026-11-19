@@ -11,12 +11,12 @@ class FileDetailView(BaseView):
     
     @method_decorator(require_login)
     def get(self, request, uuid):
-        """获取文件信息"""
+        """获取文件信息。"""
         return file_service.get_file_info(uuid=uuid)
     
     @method_decorator(require_login)
     def delete(self, request, uuid):
-        """删除文件"""
+        """删除文件。"""
         return file_service.delete_file(uuid=uuid)
 
 
@@ -24,13 +24,13 @@ class FileListView(BaseView):
     
     @method_decorator(require_login)
     def post(self, request):
-        """上传文件"""
+        """上传文件。"""
         return file_service.upload_file(request)
     
     @method_decorator(require_login)
     @method_decorator(validate_parameters(FileListSchema))
     def get(self, request, cleaned_data):
-        """根据业务信息获取文件列表"""
+        """根据业务信息获取文件列表。"""
         return file_service.get_file_list_by_business(
             company_id=request.user.company_id,
             **cleaned_data
@@ -41,7 +41,7 @@ class FileDownloadView(BaseView):
     
     @method_decorator(require_login)
     def get(self, request, uuid):
-        """下载文件（用户认证 - 需要登录）"""
+        """下载文件（用户认证 - 需要登录）。"""
         return file_service.download_file(
             company_id=request.user.company_id,
             tenant_slug=request.user.company.tenant_slug,
@@ -54,7 +54,7 @@ class FilePreviewView(BaseView):
     
     @method_decorator(require_login)
     def get(self, request, uuid):
-        """预览文件（用户认证 - 需要登录）"""
+        """预览文件（用户认证 - 需要登录）。"""
         return file_service.download_file(
             company_id=request.user.company_id,
             tenant_slug=request.user.company.tenant_slug,
@@ -66,11 +66,10 @@ class FilePreviewView(BaseView):
 # ==================== 租户认证文件接口（无需登录，使用 Token）====================
 
 class TenantFileDownloadView(BaseView):
-    """文件下载（租户认证 - 通过 Token 验证，无需登录）"""
+    """文件下载（租户认证 - 通过 Token 验证，无需登录）。"""
     
     def get(self, request, uuid):
-        """
-        下载文件
+        """下载文件。
         
         Headers:
             X-Tenant-Token: <encrypted_uuid_token>
@@ -107,11 +106,10 @@ class TenantFileDownloadView(BaseView):
 
 
 class TenantFilePreviewView(BaseView):
-    """文件预览（租户认证 - 通过 Token 验证，无需登录）"""
+    """文件预览（租户认证 - 通过 Token 验证，无需登录）。"""
     
     def get(self, request, uuid):
-        """
-        预览文件
+        """预览文件。
         
         Headers:
             X-Tenant-Token: <encrypted_uuid_token>

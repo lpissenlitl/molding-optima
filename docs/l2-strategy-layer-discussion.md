@@ -163,7 +163,7 @@
 - **禁入清单** `blocked_params`（空 = 不禁）= **基线项** —— “任何场景都不该动的旋钮”；
   在名单 ⇒ 让位「基线项 ⇒ 不参与阶段调机」。
 ⇒ 基线项（注射速度 `inj_spd_1`~`inj_spd_6`）**只写 6 个字面量**
-（`strategies.BASELINE_EXCLUDED_PARAMS`）⇒ **不需要列“所有可调旋钮”全集** ⇒ 新增旋钮不用改清单。
+（`tuning_strategy.BASELINE_BLOCKED_PARAMS`）⇒ **不需要列“所有可调旋钮”全集** ⇒ 新增旋钮不用改清单。
 ⚠️ **禁入排在准入之前**（裁决序 §2 早于 §3）⇒ 同时命中两者时留痕写**基线项**
 （全局理由更强，不被“本场景不允许”掩盖）。
 ⚠️ **条件运算子 `in_any`**（12.4a 新增）：**字段值是集合** ⇒ 任一元素 ∈ 目标集合；
@@ -461,6 +461,17 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
    `_infer_kernel` ⇒ **L1 与 L2 同一份口径** ⇒ §8 前提 ⑦ **闭环**。
    ⇒ pytest **135 passed**；场景判定核对 4 项全过（含「旧口径实证会错配」的对照）。
 
+   ⚠️ **现状更新（2026-11-19）** —— 缺陷选取的**载体**已改（**判定口径不变**）：
+   ① `select_defect` 成为**唯一入口**，入参 = feedback，返回**收敛后的 feedback**
+      （`defects` 只剩本轮处理的那条 + `defect_selection` 留痕）；
+   ② `DefectSelection.to_context()` 与 `ensure_selected_defect(context)` **已删除**；
+      context 顶层键 `selected_defect` **已移除**；
+   ③ `resolve_policies` 的 `selected_defect` 参数**已删**（改为从收敛后的
+      `defects[0]` 自行取）。
+   ⇒ 上文「随 context 的 `selected_defect` 下传」是**当时形态**；
+      「**不按全部缺陷码**（`defect_codes`）」的论证也已随收敛失效
+      （`defect_codes` 现在只含本轮处理的那条 ⇒ 与 `selected_defect` 同源）。
+
    ✅ **批次 12.5 已落地**（2026-11-16）—— **阶段达成信号 + 留痕**（**只观测，不裁决**）：
    ① `algorithms/stage_order.py` 新增 `derive_stage_progress()` + `StageProgress`
    （达成 = 该阶段的缺陷码在本轮反馈中**全部消失**；**纯推导、不落库**，每轮重算）；
@@ -496,6 +507,18 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
    ⇒ pytest **135 passed**；核对 **18 项全过**；黄金快照差异数不变（仍为 6，历史遗留）。
    ⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条** ⇒
    L1 推理对象 + L2 命中场景随之变（已留痕：`selection.to_trace()`）。
+   ⚠️ **现状更新（2026-11-19）**：`FirstValidDefectStrategy` /
+   `FIRST_VALID_STRATEGY` / 策略 Protocol / `select_defect` 的 `strategy` 形参 ——
+   **全部删除**（占位口径 + 用不到的切换机制，按「用不到就不写代码」原则不留空壳）。
+   ⚠️ **现状更新（2026-11-19，纯改名 + 合并）**：调机策略全套（**阶段表 + 场景清单**）
+   合并为 **`algorithms/tuning_strategy.py`** —— 阶段表与场景规则是同一张表的两端
+   （场景清单按 S1/S2/S3 分区，恰好对应三个阶段）。曾用名：
+   `algorithms/stage_order.py`（阶段表）、`algorithms/strategies.py`（场景清单）。
+   符号改名：`stage_of` → `stage_of_defect`、`stage_rank` → `rank_of_stage`、
+   `order_defects` → `sort_defects_by_stage`、`DEFECT_STAGE` → `DEFECT_STAGE_MAP`、
+   `STRATEGIES` → `SCENARIO_POLICIES`、`load_strategies()` →
+   `sorted_scenario_policies()`、`BASELINE_EXCLUDED_PARAMS` → `BASELINE_BLOCKED_PARAMS`
+   ⇒ 行为零变化；上文纪实里的旧名是**当时形态**。
 
    ✅ **批次 12.8 已落地**（2026-11-16）—— **修「一屏建议、参数没动」**（用户报 bug）：
    ① **根因：L2 与 L3 的规则打架** —— L2 的**禁入清单**排除 `inj_spd_1`（基线项），

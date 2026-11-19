@@ -1,10 +1,9 @@
-"""
-调机反馈 Schema
+"""调机反馈 Schema。
 
-对应 URL 段: processes/parameters/<pid>/tuning-feedback/  业务对象 ID: parameter_id
+对应 URL 段: /api/processes/parameters/<int:parameter_id>/tuning-feedback/  业务对象 ID: parameter_id
 
 tuning-feedback 子资源:
-- 归属: parameters/<pid>/tuning-feedback/ (parameter 是 tuning 的真正父资源)
+- 归属: /api/processes/parameters/<int:parameter_id>/tuning-feedback/ (parameter 是 tuning 的真正父资源)
 
 业务语义:
 - parameter_id 从 URL 限定, 不从 body 传入 (一意唯一)
@@ -13,7 +12,7 @@ tuning-feedback 子资源:
 
 独立 tuning service 契约:
 - TuningRecordRequestSchema    人工调机反馈 (写 TuningRecord)
-- TuningBatchDeleteSchema      批量删除 (仍按 condition_id, 与 records/batch-delete 职责重复, 保留备用)
+- TuningBatchDeleteSchema      批量删除 (仍按 condition_id, 与 /api/processes/records/actions/batch-delete/ 职责重复, 保留备用)
 """
 from typing import List, Dict, Any, Optional
 
@@ -24,10 +23,10 @@ from .parameter import ProcessParameterSchema
 
 
 class TuningRecordRequestSchema(BaseSchema):
-    """人工调机反馈 (写 TuningRecord)
+    """人工调机反馈 (写 TuningRecord)。
 
     业务语义:
-    - parameter_id 从 URL 限定 (POST /conditions/<id>/parameters/<pid>/tuning-feedback/)
+    - parameter_id 从 URL 限定 (POST /api/processes/parameters/<int:parameter_id>/tuning-feedback/)
     - 反馈字段: defect_feedbacks / observations / tuning_result / result_detail
 
     tuning_result：首轮 qualified/unqualified，第 2 轮起 qualified + effective/unchanged/ineffective
@@ -48,8 +47,8 @@ class TuningRecordRequestSchema(BaseSchema):
     observations: Optional[List[Dict[str, Any]]] = Field(
         None,
         description=(
-            "实测观察列表（按需传）。本接口不存储到数据库，"
-            "仅作为 schema 校验透传，避免与前端契约冲突。"
+            "实测观察列表（按需传）：本轮试模的实测值（param_key / value），"
+            "写入该轮 TuningRecord.observations；合格态也保留。"
         ),
     )
 
@@ -85,7 +84,7 @@ class TuningRecordRequestSchema(BaseSchema):
 
 
 class TuningBatchDeleteSchema(BaseSchema):
-    """批量删除调机记录（按 condition_id, 级联软删其下 parameter）"""
+    """批量删除调机记录（按 condition_id, 级联软删其下 parameter）。"""
 
     ids: list[int] = Field(..., min_length=1, description="工艺条件 ID 列表")
 

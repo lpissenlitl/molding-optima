@@ -1,4 +1,4 @@
-"""molding-optima process URL 路由
+"""molding-optima process URL 路由。
 
 URL 段架构:
 - records/                   业务级入口 (condition + parameter 整体)
@@ -9,10 +9,9 @@ URL 段架构:
 - rule-promotions/             规则晋升到公共库 (require_superuser)
 - mining-rules/                 候选规则审核流 (require_admin)
 
-设计原则:
+路由约定:
 - 业务级 CRUD 走 records 段, 纯数据级 CRUD 走 conditions / parameters 段
 - parameter 是独立业务对象, URL 单段化, condition_id 退化为可选 query 过滤
-- tuning-feedback: 人工调机反馈, 挂 parameters 段下
 - records 段子视图: parameter-list (平铺) / parameter-tree (树形) / history (调机时间线)
 """
 from django.urls import path
@@ -76,7 +75,7 @@ urlpatterns = [
     path("processes/parameters/<int:parameter_id>/tuning-feedback/", TuningFeedbackView.as_view()),
     # 以某一轮为基线新建一轮 (源轮不改写, 新轮未评价可编辑)
     path("processes/parameters/<int:parameter_id>/clone-round/", ProcessParameterCloneRoundView.as_view()),
-    # 参数版本树: view + service 保留, 路由暂不挂出, 需要时再加回
+    # 参数版本树：view + service 保留，路由未挂出
 
     # algorithms 段
     path("processes/algorithms/initialize/", AlgorithmsInitializeView.as_view()),

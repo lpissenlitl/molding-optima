@@ -72,7 +72,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _load_rows_from_json(json_path: Path) -> list:
-        """从 curated JSON 读取 step 来源
+        """从 curated JSON 读取 step 来源。
 
         JSON 的 action_max_val 即老 CSV 的 col7（单次最大调整量 = step）。
         """
@@ -99,7 +99,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _load_rows_from_csv(csv_path: Path) -> list:
-        """从老 fuzzykit 的 process_ranges.csv 读取 step 来源"""
+        """从老 fuzzykit 的 process_ranges.csv 读取 step 来源。"""
         rows = []
         # utf-8-sig：兼容 Excel 导出的带 BOM 的 CSV
         with open(csv_path, 'r', encoding='utf-8-sig') as f:

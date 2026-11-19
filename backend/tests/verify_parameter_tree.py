@@ -30,7 +30,7 @@ fixture 设计：真实 DB（mold + polymer + condition + 6 个 parameter 构成
 import os
 import sys
 
-# ★ backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
+# backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
 #   直接 `python tests/verify_parameter_tree.py` 时，sys.path[0] 是脚本所在目录
 #   （= backend/tests）⇒ 拿不到 `_moldx` 等顶层包。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -68,7 +68,7 @@ created_parameter_ids = []  # 测试结束时统一软删
 
 
 def setup_fixtures():
-    """创建测试 fixture：mold + polymer + condition + 6 个 parameter（树形结构）
+    """创建测试 fixture：mold + polymer + condition + 6 个 parameter（树形结构）。
 
     注：ProcessParameter.save() 自动分配 seq_idx（max+1），
     故 fixture 创建顺序决定 seq_idx 严格递增：1, 2, 3, 4, 5, 6
@@ -147,7 +147,7 @@ def setup_fixtures():
 
 
 def cleanup_fixtures():
-    """清理 fixture：所有 parameter 软删 + condition + mold + polymer 软删"""
+    """清理 fixture：所有 parameter 软删 + condition + mold + polymer 软删。"""
     if created_parameter_ids:
         ProcessParameter.all_objects.filter(id__in=created_parameter_ids).delete()
     if condition:
@@ -198,7 +198,7 @@ try:
     assert updated["inj_spd_1"] == original_inj_pres_1 + 10, "inj_spd_1 未更新"
     print(f"    [OK] 合法字段更新成功: inj_pres_1={original_inj_pres_1} -> {updated['inj_pres_1']}")
 
-    # 业务身份锁：受保护字段必须被拦截
+    # 业务身份锁：受保护字段必须被过滤（值不变）
     p3_fresh = ProcessParameter.objects.get(id=p3.id)
     original_parent = p3_fresh.parent_param_id
     original_seq = p3_fresh.seq_idx

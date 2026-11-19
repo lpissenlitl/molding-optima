@@ -34,8 +34,7 @@ class LLMEngine(AlgorithmBase):
         # TODO: 后续初始化 LLM 客户端
 
     def recommend(self, context: dict) -> List[AlgorithmRecommendation]:
-        """
-        根据上下文返回推荐
+        """根据上下文返回推荐。
 
         Args:
             context: {
@@ -52,8 +51,7 @@ class LLMEngine(AlgorithmBase):
         return []
 
     def is_available(self, context: dict) -> bool:
-        """
-        判断是否可用
+        """判断是否可用。
 
         需要配置 LLM API
         """
@@ -68,17 +66,17 @@ class LLMEngine(AlgorithmBase):
         return self.recommend(context)
 
     def _retrieve_similar_cases(self, context: dict) -> List[dict]:
-        """向量检索相似历史案例"""
+        """向量检索相似历史案例。"""
         # TODO: 后续实现向量检索
         return []
 
     def _build_prompt(self, context: dict, similar_cases: List[dict]) -> str:
-        """构建 LLM prompt"""
+        """构建 LLM prompt。"""
         # TODO: 后续实现
         return ""
 
     def _parse_llm_response(self, response: str) -> List[AlgorithmRecommendation]:
-        """解析 LLM 输出"""
+        """解析 LLM 输出。"""
         # TODO: 后续实现
         return []
 

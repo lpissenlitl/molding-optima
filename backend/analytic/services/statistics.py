@@ -23,8 +23,7 @@ ORIGIN_LABELS: Dict[str, str] = dict(
 
 
 def get_process_statistics(company_id: int, days: int = 30) -> Dict[str, Any]:
-    """
-    获取工艺统计聚合数据
+    """获取工艺统计聚合数据。
 
     Args:
         company_id: 公司 ID（多租户隔离）
@@ -49,7 +48,7 @@ def get_process_statistics(company_id: int, days: int = 30) -> Dict[str, Any]:
 
 
 def _get_trend(company_id: int, days: int) -> Dict[str, Any]:
-    """近 N 天每日新增工艺数（0 时补齐）"""
+    """近 N 天每日新增工艺数（0 时补齐）。"""
     start_date = date.today() - timedelta(days=days - 1)
 
     # 按日期分组聚合（数据库侧 group by）
@@ -75,7 +74,7 @@ def _get_trend(company_id: int, days: int) -> Dict[str, Any]:
 
 
 def _get_origin_distribution(company_id: int) -> list:
-    """按 origin_type 分组聚合（count 数降序）"""
+    """按 origin_type 分组聚合（count 数降序）。"""
     rows = (
         ProcessCondition.objects
         .filter(company_id=company_id)

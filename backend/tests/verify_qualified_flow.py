@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""一次性验收：合格态（qualified）流程
+"""一次性验收：合格态（qualified）流程。
 
 背景：合格态产品**没有缺陷** ⇒
 - 界面不要求填缺陷（前端隐藏并清空缺陷区）
 - 后端照常落库（result=qualified），但提交的缺陷信息一律丢弃
-- 不进入缺陷驱动的优化流程（infer 短路：不跑 fuzzy、不建新轮次）
+- 不进入缺陷驱动的优化流程（optimize_from_condition 短路：不跑 fuzzy、不建新轮次）
 
 覆盖：
 1. is_qualified_result：合格判定
 2. upsert_tuning_record：qualified ⇒ 丢弃缺陷（即使传了）；其余档位缺陷保留
-3. _update_previous_tuning_record：qualified ⇒ 显式清空缺陷（含历史遗留，不靠 if 守卫跳过）
-4. _validate_feedback：仅 qualified 允许空缺陷
-5. infer：qualified ⇒ 不跑 fuzzy、不建新轮次，但参数与评价照常落库
+3. _record_tuning_round：qualified ⇒ 显式清空缺陷（含历史遗留，不靠 if 守卫跳过）
+4. _to_algorithm_feedback：仅 qualified 允许空缺陷
+5. optimize_from_condition：qualified ⇒ 不跑 fuzzy、不建新轮次，但参数与评价照常落库
 6. TuningRecordRequestSchema：接受 parameter（flat 工艺字段），未传字段不落库
 """
 import os
@@ -36,6 +36,7 @@ from process.services.tuning import TuningService, is_qualified_result
 print("=== 合格态（qualified）流程验收 ===")
 
 DEFECT = [{"keyword_name": "短射", "level": "high", "position": "DL短射1"}]
+OBS = [{"param_key": "actual_product_weight", "value": 85.0}]
 
 # ---------- 1. 合格判定 ----------
 assert is_qualified_result("qualified") is True
@@ -68,48 +69,61 @@ with patch.object(TuningRecord.objects, "filter") as mf:
 assert fake_record2.defect_feedbacks == DEFECT, fake_record2.defect_feedbacks
 print("[2/6] upsert_tuning_record: qualified ⇒ 缺陷丢弃；unchanged ⇒ 缺陷保留  OK")
 
-# ---------- 3. _update_previous_tuning_record：qualified 显式清空 ----------
+# ---------- 3. _record_tuning_round：qualified 显式清空 ----------
 # 场景：先填过缺陷，后改判合格 —— 历史缺陷必须被清掉（不能靠 `if defect_feedbacks:` 守卫跳过）
 fake_rec = MagicMock(result="pending", defect_feedbacks=[{"keyword_name": "气纹", "level": "low"}])
-with patch.object(TuningRecord.objects, "filter") as mf:
+with patch.object(TuningRecord.objects, "filter") as mf, \
+        patch.object(po.Recommendation.objects, "create"):
     mf.return_value.order_by.return_value.first.return_value = fake_rec
-    po._update_previous_tuning_record(
+    po._record_tuning_round(
         parent_param=MagicMock(id=1),
+        changed_fields={},
         defect_feedbacks=DEFECT,
+        observations=OBS,
         tuning_result="qualified",
+        algorithm_recommendations=[],
+        source_type="fuzzy_rule",
     )
 assert fake_rec.result == "qualified", fake_rec.result
 assert fake_rec.defect_feedbacks == [], f"合格态应清空历史缺陷，实际 {fake_rec.defect_feedbacks!r}"
+# 合格态只清缺陷，**实测观察保留**（合格与否与实测值无关）
+assert fake_rec.observations == OBS, f"合格态应保留实测观察，实际 {fake_rec.observations!r}"
 
 # 非合格档位：缺陷写入（回归）
 fake_rec2 = MagicMock(result="pending", defect_feedbacks=[])
-with patch.object(TuningRecord.objects, "filter") as mf:
+with patch.object(TuningRecord.objects, "filter") as mf, \
+        patch.object(po.Recommendation.objects, "create"):
     mf.return_value.order_by.return_value.first.return_value = fake_rec2
-    po._update_previous_tuning_record(
+    po._record_tuning_round(
         parent_param=MagicMock(id=1),
+        changed_fields={},
         defect_feedbacks=DEFECT,
+        observations=OBS,
         tuning_result="unchanged",
+        algorithm_recommendations=[],
+        source_type="fuzzy_rule",
     )
 assert fake_rec2.defect_feedbacks == DEFECT, fake_rec2.defect_feedbacks
-print("[3/6] _update_previous_tuning_record: qualified ⇒ 显式清空（含历史遗留）；其余 ⇒ 写入  OK")
+assert fake_rec2.observations == OBS, fake_rec2.observations
+print("[3/6] _record_tuning_round: qualified ⇒ 显式清空（含历史遗留）但保留实测观察；其余 ⇒ 写入  OK")
 
-# ---------- 4. _validate_feedback：仅 qualified 允许空缺陷 ----------
-po._validate_feedback({"tuning_result": "qualified", "defect": []})  # 放行
-po._validate_feedback({"tuning_result": "qualified", "defect": DEFECT})  # 也放行
+# ---------- 4. 反馈转换：仅 qualified 允许空缺陷 ----------
+po._to_algorithm_feedback({"tuning_result": "qualified", "defects": []})  # 放行
+po._to_algorithm_feedback({"tuning_result": "qualified", "defects": DEFECT})  # 也放行
 for bad in (
-    {"tuning_result": "unchanged", "defect": []},
-    {"tuning_result": "unqualified", "defect": []},
+    {"tuning_result": "unchanged", "defects": []},
+    {"tuning_result": "unqualified", "defects": []},
     {},
 ):
     try:
-        po._validate_feedback(bad)
+        po._to_algorithm_feedback(bad)
     except BizException:
         pass
     else:
         raise AssertionError(f"空缺陷应当被拒：{bad!r}")
-print("[4/6] _validate_feedback: 仅 qualified 允许空缺陷，其余一律拒  OK")
+print("[4/6] _to_algorithm_feedback: 仅 qualified 允许空缺陷，其余一律拒  OK")
 
-# ---------- 5. infer：qualified 短路（不跑 fuzzy、不建新轮次，但照常落库）----------
+# ---------- 5. optimize_from_condition：qualified 短路（不跑 fuzzy、不建新轮次，但照常落库）----------
 fake_ctx = {
     "condition": MagicMock(),
     "parent_param": MagicMock(id=1),
@@ -119,25 +133,23 @@ fake_ctx = {
     "mold_info": {},
     "user_changed_fields": {"inj_pres_1": 55},
 }
-with patch.object(po, "_assemble_context", return_value=fake_ctx), \
-        patch.object(po, "_sync_user_modified_parameter") as msync, \
-        patch.object(po, "_update_previous_tuning_record") as mupd, \
-        patch.object(po.ParameterOptimizeService, "_infer_kernel") as mkernel, \
+with patch.object(po, "_resolve_infer_context", return_value=fake_ctx), \
+        patch.object(po, "_record_tuning_round") as mrec, \
+        patch.object(po, "_infer_kernel") as mkernel, \
         patch.object(po.db_transaction, "atomic") as matomic:
-    result = po.ParameterOptimizeService().infer(
+    result = po.optimize_from_condition(
         condition_id=1,
         parent_seq_idx=1,
         parameter=None,
-        feedback={"tuning_result": "qualified", "defect": []},
+        feedback={"tuning_result": "qualified", "defects": []},
     )
 assert mkernel.call_count == 0, "合格态不应调用模糊推理"
-assert msync.call_count == 1, "合格态仍应写回用户手改的参数"
-assert mupd.call_count == 1, "合格态仍应写入本轮评价"
+assert mrec.call_count == 1, "合格态仍应记录本轮（参数 + 评价）"
 assert result["skipped"] is True, result
 assert result["skip_reason"] == "qualified", result
-assert result["new_parameter"] is None, result
+assert result["parameter"] is None, result
 assert result["suggestion"] is None, result
-print("[5/6] infer(qualified): 不跑 fuzzy、不建新轮次；参数与评价照常落库  OK")
+print("[5/6] optimize_from_condition(qualified): 不跑 fuzzy、不建新轮次；参数与评价照常落库  OK")
 
 # ---------- 6. Schema：接受 parameter（flat 工艺字段）----------
 schema = TuningRecordRequestSchema(**{

@@ -1,5 +1,4 @@
-"""
-molding-optima demo 数据初始化命令
+"""molding-optima demo 数据初始化命令。
 
 用法：
     python manage.py init_demo
@@ -1159,7 +1158,7 @@ def _make_injection_unit(
     screw_compression_ratio: float = 2.0,
     screw_enhancement_ratio: float = 1.3,
 ) -> dict:
-    """生成一条完整的注射单元（射台）数据
+    """生成一条完整的注射单元（射台）数据。
 
     螺杆几何量按直径派生（不写死，避免与 screw_diameter 打架）：
     - 截面积       A = π/4 · D²
@@ -1450,7 +1449,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _create_demo_business_data(self, company):
-        """创建 6 个基础数据模块的 demo 样本数据
+        """创建 6 个基础数据模块的 demo 样本数据。
 
         执行顺序：
         - project 最先创建（mold 依赖 project_id）
@@ -1716,7 +1715,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _get_demo_company(self):
-        """获取 system_demo 公司"""
+        """获取 system_demo 公司。"""
         from identity.models.company import Company
         try:
             return Company.objects.get(code=SYSTEM_DEMO_COMPANY_CODE)
@@ -1724,7 +1723,7 @@ class Command(BaseCommand):
             return None
 
     def _clean_demo_data(self, company):
-        """清理已有的 demo 数据（软删除）
+        """清理已有的 demo 数据（软删除）。
 
         仅清理 system_demo 公司下的数据，避免影响其他租户：
         - demo_ 开头的用户
@@ -1825,7 +1824,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _create_orgs(self, company):
-        """创建组织结构（递归），返回 code → Organization 的映射
+        """创建组织结构（递归），返回 code → Organization 的映射。
 
         init_demo 兌底创建 system_demo 根组织（system_demo_HQ），
         DEMO_ORG_TREE 的所有节点作为子节点挂载到根组织下。
@@ -1933,7 +1932,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _create_roles(self, company):
-        """创建 demo 角色，同步权限，返回 code → Role 的映射"""
+        """创建 demo 角色，同步权限，返回 code → Role 的映射。"""
         from identity.models.user import Role
 
         self.stdout.write("\n[2/3] 创建 demo 角色 + 同步权限...")
@@ -1985,7 +1984,7 @@ class Command(BaseCommand):
         return role_map
 
     def _resolve_permission_codes(self, role_def):
-        """根据角色定义解析目标权限码集合"""
+        """根据角色定义解析目标权限码集合。"""
         from identity.models.user import Permission
 
         if role_def.get("permission_strategy") == "all_active":
@@ -2002,7 +2001,7 @@ class Command(BaseCommand):
         return codes
 
     def _sync_role_permissions(self, role, target_codes):
-        """双向同步角色权限（与 init_platform 游客角色同样的同步逻辑）"""
+        """双向同步角色权限（与 init_platform 游客角色同样的同步逻辑）。"""
         from identity.models.user import RolePermission
 
         existing_codes = set(
@@ -2033,7 +2032,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _create_users(self, company, org_map, role_map):
-        """创建 demo 用户"""
+        """创建 demo 用户。"""
         from extensions.encrypt.pwdutils import hash_pwd
         from identity.models.user import User
 

@@ -130,7 +130,7 @@ CASES = [
     ('显式补充库 R20240516093115 + prod=碗',
      dict(defect_name='SHORTSHOT', defect_level='low',
           rule_library_code='R20240516093115', product_category='碗')),
-    # ⚠️ 缺维场景：上下文没给 polymer / product ⇒ 这两维**不设限**
+    # 【注意】缺维场景：上下文没给 polymer / product ⇒ 这两维**不设限**
     #    （「未指明」≠「不适用」）⇒ 该库里的带标签规则也会进来。
     ('显式补充库 R20240516093115（无维度）',
      dict(defect_name='SHORTSHOT', defect_level='low',
@@ -184,9 +184,9 @@ def _expected_dedup(context):
     - `ResourceRepository.select_libraries`（选库）
     取数谓词、去重键、判优、编排、缺陷名闸门全部自己写一遍。
 
-    ⚠️ **取数口径（匹配谓词）**：规则该维为 NULL（通用）或等于上下文值；
+    【注意】**取数口径（匹配谓词）**：规则该维为 NULL（通用）或等于上下文值；
        上下文该维未知（None）⇒ 该维**不设限**；已知但不等 ⇒ **排除**（冲突排除）。
-    ⚠️ 缺陷名闸门**不复用**生产代码（`RuleService.match_defect_name`）：
+    【注意】缺陷名闸门**不复用**生产代码（`RuleService.match_defect_name`）：
        它是改造落点之一，复用会让参照系与生产同源、失去校验意义。
     """
 
@@ -282,7 +282,7 @@ for label, kw in DEDUP_CASES:
           % (label, len(ps), exp_total, exp_unique, dup_left))
 
 # 业务语义硬断言：裸上下文不加载任何补充库 ⇒ 库内无副本 ⇒ 条数不受去重影响。
-# ⚠️ 不写死条数（规则库在变）⇒ 与参照系对拍。
+# 【注意】不写死条数（规则库在变）⇒ 与参照系对拍。
 bare_ctx = RuleQueryContext(defect_name='SHORTSHOT', defect_level='low')
 bare_dedup = ResourceRepository.get_rules(bare_ctx)
 _bare_exp, _bare_uniq, _bare_total = _expected_dedup(bare_ctx)
@@ -313,7 +313,7 @@ lib_failures = []
 # 断言 1：compose 把 rule_library_code 放进 context
 _ctx = _compose_algorithm_context(
     machine_info={}, polymer_info={}, mold_info={},
-    parameter={}, feedback={'defect': []},
+    parameter={}, feedback={'defects': []},
     rule_library_code='R20240516093115',
 )
 if _ctx.get('rule_library_code') != 'R20240516093115':
@@ -322,7 +322,7 @@ if _ctx.get('rule_library_code') != 'R20240516093115':
 # 断言 2：未指定时为 None（与现状完全等价）
 _ctx_none = _compose_algorithm_context(
     machine_info={}, polymer_info={}, mold_info={},
-    parameter={}, feedback={'defect': []},
+    parameter={}, feedback={'defects': []},
 )
 if _ctx_none.get('rule_library_code') is not None:
     lib_failures.append('未指定时 rule_library_code 应为 None')

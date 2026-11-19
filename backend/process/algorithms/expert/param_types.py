@@ -1,5 +1,4 @@
-﻿"""
-工艺参数类型定义
+﻿"""工艺参数类型定义。
 
 按设备分组，组成完整生产工艺参数：
 1. ProcessParams - 注塑机工艺参数（行业默认的"工艺参数"）
@@ -19,8 +18,7 @@ from typing import List, Optional
 
 @dataclass
 class ProcessParams:
-    """
-    注塑机工艺参数
+    """注塑机工艺参数。
 
     行业默认的"工艺参数"，直接参考 process_parameter.py 的命名规范。
     多级参数使用 _steps 后缀。
@@ -146,7 +144,7 @@ class ProcessParams:
 
 @dataclass
 class MoldTempParams:
-    """模温机工艺参数"""
+    """模温机工艺参数。"""
     mold_temp: float = 50.0  # 模具温度 (℃)
 
     def to_dict(self) -> dict:
@@ -155,7 +153,7 @@ class MoldTempParams:
 
 @dataclass
 class HotRunnerParams:
-    """热流道工艺参数"""
+    """热流道工艺参数。"""
     valve_num: int = 0  # 阀口数量
     valve_time_steps: List[float] = field(default_factory=list)  # 阀口时间
 
@@ -165,8 +163,7 @@ class HotRunnerParams:
 
 @dataclass
 class ProductionParams:
-    """
-    完整生产工艺参数
+    """完整生产工艺参数。
 
     组合多个设备的工艺参数：
     - process: 注塑机工艺参数

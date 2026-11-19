@@ -1,5 +1,4 @@
-"""
-molding-optima 平台级数据初始化命令
+"""molding-optima 平台级数据初始化命令。
 
 用法：
     python manage.py init_platform
@@ -94,7 +93,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("\n[完成] 平台级初始化完成"))
 
     def _sync_permissions(self):
-        """同步 const.PERMISSIONS → Permission 表"""
+        """同步 const.PERMISSIONS → Permission 表。"""
         from identity.models.user import Permission
 
         self.stdout.write("[1/2] 同步权限清单...")
@@ -104,7 +103,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"  权限总数: {after}（新增 {after - before} / 更新 {before}）"))
 
     def _create_demo_company(self):
-        """创建 system_demo 公司（游客共享）+ 根组织（公司级属性）
+        """创建 system_demo 公司（游客共享）+ 根组织（公司级属性）。
 
         设计原则：
         - 公司创建 = 同时初始化组织容器（根组织）
@@ -170,7 +169,7 @@ class Command(BaseCommand):
         return company
 
     def _create_guest_role(self, company):
-        """创建游客角色（属于 system_demo，绑定查看类权限）
+        """创建游客角色（属于 system_demo，绑定查看类权限）。
 
         权限范围：
         - 所有 type='menu' 的权限（业务模块）→ 游客能看见菜单入口
@@ -235,7 +234,7 @@ class Command(BaseCommand):
         ))
 
     def _create_superuser(self, username: str, password: str, reset: bool = False):
-        """创建/重置超级管理员用户（平台级用户）
+        """创建/重置超级管理员用户（平台级用户）。
 
         设计要点：
         - is_superuser=True：自动拥有所有权限（User.get_permissions 第一行）

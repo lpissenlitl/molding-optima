@@ -6,15 +6,15 @@
 判定口径 = **子进程退出码**（非 0 = 该场景不过）—— 与各 smoke 脚本自身的
 「`_failures` 收集器 + 退出码」口径一致。
 
-⚠️ 为什么不直接用 pytest：
+【注意】为什么不直接用 pytest：
     `verify_` 前缀 ⇒ pytest **不收集**这些脚本。若把它们改名为 `test_*`，
     pytest 会把「断言值不对」也报成 PASS（假绿）⇒ **不要改前缀**。
     本 runner 存在的意义就是给这批脚本一个统一的批量入口。
 
-⚠️ 与「逐位回归锁」的区别：
+【注意】与「逐位回归锁」的区别：
     各 smoke 脚本是**断言式**护栏（校验领域不变量）；
     `_snapshot_expert.py` + `_golden_expert.json` 是**逐位**护栏（输出逐条比对）。
-    二者互补 —— 逐位锁已退役（生成器不可重建），
+    二者互补 —— 逐位锁不可用（生成器不可重建），
     当前 expert 侧以本 runner 为准。
 """
 import glob
@@ -27,8 +27,8 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(BACKEND)
 sys.path.insert(0, BACKEND)
 
-# ⚠️ 子进程必须显式指定 UTF-8 输出编码：
-#    各 smoke 脚本结尾会打印 ✅ / ✓ 等非 ASCII 字符，而 Windows 控制台默认
+# 【注意】子进程必须显式指定 UTF-8 输出编码：
+#    各 smoke 脚本结尾会打印 / 等非 ASCII 字符，而 Windows 控制台默认
 #    GBK codepage ⇒ 直接跑会抛 UnicodeEncodeError（断言全过却在最后一行崩、
 #    退出码 = 1 ⇒ 假失败）。这里对子进程注入 PYTHONIOENCODING 规避。
 CHILD_ENV = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")

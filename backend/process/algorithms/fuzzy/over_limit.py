@@ -18,17 +18,18 @@
   （无上限）      时间类       无设备约束                            不识别
   =============  ==========  ==================================  ============
 
-⚠️ ``device`` 与 ``stroke`` 的**根本差别**（决定了处理方式不能统一）：
+【注意】``device`` 与 ``stroke`` 的**根本差别**（决定了处理方式不能统一）：
   - ``device``（设定值类）= 用户把某个参数**设错了**，改个值就好 ⇒ 值得拦；
   - ``stroke``（位置类）= **这个产品在这台设备上做不出来**（实测 MEL 56/70 行
     超行程：行程 200mm 而产品充填需 291mm）⇒ 用户**改不了** ⇒ 拦了也没有出路。
 ⇒ ``stroke`` **永不进** :data:`BLOCKING_LIMIT_SOURCES`。
 
-⚠️ **本模块不抛异常、不改建议**：
+【注意】**本模块不抛异常、不改建议**：
   - **不告警**：不改 `AlgorithmRecommendation`，不产出 `fuzzy.check` 文本建议；
   - **不拒绝**：`engine.recommend()` 的异常边界会把任何异常**降级成空推荐**
-    （"什么都给不出来"，比不拦更糟）⇒ 拒绝必须由 **service 层**在拿到
-    recommendations 之后转 `BizException`（`parameter_optimize._guard_blocking_over_limits`）；
+    （"什么都给不出来"，比不拦更糟）⇒ 拒绝必须由 **service 层**在**调用算法之前**
+    转 `BizException`（`parameter_optimize._guard_over_limit_settings`）；
+    判据是**纯事实**（当前设定值 vs 机台上限）⇒ 不需要结论做参照；
   - **不改建议**：推荐值侧的封顶裁剪在 `engine._apply_machine_limits`，本模块不碰。
 
 本模块负责的是**分层口径**（哪些来源会阻断），**判定与拒绝的执行**在 service 层。
@@ -195,7 +196,7 @@ def detect_over_stroke_limits(
        **这个产品在这台设备上做不出来**（实测 MEL 56/70 行超行程）⇒ 用户改不了
        ⇒ **只留痕，永不阻断**。
 
-    ⚠️ 本函数的产出**永远不进** :data:`BLOCKING_LIMIT_SOURCES`
+    【注意】本函数的产出**永远不进** :data:`BLOCKING_LIMIT_SOURCES`
     ⇒ 不参与 :func:`detect_blocking_over_limits` ⇒ service 层不会 400。
 
     Args:

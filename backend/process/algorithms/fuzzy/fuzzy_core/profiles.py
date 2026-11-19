@@ -58,7 +58,7 @@ DIMENSION_PARAMETER = 'parameter'
 
 #: 缺陷名维度（SHORTSHOT / FLASH / …）：**离散档位、多档并存**。
 #:
-#: ⚠️ 语义与工艺参数不同（见 ``nets.py`` 的 M-1 判定）：
+#: 【注意】语义与工艺参数不同（见 ``nets.py`` 的 M-1 判定）：
 #:   工艺参数是「当前值唯一 ⇒ 它归属哪一档也唯一」；
 #:   缺陷维度是「规则库里 low/medium/high 三档**本来就并存**，
 #:   跨档参与是设计意图」（程度越严重，建议越激进）⇒
@@ -67,7 +67,7 @@ DIMENSION_DEFECT = 'defect'
 
 #: 缺陷位置维度（DLSHORTSHOT1 / …）：**位置名本身就是精确匹配信号**。
 #:
-#: ⚠️ 规则库里 DL 前件的档位**恒为 high**（实测 20 条 100% 一致）⇒
+#: 【注意】规则库里 DL 前件的档位**恒为 high**（实测 20 条 100% 一致）⇒
 #:   位置维不需要跨档加权，同样**不参与 competition / β 降权**。
 DIMENSION_DEFECT_POSITION = 'defect_position'
 
@@ -80,7 +80,7 @@ VALID_DIMENSIONS = (
 
 
 # 内核**支持**的模糊等级数（与 macros.LEVEL_WORDS_BY_LVL 的键一致）。
-# ⚠️ 这是**引擎能力**，不是业务口径：业务侧现网已统一收敛到 3 档
+# 【注意】这是**引擎能力**，不是业务口径：业务侧现网已统一收敛到 3 档
 #    （RuleKeyword.FUZZY_LEVELS = [(3, '3级')]），但内核仍保留 5/7 档的
 #    词表与桶中心算法 ⇒ 引擎侧**不做**收窄。
 VALID_LVL = (3, 5, 7)
@@ -129,24 +129,24 @@ class KeywordProfile:
         - ``'guessed'`` —— 整段论域由引擎按当前值**推测**
         - 空串 = 未标注
 
-        ⚠️ **与 `meta_source` 是两回事，别混**：`meta_source` 说的是
+        【注意】**与 `meta_source` 是两回事，别混**：`meta_source` 说的是
         **关键字元数据**（档位数等）的来源；`domain_source` 说的是
         **论域边界**的来源。一个档案可以「元数据是权威的、论域是推测的」
         （或反之）⇒ 两个字段独立填写。
 
-        ⚠️ **内核不读此字段**（与 `meta_source` 同构）：内核只认
+        【注意】**内核不读此字段**（与 `meta_source` 同构）：内核只认
         `min_val` / `max_val` / `step` / `lvl`；本字段供上层分流与
         诊断留痕（见 ``engine._load_keyword_profiles``）。
     dimension : str
         **维度角色**（默认 ``'parameter'``）：``'parameter'``（工艺参数）/
         ``'defect'``（缺陷名）/ ``'defect_position'``（缺陷位置）。
 
-        ⚠️ **为什么内核需要这个字段**：缺陷类维度与工艺参数的**语义不同** ——
+        【注意】**为什么内核需要这个字段**：缺陷类维度与工艺参数的**语义不同** ——
         工艺参数是连续量、归属唯一；缺陷类是离散档位、多档并存。
         内核的 M-1 门控据此区分「是否参与档位归属判定」
         （见 ``nets.py`` 的 M-1 段）。
 
-        ⚠️ **默认值是 `'parameter'`**（向后兼容：既有构造点不必改）。
+        【注意】**默认值是 `'parameter'`**（向后兼容：既有构造点不必改）。
         但**缺陷类元数据必须显式带上**，否则缺陷维会被当成工艺参数维 ⇒
         又被打上「档位不符」的标签。数据来源侧（``library/adapters.py``）
         从 ``RuleKeyword.category`` 带出本字段。
@@ -187,22 +187,22 @@ class RuleProfile:
     source_ref : str
         溯源标识（可选）：数据库主键 / 文件路径 + 行号等。
         **不参与算法**，仅用于「这条建议来自哪条规则」这类排查与展示。
-        ⚠️ 这里放**字符串**而不是数据源对象 —— 放对象就等于把来源焊回契约。
+        【注意】这里放**字符串**而不是数据源对象 —— 放对象就等于把来源焊回契约。
     parsed : dict | None
         规则串的**拆解产物**（`fuzzy_core.parsing.parse_rule` 的返回值：
         ``{'preconditions': [...], 'solutions': [...]}``）。
 
-        ⚠️ **为什么装在契约里**：同一条规则串在整条链路上会被拆**三次**
+        【注意】**为什么装在契约里**：同一条规则串在整条链路上会被拆**三次**
         （来源适配层判结论形态 / 编排层判缺陷名 / 内核第 4 层建对象），
         1646 条规则 ⇒ 约 5000 次重复拆解。拆解是**纯函数**且结果只与规则串有关，
         因此「拆一次、带着走」是唯一无损的收敛方式（缓存也有同样的效果，
         但缓存的键/失效时机得额外维护）。
 
-        ⚠️ **可选**（默认 `None`）：为 `None` 时下游（`fuzzy_core.rules_filter`）
+        【注意】**可选**（默认 `None`）：为 `None` 时下游（`fuzzy_core.rules_filter`）
         会自行拆解 ⇒ 直接构造 `RuleProfile` 的调用方（测试替身 / 离线脚本 /
         demo 案例）**不必关心本字段**。
 
-        ⚠️ **必须与 `rule_description` 同源**：由来源适配层用**同一个**规则串
+        【注意】**必须与 `rule_description` 同源**：由来源适配层用**同一个**规则串
         解析一次产出。若二者不一致，下游用的是 `parsed` 而非重新拆解 ⇒ 会静默错位。
     """
 
@@ -225,7 +225,7 @@ def keyword_profile_issues(p: KeywordProfile) -> List[str]:
     供「逐条校验、跳过坏的、保住好的」场景使用
     （见 `library/repository.py` 的两个出库点）。
 
-    ⚠️ 为什么需要单条版：整批版语义是「任一条不合法即抛 ValueError」，
+    【注意】为什么需要单条版：整批版语义是「任一条不合法即抛 ValueError」，
     适合需要 fail-fast 的调用方；而生产路径要求的是**一条脏档案只废掉自己**，
     不能让整次调优塌成空推荐（`engine.recommend` 的兜底会把异常吞成空推荐）。
     """
@@ -275,7 +275,7 @@ def validate_keyword_profiles(profiles: Iterable[KeywordProfile]) -> None:
     解析出的档案必须**先过校验**才能进入构建层 ⇒ 脏数据在边界被拦下，
     而不是等到内核算隶属度时才抛异常。
 
-    ⚠️ 生产路径（`library/repository.py`）用的是**单条版**
+    【注意】生产路径（`library/repository.py`）用的是**单条版**
     `keyword_profile_issues` —— 逐条跳过坏的、保住好的，而不是整批抛：
     一条脏档案只废掉自己，不能让整次调优塌成空推荐。
     """

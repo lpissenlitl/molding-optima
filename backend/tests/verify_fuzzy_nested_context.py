@@ -4,7 +4,7 @@ verify_fuzzy_nested_context.py
 取出 abbreviation / product_category 传给 RuleQueryContext。
 
 契约说明：
-- 缺陷名取 `feedback.defect[].keyword_name`（英文缺陷码，如 SHORTSHOT），
+- 缺陷名取 `feedback.defects[].keyword_name`（英文缺陷码，如 SHORTSHOT），
   与 RuleMethod.defect_code / RuleKeyword.keyword_name 对齐
   （`defect_name`（中文或 snake_case）不被读取）
 - process_parameter 是算法命名空间（IV0 / IP0 / ...，0-based）
@@ -30,13 +30,13 @@ def main():
     print("engine.recommend: 验证嵌套 context['polymer/mold'] 取值")
     print("=" * 70)
 
-    # 缺陷选取在调用方整理一次（引擎只读结果，不再各自挑缺陷）
-    from process.algorithms.defect_selection import ensure_selected_defect
+    # 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
+    from process.algorithms.defect_selection import select_defect
 
     engine = FuzzyEngine()
     context = {
         "feedback": {
-            "defect": [{"keyword_name": "SHORTSHOT", "level": "high", "position": "DL1"}],
+            "defects": [{"keyword_name": "SHORTSHOT", "level": "high", "position": "DL1"}],
         },
         "process_parameter": {"IP0": 60.0},
         "machine_info": {"drive_system": "hydraulic"},
@@ -56,7 +56,7 @@ def main():
         "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
-        ensure_selected_defect(context)
+        context['feedback'] = select_defect(context.get('feedback') or {})
         recs = engine.recommend(context)
 
     assert len(captured) == 1, f"RuleQueryContext 应被构造 1 次, got {len(captured)}"
@@ -78,7 +78,7 @@ def main():
     # 退化：polymer_info / mold_info 缺失时走空 dict，不应抛错
     captured.clear()
     context_empty = {
-        "feedback": {"defect": [{"keyword_name": "SHORTSHOT", "level": "high"}]},
+        "feedback": {"defects": [{"keyword_name": "SHORTSHOT", "level": "high"}]},
         "process_parameter": {},
         "machine_info": {},
     }
@@ -88,7 +88,7 @@ def main():
         "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
-        ensure_selected_defect(context_empty)
+        context_empty['feedback'] = select_defect(context_empty.get('feedback') or {})
         recs2 = engine.recommend(context_empty)
     assert len(captured) == 1
     assert captured[0].polymer_abbreviation is None
@@ -98,7 +98,7 @@ def main():
     # 退化：polymer_info / mold_info 是 None（极端 case）
     captured.clear()
     context_none = {
-        "feedback": {"defect": [{"keyword_name": "SHORTSHOT", "level": "high"}]},
+        "feedback": {"defects": [{"keyword_name": "SHORTSHOT", "level": "high"}]},
         "process_parameter": {},
         "machine_info": {},
         "polymer_info": None,
@@ -110,7 +110,7 @@ def main():
         "process.algorithms.fuzzy.library.repository.ResourceRepository.get_rules",
         side_effect=_spy_get_rules,
     ):
-        ensure_selected_defect(context_none)
+        context_none['feedback'] = select_defect(context_none.get('feedback') or {})
         recs3 = engine.recommend(context_none)
     assert len(captured) == 1
     assert captured[0].polymer_abbreviation is None

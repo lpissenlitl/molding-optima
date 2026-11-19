@@ -25,8 +25,7 @@ from process.schemas import (
     SuggestionGroupSchema,
     SuggestionItemSchema,
 )
-from process.services import ParameterOptimizeService
-from process.services import parameter_optimize as _opt_mod  # 模块顶层函数（整改后 helper 已不在类内）
+from process.services import parameter_optimize as _opt_mod  # 模块级函数（service 层无类封装）
 from process.urls import urlpatterns
 print("[1/4] Imports OK")
 
@@ -36,9 +35,9 @@ valid_request = {
     "parent_seq_idx": 1,
     "parameter": {"inj_spd_1": 50.0, "inj_pres_1": 60.0},
     "feedback": {
-        "defect": [
-            {"keyword_id": 15, "keyword_name": "短射", "level": "high", "position": "DL飞边3"},
-            {"keyword_id": 22, "keyword_name": "飞边", "level": "medium", "position": "DL飞边2"},
+        "defects": [
+            {"keyword_name": "短射", "level": "high", "position": "DL飞边3"},
+            {"keyword_name": "飞边", "level": "medium", "position": "DL飞边2"},
         ],
         "observations": [
             {"param_key": "actual_product_weight", "value": 85.0},
@@ -53,7 +52,7 @@ assert parsed.parent_seq_idx == 1
 # parameter 是 ProcessParameterSchema 实例（不再是自由 dict），用属性访问
 assert parsed.parameter.inj_spd_1 == 50.0
 assert parsed.parameter.inj_pres_1 == 60.0
-assert len(parsed.feedback.defect) == 2
+assert len(parsed.feedback.defects) == 2
 assert parsed.feedback.tuning_result == "ineffective"
 print("[2/4] ProcessOptimizeFromConditionSchema validation OK (flat parameter)")
 
@@ -88,20 +87,17 @@ assert len(suggestion.groups) == 1
 assert suggestion.groups[0].items[0].direction == "decrease"
 print("[2/4] SuggestionSchema validation OK")
 
-# 2d. DefectFeedbackDataSchema 允许 keyword_id/keyword_name 为 null
+# 2d. DefectFeedbackDataSchema 允许 keyword_name 为 null
 empty_defect_schema = DefectFeedbackDataSchema.model_validate({
-    "keyword_id": None,
     "keyword_name": None,
     "level": None,
     "position": "",
 })
-assert empty_defect_schema.keyword_id is None
 assert empty_defect_schema.keyword_name is None
-print("[2/4] DefectFeedbackDataSchema accepts null keyword_id/name OK")
+print("[2/4] DefectFeedbackDataSchema accepts null keyword_name OK")
 
 # 2e. 缺省时也走默认值 None
 default_defect = DefectFeedbackDataSchema.model_validate({})
-assert default_defect.keyword_id is None
 assert default_defect.keyword_name is None
 print("[2/4] DefectFeedbackDataSchema default None OK")
 
@@ -110,20 +106,20 @@ req_with_empty = {
     "condition_id": 100,
     "parent_seq_idx": 1,
     "feedback": {
-        "defect": [
-            {"keyword_id": None, "keyword_name": None},  # 用户未选
+        "defects": [
+            {"keyword_name": None},  # 用户未选
         ],
     },
 }
 parsed2 = ProcessOptimizeFromConditionSchema.model_validate(req_with_empty)
-assert parsed2.feedback.defect[0].keyword_id is None
-print("[2/4] ProcessOptimizeFromConditionSchema accepts defect with null keyword_id OK")
+assert parsed2.feedback.defects[0].keyword_name is None
+print("[2/4] ProcessOptimizeFromConditionSchema accepts defect with null keyword_name OK")
 
 # 2g. parameter 为 None：合法，用户没改参数，service 走 ORM 反查 baseline
 req_no_param = {
     "condition_id": 100,
     "parent_seq_idx": 1,
-    "feedback": {"defect": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+    "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
 }
 p_no = ProcessOptimizeFromConditionSchema.model_validate(req_no_param)
 assert p_no.parameter is None
@@ -134,7 +130,7 @@ try:
     ProcessOptimizeFromConditionSchema.model_validate({
         "condition_id": 100, "parent_seq_idx": 1,
         "parameter": {},
-        "feedback": {"defect": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
     })
     assert False, "should reject empty parameter dict"
 except ValidationError as e:
@@ -147,7 +143,7 @@ try:
     ProcessOptimizeFromConditionSchema.model_validate({
         "condition_id": 100, "parent_seq_idx": 1,
         "parameter": {"parent_seq_idx": 5, "param_source": "manual"},
-        "feedback": {"defect": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
     })
     assert False, "should reject parameter with only business metadata"
 except ValidationError as e:
@@ -157,7 +153,7 @@ except ValidationError as e:
 req_sparse = {
     "condition_id": 100, "parent_seq_idx": 1,
     "parameter": {"inj_spd_1": 50.0},   # 只改一段注射速度
-    "feedback": {"defect": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+    "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
 }
 p_sp = ProcessOptimizeFromConditionSchema.model_validate(req_sparse)
 assert p_sp.parameter.inj_spd_1 == 50.0
@@ -168,7 +164,7 @@ print("[2/4] ProcessOptimizeFromConditionSchema accepts sparse flat override OK"
 #     两层设计：对象存在性由 pydantic 拦，字段级必填等级由 algorithms/fuzzy/specs.py 拦
 provided_min = {
     "parameter": {"inj_pres_1": 60.0},
-    "feedback": {"defect": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+    "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
     "mold_info": {"product_category": "空调"},
     "machine_info": {"drive_system": "hydraulic"},
     "polymer_info": {"abbreviation": "PP"},
@@ -193,7 +189,7 @@ print("[2/4] ProcessOptimizeFromProvidedSchema rejects missing context dimension
 # 2h. FromProvided：三维齐全；未知字段应被 BaseSchema 的 extra='ignore' 丢弃
 provided_full = {
     "parameter": {"inj_pres_1": 60.0, "brl_temp_3": 220.0, "unknown_biz_field": 1},
-    "feedback": {"defect": [{"keyword_name": "飞边", "level": "medium", "position": "分型面"}]},
+    "feedback": {"defects": [{"keyword_name": "飞边", "level": "medium", "position": "分型面"}]},
     "mold_info": {"product_category": "空调", "target_cycle_time": 45.0},
     "machine_info": {
         "drive_system": "hydraulic",
@@ -217,26 +213,26 @@ try:
 except Exception:
     print("[2/4] ProcessOptimizeFromProvidedSchema rejects missing parameter OK")
 
-# 3. Service instantiation
-service = ParameterOptimizeService()
-assert hasattr(service, "infer")
-assert hasattr(service, "infer_from_provided")
-# 模块顶层 helper（类内移出，独立函数）
-assert hasattr(_opt_mod, "_resolve_parent")
+# 3. Service 公开入口（模块级函数 —— 无类封装）
+assert hasattr(_opt_mod, "optimize_from_condition")
+assert hasattr(_opt_mod, "optimize_from_provided")
+# 模块顶层 helper
+assert hasattr(_opt_mod, "_resolve_condition")
+assert hasattr(_opt_mod, "_resolve_parent_parameter")
 assert hasattr(_opt_mod, "_resolve_baseline")
 assert hasattr(_opt_mod, "_build_suggestion_payload")
 # 纯算法内核（Step 3+4，两个入口共用，对应 parameter_initialize._infer_kernel 模式）
-assert hasattr(_opt_mod.ParameterOptimizeService, "_infer_kernel")
+assert hasattr(_opt_mod, "_infer_kernel")
 assert hasattr(_opt_mod, "_resolve_baseline")
 assert hasattr(_opt_mod, "_compose_algorithm_context")
-print("[3/4] Service instantiation OK + _infer_kernel pure-kernel present")
+print("[3/4] Service 公开入口 OK + _infer_kernel pure-kernel present")
 
-# 3a. infer_from_provided：缺 feedback.defect 必拒（与 infer() 同一套约束镜像）
+# 3a. optimize_from_provided：缺 feedback.defects 必拒（与 optimize_from_condition() 同一套约束镜像）
 from extensions.exceptions import BizException
 try:
-    service.infer_from_provided(
+    _opt_mod.optimize_from_provided(
         parameter={"inj_pres_1": 60.0},
-        feedback={"defect": []},   # 空缺陷列表
+        feedback={"defects": []},   # 空缺陷列表
         mold_info={"product_category": "空调"},
         machine_info={"drive_system": "hydraulic"},
         polymer_info={"abbreviation": "PP"},
@@ -244,15 +240,15 @@ try:
     assert False, "should reject empty defect list"
 except BizException as e:
     assert "缺陷" in str(e) or "feedback" in str(e).lower() or "defect" in str(e).lower()
-    print("[3/4] infer_from_provided rejects empty defect list OK")
+    print("[3/4] optimize_from_provided rejects empty defect list OK")
 
-# 3b. infer_from_provided：完整输入走通整条链路
+# 3b. optimize_from_provided：完整输入走通整条链路
 #     （接受 2 种结果：成功（返回 new_parameter+suggestion） / fail-fast（无推荐 BizException），
 #      只要不 NameError 即说明 _call_algorithms 的 engines 变量已修好）
 try:
-    result = service.infer_from_provided(
+    result = _opt_mod.optimize_from_provided(
         parameter={"inj_pres_1": 60.0, "brl_temp_3": 220.0},
-        feedback={"defect": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        feedback={"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
         mold_info={"product_category": "空调"},
         machine_info={
             "drive_system": "hydraulic",
@@ -278,11 +274,11 @@ try:
     assert result["new_parameter"].get("inj_pres_1") in (60.0, None) or isinstance(
         result["new_parameter"].get("inj_pres_1"), (int, float)
     )
-    print("[3/4] infer_from_provided full happy path OK")
+    print("[3/4] optimize_from_provided full happy path OK")
 except BizException as e:
     # fail-fast 路径：算法无推荐（测试环境可能规则集不全）—— 也算链路打通
     assert "推荐算法" in str(e), f"unexpected BizException: {e}"
-    print(f"[3/4] infer_from_provided full path → fail-fast as expected (no rule match): {e}")
+    print(f"[3/4] optimize_from_provided full path → fail-fast as expected (no rule match): {e}")
 
 # 4. URL routing
 optimize_routes = [p for p in urlpatterns if "algorithms/optimize" in str(p.pattern)]

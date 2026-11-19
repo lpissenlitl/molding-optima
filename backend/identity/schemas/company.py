@@ -1,5 +1,4 @@
-"""
-公司组织相关 Schema - Pydantic 版本
+"""公司组织相关 Schema - Pydantic 版本。
 
 """
 from typing import Optional, List
@@ -10,7 +9,7 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema, AbstractBaseSch
 
 
 class CompanyAdminSchema(AbstractBaseSchema):
-    """公司管理员信息"""
+    """公司管理员信息。"""
     username: Optional[str] = Field(None, description="用户名")
     email: Optional[str] = Field(None, description="邮箱")
     password: Optional[str] = Field(None, description="密码")
@@ -18,7 +17,7 @@ class CompanyAdminSchema(AbstractBaseSchema):
 
 
 class CompanySchema(BaseSchema):
-    """公司信息"""
+    """公司信息。"""
     id: Optional[int] = Field(None, description="公司ID")
     name: str = Field(..., description="公司名称")
     code: str = Field(..., description="公司编码")
@@ -35,14 +34,14 @@ class CompanySchema(BaseSchema):
 
 
 class CompanyListSchema(PaginationBaseSchema):
-    """公司列表信息"""
+    """公司列表信息。"""
     name: Optional[str] = Field(None, description="公司名称")
     industry: Optional[str] = Field(None, description="所属行业")
     is_active: Optional[bool] = Field(None, description="是否激活")
 
 
 class OrganizationSchema(BaseSchema):
-    """组织信息"""
+    """组织信息。"""
     id: Optional[int] = Field(None, description="组织ID")
     name: str = Field(..., description="组织名称")
     code: Optional[str] = Field(None, description="组织编码")
@@ -57,10 +56,10 @@ class OrganizationSchema(BaseSchema):
 
 
 class OrganizationBatchUpdateSchema(BaseSchema):
-    """批量更新组织信息"""
+    """批量更新组织信息。"""
     
     class UpdateDetailSchema(AbstractBaseSchema):
-        """更新详情"""
+        """更新详情。"""
         id: int = Field(..., description="组织ID")
         parent_id: Optional[int] = Field(None, description="父级组织ID")
         sort_order: Optional[int] = Field(None, description="排序")
@@ -70,7 +69,7 @@ class OrganizationBatchUpdateSchema(BaseSchema):
 
 
 class OrganizationListSchema(PaginationBaseSchema):
-    """组织列表信息"""
+    """组织列表信息。"""
     name: Optional[str] = Field(None, description="组织名称")
     org_type: Optional[str] = Field(None, description="组织类型")
     code: Optional[str] = Field(None, description="组织编码")
@@ -79,5 +78,5 @@ class OrganizationListSchema(PaginationBaseSchema):
 
 
 class OrganizationTreeSchema(AbstractBaseSchema):
-    """组织树信息"""
+    """组织树信息。"""
     id: int = Field(..., description="组织ID")

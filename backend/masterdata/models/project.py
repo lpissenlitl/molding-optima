@@ -3,7 +3,7 @@ from django.db import models
 
 
 class Project(BusinessBaseModel):
-    """项目主数据（中性化设计，适用内外部项目）"""
+    """项目主数据（中性化设计，适用内外部项目）。"""
 
     # --- 核心标识 ---
     project_code = models.CharField(max_length=50, verbose_name="项目编号")

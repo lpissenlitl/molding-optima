@@ -3,7 +3,7 @@ from django.db import models
 
 
 class Mold(BusinessBaseModel):
-    """模具信息"""
+    """模具信息。"""
     # --- 元状态信息 ---
     project = models.ForeignKey(
         "masterdata.Project",
@@ -111,7 +111,7 @@ class Mold(BusinessBaseModel):
 
 
 class GatingSystem(AbstractBaseModel):
-    """模具浇注系统信息"""
+    """模具浇注系统信息。"""
     mold = models.ForeignKey(
         "masterdata.Mold",
         on_delete=models.CASCADE,
@@ -154,7 +154,7 @@ class GatingSystem(AbstractBaseModel):
 
 
 class Cavity(AbstractBaseModel):
-    """型腔信息"""
+    """型腔信息。"""
     gating_system = models.ForeignKey(
         "masterdata.GatingSystem",
         on_delete=models.CASCADE,
@@ -192,7 +192,7 @@ class Cavity(AbstractBaseModel):
 
 
 class Gate(AbstractBaseModel):
-    """浇口特征定义，直接关联到具体型腔"""
+    """浇口特征定义，直接关联到具体型腔。"""
     cavity = models.ForeignKey(
         "masterdata.Cavity",
         on_delete=models.CASCADE,
@@ -236,7 +236,7 @@ class Gate(AbstractBaseModel):
 
 
 class CoolingSystem(AbstractBaseModel):
-    """模具冷却系统信息"""
+    """模具冷却系统信息。"""
     mold = models.OneToOneField(
         "masterdata.Mold",
         on_delete=models.CASCADE,
@@ -277,7 +277,7 @@ class CoolingSystem(AbstractBaseModel):
     
 
 class EjectionSystem(AbstractBaseModel):
-    """模具顶出系统信息"""
+    """模具顶出系统信息。"""
     mold = models.OneToOneField(
         "masterdata.Mold",
         on_delete=models.CASCADE,

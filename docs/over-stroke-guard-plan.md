@@ -104,7 +104,7 @@
 | 文件 | 改动 |
 |---|---|
 | `backend/process/exceptions.py` | 新增 `ERROR_PROCESS_OVER_STROKE = BizErrorCode.create(MOD_PROCESS, 38, ...)` |
-| `backend/process/services/parameter_initialize.py` | 新增 `_guard_over_stroke()`；在 `from_masterdata` 落库前、`infer_from_provided` 返回前调用 |
+| `backend/process/services/parameter_initialize.py` | 新增 `_guard_over_stroke()`；在 `initialize_from_masterdata` 落库前、`initialize_from_provided` 返回前调用 |
 
 **判定实现（复用既有口径，不新建第二套）**：
 
@@ -137,9 +137,9 @@ fuzzy 包不 import services ⇒ 无循环（`parameter_optimize.py` 已走同�
   - 新增 `_guard_over_stroke(process_flat, machine_info)`：
     **缺行程不判**（缺数据 ≠ 参数不合理）⇒ 超出则取 `exceeded_by` 最大项合并成一条文案，
     `raise BizException(ERROR_PROCESS_OVER_STROKE, message)`；
-  - 调用点 1：`infer`（from_masterdata）Step 4 落库**前**新增「Step 3.5」
+  - 调用点 1：`initialize_from_masterdata` Step 4 落库**前**新增「Step 3.5」
     （在 `transaction.atomic()` 内 ⇒ 抛异常自动回滚，不留脏 condition）；
-  - 调用点 2：`infer_from_provided`（纯推理）flat 化之后。
+  - 调用点 2：`initialize_from_provided`（纯推理）flat 化之后。
 - 文案（实测，精简后）：
   > 当前设备无法生产该制品 - **熔胶终止位置**需 758.07mm，超出本机注射行程 200mm
   > （另有 3 项超出行程），请更换行程更大的设备

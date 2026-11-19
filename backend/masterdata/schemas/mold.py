@@ -1,5 +1,4 @@
-"""
-模具相关 Schema 定义 - Pydantic 版本
+"""模具相关 Schema 定义 - Pydantic 版本。
 
 """
 from typing import Optional, List, Any
@@ -11,7 +10,7 @@ from extensions.schemas import AbstractBaseSchema, BaseSchema, PaginationBaseSch
 # ==================== 嵌套 Schema ====================
 
 class GateSchema(AbstractBaseSchema):
-    """浇口"""
+    """浇口。"""
     
     id: Optional[int] = Field(None, description="浇口ID")
     # --- 浇口信息 ---
@@ -36,7 +35,7 @@ class GateSchema(AbstractBaseSchema):
 
 
 class CavitySchema(AbstractBaseSchema):
-    """型腔"""
+    """型腔。"""
     
     id: Optional[int] = Field(None, description="型腔ID")
     # --- 数量：这类型腔的数量 ---
@@ -59,7 +58,7 @@ class CavitySchema(AbstractBaseSchema):
 
 
 class GatingSystemSchema(AbstractBaseSchema):
-    """浇注系统"""
+    """浇注系统。"""
     
     id: Optional[int] = Field(None, description="浇注系统ID")
     # --- 流道类型 ---
@@ -91,7 +90,7 @@ class GatingSystemSchema(AbstractBaseSchema):
 
 
 class CoolingSystemSchema(AbstractBaseSchema):
-    """冷却系统"""
+    """冷却系统。"""
     
     id: Optional[int] = Field(None, description="冷却系统ID")
     cooling_cavity_type: Optional[str] = Field(None, description="型腔冷却类型")
@@ -113,7 +112,7 @@ class CoolingSystemSchema(AbstractBaseSchema):
 
 
 class EjectionSystemSchema(AbstractBaseSchema):
-    """顶出系统"""
+    """顶出系统。"""
     
     id: Optional[int] = Field(None, description="顶出系统ID")
     ejection_type: Optional[str] = Field(None, description="顶出类型")
@@ -132,7 +131,7 @@ class EjectionSystemSchema(AbstractBaseSchema):
 # ==================== 模具主 Schema ====================
 
 class MoldSchema(BaseSchema):
-    """模具表单"""
+    """模具表单。"""
     
     id: Optional[int] = Field(None, description="模具ID")
     project_id: Optional[int] = Field(None, description="项目ID")
@@ -204,7 +203,7 @@ class MoldSchema(BaseSchema):
 
 
 class MoldListSchema(PaginationBaseSchema):
-    """获取模具列表"""
+    """获取模具列表。"""
     
     id: Optional[int] = Field(None, description="模具ID")
     status: Optional[str] = Field(None, description="模具状态")

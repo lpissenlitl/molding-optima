@@ -1,8 +1,8 @@
-"""Bug 2 修复验证：_create_process_parameter / _copy_process_parameter 同步创建 TuningRecord"""
+"""Bug 2 验收：_create_process_parameter / _copy_process_parameter 同步创建 TuningRecord。"""
 import os
 import sys
 
-# ★ backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
+# backend 根目录必须进 sys.path（脚本位于 backend/tests/ ⇒ 向上两级 = backend 根目录）
 #   直接 `python tests/verify_bug2_tuning_record.py` 时，sys.path[0] 是脚本所在目录
 #   （= backend/tests）⇒ 拿不到 `_moldx` 等顶层包。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -65,4 +65,4 @@ with patch("process.models.parameter.ProcessParameter.objects.create", return_va
 print("\n" + "=" * 50)
 print("Bug 2 验证通过")
 print("ProcessParameter <-> TuningRecord 1:1 业务契约已建立")
-print("后续 optimization/infer/ 调 _update_previous_tuning_record 不再 WARNING")
+print("后续 optimize_from_condition 调 parameter_optimize._record_tuning_round 不再 WARNING")

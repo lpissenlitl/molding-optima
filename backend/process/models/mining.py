@@ -10,10 +10,9 @@ from extensions.models import BusinessBaseModel
 
 
 class MiningRule(BusinessBaseModel):
-    """
-    候选规则 —— 规则挖掘产出的「缺陷 + 参数变更 ⇒ 试模结果」关联规则
+    """候选规则 —— 规则挖掘产出的「缺陷 + 参数变更 ⇒ 试模结果」关联规则。
 
-    ⚠️ **为什么候选规则要单独建表，而不是直接写 RuleMethod**
+    【注意】**为什么候选规则要单独建表，而不是直接写 RuleMethod**
     - RuleMethod 是**已生效**规则（会被 FuzzyEngine 直接查询消费）；
       挖出来的规则置信度未经人工确认，直接写进 RuleMethod 等于把
       「统计关联」当成「工艺因果」使用。
@@ -22,7 +21,7 @@ class MiningRule(BusinessBaseModel):
     - 候选规则保留**挖掘指标与证据**（support / confidence / lift / evidence），
       RuleMethod 只有 confidence 一个标量，事后无法复核。
 
-    ⚠️ **重复挖掘只更新不新增**
+    【注意】**重复挖掘只更新不新增**
     自然键是 `rule_hash`（缺陷 + 变更 + 后件的规范化摘要）⇒ 同一规则反复挖出
     时命中同一条记录，只刷新指标；**审核状态不被重置**（已审核的规则
     不因指标微调被打回待审，避免审核流程被反复打断）。

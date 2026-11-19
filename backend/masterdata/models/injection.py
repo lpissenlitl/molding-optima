@@ -3,7 +3,7 @@ from django.db import models
 
 
 class InjectionMoldingMachine(BusinessBaseModel):
-    """注塑机"""
+    """注塑机。"""
     # --- 状态信息 ---
     STATUS_CHOICES = [
         ('idle', '空闲'),
@@ -240,7 +240,7 @@ class InjectionMoldingMachine(BusinessBaseModel):
    
 
 class InjectionUnit(AbstractBaseModel):
-    """注射单元"""
+    """注射单元。"""
     machine = models.ForeignKey(
         "InjectionMoldingMachine",
         on_delete=models.CASCADE,

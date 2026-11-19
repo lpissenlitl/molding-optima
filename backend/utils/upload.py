@@ -3,7 +3,7 @@ from django.core.files.uploadedfile import UploadedFile
 
 
 def calculate_md5(file: UploadedFile) -> str:
-    """计算 文件的 MD5 值"""
+    """计算 文件的 MD5 值。"""
     hash_md5 = hashlib.md5()
     
     # 保存当前位置

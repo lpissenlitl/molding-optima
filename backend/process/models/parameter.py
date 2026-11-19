@@ -1,5 +1,4 @@
-"""
-工艺参数模型
+"""工艺参数模型。
 """
 
 from django.conf import settings
@@ -11,11 +10,9 @@ from extensions.models import BusinessBaseModel
 
 
 class ProcessParameter(BusinessBaseModel):
-    """
-    工艺参数 - 隶属 ProcessCondition 的具体参数
+    """工艺参数 - 隶属 ProcessCondition 的具体参数。
 
-    字段命名参考 molding-expert（inj_spd_1, inj_pres_1, hold_pres_1 等），
-    比旧版 molding-optima 的命名（IV0, IP0, IL0）更可读。
+    字段命名参考 molding-expert（inj_spd_1, inj_pres_1, hold_pres_1 等）。
 
     版本管理：
     - parent_param: 自关联，父子关系构成调机树；父指向哪个模次由业务指定，
@@ -201,7 +198,7 @@ class ProcessParameter(BusinessBaseModel):
 
     @classmethod
     def _to_local(cls, at):
-        """转本地时间：naive 直接返回；aware 按 TIME_ZONE 转换"""
+        """转本地时间：naive 直接返回；aware 按 TIME_ZONE 转换。"""
         if settings.USE_TZ and timezone.is_aware(at):
             return timezone.localtime(at)
         return at
@@ -217,12 +214,12 @@ class ProcessParameter(BusinessBaseModel):
 
     @classmethod
     def build_parameter_no(cls, at, seq: int) -> str:
-        """按时刻 + 序号拼出编号：PP-{YYYYMMDD}-{HHMMSS}-{NNN}"""
+        """按时刻 + 序号拼出编号：PP-{YYYYMMDD}-{HHMMSS}-{NNN}。"""
         return f"{cls.parameter_no_prefix(at)}{seq:03d}"
 
     @classmethod
     def used_parameter_seqs(cls, company_id, prefix: str) -> set:
-        """查该租户下已占用该编号前缀的序号集合
+        """查该租户下已占用该编号前缀的序号集合。
 
         含软删记录（all_objects）：编号一经分配不回收，避免同号指向两条历史数据。
         """
@@ -239,7 +236,7 @@ class ProcessParameter(BusinessBaseModel):
 
     @classmethod
     def _generate_parameter_no(cls, company_id=None) -> str:
-        """生成下一个可用编号（新建轮次时调用）
+        """生成下一个可用编号（新建轮次时调用）。
 
         - YYYYMMDD-HHMMSS = 创建时刻（用户可读，且天然按时间排序）
         - NNN = 同一租户同一秒内的递增序号（并发兜底 ⇒ 租户内唯一）

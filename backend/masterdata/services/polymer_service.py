@@ -1,5 +1,4 @@
-"""
-Polymer（聚合物）服务层
+"""Polymer（聚合物）服务层。
 
 设计原则
 ========
@@ -46,7 +45,7 @@ MOLDFLOW_PROPERTY_MODELS = [
 # ============================================================
 
 def _get_polymer_by_id(polymer_id: int) -> Polymer:
-    """通过ID获取聚合物对象（含 Moldflow 参数预加载）"""
+    """通过ID获取聚合物对象（含 Moldflow 参数预加载）。"""
     polymer_id = validate_pk(polymer_id, "聚合物ID")
     polymer = Polymer.objects.filter(
         id=polymer_id
@@ -59,8 +58,7 @@ def _get_polymer_by_id(polymer_id: int) -> Polymer:
 
 
 def _get_single_property(model_cls, polymer, raise_on_duplicate: bool = True):
-    """
-    获取该 Polymer 对应的单条 Moldflow 参数记录
+    """获取该 Polymer 对应的单条 Moldflow 参数记录。
 
     业务约束：一个 Polymer 对每种参数最多一条
     - 0 条：返回 None
@@ -80,8 +78,7 @@ def _get_single_property(model_cls, polymer, raise_on_duplicate: bool = True):
 
 
 def _upsert_property(model_cls, polymer, data: dict):
-    """
-    业务唯一的参数同步入口：upsert 语义
+    """业务唯一的参数同步入口：upsert 语义。
 
     - 已存在：更新字段
     - 不存在：创建记录
@@ -108,8 +105,7 @@ def _upsert_property(model_cls, polymer, data: dict):
 
 
 def _sync_moldflow_properties(polymer: Polymer, kwargs: dict, is_create: bool = False):
-    """
-    同步四张 Moldflow 参数子表
+    """同步四张 Moldflow 参数子表。
 
     - is_create=True：四张表统一 create（kwargs 中只处理提供的 key）
     - is_create=False：根据 kwargs 中每个 key 的值决定 upsert / 删除
@@ -127,8 +123,7 @@ def _sync_moldflow_properties(polymer: Polymer, kwargs: dict, is_create: bool = 
 
 
 def _assemble_moldflow_properties(polymer: Polymer) -> dict:
-    """
-    业务层组装单对象形式的 Moldflow 参数
+    """业务层组装单对象形式的 Moldflow 参数。
 
     数据库层的关系是 ForeignKey（一对多），prefetch 拿到的是 QuerySet；
     业务层约定最多一条，所以这里取第一条。
@@ -152,7 +147,7 @@ def _assemble_moldflow_properties(polymer: Polymer) -> dict:
 
 
 def _build_polymer_dict(polymer: Polymer) -> dict:
-    """构建聚合物完整数据（含 Moldflow 参数）"""
+    """构建聚合物完整数据（含 Moldflow 参数）。"""
     data = polymer.to_dict()
     data.update(_assemble_moldflow_properties(polymer))
     return data
@@ -163,8 +158,7 @@ def _build_polymer_dict(polymer: Polymer) -> dict:
 # ============================================================
 
 def create_polymer(company_id: int, organization_id: int, **kwargs) -> dict:
-    """
-    创建聚合物
+    """创建聚合物。
 
     如果传入了 Moldflow 参数（rheology / pvt / mechanical / shrinkage），
     会在同一事务中统一创建。
@@ -180,7 +174,7 @@ def create_polymer(company_id: int, organization_id: int, **kwargs) -> dict:
 
 
 def get_polymer_info(polymer_id: int) -> dict:
-    """获取聚合物信息（含 Moldflow 参数）"""
+    """获取聚合物信息（含 Moldflow 参数）。"""
     polymer = _get_polymer_by_id(polymer_id)
     return _build_polymer_dict(polymer)
 
@@ -229,7 +223,7 @@ def get_polymer_list(
     page_size: int = None,
     sort: str = None
 ) -> tuple:
-    """获取聚合物列表（不含 Moldflow 参数）"""
+    """获取聚合物列表（不含 Moldflow 参数）。"""
     filter_map = {
         "company_id": {"input": company_id, "column": "company_id", "lookup": "exact"},
         "manufacturer": {"input": manufacturer, "column": "manufacturer", "lookup": "icontains"},
@@ -254,7 +248,7 @@ def get_polymer_list(
 
 
 def batch_delete_polymer(company_id: int, ids: list) -> int:
-    """批量删除聚合物（软删除，仅删本公司存在的）"""
+    """批量删除聚合物（软删除，仅删本公司存在的）。"""
     ids = validate_id_list(ids, "聚合物ID")
     # 按 company_id 过滤出本公司的 id（防止跨公司删除）
     valid_ids = list(

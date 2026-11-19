@@ -3,8 +3,7 @@ from datetime import datetime
 
 
 class BaseDoc(Document):
-    """
-    Django 项目专用的 MongoEngine 文档基类
+    """Django 项目专用的 MongoEngine 文档基类。
     使用 Django 的时区系统，确保时间一致性
     """
     created_at = DateTimeField(required=True, default=datetime.now)
@@ -36,7 +35,7 @@ class BaseDoc(Document):
 
 class BusinessBaseDoc(BaseDoc):
     """
-    当前项目的业务文档基类
+    当前项目的业务文档基类。
     """
     
     company_id = IntField(null=True, verbose_name="所属公司")

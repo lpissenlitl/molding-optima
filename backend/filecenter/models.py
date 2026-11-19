@@ -4,7 +4,7 @@ import uuid
 
 
 class File(BusinessBaseModel):
-    """文件模型"""
+    """文件模型。"""
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, verbose_name="文件UUID")
     filename = models.CharField(max_length=255, verbose_name="原始文件名")
     mime_type = models.CharField(max_length=100, verbose_name="MIME类型")
@@ -36,7 +36,7 @@ class File(BusinessBaseModel):
 
 
 class FileReference(TracedModel):
-    """文件引用模型"""
+    """文件引用模型。"""
     file = models.ForeignKey(File, on_delete=models.CASCADE, related_name="references")
     business_id = models.IntegerField(verbose_name="业务ID")
     business_type = models.CharField(max_length=50, verbose_name="业务类型")

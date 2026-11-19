@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class User(BaseModel):
-    """用户表"""
+    """用户表。"""
     company = models.ForeignKey(
         "identity.Company", 
         on_delete=models.CASCADE, 
@@ -61,7 +61,7 @@ class User(BaseModel):
     feishu_id =  models.CharField(null=True, max_length=50, verbose_name="飞书用户ID")
     
     def is_accessible(self):
-        """判断用户是否可访问"""
+        """判断用户是否可访问。"""
 
         if self.is_superuser:
             return True # 超级管理员用户，拥有所有权限
@@ -89,7 +89,7 @@ class User(BaseModel):
         self.save(update_fields=["login_count", "last_login_at", "updated_at"])
   
     def get_permissions(self):
-        """获取用户权限,用户后端鉴权,能否操作
+        """获取用户权限,用户后端鉴权,能否操作。
 
         权限优先级（从高到低）：
         1. is_superuser=True：拥有所有权限（平台超级管理员）
@@ -123,7 +123,7 @@ class User(BaseModel):
         return list(permissions)
     
     def get_accessible_organizations(self):
-        """获取用户可访问组织"""
+        """获取用户可访问组织。"""
         if self.is_tenant_admin:
             from identity.models import Organization
             return Organization.objects.filter(company_id=self.company_id)
@@ -136,16 +136,16 @@ class User(BaseModel):
             return all_acc_orgs
     
     def has_permission(self, permission_code: str):
-        """判断用户是否拥有指定权限"""
+        """判断用户是否拥有指定权限。"""
         return permission_code in self.get_permissions()
     
     def deactivate(self):
-        """用户注销"""
+        """用户注销。"""
         self.is_active = False
         self.save(update_fields=["is_active", "updated_at"])
     
     def construct_user_info(self) -> dict:
-        """构造用户信息"""
+        """构造用户信息。"""
         # 构建脱敏用户信息
         user_info = {
             **self.to_dict(
@@ -167,7 +167,7 @@ class User(BaseModel):
     
     @classmethod
     def create_superuser(cls, username: str, password: str):
-        """创建超级管理员用户"""
+        """创建超级管理员用户。"""
         # print(password, hash_pwd(password))
         user = cls.objects.create(
             username=username,
@@ -187,7 +187,7 @@ class User(BaseModel):
 
 
 class Role(BaseModel):
-    """角色表"""
+    """角色表。"""
     company = models.ForeignKey(
         "identity.Company", 
         on_delete=models.CASCADE,
@@ -202,7 +202,7 @@ class Role(BaseModel):
 
     @transaction.atomic
     def set_permissions(self, permission_codes: list):
-        """设置角色权限"""
+        """设置角色权限。"""
         # permission_codes 为None或空列表，清空权限
         if permission_codes is None:
             raise BizException(ERROR_ILLEGAL_ARGUMENT, message="权限编码列表不能为空")
@@ -233,7 +233,7 @@ class Role(BaseModel):
             ])        
         
     def get_permissions(self):
-        """返回角色权限 code 列表"""
+        """返回角色权限 code 列表。"""
         valid_permission = Permission.objects.filter(
             code=OuterRef('permission_code'),  # 子查询引用外层RolePermission的permission_code
             is_active=True  # 只找Permission表中启用的权限
@@ -251,7 +251,7 @@ class Role(BaseModel):
 
 
 class RolePermission(TracedModel):
-    """角色权限关系表"""
+    """角色权限关系表。"""
     role = models.ForeignKey(
         "identity.Role", 
         on_delete=models.CASCADE,
@@ -267,7 +267,7 @@ class RolePermission(TracedModel):
 
 
 class Permission(TracedModel):
-    """权限表"""
+    """权限表。"""
 
     name = models.CharField(max_length=50, verbose_name="权限名称")
     code = models.CharField(max_length=50, unique=True, verbose_name="权限代码")
@@ -294,7 +294,7 @@ class Permission(TracedModel):
                 code=perm["code"],
                 defaults=perm
             )
-            status = "✅ 创建" if created else "🔄 更新"
+            status = "创建" if created else "更新"
             logger.info(f'{status}: {perm["name"]} ({perm["code"]})')
 
     class Meta:
@@ -304,7 +304,7 @@ class Permission(TracedModel):
 
 
 class Token(AbstractBaseModel):
-    """用户Token"""
+    """用户Token。"""
     user = models.ForeignKey("identity.User", on_delete=models.CASCADE, related_name="tokens", verbose_name="用户")
     token = models.CharField(max_length=255, db_index=True, verbose_name="哈希Token")
     ua = models.CharField(max_length=512, default="", verbose_name="用户代理")
@@ -316,7 +316,7 @@ class Token(AbstractBaseModel):
 
     @classmethod
     def create(cls, user: User, request: HttpRequest, expire_hours=6):
-        """生成一个6小时内有效的Token"""
+        """生成一个6小时内有效的Token。"""
         raw_token = secrets.token_urlsafe(48)
         hash_token = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         expires_at = datetime.now() + timedelta(hours=expire_hours)
@@ -341,7 +341,7 @@ class Token(AbstractBaseModel):
 
 
 class RedirectToken(TracedModel):
-    """跳转令牌"""
+    """跳转令牌。"""
     token = models.CharField(max_length=255, unique=True, db_index=True, verbose_name="跳转令牌")
     user = models.ForeignKey('identity.User', on_delete=models.CASCADE, verbose_name="用户")
     target_url = models.TextField(verbose_name="目标地址")
@@ -350,7 +350,7 @@ class RedirectToken(TracedModel):
 
     @classmethod
     def create(cls, user: User, target_url: str, expire_hours=72):
-        """生成一个72小时内有效的跳转token"""
+        """生成一个72小时内有效的跳转token。"""
         raw_token = secrets.token_urlsafe(48)  # 长度足够安全
         hash_token = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         expires_at = datetime.now() + timedelta(hours=expire_hours)
@@ -365,12 +365,12 @@ class RedirectToken(TracedModel):
         return raw_token, redirect_token
 
     def is_valid(self):
-        """验证该跳转令牌是否有效"""
+        """验证该跳转令牌是否有效。"""
         now = datetime.now()
         return not self.is_used and now < self.expires_at
     
     def consume(self):
-        """使用并作废该 Token"""
+        """使用并作废该 Token。"""
         if self.is_valid():
             self.is_used = True
             self.save()

@@ -6,7 +6,7 @@ URL 段:
 - processes/mining-rules/<id>/approve/           通过 ⇒ 落地为生效规则
 - processes/mining-rules/<id>/reject/            驳回
 
-⚠️ **四个端点全部要求管理员**（`require_admin`：超管 || 租户管理员）
+【注意】**四个端点全部要求管理员**（`require_admin`：超管 || 租户管理员）
     —— 候选规则是**统计关联**，未经人工确认就写进生效规则库等于把
     「相关性」当成「工艺因果」使用；驳回/通过会直接改变试模推荐行为，
     因此这条业务线**整体不对普通用户开放**。
@@ -38,7 +38,7 @@ def _reviewer_name(request) -> str:
 
 @method_decorator(require_admin, name="dispatch")
 class MiningRuleListView(BaseView):
-    """候选规则列表（审核台）
+    """候选规则列表（审核台）。
 
     GET 可选 query:
     - status       按审核态过滤（pending / approved / rejected）
@@ -62,7 +62,7 @@ class MiningRuleListView(BaseView):
 
 @method_decorator(require_admin, name="dispatch")
 class MiningRuleDetailView(BaseView):
-    """候选规则详情（挖掘指标 + 证据样本 + 落地预览）"""
+    """候选规则详情（挖掘指标 + 证据样本 + 落地预览）。"""
 
     def get(self, request, mining_rule_id):
         return mining_review.get_mining_rule_detail(
@@ -74,7 +74,7 @@ class MiningRuleDetailView(BaseView):
 
 @method_decorator(require_admin, name="dispatch")
 class MiningRuleApproveView(BaseView):
-    """通过候选规则 ⇒ 落地为生效规则（RuleMethod, source='rule_miner'）
+    """通过候选规则 ⇒ 落地为生效规则（RuleMethod, source='rule_miner'）。
 
     POST body:
     - note  审核意见（可选）
@@ -93,7 +93,7 @@ class MiningRuleApproveView(BaseView):
 
 @method_decorator(require_admin, name="dispatch")
 class MiningRuleRejectView(BaseView):
-    """驳回候选规则
+    """驳回候选规则。
 
     POST body:
     - note  审核意见（**必填**）

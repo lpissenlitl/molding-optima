@@ -4,7 +4,7 @@ from extensions.models import AbstractBaseModel
 
 
 class OperationLog(AbstractBaseModel):
-    """操作记录"""
+    """操作记录。"""
     # ================ 1. 操作人信息（快照） ================
     user_id = models.CharField(max_length=50, null=True, db_index=True, verbose_name="用户ID")
     user_name = models.CharField(max_length=50, db_index=True, verbose_name="用户名称")

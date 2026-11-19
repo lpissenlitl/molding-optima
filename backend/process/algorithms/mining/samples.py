@@ -4,25 +4,25 @@
 两边都实现同一个 Protocol，实现方可互换 ⇒ 将来加数据库来源时，
 挖掘内核与编排层一行都不用改。
 
-⚠️ **为什么语料用 JSONL 而不是 JSON 数组**
+【注意】**为什么语料用 JSONL 而不是 JSON 数组**
    语料是 **append-only 事实流**（每次调机出结果就追加一条，历史样本永不修改）。
    JSONL 的追加写是 O(1) 且天然抗中断（半行写坏了不影响前面的行），
    数组则每次都要整体重写。
 
-⚠️ **为什么按公司分片**
+【注意】**为什么按公司分片**
    规则库按公司隔离（`RuleLibrary` / `RuleMethod` 都有 company 外键），
    样本是规则的证据 ⇒ 语料必须同样隔离，否则跨公司的调机经验会被
    混成一条规则。一个公司一个文件：`{root_dir}/company_{id}.jsonl`。
 
-   ⚠️ **`root_dir` 本身已按租户隔离**：应用层（`provider.py`）把它解析成
+   【注意】**`root_dir` 本身已按租户隔离**：应用层（`provider.py`）把它解析成
    `{STORE_PATH}/{tenant_slug}/mining/samples` ⇒ 租户级隔离靠目录，
    公司级隔离靠文件名，两级不混。
 
-⚠️ **`sample_id` 必须字典序可比**
+【注意】**`sample_id` 必须字典序可比**
    增量挖掘靠游标 `since` 截断，判定是字符串比较 ⇒ id 必须零填充
    （如 ``"tr:000000000070"``），否则 ``"tr:99"`` 会排在 ``"tr:100"`` 之后。
 
-⚠️ **语料是 append-only 日志，允许同 id 多行**
+【注意】**语料是 append-only 日志，允许同 id 多行**
    源侧样本会漂移（调机记录的 ``adjustments`` 会被重算、试模结果后补）
    ⇒ 修订以**新行追加**，读取时同 ``sample_id`` 取**最后一行**为准
    （见 `get_samples`）。
@@ -72,7 +72,7 @@ def parse_sample_id(sample_id: str) -> Optional[int]:
 def _decode_defects(data: Dict) -> List[Dict]:
     """JSON 里的 ``defects`` → 规范形态（``[{'name','level'}]``）。
 
-    ⚠️ **必须兼容旧格式**：旧语料行的 ``defects`` 存的是裸缺陷名
+    【注意】**必须兼容旧格式**：旧语料行的 ``defects`` 存的是裸缺陷名
         （``['SHORTSHOT']``），等级另存于 ``defect_levels``。
         语料是 **append-only** 日志（历史行永不删除）⇒ 读取时必须认旧格式，
         否则历史行会退化成「有名字、没等级」，与新采集的行产生**伪差异**
@@ -147,7 +147,7 @@ class FileSampleRepository:
     def get_samples(self, since: Optional[str] = None) -> List[SampleRecord]:
         """取训练样本列表（按 `sample_id` 升序）。
 
-        ⚠️ **同 id 后写覆盖先写**：语料是 append-only 日志，而源侧样本会漂移
+        【注意】**同 id 后写覆盖先写**：语料是 append-only 日志，而源侧样本会漂移
           （调机记录的 `adjustments` 会被重算、试模结果后补）⇒ 修订以**新行追加**，
           读取时同 `sample_id` 取**最后一行**为准。
 

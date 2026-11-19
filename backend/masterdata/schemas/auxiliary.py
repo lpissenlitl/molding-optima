@@ -1,5 +1,4 @@
-"""
-辅助设备相关 Schema 定义 - Pydantic 版本
+"""辅助设备相关 Schema 定义 - Pydantic 版本。
 
 """
 from pydantic import Field
@@ -8,7 +7,7 @@ from extensions.schemas import BaseSchema, PaginationBaseSchema
 
 
 class AuxiliaryEquipmentSchema(BaseSchema):
-    """辅助装置"""
+    """辅助装置。"""
     
     equipment_name: str = Field(..., description="名称")
     equipment_type: str = Field(..., description="类型")
@@ -19,7 +18,7 @@ class AuxiliaryEquipmentSchema(BaseSchema):
 
 
 class AuxiliaryEquipmentListSchema(PaginationBaseSchema):
-    """辅助装置列表"""
+    """辅助装置列表。"""
     
     equipment_name: str = Field(None, description="名称")
     equipment_type: str = Field(None, description="名称")

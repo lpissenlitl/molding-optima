@@ -9,7 +9,7 @@
 - 【3 应用】provider: 语料目录解析 + 样本仓库构造（**唯一引入 Django 的层**）
 - 【4 外壳】rule_miner: RuleMinerEngine（统一入口，algorithm_type='mining'）
 
-⚠️ **Django 只出现在 provider 层**：内核与来源层保持零 Django ⇒
+【注意】**Django 只出现在 provider 层**：内核与来源层保持零 Django ⇒
   离线 runner 可在不连库、不 setup() 的环境下跑挖掘。
 
 algorithm_type='mining'，**不注册**到 AlgorithmRegistry。

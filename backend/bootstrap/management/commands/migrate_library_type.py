@@ -54,6 +54,6 @@ class Command(BaseCommand):
 
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS(
-            f'✅ library_type 校验完成，共需更新 {updated} 条记录'
+            f'library_type 校验完成，共需更新 {updated} 条记录'
             + ('（dry-run 模式未实际修改）' if dry_run else ''),
         ))

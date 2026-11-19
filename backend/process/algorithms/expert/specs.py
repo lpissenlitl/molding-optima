@@ -24,19 +24,19 @@ from ..field_contract import (
 
 
 # ---- Machine 设备级字段 ----
-# ① 大部分字段来自 InjectionUnit
-# ② drive_system 来自 InjectionMoldingMachine（算法层负责 drive_system → power_method 转换）
+# 大多数字段来自 InjectionUnit（drive_system 除外）。
 MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
-    # ① 动力系统（来自 Machine 主表，算法层负责 drive_system → power_method 标准化）
+    # 动力系统：来自 InjectionMoldingMachine（Machine 主表，不是 InjectionUnit）；
+    # 算法层负责 drive_system → power_method 标准化。
     'drive_system': {
-        'source_model': 'InjectionMoldingMachine',  # ← Machine 主表（不是 InjectionUnit）
+        'source_model': 'InjectionMoldingMachine',
         'source': 'InjectionMoldingMachine.drive_system',
         'attr_name': 'drive_system',  # ORM 字段名是 drive_system
         'desc': '动力系统原始值（液压/电动/...），算法层自动标准化为 power_method',
         'type': str,
         'condition': '必填',  # algorithm 用于判断液压机特需字段
     },
-    # ② 喷嘴与螺杆参数
+    # 喷嘴与螺杆参数
     'nozzle_type': {
         'source_model': 'InjectionUnit',
         'source': 'InjectionUnit.nozzle_type',
@@ -54,7 +54,7 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'condition': '必填',  # algorithm _validate_inputs + total_len 计算
     },
 
-    # ② 塑化与注射能力（设备极限）
+    # 塑化与注射能力（设备极限）
     'max_injection_stroke': {
         'source_model': 'InjectionUnit',
         'source': 'InjectionUnit.max_injection_stroke',
@@ -120,7 +120,7 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'condition': '可选',
     },
 
-    # ②+ 液压机特需（设备极限）
+    # 液压机特需（设备极限）
     # 说明：这两个字段原标「液压机必填」，但算法层（algorithm_engine 等）完全未引用，
     #        仅为 InjectionUnit 的「设备能力描述」，并不参与工艺推导。
     #        保留在 spec 是为了前端能编辑/展示，但不应阻塞初始化推理。
@@ -141,7 +141,7 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'condition': '可选',
     },
 
-    # ③ HMI 可设定范围（操作界面限制）
+    # HMI 可设定范围（操作界面限制）
     'max_set_injection_pressure': {
         'source_model': 'InjectionUnit',
         'source': 'InjectionUnit.max_set_injection_pressure',
@@ -203,7 +203,7 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'condition': '可选',
     },
 
-    # ③+ 液压机特需（HMI 可设定范围）
+    # 液压机特需（HMI 可设定范围）
     'max_set_metering_pressure': {
         'source_model': 'InjectionUnit',
         'source': 'InjectionUnit.max_set_metering_pressure',

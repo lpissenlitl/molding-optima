@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class DataValidator:
-    """算法层数据校验器（接口契约 + 智能默认值）
+    """算法层数据校验器（接口契约 + 智能默认值）。
 
     在 ProcessInitializer 构造时调用 validate()，确保输入数据符合算法要求。
 
@@ -46,7 +46,7 @@ class DataValidator:
         *,
         is_hydraulic: bool = False,
     ) -> None:
-        """校验输入数据 + 智能填充材料默认值
+        """校验输入数据 + 智能填充材料默认值。
 
         顺序：智能填充 → 校验 → 最终检查
         原因：先按 abbreviation 查材料族填充，校验后只需要检查

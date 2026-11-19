@@ -1,4 +1,4 @@
-"""规则中心 v2 视图层
+"""规则中心 v2 视图层。
 
 URL 段 (4 类资源对称, 全部为 list + detail):
 - rules/keywords/        规则关键词 (基础字典)
@@ -44,7 +44,7 @@ def _operator_name(request) -> str:
 
 @method_decorator(require_login, name="dispatch")
 class RuleKeywordListView(BaseView):
-    """规则关键字列表 / 创建"""
+    """规则关键字列表 / 创建。"""
 
     @method_decorator(validate_parameters(RuleKeywordListSchema))
     def get(self, request, cleaned_data):
@@ -66,7 +66,7 @@ class RuleKeywordListView(BaseView):
 
 @method_decorator(require_login, name="dispatch")
 class RuleKeywordDetailView(BaseView):
-    """规则关键字详情 / 更新 / 删除"""
+    """规则关键字详情 / 更新 / 删除。"""
 
     def get(self, request, rule_keyword_id):
         return rule.get_rule_keyword(rule_keyword_id)
@@ -82,7 +82,7 @@ class RuleKeywordDetailView(BaseView):
 
 @method_decorator(require_login, name="dispatch")
 class RuleLibraryListView(BaseView):
-    """规则库列表 / 创建"""
+    """规则库列表 / 创建。"""
 
     @method_decorator(validate_parameters(RuleLibraryListSchema))
     def get(self, request, cleaned_data):
@@ -106,7 +106,7 @@ class RuleLibraryListView(BaseView):
 
 @method_decorator(require_login, name="dispatch")
 class RuleLibraryDetailView(BaseView):
-    """规则库详情（含归属校验：租户只能读自己的库 + 系统级库）"""
+    """规则库详情（含归属校验：租户只能读自己的库 + 系统级库）。"""
 
     def get(self, request, rule_library_id):
         return rule.get_rule_library(
@@ -137,7 +137,7 @@ class RuleLibraryDetailView(BaseView):
 
 @method_decorator(require_login, name="dispatch")
 class RuleMethodListView(BaseView):
-    """规则方法列表 / 创建
+    """规则方法列表 / 创建。
 
     GET 可选 query:
     - defect_code  按缺陷查询所有启用的规则 (业务功能, 不分页)
@@ -165,7 +165,7 @@ class RuleMethodListView(BaseView):
 
 @method_decorator(require_login, name="dispatch")
 class RuleMethodDetailView(BaseView):
-    """规则方法详情"""
+    """规则方法详情。"""
 
     def get(self, request, rule_method_id):
         return rule.get_rule_method(rule_method_id)
@@ -183,7 +183,7 @@ class RuleMethodDetailView(BaseView):
 
 @method_decorator(require_superuser, name="dispatch")
 class ExpertRuleListView(BaseView):
-    """专家规则列表 / 创建"""
+    """专家规则列表 / 创建。"""
 
     @method_decorator(validate_parameters(ExpertRuleListSchema))
     def get(self, request, cleaned_data):
@@ -202,7 +202,7 @@ class ExpertRuleListView(BaseView):
 
 @method_decorator(require_superuser, name="dispatch")
 class ExpertRuleDetailView(BaseView):
-    """专家规则详情"""
+    """专家规则详情。"""
 
     def get(self, request, expert_rule_id):
         return rule.get_expert_rule(expert_rule_id)
@@ -228,14 +228,14 @@ class ExpertRuleDetailView(BaseView):
 
 @method_decorator(require_superuser, name="dispatch")
 class RulePromotionView(BaseView):
-    """规则晋升到公共库（平台超管专用）
+    """规则晋升到公共库（平台超管专用）。
 
-    ⚠️ **为什么只有平台超管能做**：公共库是**全平台资产** ——
+    【注意】**为什么只有平台超管能做**：公共库是**全平台资产** ——
        规则一旦晋升进去，**所有租户**的试模推荐都会用上它。
        若允许租户自助晋升，等于任何租户都能把任意规则扩散给所有租户。
        ⇒ view 层 `require_superuser`，service 层再校验一次（双保险）。
 
-    ⚠️ **语义是「移动」不是「复制」**：规则的所属库改指向公共库，
+    【注意】**语义是「移动」不是「复制」**：规则的所属库改指向公共库，
        原租户私库不再保留该规则；规则的 `company_id` 保留原租户值作溯源。
     """
 
