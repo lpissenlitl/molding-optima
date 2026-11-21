@@ -33,37 +33,31 @@ from masterdata.models.material import Polymer
 from masterdata.models.mold import Mold
 from process.algorithms.expert.initializer import ProcessInitializer
 from process.algorithms.expert.rule_matcher import InitRuleMatcher
-# 字段定义单一来源：算法层 specs.py（service 层不重复定义字段）
-from process.algorithms.expert.specs import (
-    MOLD_INFO_SPEC,
-    MACHINE_INFO_FIELDS,
-    POLYMER_INFO_FIELDS,
-)
 from process.algorithms.integrate_params import (  # 第3层：整合参数
     integrate,
     numeric_snapshot,
 )
 from process.algorithms.check_params import validate  # 第4层：校验参数合理性
-# 越限识别口径复用模糊推理层（唯一真相源，不在本 service 里另写一套判据）：
-#   resolve_position_limits  —— 机台实测注射行程 → 位置类上限
-#   detect_over_stroke_limits —— 位置类超行程识别（纯函数）
-#   to_algo_params           —— 业务字段名 → 算法字段名（位置类参数按算法名匹配）
-from process.algorithms.fuzzy.field_names import to_algo_params
-from process.algorithms.fuzzy.over_limit import detect_over_stroke_limits
-from process.algorithms.fuzzy.specs import resolve_position_limits
 from process.exceptions import (
     ERROR_MACHINE_NOT_FOUND,
     ERROR_MOLD_NOT_FOUND,
     ERROR_POLYMER_NOT_FOUND,
     ERROR_PROCESS_CONDITION_NOT_FOUND,
     ERROR_PROCESS_INSUFFICIENT_FIELDS,
-    ERROR_PROCESS_OVER_STROKE,
     ERROR_PROCESS_PARAMETER_NOT_FOUND,
 )
 from process.models.condition import ProcessCondition
 from process.models.parameter import ProcessParameter
 from process.models.tuning_record import TuningRecord
 from utils.objects import safe_json
+from .spec_extract import (  # 参数提取专区（优化 / 初始化两条链路共用；按需自取）
+    build_machine_info_from_snapshot,
+    build_mold_info_from_snapshot,
+    build_polymer_info_from_snapshot,
+)
+from .over_limit_guard import (  # 越限守卫专区（与优化链路共用同一判据与文案）
+    guard_position_over_stroke,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,266 +194,9 @@ def _build_process_context_snapshot(
     return safe_json(raw)
 
 
-# --- 快照 → 算法入参：从完整快照中抽取 algorithm 需要的扁平字段 ---
-# 设计原则：
-#   - 算法入参（_infer_kernel）依然是扁平 dict，不变
-#   - 这里只是"快照 → 算法入参"的转换层，算法不直接看快照
-#   - 快照是完整的（落库 / 历史回溯），算法入参是精简的（按 MOLD_INFO_SPEC 提取）
-#   - 通用提取：按 spec.source_model 路由到 snapshot 的不同子表，多腔/多浇口统一取第一个
-#   - 特殊处理：attr_name=None 的计算字段（gate_radius = diameter / 2 (or outer_diameter / 2)）+
-#                attr_name 同名但带 fallback 语义的字段（runner_weight / max_length）
-
-
-def _resolve_mold_data_sources(mold_snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """解析 mold snapshot 的数据源（按 source_model 拆解）。
-
-    路由关系：
-        source_model='Mold'         → snapshot['mold']
-        source_model='GatingSystem' → snapshot['gating_system']
-        source_model='Cavity'       → snapshot['gating_system']['cavities'][0]（多腔取第一个）
-        source_model='Gate'         → snapshot['gating_system']['cavities'][0]['gates'][0]（多浇口取第一个）
-
-    多腔/多浇口场景的子项选取（"取第一个"）由本函数统一封装，
-    _build_mold_info_from_snapshot 不 hardcode cavities[0] / gates[0]。
-    """
-    sources: Dict[str, Dict[str, Any]] = {}
-    sources['Mold'] = mold_snapshot.get('mold') or {}
-    sources['GatingSystem'] = mold_snapshot.get('gating_system') or {}
-
-    gating = mold_snapshot.get('gating_system') or {}
-    cavities = gating.get('cavities') or []
-    if cavities:
-        sources['Cavity'] = cavities[0]
-        gates = cavities[0].get('gates') or []
-        if gates:
-            sources['Gate'] = gates[0]
-    return sources
-
-
-def _build_mold_info_from_snapshot(
-    mold_snapshot: Dict[str, Any],
-) -> Dict[str, Any]:
-    """从 mold 快照构建算法入参 mold_info。
-
-    Args:
-        mold_snapshot: _build_mold_snapshot 的返回值
-                       形如: {"mold": {...}, "gating_system": {..., "cavities": [...], "gates": [...]}}
-
-    Returns:
-        算法入参 mold_info（扁平 dict，含 None 字段）
-
-    提取原则：
-    - 通用提取：按 MOLD_INFO_SPEC 遍历，【全部提取】（含 None）—— 前端能编辑/展示所有 spec 字段
-    - 特殊 fallback：runner_weight / max_length 补充计算
-    - 特殊计算：gate_radius = diameter / 2 (or outer_diameter / 2)
-    - 算法层 audit_field_completeness 只校验 "必填/液压机必填/条件必填" 字段，
-      "可选/推荐" 字段提取 None 不影响校验结果（"可选/推荐" 会被跳过）
-    """
-    data_sources = _resolve_mold_data_sources(mold_snapshot)
-    mold_info: Dict[str, Any] = {}
-
-    # 1. 通用提取：按 MOLD_INFO_SPEC 遍历，每个字段都提取（含 None）
-    #    - attr_name=None 的计算字段跳过（单独处理）
-    #    - 可选/推荐字段提取 None（前端能编辑/展示）
-    #    - source_model 缺失时（Cavity/Gate 无数据）取空 dict 兜底
-    for target_key, spec in MOLD_INFO_SPEC.items():
-        attr_name = spec.get('attr_name')
-        if not attr_name:
-            continue  # 计算字段（gate_radius）单独处理
-        source_model = spec.get('source_model')
-        data = data_sources.get(source_model) or {}
-        mold_info[target_key] = data.get(attr_name)
-
-    # 2. 特殊 fallback：runner_weight 优先取 runner_weight，否则取 estimated_runner_weight
-    if mold_info.get('runner_weight') is None:
-        gating = data_sources.get('GatingSystem') or {}
-        est = gating.get('estimated_runner_weight')
-        if est is not None:
-            mold_info['runner_weight'] = est
-
-    # 3. 特殊 fallback：max_length 优先取 max_flow_length，否则取 flow_ratio * ave_wall_thickness
-    if mold_info.get('max_length') is None:
-        cavity = data_sources.get('Cavity') or {}
-        flow_ratio = cavity.get('flow_ratio')
-        ave_thickness = cavity.get('ave_wall_thickness')
-        if flow_ratio is not None and ave_thickness is not None:
-            mold_info['max_length'] = flow_ratio * ave_thickness
-
-    # 4. 特殊计算：gate_radius = diameter / 2 (or outer_diameter / 2)（spec.attr_name=None）
-    #    针阀式/点浇口用 diameter，环形浇口用 outer_diameter
-    #    只在未填充时计算（保留可能的“外部覆盖”）
-    if mold_info.get('gate_radius') is None:
-        gate = data_sources.get('Gate') or {}
-        if gate.get('diameter') is not None:
-            mold_info['gate_radius'] = gate['diameter'] / 2
-        elif gate.get('outer_diameter') is not None:
-            mold_info['gate_radius'] = gate['outer_diameter'] / 2
-
-    return mold_info
-
-
-def _build_machine_info_from_snapshot(
-    machine_snapshot: Dict[str, Any],
-) -> Dict[str, Any]:
-    """从 machine 快照构建算法入参 machine_info。
-
-    Args:
-        machine_snapshot: _build_machine_snapshot 的返回值
-                          形如: {"machine": {...}, "injection_unit": {...}}
-
-    Returns:
-        算法入参 machine_info（扁平 dict，含 None 字段）
-
-    提取原则：
-    - 通用提取：按 MACHINE_INFO_FIELDS 遍历，【全部提取】（含 None）—— 前端能编辑/展示所有 spec 字段
-    - algorithm 只看 "必填/液压机必填" 字段（"可选" 字段被跳过）
-    """
-    machine_data = machine_snapshot.get("machine") or {}
-    unit = machine_snapshot.get("injection_unit") or {}
-
-    machine_info: Dict[str, Any] = {}
-
-    # 按 MACHINE_INFO_FIELDS 遍历，source_model 决定从 machine_data / unit 取
-    #    算法层 ProcessInitializer 负责 drive_system → power_method 转换
-    #    这里只把 drive_system 放进去（不动转换逻辑——关注点分离）
-    for target_key, spec in MACHINE_INFO_FIELDS.items():
-        attr_name = spec.get('attr_name')
-        if not attr_name:
-            continue
-        source_model = spec.get('source_model')
-        if source_model == 'InjectionMoldingMachine':
-            data = machine_data
-        elif source_model == 'InjectionUnit':
-            data = unit
-        else:
-            # 显式报错：避免 spec 扩 source_model 时静默取错数据
-            raise ValueError(
-                f"MACHINE_INFO_FIELDS['{target_key}'] 的 source_model={source_model!r} "
-                f"未在 service 层处理（已知：InjectionMoldingMachine / InjectionUnit）"
-            )
-        machine_info[target_key] = data.get(attr_name)
-
-    return machine_info
-
-
-def _build_polymer_info_from_snapshot(
-    polymer_snapshot: Dict[str, Any],
-) -> Dict[str, Any]:
-    """从 polymer 快照构建算法入参 polymer_info。
-
-    Args:
-        polymer_snapshot: _build_polymer_snapshot 的返回值
-                          形如: {"polymer": {...}}
-
-    Returns:
-        算法入参 polymer_info（扁平 dict，含 None 字段）
-
-    提取原则：
-    - 通用提取：按 POLYMER_INFO_FIELDS 遍历，【全部提取】（含 None）—— 前端能编辑/展示所有 spec 字段
-    - algorithm 只看 "必填" 字段（"可选" 字段被跳过）
-    """
-    polymer_data = polymer_snapshot.get("polymer") or {}
-    polymer_info: Dict[str, Any] = {}
-
-    for target_key, spec in POLYMER_INFO_FIELDS.items():
-        attr_name = spec.get('attr_name')
-        if not attr_name:
-            continue
-        polymer_info[target_key] = polymer_data.get(attr_name)
-
-    return polymer_info
-
-
-def _param_label(business_name: str) -> str:
-    """业务字段名 → 中文标签（取 ProcessParameter 字段的 verbose_name）。
-
-    例：``met_end_pos`` → ``熔胶终止位置``。
-
-    文案面向的是工艺员，必须用中文标签而不是 ``met_end_pos`` / ``MEL``。
-    与 ``parameter_optimize._param_label`` 同口径（同一份展示规则）；
-    两处各写一份：它们分属不同 service 的**局部展示工具**，
-    为此抽到公共模块属于为 5 行代码扩大改动面，不划算。
-
-    参数不在 ProcessParameter 里时（规则库专用参数如 ``IPOS`` / ``CUSION``）
-    回落到业务字段名本身。
-    """
-    if not business_name:
-        return business_name
-    try:
-        return ProcessParameter._meta.get_field(business_name).verbose_name
-    except Exception:  # noqa: BLE001 —— 字段不存在 / 非模型字段
-        return business_name
-
-
-def _format_limit_number(value: Any) -> str:
-    """上限 / 需用值的展示格式：整数不带小数尾巴（'100' 而不是 '100.0000'）。
-
-    与 ``parameter_optimize._format_limit_number`` 同口径（数值展示格式一致）。
-    两处各写一份：它们分属不同 service 的**局部展示工具**，
-    为此抽到公共模块属于为 3 行格式化代码扩大改动面，不划算。
-    """
-    try:
-        if float(value) == int(value):
-            return str(int(value))
-    except (TypeError, ValueError):
-        pass
-    return ('%.4f' % value).rstrip('0').rstrip('.')
-
-
-def _guard_over_stroke(
-    process_flat: Dict[str, Any],
-    machine_info: Dict[str, Any],
-) -> None:
-    """位置类超行程守卫 —— **机台能力校验**（超了直接 400 拒绝，不产出错参数）。
-
-    与优化链路的越限处理**判据相同、处理方式不同**：
-
-    - 那边（``parameter_optimize``）：位置类超行程 ⇒ **只告知不阻断**
-      —— 那是「已有参数」下产品做不出来，用户改不了 ⇒ 拦了没出路；
-    - 这边（初始化）：算出来的**初值本身就是超行程的** ⇒ 落到参数表里就是
-      让操作工去设一个机台根本设不进去的值 ⇒ **拒绝**，
-      文案指向「换机」而不是「改个值」。
-      【注意】**以产品为目标**（产品形态已定）⇒ 出路只有「换行程更大的机」，
-      不给「减轻制品重量 / 减少型腔数」这类迁就设备的建议。
-
-    判据复用越限识别层的唯一口径（``fuzzy/over_limit.detect_over_stroke_limits``），
-    上限取设备实测的最大注射行程（``fuzzy/specs.resolve_position_limits``）。
-
-    【注意】缺机台行程（``max_injection_stroke`` 没录）⇒ **不判**：缺数据不等于
-    参数不合理（同 ``resolve_position_limits`` 的既定口径）。
-
-    Args:
-        process_flat: flat 形态的工艺参数（业务字段名）。
-        machine_info: 算法入参 machine_info（含 ``max_injection_stroke``）。
-
-    Raises:
-        BizException(ERROR_PROCESS_OVER_STROKE): 位置类参数超出机台注射行程
-    """
-    limits = resolve_position_limits(machine_info)
-    if not limits:
-        return
-    algo_params = to_algo_params(process_flat)
-    items = detect_over_stroke_limits(algo_params, limits)
-    if not items:
-        return
-
-    # 多个位置参数同时超出行程（注射位置 / 计量位置 / 终止位置）⇒ 合并成一条：
-    # 它们说的是同一件事（这个产品在本机做不出来），逐条提示只会刷屏。
-    # 【注意】文案三段式：**事实**（哪个参数、超多少）→ **出路**（换更大的机）。
-    #    「本机做不出来」的结论由错误码标题承担（当前设备无法生产该制品），
-    #    正文不再重复；出路只给「换机」—— 产品是既定的，不迁就设备。
-    top = max(items, key=lambda item: item.exceeded_by)
-    others = len(items) - 1
-    label = _param_label(top.business_name or top.param_name)
-    message = (
-        '%s需 %smm，超出本机注射行程 %smm%s，请更换行程更大的设备'
-        % (label,
-           _format_limit_number(top.current_value),
-           _format_limit_number(top.limit),
-           ('（另有 %d 项超出行程）' % others) if others else '')
-    )
-    logger.warning("[initialize] 位置类超行程，拒绝初始化: %s", message)
-    raise BizException(ERROR_PROCESS_OVER_STROKE, message)
+# --- 越限守卫（位置类超行程）---
+# 【注意】实现见 :mod:`process.services.over_limit_guard` —— 与优化链路共用同一判据、
+#    同一错误码、同一文案 ⇒ 同一台机、同一产品，初始化报错说什么、优化报错也说什么。
 
 
 # 快照路径：ORM → snapshot → 4 维算法入参
@@ -564,9 +301,9 @@ class ParameterInitializeService:
             )
 
             # Step 2b: 从快照构建算法入参
-            mold_info = _build_mold_info_from_snapshot(mold_snapshot)
-            machine_info = _build_machine_info_from_snapshot(machine_snapshot)
-            polymer_info = _build_polymer_info_from_snapshot(polymer_snapshot)
+            mold_info = build_mold_info_from_snapshot(mold_snapshot)
+            machine_info = build_machine_info_from_snapshot(machine_snapshot)
+            polymer_info = build_polymer_info_from_snapshot(polymer_snapshot)
 
             # Step 3: 推理算法
             result = ParameterInitializeService._infer_kernel(
@@ -590,8 +327,12 @@ class ParameterInitializeService:
             # Step 3.5: 机台能力校验 —— 位置类参数超出机台注射行程 ⇒ 400 拒绝
             # （算出来的初值本身就是超行程的 ⇒ 落库就是让操作工去设一个
             #   机台根本设不进去的值 ⇒ 拒绝，不产出错参数）
-            _guard_over_stroke(
-                process_params_to_flat(result['process']), machine_info)
+            guard_position_over_stroke(
+                values=process_params_to_flat(result['process']),
+                machine_info=machine_info,
+                scope='initialize',
+                interface_tag='from_masterdata',
+            )
 
             # Step 4: 落库
             condition = ProcessCondition.objects.create(
@@ -754,7 +495,12 @@ class ParameterInitializeService:
         result = {k: v for k, v in result.items() if k != 'process'}
         result['parameter'] = flat
         # 机台能力校验（与 from_masterdata 同口径）：位置类超行程 ⇒ 400 拒绝
-        _guard_over_stroke(result['parameter'], machine_info)
+        guard_position_over_stroke(
+            values=result['parameter'],
+            machine_info=machine_info,
+            scope='initialize',
+            interface_tag='from_provided',
+        )
         return result
 
     # --- 核心算法 —— 私有方法，三个入口共用 ---

@@ -119,11 +119,11 @@
 > ⚠️ **文件位置已被批次 9 重排**（见 §3.7）：下表的机制**全部保留**，
 > 只是从「按技术角色切分」改成「按 4 层流程切分」。
 
-- `algorithms/decide_direction.py::resolve_direction`（原 `recommendation_apply.py::apply_recommendations`）
+- `algorithms/decide_direction.py::build_plan`（原 `recommendation_apply.py::apply_recommendations`）
   ⇒ ① 候选集 → ② **第2层裁决** → ③ 明确方向（`MEL` 目标已翻成计量位置）；
-- `services/parameter_optimize.py::_resolve_direction`（原 `_apply_recommendations_to_baseline`）
+- `services/parameter_optimize.py::_decide_plan_by_strategy`（原 `_apply_recommendations_to_baseline`，批次 14.3 / 14.4 改名）
   ⇒ **当前传空表/空场景 ⇒ 不裁决 ⇒ 运行行为与「不接第2层」完全一致**；
-- 留痕落**后端日志**（`_logger.info('infer direction: …')`），**不动响应契约**；
+- 留痕落**后端日志**（`_logger.info('infer plan: …')`），**不动响应契约**；
 - 护栏 `tests/test_direction_layer.py`（让位不落地 / 让位的 MEL 不进翻译 / 空表不变 / 暂缓也留痕 / 次序只来自数据）；
 - 第3层侧口径（同时期）：`MEL` 两步式推算 `① ML_N 基准 = 原MEL − 原DDAM` `② MEL_新 = ML_N + DDAM + ΔDDAM + ΔMEL`
   ⇒ 落库的计量位置 = `原ML_N + ΔMEL`（**`ΔDDAM` 不叠加到计量位置**）。
@@ -142,7 +142,7 @@
 | ~~`process/models/strategy.py`~~ | ⏪ **已撤回**（批次 11）—— 独立策略表（`StrategyPolicy` + `StrategyPriorityEntry`）连同 migration `0019` 与种子命令一并删除 | 撤回理由见 §6.2 |
 | `process/algorithms/strategies.py` | **策略清单**（文件版）：场景 + 触发条件 + 准入 + 优先集 + 名额 + 目标口径 + 字段级优先级表 | **代码即规则**（不是 JSON 第二门语言）；**12.4a 起清单有 6 条**（S1 `filling_first` / S2 `shrinking_first` / S3 三条 `flash_first`·`burn_first`·`gasveins_first` + 兜底 `default_one_adjust`） |
 | `process/algorithms/decide_direction.py` | 场景判定**机制**（条件求值 + 选策略）+ 裁决机制（同一模块） | **零 ORM**；条件沿用 `ExpertRule.conditions` 的 `field/operator/value` 范式；**缺数据 ⇒ 不命中**、**未知操作符 ⇒ 不命中** |
-| `process/services/policies.py` | 读策略清单 → 组装 `PolicyResolution`（场景 + 优先级表 + 留痕） | 读清单失败 ⇒ warning + **全空**（不裁决）；命中多条 ⇒ 取**第一条**（最具体） |
+| `process/services/strategy_inputs.py` | 读策略清单 → 组装 `StrategyInputs`（场景 + 优先级表 + 留痕） | 读清单失败 ⇒ warning + **全空**（不裁决）；命中多条 ⇒ 取**第一条**（最具体） |
 | `process/algorithms/anchors.py::resolve_fill_target` | 充填量目标求解器（第3层） | `目标行程 = 当前行程 × (目标重量/实测重量)`；`ML_N 目标 = VPTL + 目标行程`；数据不全 ⇒ `None`（回落增量口径，不臆造） |
 
 **策略清单**（`process/algorithms/strategies.py`，批次 11 起）：
@@ -196,26 +196,41 @@ anchors.py  ←  decide_direction.py  ←  integrate_params.py  ←  check_param
 |---|---|---|
 | `algorithms/strategy.py` | 优先级表 + 裁决 | ➡️ `algorithms/decide_direction.py`（裁决）+ `algorithms/strategies.py`（清单） |
 | `algorithms/scenario.py` | 条件求值 + 选策略 | ➡️ `algorithms/decide_direction.py`（合并） |
-| `algorithms/recommendation_apply.py` | 候选集 + 裁决 + 写入 | ➡️ 候选集 → `decide_direction.py::collect_candidates`；写入 → `integrate_params.py::apply_direction` |
+| `algorithms/recommendation_apply.py` | 候选集 + 裁决 + 写入 | ➡️ 候选集 → `decide_direction.py::collect_candidates`；写入 → `integrate_params.py::apply_plan` |
 | `algorithms/consistency.py` | 锚点传导 | ➡️ `algorithms/integrate_params.py` |
 | `algorithms/param_consistency.py` | 差分 + 传导 + 自检编排 | ➡️ 差分 + 传导 → `integrate_params.py::integrate`；自检 → `check_params.py::validate` |
 | `algorithms/param_checks.py` | 三类合理性检查 | ➡️ `algorithms/check_params.py` |
-| `services/strategy.py` | 读策略表 + 组装 | ➡️ `services/policies.py`（`StrategyResolution` → `PolicyResolution`；批次 11 起读**清单文件**） |
+| `services/strategy.py` | 读策略表 + 组装 | ➡️ `services/strategy_inputs.py`（批次 11 起读**清单文件**） |
 
 **命名统一**：`PolicySpec` / `ScenarioPolicy` / `StrategyResolution` 三名并存
-⇒ 合并为**唯一** `ScenarioPolicy`（吸收 `conditions` / `priority` / `priority_table`），
-服务层一律叫 `PolicyResolution`。
+⇒ 合并为**唯一** `ScenarioStrategy`（吸收 `conditions` / `priority` / `priority_table`），
+服务层一律叫 `StrategyInputs`。
 （批次 11：`policy_id` / `owner_rank` 随策略表一并撤回 —— 前者是表主键，后者是租户归属排序，
 文件版载体两者都不存在。）
+
+> 🔄 **2026-11-20 翻案：词根 `policy` → `strategy`**（用户拍板）
+>
+> - **理由①（工业语境）**：制造业现场的 "policy" 读作**管理制度/作业方针**
+>   （安全方针、质量方针），不是「这台机这轮该调哪几个旋钮」的**加工决策**。
+> - **理由②（词根一致）**：中文层本来就是「L1 = 规则 / L2 = 策略」，而英文里被劈成
+>   `Policy` 与 `Strategy` 两套词根 ⇒ 纯词根不一致，与语义无关。
+> - **词根排除**：`rule`（已被第1层规则库占满）/ `plan`（已被 `LandingPlan` 占用）
+>   / `recipe`（中文「配方」偏材料配方）⇒ 只能统一到 `strategy`。
+>
+> **现行名**：`StrategyInputs` / `ScenarioStrategy` / `resolve_strategy_inputs` /
+> `select_strategy` / `SCENARIO_STRATEGIES` / `services/strategy_inputs.py`。
+> 本文档**历史批次记录**里的旧名（`PolicyResolution` / `ScenarioPolicy` /
+> `resolve_policies` / `select_policy` / `SCENARIO_POLICIES` / `services/policies.py`）
+> **一律保留原样** —— 那是当时的代码事实。
 
 **service 层变成 4 层直线**（`parameter_optimize.py::_infer_core`）：
 
 ```python
 # 第2层：结合实际情况，确定明确的调整方向
-direction = _resolve_direction(...)
+plan = _decide_plan_by_strategy(...)
 
 # 第3层：整合参数（写入方向 + 锚点传导自洽）
-integrated = apply_direction(baseline, direction, previous=baseline)
+integrated = apply_plan(baseline, plan, previous=baseline)
 
 # 第4层：校验参数合理性（只报不阻断）
 validation = validate(integrated.values)
@@ -317,7 +332,7 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
 
 | # | 待拍 | 状态 |
 |---|---|---|
-| **①** | **准入的默认语义**：默认全允许 + 显式收紧／默认全禁止 + 显式允许 | ✅ **已拍板：默认全允许 + 显式收紧**（`allowed_params` 空 = 不限制；漏配退化为「没筛选」，不挡掉必要调整）⇒ `ScenarioPolicy.allowed_params` |
+| **①** | **准入的默认语义**：默认全允许 + 显式收紧／默认全禁止 + 显式允许 | ✅ **已拍板：默认全允许 + 显式收紧**（`allowed_params` 空 = 不限制；漏配退化为「没筛选」，不挡掉必要调整）⇒ `ScenarioStrategy.allowed_params` |
 | **②** | **「本场景不允许」的存储形态**：复用规则表加一列／独立策略表／**文件清单** | ✅ **已定：文件清单**（批次 11，原「独立策略表」已撤回 ⇒ §6.2）⇒ `algorithms/strategies.py`（场景 + 条件 + 准入 + 优先集 + 名额 + 目标口径 + 字段级优先级表） |
 | ③ | 次序要几层：方向级 + 参数组级 + 字段级三层／先落组级 + 字段级两层 | 🟡 **部分落地**：本轮按旧版机制 ⇒ 只落**场景优先集（方向级简化版）+ 字段级**；**组级未做**（旧版无此需求）；⚠️ **批次 13.0**：场景优先集已能表达**组级次序**（`filling_stage_first` 把「胶量端 → 保压 → 熔体侧 → 料筒温度」写在优先集里）⇒ **组级实际可用**，但仍**没有独立的组级配置层** |
 | ④ | 方向 / 场景的数据来源：规则库关键词／独立策略表／**文件清单**／手工配置 | ✅ **已定：文件清单**（同 ②，批次 11）；⚠️ **清单当前为空** ⇒ 待阶段口径（§6 表 ⑧）定后填充 |
@@ -624,3 +639,292 @@ L2 留痕（用了哪条经验 / 谁让位 / 为什么）
    `inj_t` 让位给 `inj_spd_1`，而 `inj_spd_1` 属基线项禁入 ⇒ **`inj_t` 永远调不了**。
    这符合 G3 原意（注射阶段是速度控制，设定时间只是设定值），
    但意味着短射少了一个强力旋钮 ⇒ **需用户另行拍板**。
+
+✅ **批次 14.0 已落地**（2026-11-20）—— **「改成多少」归第3层**（第2层不再求落地值）：
+   **用户指出的问题**：第2层耦合参数 —— 「我现在的场景就是天黑的情况，所以第2层应该只考虑
+   规则信息，我不认为需要和参数有关联；参数怎么落地是第三层的工作」。
+   ⇒ **与本文 §1 的分层定位对齐**：第2层「**不重算数值**」、第3层「MEL 目标 ⇒ 计量位置」——
+   **代码此前偏离了文档**（MEL 翻译落在第2层），本批次把实现拉回文档口径。
+
+   ① **第2层（`decide_direction.py`）回归纯筛选**：
+      - `resolve_direction()` **去掉 `baseline` 入参**（不再读现状参数集）；
+      - 删掉 MEL 翻译块（`apply_mel_targets` / `resolve_fill_target` 的调用）；
+      - `Direction` 契约改为：`decisions`（**非派生量**的绝对值）+ `mel_targets`
+        （MEL 目标值，**未翻算**）+ `target_mode`（口径：`'fill_ratio'` / `'delta'`）；
+      - 删掉 `Direction.fill_target`（第2层不再解算充填量目标）。
+   ② **第3层（`integrate_params.py`）接管落地值**：
+      - `apply_direction()` 新增 `fill_weights`（目标重量, 实测重量）入参；
+      - 按 `direction.target_mode` 换算：`'fill_ratio'` ⇒ 按重量比例解算行程
+        （解不出来 ⇒ **回落增量口径**）；其它 ⇒ 旧 MEL + ΔMEL；
+      - `IntegratedParams` 新增 `fill_target` 字段（充填量目标随留痕）。
+   ③ **底座（`anchors.py`）**：`apply_mel_targets()` 从第2层**下沉到底座**
+      （与 `resolve_mel_target` 同居 ⇒ 物理换算只有一处）。
+   ④ **编排层（`services/parameter_optimize.py`）**：第2层分节标题**上移**
+      （此前「策略数据」那段落在第1层分节里 ⇒ 读代码会误判归属）；新增 `_fill_weights(context)`。
+   ⇒ **行为零变化**：同一套公式、同一个旧值基线 ⇒ 落地值与顺序完全一致
+     （**A/B 对拍 8 个用例逐条差异 = 0**：增量口径 / 比例口径 / 缺重量回落 / MEL 让位 /
+     多候选 / 纯非派生量）；pytest **117 passed**；`verify_provided_smoke.py` PASSED。
+   ⚠️ **第2层仍读参数的两处**（**筛选依据**，不是落地计算）：
+      - **候选准入**：基线里没有这个字段 ⇒ 无处可落 ⇒ 不进候选；
+      - **让位预筛**：只有当前有值的旋钮才算「可调」（批次 12.8 的明确要求）。
+      ⇒ ⚠️ **这两处已在批次 14.1 拿掉**（第2层不再碰参数）。
+   ⚠️ **口径表述**（本文 §1 表第2层「不重算数值」）：`MEL` 这类**派生量**仍由第2层**裁决**
+     （用不用它、什么口径），只是**换算**挪到第3层 ⇒ 「不重算」指不产出落地值。
+
+✅ **批次 14.1 已落地**（2026-11-20）—— **第2层不掺合参数**（第2层只筛规则）：
+
+   **用户指出的问题**：我拿「规则是否可用」在第2层讨论了两轮（候选准入 / 让位预筛），
+   用户纠正：「**参数是否合理，甚至规则是否能用，放在第三层校验即可**……
+   第二层就是对规则的筛选，不应该糅合参数」⇒ 共识：
+   **每一层的工作都要清晰，不互相糅合**；**不为单个字段在某一层加特例兜底**。
+
+   ① **第2层（`decide_direction.py`）不再碰参数**：
+      - `collect_candidates()` **去掉 `baseline` 入参**与「基线里没有 ⇒ 不进候选」的准入
+        ⇒ 它只筛「**根本不算建议**」的条目（没推荐值 / 译不出业务字段名）；
+      - `resolve_direction()` 已于批次 14.0 去掉 `baseline` ⇒ **本层入参只剩
+        候选建议 + 实际情况 + 策略数据**；
+      - 删掉 `services/parameter_optimize.py::_unlandable_veto()`（让位预筛：
+        按「让位对象当前有没有值」预判白改）⇒ **第2层不再为单个字段做兜底**。
+   ② **第3层（`integrate_params.py`）接管「规则是否可用」**：
+      - `apply_direction()` 写入前校验字段是否在参数集里 ⇒ 不在 ⇒ **剔除 + 记入
+        `IntegratedParams.unresolved` 留痕**（不写进参数集 ⇒ 落库不脏）；
+      - 真正「一个量都没落地」时 ⇒ 由编排层既有的**零落地守卫**明确报错。
+   ③ **底座**：`anchors.unlandable_params()` 保留（**物理判据**），口径改为
+      「第2层已不再用它预判；供第3层 / 规则层在需要时引用」。
+   ④ **编排层**：`parameter_optimize._decide_direction_by_strategy()` 去掉 `baseline` 入参；
+      展示层过滤（`_build_suggestion_payload`）与第3层校验**同口径**。
+
+   ⇒ **验证**：pytest **118 passed**（新增 1 条护栏：`test_layer2_does_not_check_parameter_existence`）；
+     `verify_provided_smoke.py` PASSED —— `not_in_baseline` 那条建议**仍不进参数集**
+     （现在是**第3层剔除 + 留痕**，可见而非静默）。
+
+   ⚠️ **行为变化（1 处，需知悉）**：**兜底场景**（`default_one_adjust`）当候选首位是
+   `inj_t` 时，由「第2层预筛 ⇒ 名额顺延给 `hold_spd_1` ⇒ 落地」变成
+   「`inj_t` 占名额 ⇒ 第3层 G3 让位回退 ⇒ **零落地** ⇒ 零落地守卫报错
+   （「本轮调整无法落地（让位回退：inj_t→inj_spd_1）」）」。
+   ⇒ 这是「第2层不为单个字段做兜底」的**必然代价**（用户口径：
+   「不管调不调 `inj_t`，我的系统都能运行……如果因为你这一个字段，
+   我的第2层需要做这么多兜底的工作，这是不合理的」）。
+   ⇒ **根治路径在规则/策略层**（`inj_t` 的替代规则，或 `inj_spd_1` 的禁入口径），
+   **不在第2层** ⇒ 留作后续批次。
+
+---
+
+### 批次 14.2：回退第3层兜底 + 候选准入改为「是不是工艺量」（2026-11-20，已落地）
+
+**用户追问**：「注塑机上肯定是有 `inj_t` 的，所以这部分我认为不可能存在第2步，
+也不应该考虑兜底问题……采用兜底的操作，导致的结果就是掩饰错误，如果规则有误，
+那理应修改规则，如果规则无误，比如说规则特意写一个 `add_xxxx`，那么我们应该
+解析 `xxxx`，可能是同时调整 `inj_velo` + `inj_pres`」
+
+⇒ 与批次 14.1 的结论**冲突**（14.1 把「规则是否可用」下放到第3层兜底）
+⇒ 本批次**回退 14.1 的第3层兜底**，并把准入判据**从本机现状换成静态字段字典**。
+
+**① 候选准入改为「是不是工艺量」（判据换源）**
+   - 判据从 `baseline`（**本机现状**：这台机有没有这个字段/值）
+     换成 **静态字段字典** `ProcessParameterSchema.model_fields`（**字段定义**）
+     ⇒ **不依赖本机现状** ⇒ 第2层仍然不读参数集；
+   - 后果：`IPOS` / `CUSION` / `not_in_baseline` 这类**不是工艺量**的名字
+     ⇒ **不进候选**（源头挡住，不靠下游兜底）；
+     而 **`inj_t` 这类「是工艺量、但本机没值」的照常进候选、照常落地**。
+
+**② 第3层回退兜底**（`integrate_params.py::apply_direction`）
+   - 删掉「字段不在 `values` ⇒ 剔除 + 记入 `unresolved` 留痕」；
+   - 改为**照写进 `values`** ⇒ 兜底 = 掩饰错误，被排除在链路之外。
+
+**③ 注释口径对齐**（本批次的主要产出之一）
+   - `_normalize_recommendations`：**第 2 步是「去噪」（丢弃零变化项），不是「取舍」**
+     ⇒ 取舍是第2层的事；
+   - 同处补一条：**这份不是定版点** —— 第2层裁决后还会就地回填裁决状态
+     （`decision_status` / `decision_reason`）⇒ 落库/展示看到的是回填后的版本；
+   - `decide_direction` / `integrate_params` / `anchors` / `algorithms/__init__`
+     的职责表述同步更新（**第3层不再「校验规则是否可用」**）。
+
+**④ 时序结论**（用户在讨论中追问并拍板）
+   - 「计算放在筛选之后是否更合适？」⇒ **位置不用挪**：
+     计算都在第2层之前，但**算出来的结论必须活过筛选**；
+   - 前提是**筛子要精确**：**噪声**（零变化项）与**冲突**（两条规则互相抵消）
+     要分开 —— 现在的「丢零变化项」会把 conflict 项一起丢掉
+     ⇒ **conflict 让位那两处本批次没有动**（待用户拍板）。
+
+**验证**：pytest **119 passed**（`test_layer2_does_not_check_parameter_existence`
+改为 `test_layer2_does_not_check_local_value_presence`；新增
+`test_non_process_params_never_enter_candidates`）；`verify_provided_smoke.py` PASSED
+—— `not_in_baseline` 那条建议**仍不进参数集**（机制换成**候选准入挡住**）。
+
+⇒ **与批次 14.1 的差异**：14.1 = 「规则是否可用」交给第3层兜底；
+14.2 = **兜底撤掉**，改由**候选准入**（静态字段字典）保证下游只见到工艺量。
+
+---
+
+### 批次 14.3：编排层方法改名 `_resolve_direction` → `_decide_direction_by_strategy`（2026-11-20，已落地）
+
+**用户提问**：「接下来是这个方法，我觉得函数命名存在歧义」⇒ 核实后**歧义成立**，三处：
+
+   ① **动词语义冲突**：仓库里 `resolve_*` 全部是「**算出来 / 查出来**」
+      （`resolve_mel_target` 解算 MEL 目标、`resolve_fill_target` 解算充填目标、
+      `resolve_stage_count` 解析段数、`resolve_baseline` 查出基线）⇒
+      `resolve_direction` 读起来就是「**算出**调整方向」⇒ 与本轮口径
+      （第2层**不产出落地值**，只给「调哪个 + 谁让位 + 什么口径」）**正好反着**；
+   ② **同名差一个下划线**：编排层 `_resolve_direction`（封装：候选准入 + 策略裁决）
+      与算法层 `resolve_direction`（第2层本体）几乎同名 ⇒ 读代码分不清在调哪个；
+   ③ **一个概念两个动词**：模块叫 `decide_direction.py`（裁决），
+      函数叫 `resolve_direction`（解算）⇒「裁决」语义已被模块名占用；
+   ④ **名字只说了后半截**：该方法实际做两件事（候选准入 + 策略裁决），
+      名字把 14.2 刚立的「是不是工艺量」准入判据藏了起来。
+
+**改名**（动宾齐、动词分工清晰）：
+
+   - 编排层 `_resolve_direction` → **`_decide_direction_by_strategy`**
+     （`decide` = 取舍裁决，与模块名一致；宾语 = `direction` = 返回值 `Direction`；
+     `by_strategy` 标明「按策略清单裁决」，与 `sort_defects_by_stage` 同型）；
+   - 算法层 `resolve_direction` **不动** —— 用户口径「算法部分等流程调完再说」
+     ⇒ 本次只改编排层（service 私有函数，改名零风险）。
+
+**验证**：pytest **119 passed**；`_resolve_direction` 全仓库残留 0
+（1 个定义 + 1 个调用 + 1 处 docstring 引用 + 本文档 3 处引用）。
+
+**未做**：把方法拆成 `_collect_candidates` + `_decide_by_strategy` ——
+`collect_candidates` 本身已是独立函数，再包一层不增加信息。
+
+**未做（待流程调完再处理）**：算法层公开类型 `Direction` 同样名不副实 ——
+14.0 之前它求落地值（MEL 已翻成计量位置）⇒ 叫「调整方向」勉强说得通；
+14.0 改成「只给调哪个 + 谁让位 + 什么口径」后，它装的是**一份调整决定**
+⇒ 不是「往哪调」的那个**单一取向**。
+⚠️ 它是算法层**公开类型** ⇒ 改名要动：类定义 + `__all__` + service 的 import 与类型标注 +
+第3层形参与类型标注 + 测试 import/用法 + `docs/*.md`。
+⇒ **已在批次 14.4 处理**（连带 `.decision` / `.decisions` 一并改名，见该段）。
+
+⚠️ **附带问题**：同一个对象里同时存在 `decision`（裁决结果：谁保留/让位/暂缓）与
+`decisions`（保留项清单：字段名 + 目标值）⇒ 两个近似名、语义却完全不同 ⇒
+改名 `Direction` 时应一并处理（否则「方向 → 计划」之后，`decision` / `decisions`
+的错位仍在）。
+⇒ **已在批次 14.4 处理**（`.decision` → `.selection` / `.decisions` → `.assignments`）。
+
+---
+
+### 批次 14.4：`direction` 一词让开 —— 第2层产出物整链改名（2026-11-20，已落地）
+
+**用户追问**：「direction 这里的 direction 究竟表示什么呢」
+⇒ 核实后确认：**同一个词在仓库里有两层同名不同义的用法**。
+
+| 层 | 含义 | 位置 | 能否动 |
+| --- | --- | --- | --- |
+| ① 经验推理的**取向** | `increase` / `decrease` / `hold` / `check` —— 「往哪调」 | `rec['direction']`、`'direction': 'check'`、`_direction_from_delta`、`_DIRECTION_CN` | **不可动** —— 对外契约字段（响应/落库结构） |
+| ② 第2层的**产出物** | 一份**调整决定清单**（谁保留 / 谁让位 / 暂缓 + 字段名 + 目标值） | `algorithms/decide_direction.py::Direction` 及其上下游 | 可动 —— 内部类型 |
+
+⇒ 14.0 之前 ② 装的是「算出来的落地值」，叫「调整方向」勉强说得通；
+14.0 改成「只给调哪个 + 谁让位 + 什么口径」后，它**不是单一取向**，而是一份清单
+⇒ **名不副实**（用户口径：「不然我看 direction 都不懂是什么」）。
+
+**改名表**（用户拍板「调整吧」后整链执行）：
+
+| 原名 | 新名 | 位置 |
+| --- | --- | --- |
+| `Direction` | **`AdjustmentPlan`** | `algorithms/decide_direction.py`（算法层公开类型） |
+| `.decision` | **`.selection`** | 同上（裁决结果：谁保留/让位/暂缓 + 依据） |
+| `.decisions` | **`.assignments`** | 同上（保留项清单：字段名 + 目标值） |
+| `resolve_direction()` | **`build_plan()`** | 第2层本体 |
+| `apply_direction()` | **`apply_plan()`** | 第3层（`integrate_params.py`） |
+| `_decide_direction_by_strategy()` | **`_decide_plan_by_strategy()`** | 编排层（`services/parameter_optimize.py`） |
+| 局部变量 `direction` | **`plan`** | 编排层 + 第3层 + 测试 |
+
+**「不动」清单**（① 取向语义，属对外契约）：`rec['direction']`、`'direction': 'check'`、
+`_direction_from_delta`、`_DIRECTION_CN` —— 一律保留。
+
+**顺带解决的两处同名错位**：`decision`（裁决结果）与 `decisions`（字段清单）
+近似名、语义完全不同 ⇒ 改为 `selection` / `assignments` 后不再互相干扰；
+`to_trace()` 的留痕键同步改为 `'assignments'`。
+
+**未做（用户口径：等流程调完再拆）**：不拆 `decide_direction.py` 文件 ——
+本批次**只改名、不动结构**。
+
+**验证**：pytest **119 passed**；`verify_provided_smoke.py` **PASSED（EXIT 0）**；
+旧名 `Direction` / `resolve_direction` / `apply_direction` /
+`_decide_direction_by_strategy` 在 backend 残留 **0**。
+
+**教训（两条）**：
+
+1. **smoke 抓到 pytest 没覆盖的漏改** —— `_guard_zero_landing(baseline, direction, …)`
+   这一处参数名不在任何测试调用路径上 ⇒ pytest 119 项全绿，但 smoke 直接
+   `NameError` ⇒ **改名后必须跑一次端到端 smoke**，不能只看单测；
+2. **`replace_all` 前缀吞并** —— `direction.decision` 是 `direction.decisions` 的
+   **前缀** ⇒ 一次性替换 `decision` → `selection` 会把 `decisions` 一并改掉
+   （3 处）⇒ 文本替换前先确认**新串不是旧串的前缀**，否则要带上分隔符一起匹配。
+
+---
+
+### 批次 14.5：位置类超行程从「半处理」改为**阻断**（2026-11-21，已落地）
+
+**用户拍板**（原话）：
+
+> 「我不建议做回退这种事情，容易引起误解」
+> 「我建议可以先按照超限值处理，或者超限先报错，回退容易污染流程」
+
+⇒ 两条候选：**① 按超限值处理** / **② 超限先报错**；**回退一律不做**。
+
+**① 病灶定位：优化链路发明了越限体系外的第三种处理**
+
+`algorithms/fuzzy/over_limit.py` 已有完整的安全分层（三种上限来源 ⇒ 三档处理）：
+
+| limit_source | 参数类型 | 风险性质 | 处理 |
+| --- | --- | --- | --- |
+| `device` | 设定值类 | 操作设备涉及安全 | **拒绝** 400 |
+| `stroke` | 位置类 | 产品在本机做不出来 | 原：**留痕（不阻断）** |
+| `material` | 温度类 | 材料降解 / 变色 | 告警 / 兜底 |
+
+而优化链路在 `stroke` 档之外又做了一件事：**剔除超行程参数的数值推荐**（但值照写）
+⇒ 成了**体系外的第三种处理**——既不是阻断（值照样落库），也不是纯告知（数值推荐被藏了）
+⇒ **半处理**。后果：用户被告知「本机做不出这个产品」，系统却把**更超行程**的值落库；
+而 `_drop_over_stroke_value_recommendations` 的 docstring 写的「不再写回 baseline」
+**与实现不符**（值已由 `apply_plan` 无条件写入）。
+
+**② 技术事实：`BLOCKING_LIMIT_SOURCES` 加 `stroke` 是无效改动**
+
+`detect_blocking_over_limits()` 内部**只调 `detect_over_limits()`**（`limit_source` 恒为
+`'device'`）⇒ `stroke` 档**永远进不了**它的结果 ⇒ 把 `'stroke'` 加进
+`BLOCKING_LIMIT_SOURCES` **改了也不生效**。两套上限来源本就不同：
+设定值类按**族前缀**查（`resolve_param_limits`），位置类按**设备实测行程**查
+（`resolve_position_limits` + `lookup_position_limit` 两级匹配）。
+
+⇒ 落点：**service 层的机台能力守卫**（与 `parameter_initialize` 已有守卫同一套）。
+
+**③ 改动清单**
+
+- **删** `parameter_optimize._drop_over_stroke_value_recommendations`（剔除数值推荐）
+  与 `_append_position_over_stroke_notices`（追加 check 告知）⇒ 「半处理」整段消失；
+- **增** `parameter_optimize._guard_position_over_stroke` —— 检出即
+  `BizException(ERROR_PROCESS_OVER_STROKE, …)`；
+- **改** 调用点：判据从「建议列表」改为**第3层整合后的落地值**（`integrated.values`）
+  ⇒ 整合值 ⊇ 基线值 ⇒ 一道同时覆盖「当前值本来就超」与「本轮把它推超了」；
+- **改** `over_limit.py` 的分层表与 `detect_over_stroke_limits` 的 docstring
+  （`stroke` 档由「留痕（不阻断）」改为「**拒绝** 400（机台能力校验）」）；
+- **改** `parameter_initialize.py` 守卫 docstring（「那边只告知不阻断」已不成立
+  ⇒ 两边改为**同一判据、同一错误码、同一文案**，差别只在判据取值）；
+- **增** `tests/test_over_stroke_guard.py`（5 条：超行程报错 / 不超放行 / 边界等于行程
+  不算超 / 缺机台行程不判 / 多项合并成一条）。
+
+**④ 「拦了没出路」这个前提被推翻**
+
+旧口径说「用户改不了 ⇒ 拦了也没有出路 ⇒ 只告知」——但**出路是明确的**：
+换行程更大的机（错误码标题已是「当前设备无法生产该制品」+ 文案「请更换行程更大的设备」）
+⇒ 拦下去有出路 ⇒ **值得拦**。与 `device` 档的差别不再是「该不该拦」，
+而是**拦了之后说什么**（出路：改值 vs 换机）。
+
+**⑤ 代价（已知并接受）**
+
+超行程产品**整个优化请求失败**（拿不到其它参数的建议）。
+实测数据里确有超行程产品（`engine.py` 注释：「实测 MEL 56/70 行超行程」，
+行程 200mm 而产品充填需 291mm）⇒ 这些行从「能出建议」变成「直接失败」。
+⇒ 但初始化链路**本就拒绝**超行程（`parameter_initialize` 同名守卫）⇒
+能走到优化链路的超行程只剩两类：**本轮推过头**（策略/规则有问题 ⇒ 报错合理）
+与 **用户手工调超了**（本来就是错值 ⇒ 报错合理）。
+
+**⑥ 验证**：pytest **124 passed**（119 + 新增 5）；`verify_provided_smoke.py`
+**PASSED（EXIT 0）**；被删的两个函数在 backend 残留 **0**。
+
+**教训**：处理链路上出现「**部分生效**」的分支（只改展示、不改落库）时，
+要么**完整拦**、要么**完整放**，不要留中间态——中间态既让展示与落库对不上，
+又让文档（说什么）与实现（做什么）对不上。
+
+

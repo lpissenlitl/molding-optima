@@ -2,7 +2,7 @@
 """案例导出工具（开发期）—— 从生产库抽一个业务案例，固化成可离线复现的 JSON。
 
 【注意】**这是开发期工具，不是运行时组件**：
-   它 import 了 service 层（`process.services.parameter_optimize`）来还原
+   它 import 了 service 层（`process.services.spec_extract`）来还原
    「机台 / 材料 / 模具 / 工艺参数」的真实抽取口径 ——
    算法包内的**运行时**代码不依赖 service 层（依赖方向：service → algorithm）。
    本脚本只是站在 service 那一侧取数，产出数据后即可删掉。
@@ -34,7 +34,11 @@ django.setup()
 
 from process.models.tuning_record import TuningRecord  # noqa: E402
 from process.models.rules import RuleKeyword  # noqa: E402
-from process.services import parameter_optimize as po  # noqa: E402
+from process.services.spec_extract import (  # noqa: E402
+    extract_machine_info,
+    extract_mold_info,
+    extract_polymer_info,
+)
 from process.algorithms.fuzzy import field_names  # noqa: E402
 from process.algorithms.defect_selection import select_defect  # noqa: E402
 from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
@@ -78,9 +82,9 @@ def main():
             continue
         baseline[f.name] = v
 
-    machine_info = po._extract_machine_info(cond)
-    polymer_info = po._extract_polymer_info(cond)
-    mold_info = po._extract_mold_info(cond)
+    machine_info = extract_machine_info(cond)
+    polymer_info = extract_polymer_info(cond)
+    mold_info = extract_mold_info(cond)
 
     # ---------------- 2) 组上下文 ----------------
     feedback = {'defects': rec.defect_feedbacks}

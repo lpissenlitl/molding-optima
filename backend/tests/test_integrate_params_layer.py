@@ -14,8 +14,7 @@
 
 import pytest
 
-from process.algorithms.anchors import resolve_mel_target
-from process.algorithms.decide_direction import apply_mel_targets
+from process.algorithms.anchors import apply_mel_targets, resolve_mel_target
 from process.algorithms.integrate_params import (
     diff_numeric_fields,
     integrate,

@@ -31,7 +31,7 @@
 层              模块                            回答什么
 ==============  ==============================  ==============================
 第1层           各算法包（fuzzy/llm/empirical） 算法给出调整方向（平级建议）
-第2层           ``decide_direction.py``         结合实际情况，确定**明确的**调整方向
+第2层           ``decide_direction.py``         按调机策略筛规则，给出**明确的**调整计划
 第3层           ``integrate_params.py``         整合参数（物理上自洽）
 第4层           ``check_params.py``             校验参数合理性（**只读**，不改值）
 底座            ``anchors.py``                  字段口径 + 锚点关系（只定义一次）
@@ -41,21 +41,24 @@
 
 .. code-block:: python
 
-    # 第2层：结合实际情况，确定明确的调整方向
-    #   from process.algorithms.decide_direction import resolve_direction
-    direction = resolve_direction(candidates, targets, baseline, ...)
+    # 第2层：按调机策略筛规则，给出明确的调整计划
+    #   from process.algorithms.decide_direction import build_plan
+    plan = build_plan(candidates, targets, ...)
 
     # 第3层：整合参数（写入方向 + 锚点传导自洽）
-    #   from process.algorithms.integrate_params import apply_direction
-    integrated = apply_direction(baseline, direction, previous=baseline)
+    #   from process.algorithms.integrate_params import apply_plan
+    integrated = apply_plan(baseline, plan, previous=baseline)
 
     # 第4层：校验参数合理性（只报不阻断）
     #   from process.algorithms.check_params import validate
     validation = validate(integrated.values)
 
 【注意】**红线**：业务判断（场景是什么 / 调哪些 / 按什么次序 / 留几个）必须是**数据**
-（策略清单文件 ``strategies.py``），代码只负责读 + 匹配 + 裁决；
-物理算式（充填量→行程、MEL 目标→计量位置）落代码，因为那是**逻辑**。
+（策略清单文件 ``tuning_strategy.py``），代码只负责读 + 匹配 + 裁决；
+**第2层不碰参数** —— 物理算式（充填量→行程、MEL 目标→计量位置）落在**第3层**
+（要拿现状参数（旧值）才能算）；「是不是工艺量」在**候选准入**判（命名契约：
+静态字段字典）⇒ 不是工艺量的**不进候选**，不靠下游兜底
+⇒ 第2层的入参只有三类：**候选建议 + 实际情况 + 策略数据**。
 
 **根目录其它文件**（不属于 4 层链路）：
 
@@ -66,7 +69,7 @@
 ``field_contract.py``          算法入参契约机制（字段字典 ⊥ 校验机制分离）
 ``material_physics.py``        材料物理常量 + 派生公式（专家/模糊共用）
 ``defect_selection.py``        缺陷选取（唯一入口：service 预处理层）
-``strategies.py``              策略清单（文件版）：第2层的规则来源
+``tuning_strategy.py``        策略清单（文件版）：第2层的规则来源
 =============================  ==============================================
 """
 

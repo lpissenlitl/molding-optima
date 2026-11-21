@@ -2,7 +2,7 @@
 
 为什么单独放一个模块：同一批锚点关系要**被多个方向使用** ——
 
-- **第2层**（``decide_direction.py``）：按关系**排除本轮落不了地的候选**；
+- **第2层**（``decide_direction.py``）：按调机策略**筛规则**（**不碰参数**）；
 - **第3层**（``integrate_params.py``）：按关系**改值**（联动传播）；
 - **第4层**（``check_params.py``）：按关系**只读校验**（锚点自检）。
 
@@ -12,16 +12,16 @@
 - **字段口径**（本模块）：G1 / G2 / G3 涉及的字段名与模板；
 - **共用判据**（本模块）：:func:`find_chain_break`（回抽链断裂判定）、
   :func:`resolve_stage_count`（段数解析）、:func:`last_stage_field`（末段字段名）、
-  :func:`unlandable_params`（本轮落不了地的候选项）。
+  :func:`unlandable_params`（**落不了地**的物理判据）。
 
-各层**各自**的只有"拿关系做什么"：第2层排除、第3层改值、第4层透传事实。
+各层**各自**的只有"拿关系做什么"：第3层改值、第4层透传事实。
 
 字段名：**代码侧**业务字段名（与 ``ProcessParameterSchema`` 对齐）；
 与算法/工艺侧命名的对照见 ``integrate_params.py`` 模块 docstring。
 """
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
 # --- G1 计量终止位置 -------------------------------------------------------
@@ -57,12 +57,13 @@ STAGE_COUNT_FIELD = 'met_stg'
 #: ⇒ 改「注射时间」没有物理意义，真正起作用的是「注射速度」
 #: ⇒ 改时间让位给速度（改速度不联动时间）。
 #:
-#: 【注意】**本关系同时被第2层引用**（:mod:`process.algorithms.decide_direction`）：
+#: 【注意】**本关系由第3层执行**（:mod:`process.algorithms.integrate_params`）：
 #:    让位对象本轮不可调（场景禁入 / 基线项）时，被让位的量**也无处可去**
 #:    —— 第3层的让位是**值回退**（改了也不生效）⇒ 该量本轮**落不了地**。
-#:    ⇒ 第2层不能把它选成保留项：否则第3层静默回退 ⇒ 本轮零变化，
-#:    而用户只看到「一屏建议、参数没动」。
-#:    ⇒ 关系放**底座**（只定义一次），第2层与第3层各自引用。
+#:    ⇒ 关系放**底座**（只定义一次），第3层引用它执行。
+#:
+#: 【注意】**第2层不预判它**（用户口径：第2层只按调机策略筛规则，
+#:    不为单个字段做兜底）⇒ 「让位对象不可调 ⇒ 本量落不了地」由第3层回答。
 FREEDOM_YIELDS: Mapping[str, str] = {'inj_t': 'inj_spd_1'}
 
 
@@ -147,6 +148,52 @@ def resolve_mel_target(
         return None
 
     return last, base_last + delta_mel
+
+
+def apply_mel_targets(
+    params: Dict[str, Any],
+    mel_targets: Sequence[Any],
+    previous: Optional[Mapping[str, Any]] = None,
+) -> Tuple[str, ...]:
+    """把 **MEL 目标**翻成**决策量**（计量末段位置），就地写入 ``params``。
+
+    「**先定 ML，再确定 MEL**」（用户口径）：``MEL`` 是算法侧的
+    **标**（由 ``ML_N + DDAM`` 算出），机台上真正会被调的是计量位置 ⇒ 算法
+    说「调 MEL」时，先把目标落成计量位置（决策量），``MEL`` 再由它算出。
+
+    **推算只用「旧值 + 调整量」**（用户口径）：
+
+    .. code-block:: text
+
+        1. ML_N 基准 = 原MEL − 原DDAM
+        2. ML_N_新   = 基准 + ΔMEL
+
+    ⇒ ``ΔDDAM`` **不叠加**到计量位置，它落在 ``MEL`` 那一侧。
+
+    【注意】**本函数只负责换算**（纯物理）—— 换不换得出来由数据决定，
+    换出来后**记不记账**（进了哪一轮的落地清单）由调用方负责
+    ⇒ 第3层（:mod:`process.algorithms.integrate_params`）调用。
+
+    Args:
+        params: 参数集（**就地**更新）。
+        mel_targets: MEL 目标值序列。
+        previous: 旧值基线（现状参数集）—— 推算调整量的依据；缺则不落地。
+
+    Returns:
+        实际落地了的字段名（未落地 = 回落：缺段数 / 缺旧值 / 缺储后松退距离 /
+        末段计量位置不在参数集里 ⇒ 不臆造）。
+    """
+    landed: List[str] = []
+    for mel_value in mel_targets:
+        resolved = resolve_mel_target(params, mel_value, previous=previous)
+        if resolved is None:
+            continue        # 回落：缺段数 / 缺储后松退距离 ⇒ 不臆造
+        field_name, ml_value = resolved
+        if field_name not in params:
+            continue        # 回落：末段计量位置不在参数集里 ⇒ 没有落点
+        params[field_name] = ml_value
+        landed.append(field_name)
+    return tuple(landed)
 
 
 @dataclass(frozen=True)
@@ -309,11 +356,15 @@ def unlandable_params(
     背景：:data:`FREEDOM_YIELDS` 声明「被让位的量 → 让给谁」。
     第3层的让位是**值回退**（改了也让位 ⇒ 不生效），
     所以当让位对象本轮**不可调**（场景禁入 / 基线项）时，
-    被让位的量**改了也是白改** ⇒ 第2层不该把它选成保留项。
+    被让位的量**改了也是白改**。
 
     【注意】**让位对象缺值时不算数**：让位对象在参数集里没有值 ⇒
     第3层不会触发让位（:func:`process.algorithms.integrate_params.propagate`
     的让位前提是让位对象有值）⇒ 本量仍可落地 ⇒ 不排除。
+
+    【注意】**第2层已不再用它做预判**（用户口径：第2层只按调机策略筛规则，
+    不为单个字段做兜底）⇒ 本函数是**底座的物理判据**，
+    供第3层 / 规则层在需要时引用。
 
     Args:
         blocked_params: 本轮**不可调**的字段名（场景禁入清单）。
@@ -343,6 +394,7 @@ __all__ = [
     'last_stage_field',
     'chain_stage_fields',
     'resolve_mel_target',
+    'apply_mel_targets',
     'resolve_fill_target',
     'find_chain_break',
 ]

@@ -17,7 +17,7 @@
 
 **二、场景裁决规则**（第 2 层的规则来源）
 
-一条 :class:`~process.algorithms.decide_direction.ScenarioPolicy` = **一套完整的
+一条 :class:`~process.algorithms.decide_direction.ScenarioStrategy` = **一套完整的
 经验组合** ⇒ 命中即整条采用，**不合并**多条（合并语义会随条数增加而含糊）。
 
 - **命中顺序 = 优先级升序，取第一条命中** ⇒ 具体场景排前面、兜底场景排最后。
@@ -47,7 +47,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .decide_direction import ScenarioPolicy
+from .decide_direction import ScenarioStrategy
 
 
 # ── 第 1 节：阶段模型（数据 + 推导）──────────────────────────
@@ -165,7 +165,7 @@ def derive_stage_progress(defect_codes: Sequence[str]) -> StageProgress:
     最靠前的未达成阶段）。
 
     【注意】**本函数只做推导，不做裁决** —— 裁决由**场景清单**做
-    （:data:`SCENARIO_POLICIES`）：``current`` 经 ``services/policies.py`` 注入
+    （:data:`SCENARIO_STRATEGIES`）：``current`` 经 ``services/strategy_inputs.py`` 注入
     ``ScenarioContext.extra`` ⇒ 场景条件**可引用**它（如 ``filling_stage_first``
     用 ``current_stage == 'filling'`` 判定「还在打足阶段」）。
     """
@@ -208,7 +208,7 @@ BASELINE_BLOCKED_PARAMS: Tuple[str, ...] = (
 )
 
 #: 场景清单（按 ``priority`` 升序排列）。
-SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
+SCENARIO_STRATEGIES: Tuple[ScenarioStrategy, ...] = (
     # --- S1 打足：短射 + 重量不足 ⇒ 充填优先 ---
     # 【注意】``fill_gap`` = 目标重量 − 实测重量（**正数 = 缺料**）⇒ ``gt 0``
     #    即「实际重量 < 目标重量」；缺重量数据 ⇒ ``fill_gap`` 为 None ⇒ 不命中。
@@ -217,7 +217,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     # 【注意】**规则原料 U-07**：充填量有两个旋钮、有先后（先胶量端，MEL 偏大后才轮到
     #    VPTL）⇒ 白名单只留胶量端两个旋钮；其余旋钮**让位**（而不是「暂缓」——
     #    含义：这个场景不管它们）。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='filling_first',
         conditions=(
             {'field': 'selected_defect', 'operator': 'in_set', 'value': ('SHORTSHOT',)},
@@ -247,7 +247,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     # 【注意】白名单**含 ``inj_t``**：它虽受 G3 让位规则约束（改注射时间要让位给
     #    注射速度，而注射速度是基线项不可调），但**不在白名单会让位理由被
     #    「本场景不允许」掩盖** ⇒ 反而看不出 G3 规则在工作。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='filling_stage_first',
         conditions=(
             {'field': 'selected_defect', 'operator': 'in_set', 'value': ('SHORTSHOT',)},
@@ -298,7 +298,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     # --- S2 补缩：缩水类 ⇒ 只动保压组 ---
     # 【注意】**规则原料 SK-01 / SK-02** ⇒ 白名单 = 二段压力 + 二段时间；
     #    二段时间的定量锚点是**浇口封冻时间**（【待补】尚缺判据 ⇒ 目标值待校准）。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='shrinking_first',
         conditions=(
             {
@@ -324,7 +324,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     #    ⇒ 本场景的前提应是「已排除模具问题」，但**该判据目前系统里没有信号**
     #    （【待补】需「不带二段的充填件」测试结果）⇒ 只能写进 ``reason``（进留痕），
     #    **不写成条件**（写了就等于该场景永不命中）。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='flash_first',
         conditions=(
             {'field': 'selected_defect', 'operator': 'in_set', 'value': ('FLASH',)},
@@ -347,7 +347,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     # 【注意】**用户口径**：烧焦**首要根因是模具排气不良**（规则原料 BN-01），
     #    调参 = 绕过根因 ⇒ 「已排气处理」本应是前提，但**没有信号**
     #    （【待补】）⇒ 只能写进 ``reason``（进留痕）。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='burn_first',
         conditions=(
             {'field': 'selected_defect', 'operator': 'in_set', 'value': ('BURN',)},
@@ -372,7 +372,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     #    规则库实测：气纹类规则里背压（``MBP0``）是主要输出参数之一。
     # 【注意】白名单比拍板 G 宽（背压 + 保压压力 + 保压时间）—— 只留背压一个时，
     #    若本轮规则只推了其它旋钮，会出现“本场景无输出”。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='gasveins_first',
         conditions=(
             {'field': 'selected_defect', 'operator': 'in_set', 'value': ('GASVEINS',)},
@@ -389,7 +389,7 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
     #    具体场景时的缺省行为；``priority`` 排最后 ⇒ 具体场景永远优先。
     # 【注意】兜底恒命中 ⇒ **场景永不为 None** ⇒ 留痕里永远有「这一轮按什么场景裁决」。
     # 【注意】**白名单留空**（不限制）⇒ 兜底不窄化；基线项由禁入清单挡住。
-    ScenarioPolicy(
+    ScenarioStrategy(
         scenario_code='default_one_adjust',
         conditions=(),
         blocked_params=BASELINE_BLOCKED_PARAMS,
@@ -400,23 +400,23 @@ SCENARIO_POLICIES: Tuple[ScenarioPolicy, ...] = (
 )
 
 
-def sorted_scenario_policies() -> Tuple[ScenarioPolicy, ...]:
+def sorted_scenario_strategies() -> Tuple[ScenarioStrategy, ...]:
     """返回场景清单（按 ``priority`` 升序 ⇒ 命中判定从靠前的开始）。"""
     return tuple(
-        sorted(SCENARIO_POLICIES, key=lambda item: (item.priority, item.scenario_code))
+        sorted(SCENARIO_STRATEGIES, key=lambda item: (item.priority, item.scenario_code))
     )
 
 
 __all__ = [
     'BASELINE_BLOCKED_PARAMS',
     'DEFECT_STAGE_MAP',
-    'SCENARIO_POLICIES',
+    'SCENARIO_STRATEGIES',
     'STAGE_ORDER',
     'StageProgress',
     'UNKNOWN_STAGE',
     'derive_stage_progress',
     'rank_of_stage',
     'sort_defects_by_stage',
-    'sorted_scenario_policies',
+    'sorted_scenario_strategies',
     'stage_of_defect',
 ]

@@ -23,13 +23,12 @@ optimize_from_condition / optimize_from_provided + 私有内核 _infer_kernel（
 """
 import logging
 from collections.abc import Mapping
-from typing import Dict, Any, List, Optional, Tuple, TypedDict
+from typing import Dict, Any, FrozenSet, List, Optional, Tuple, TypedDict
 
 from django.db import transaction as db_transaction
 
 from extensions.exceptions import (
     BizException,
-    ERROR_DATA_INVALID,
     ERROR_DATA_NOT_FOUND,
     ERROR_OPERATION_FAILED,
     ERROR_REQUIRED_FIELD,
@@ -40,19 +39,21 @@ from process.models import (
     Recommendation,
     TuningRecord,
 )
-from process.algorithms.decide_direction import (  # 第2层：结合实际情况，确定明确的调整方向
-    Direction,
+from process.schemas.parameter import (
+    ProcessParameterSchema,  # 工艺字段字典（静态契约）—— 判「是不是工艺量」
+)
+from process.algorithms.decide_direction import (  # 第2层：按调机策略筛选规则，给出明确的调整计划
+    AdjustmentPlan,
     PriorityTable,
     ScenarioContext,
-    ScenarioPolicy,
+    ScenarioStrategy,
     StrategyDecision,
+    build_plan,
     collect_candidates,
-    resolve_direction,
 )
-from process.algorithms.anchors import unlandable_params  # 底座：物理关系（只定义一次）
 from process.algorithms.integrate_params import (  # 第3层：整合参数
     IntegratedParams,
-    apply_direction,
+    apply_plan,
     diff_numeric_fields,
 )
 from process.algorithms.check_params import validate  # 第4层：校验参数合理性
@@ -63,20 +64,10 @@ from process.algorithms.defect_selection import (  # 缺陷选取（实现在算
 from process.algorithms.fuzzy import (
     field_names,  # 命名契约：业务字段名 ↔ 算法字段名（双向映射，契约层唯一真相源）
 )
-from process.algorithms.fuzzy.over_limit import (
-    OverLimitItem,  # 越限记录（类型标注）
-    detect_blocking_over_limits,  # 越限分层口径（device = 设备安全红线 ⇒ 阻断）
-    detect_over_stroke_limits,  # 位置类超行程识别（stroke = 产品在本机做不出来 ⇒ 不阻断）
-)
 from process.algorithms.fuzzy.specs import (
     OPTIMIZE_FEEDBACK_FIELDS,
-    OPTIMIZE_MACHINE_INFO_FIELDS,
-    OPTIMIZE_POLYMER_INFO_FIELDS,
-    OPTIMIZE_MOLD_INFO_FIELDS,
     audit_feedback_defects,  # 缺陷反馈校验（契约层）
     OptimizeDataValidator,  # 入参契约校验器
-    resolve_param_limits,  # 机台物理上限 → {参数族: 上限}
-    resolve_position_limits,  # 设备实测注射行程 → {位置类参数名/族: 上限}
 )  # 算法入参契约（字段字典）—— service 层按此白名单提取，不传全量 ORM 字段
 from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数快照/训练样本组装（均为唯一真相源）
     NON_SNAPSHOT_FIELDS,
@@ -89,8 +80,21 @@ from .tuning import (  # tuning_result → TuningRecord.result 映射 + 参数�
 from process.models.rules import RuleLibrary
 from process.algorithms.fuzzy.library.adapters import LibraryRecordAdapter
 from process.algorithms.fuzzy.library.contracts import LibraryRecord
-from .policies import (  # 第2层的策略读表与组装（业务知识在策略表，代码只负责读+匹配）
-    resolve_policies,
+from .strategy_inputs import (  # 第2层的策略读表与组装（业务知识在策略表，代码只负责读+匹配）
+    resolve_strategy_inputs,
+)
+from .spec_extract import (  # 参数提取专区（优化 / 初始化两条链路共用；按需自取）
+    extract_machine_info,
+    extract_mold_info,
+    extract_polymer_info,
+)
+from .over_limit_guard import (  # 越限守卫专区（初始化 / 优化两条链路共用同一判据与文案）
+    guard_over_limit_settings,
+    guard_position_over_stroke,
+)
+from .optimize_common import (  # 字段命名翻译与中文标签（跨链路共用）
+    param_label,
+    to_business_param_name,
 )
 
 _logger = logging.getLogger(__name__)
@@ -191,34 +195,40 @@ def _to_full_dict(instance: Any) -> Dict[str, Any]:
     }
 
 
-def _to_business_param_name(param_name: str) -> str:
-    """算法字段名 → 业务字段名（无法翻译时原样返回）。
+#: **工艺字段字典**（静态契约）—— 工艺参数表有哪些列。
+#:
+#: 【注意】与 ``baseline`` 的区别：``baseline`` 是**某台机的当前值**（含 null），
+#: 这里是**字段定义**（静态）⇒ 判「这是不是工艺量」**不依赖本机现状**。
+PROCESS_FIELDS: FrozenSet[str] = frozenset(ProcessParameterSchema.model_fields)
 
-    算法侧返回的 ``param`` 是算法命名空间（``IV0`` / ``BT1`` / ...），
-    业务侧字段名是 ``inj_spd_1`` / ``brl_temp_1`` / ...。
-    两者不在同一命名空间：不翻译就永远匹配不上 baseline，
-    推荐值会被静默丢弃（表现为“算法有推荐，但参数没变”）。
+
+def _to_candidate_param_name(param_name: str) -> Optional[str]:
+    """字段名 → **候选字段名**；不是工艺量 ⇒ ``None`` ⇒ **不进候选**。
+
+    口径（用户口径：第2层只筛规则，不掺合参数）：
+
+    - **翻得出业务名** ⇒ 用它（``IV0`` → ``inj_spd_1``）；
+    - **翻不出、但本身就是工艺字段名** ⇒ 原样保留
+      （llm / 经验推理直接给业务名）；
+    - **翻不出、也不是工艺字段** ⇒ ``None`` ⇒ **不进候选**
+      （``IPOS`` / ``CUSION`` 这类规则库专用参数）—— 它们**不是工艺量**，
+      落不了地。
+
+    【注意】判据是**静态字段字典**（契约），**不是 baseline**（本机现状）⇒
+    「这台机这个字段有没有值」与「这是不是工艺量」是**两件事**：
+
+    - **是工艺量、但本机没值**（如 ``inj_t`` 为 null）⇒ 照常进候选、照常落地；
+    - **不是工艺量** ⇒ 在这里挡住 ⇒ **下游不需要存在性兜底**
+      （兜底 = 掩饰错误：规则有误该改规则，不该在运行时悄悄丢弃）。
     """
     if not param_name or not isinstance(param_name, str):
+        return None
+    translated = field_names.to_business_name(param_name)
+    if translated:
+        return translated
+    if param_name in PROCESS_FIELDS:
         return param_name
-    return field_names.to_business_name(param_name) or param_name
-
-
-def _param_label(business_name: str) -> str:
-    """业务字段名 → 中文标签（取 ProcessParameter 字段的 verbose_name）。
-
-    例：``inj_pres_1`` → ``一段注射压力``。
-
-    建议文案面向的是工艺员，必须用中文标签而不是 ``inj_pres_1`` / ``IP0``。
-    参数不在 ProcessParameter 里时（规则库专用参数如 ``IPOS`` / ``CUSION``）
-    回落到业务字段名本身。
-    """
-    if not business_name:
-        return business_name
-    try:
-        return ProcessParameter._meta.get_field(business_name).verbose_name
-    except Exception:  # noqa: BLE001 —— 字段不存在 / 非模型字段
-        return business_name
+    return None
 
 
 # --- 缺陷反馈整理（预处理层，只做一次）---
@@ -280,9 +290,9 @@ def _resolve_infer_context(
         condition=condition_orm,
         parent_param=parent_param_orm,
         baseline=baseline,
-        machine_info=_extract_machine_info(condition_orm),
-        polymer_info=_extract_polymer_info(condition_orm),
-        mold_info=_extract_mold_info(condition_orm),
+        machine_info=extract_machine_info(condition_orm),
+        polymer_info=extract_polymer_info(condition_orm),
+        mold_info=extract_mold_info(condition_orm),
         user_changed_fields=changed_fields,
     )
 
@@ -418,107 +428,6 @@ def _resolve_baseline(
             setattr(parent_param_orm, key, value)
             changed_fields[key] = value
     return _to_full_dict(parent_param_orm) or {}, changed_fields
-
-
-def _extract_orm_fields_by_spec(
-    source_orm_map: Dict[str, Any],
-    spec_dict: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """按 specs 契约跨 source_model 取值（白名单）。
-
-    按 spec 的 ``source_model`` 找对应 ORM 实例，取 ``attr_name`` 的值；
-    ``None`` 值不纳入结果。
-
-    与 ``field_contract`` 的分工：那边提供【校验机制】
-    （``audit_field_completeness``），这里提供【提取机制】。
-    """
-    extracted: Dict[str, Any] = {}
-    for spec_key, spec in spec_dict.items():
-        source_model = spec.get("source_model")
-        attr_name = spec.get("attr_name")
-        if not source_model or not attr_name:
-            continue
-        orm_instance = source_orm_map.get(source_model)
-        if orm_instance is None:
-            continue
-        value = getattr(orm_instance, attr_name, None)
-        if value is not None:
-            extracted[spec_key] = value
-    return extracted
-
-
-def _extract_machine_info(condition: ProcessCondition) -> Dict[str, Any]:
-    """按 OPTIMIZE_MACHINE_INFO_FIELDS 契约提取 machine_info（白名单）。
-
-    跨两张表合并：InjectionMoldingMachine.drive_system（机器主表）
-    + InjectionUnit.max_set_*（按 condition.injection_index 选 unit；
-      索引越界则告警并降级为空）。
-    只返回 specs 声明的字段；ORM 元数据不传给算法。
-    """
-    machine = condition.injection_machine
-    if machine is None:
-        return {}
-
-    injection_index = condition.injection_index or 0
-    injection_units = list(machine.injection_units.all())
-    if injection_index >= len(injection_units):
-        _logger.warning(
-            "[optimize] injection_index=%s 超出 machine(id=%s) 的 injection_units（共 %s 个）",
-            injection_index, machine.id, len(injection_units),
-        )
-        return {}
-
-    return _extract_orm_fields_by_spec(
-        source_orm_map={
-            "InjectionMoldingMachine": machine,
-            "InjectionUnit": injection_units[injection_index],
-        },
-        spec_dict=OPTIMIZE_MACHINE_INFO_FIELDS,
-    )
-
-
-def _extract_polymer_info(condition: ProcessCondition) -> Dict[str, Any]:
-    """按 OPTIMIZE_POLYMER_INFO_FIELDS 契约从 Polymer 提取 polymer_info（白名单）。"""
-    polymer = condition.polymer
-    if polymer is None:
-        return {}
-    return _extract_orm_fields_by_spec(
-        source_orm_map={"Polymer": polymer},
-        spec_dict=OPTIMIZE_POLYMER_INFO_FIELDS,
-    )
-
-
-def _extract_mold_info(condition: ProcessCondition) -> Dict[str, Any]:
-    """按 OPTIMIZE_MOLD_INFO_FIELDS 契约从 Mold 提取 mold_info（白名单）。
-
-    跨四张表合并：**Mold**（主表）+ **GatingSystem**（流道）+ **Cavity**（型腔）
-    + **Gate**（浇口）—— 后三张是制品级物理基准的来源（壁厚 / 制品重 / 流道 /
-    浇口类型），是冷却时间判级论域的必需输入（见 ``fuzzy/specs.py`` 的
-    ``resolve_product_limits``）。
-
-    【注意】**逐级取第一个**（多浇注系统 / 多型腔 / 多浇口时取第一个）：
-      与专家引擎侧「多腔取第一个 / 多浇口取第一个」的既有口径一致。
-      【注意】若将来出现多射工况，需改为按 ``condition.shot_index`` 选取
-      （与 ``parameter_initialize._build_mold_snapshot`` 对齐）。
-
-    【注意】**任一级缺失 ⇒ 该来源的字段全部不出现** ⇒ 调用方回落经验论域，
-      **不报错、不阻塞**。
-    """
-    mold = condition.mold
-    if mold is None:
-        return {}
-    gating = mold.gating_systems.first()
-    cavity = gating.cavities.first() if gating is not None else None
-    gate = cavity.gates.first() if cavity is not None else None
-    return _extract_orm_fields_by_spec(
-        source_orm_map={
-            "Mold": mold,
-            "GatingSystem": gating,
-            "Cavity": cavity,
-            "Gate": gate,
-        },
-        spec_dict=OPTIMIZE_MOLD_INFO_FIELDS,
-    )
 
 
 # --- 算法调用与上下文构造 ---
@@ -657,178 +566,9 @@ def _compose_algorithm_context(
     }
 
 
-# --- 越限守卫（设备安全红线）---
-
-def _format_limit_number(value: float) -> str:
-    """上限 / 当前值的展示格式：整数不带小数尾巴（'100' 而不是 '100.0000'）。"""
-    try:
-        if float(value) == int(value):
-            return str(int(value))
-    except (TypeError, ValueError):
-        pass
-    return ('%.4f' % value).rstrip('0').rstrip('.')
-
-
-def _format_over_limit_message(items: List[Any]) -> str:
-    """越限拒绝文案 —— 说清「哪个参数 / 当前值 / 上限」。
-
-    否则用户只看到一个「数据无效」，无从下手改。
-    """
-    details = []
-    for item in items[:3]:
-        details.append('%s 当前 %s 超出机台上限 %s'
-                       % (item.business_name or item.param_name,
-                          _format_limit_number(item.current_value),
-                          _format_limit_number(item.limit)))
-    if len(items) > 3:
-        details.append('等 %d 项' % len(items))
-    return '；'.join(details) + '，该设定超出设备可设定范围，请修正后再试'
-
-
-def _guard_over_limit_settings(
-    *,
-    process_parameter: Dict[str, Any],
-    machine_info: Dict[str, Any],
-    interface_tag: str,
-) -> None:
-    """越限守卫 —— **设备安全红线**命中即拒绝（400）。
-
-    判定时机：**调用算法之前**（service 预处理层）。
-    判据是**纯事实**（当前设定值 vs 机台物理上限）⇒ 不需要结论做参照。
-
-    判据：当前设定值 > 机台物理上限（`specs.resolve_param_limits`）。
-
-    分层（安全分层口径，固化在算法契约层 `over_limit.BLOCKING_LIMIT_SOURCES`）：
-      - ``device``（设定值类）—— **操作设备涉及安全** ⇒ 阻断；
-      - ``material``（温度类）—— 降解/变色，不涉及设备安全 ⇒ 不阻断（只告警）。
-
-    【注意】缺上限（机台没填）⇒ **不阻断**：缺数据不等于参数不合理。
-
-    Raises:
-        BizException(ERROR_DATA_INVALID): 命中设备安全红线
-    """
-    blocking = detect_blocking_over_limits(
-        process_parameter, resolve_param_limits(machine_info))
-    if not blocking:
-        return
-    _logger.warning(
-        "[optimize] %s 越限拒绝（设备安全红线）: %s",
-        interface_tag, [item.to_trace() for item in blocking])
-    raise BizException(ERROR_DATA_INVALID, _format_over_limit_message(blocking))
-
-
-def _drop_over_stroke_value_recommendations(
-    recommendations: List[Dict[str, Any]],
-    stroke_items: List[OverLimitItem],
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """剔除「已超出行程的位置类参数」的**数值推荐**（只保留 check 告知）。
-
-    矛盾在哪：位置类参数（MEL / IL / ML / VPTL）已经超出机台注射行程，
-    而规则层仍可能因**缺陷前件**（如 ``SHORTSHOT_low THEN MEL_add_2``）推荐
-    「再往上加」⇒ 一边告诉用户「这台机做不出这个产品」，一边又推一个
-    更离谱的数值（实测：MEL 当前 758.07 → 推荐 760.19，行程只有 200mm）。
-
-    处理方式：超行程参数的数值推荐**一律剔除**（不再推、不再写回 baseline），
-    只留 :func:`_append_position_over_stroke_notices` 追加的那条 check 告知。
-
-    【注意】剔除的**不是当前值**：baseline 里超行程的原值照旧保留（那是既有工艺的
-    事实，抹掉反而看不出问题），本函数只管「别再往上推」。
-
-    【注意】判据与 :func:`collect_candidates` 的入候选判据**严格一致**
-    （都是 ``recommended_value is not None``）⇒ 凡是会被写回 baseline 的数值推荐，
-    必定在这里被剔除 ⇒ 不会漏网。
-
-    Args:
-        recommendations: 本次推理的原始推荐列表（**不修改**，返回新列表）。
-        stroke_items: :func:`detect_over_stroke_limits` 的产物。
-
-    Returns:
-        ``(保留的推荐列表, 被剔除的推荐列表)``；无超行程时两者分别为
-        （入参列表本身, 空列表）。
-    """
-    if not stroke_items or not recommendations:
-        return recommendations, []
-
-    over_names = {item.param_name for item in stroke_items}
-    kept: List[Dict[str, Any]] = []
-    dropped: List[Dict[str, Any]] = []
-    for rec in recommendations:
-        # 【注意】``param`` 此刻还是**算法名**（MEL / IL0 ...）——本函数在
-        #    ``_normalize_recommendations`` **之前**调用，还未译回业务字段名。
-        if rec.get("param") in over_names and rec.get("recommended_value") is not None:
-            dropped.append(rec)
-            continue
-        kept.append(rec)
-    return kept, dropped
-
-
-def _append_position_over_stroke_notices(
-    recommendations: List[Dict[str, Any]],
-    stroke_items: List[OverLimitItem],
-) -> List[Dict[str, Any]]:
-    """位置类超行程 ⇒ 追加一条「检查」类建议（**告知，不阻断**）。
-
-    与 :func:`_guard_over_limit_settings` 同属「越限处理」的处理层，但**判据
-    不同、处理方式必须不同**：
-
-    - 那边 = **设备安全红线**（设定值类超机台可设定上限）⇒ 400 拒绝 ——
-      判据是「用户把参数设错了」，改个值就能继续 ⇒ 值得拦；
-    - 这边 = **产品与机台能力不匹配**（位置类当前值超设备注射行程）⇒
-      **用户改不了**（是产品本身在这台机上做不出来，实测 MEL 56/70 行超行程）
-      ⇒ 拦了也没有出路 ⇒ 只**告知**。
-
-    【注意】告知走**既有的 check 通道**（``source='fuzzy.check'`` / ``direction='check'``）
-    ⇒ **不改对外契约**：``_normalize_recommendations`` 会自动译业务字段名、生成
-    中文标签，``_build_suggestion_payload`` 会按业务字段名自动归组
-    （``met_end_pos`` → 熔胶参数 / ``inj_pos_1`` → 注射参数）。
-
-    Args:
-        recommendations: 本次推理的原始推荐列表（**不修改**，返回新列表）。
-        stroke_items: :func:`detect_over_stroke_limits` 的产物
-            （已超出行程的位置类参数）。
-
-    Returns:
-        追加了告知条目后的推荐列表；无位置类超行程时**原样返回**。
-    """
-    if not stroke_items:
-        return recommendations
-
-    # 多个位置参数同时超出行程（IL0 / ML0 / MEL 一起超）⇒ 合并成**一条**告知：
-    # 它们说的是同一件事（这个产品在本机做不出来），逐条提示只会刷屏。
-    # 取**超出量最大**的那项作代表。
-    # 【注意】文案三段式：**事实**（哪个参数、超多少）→ **结论**（本机做不出来）
-    #    → **出路**（换更大的机）。
-    #    出路只给「换机」—— **以产品为目标**（产品形态已定），不给
-    #    「减轻制品重量 / 减少型腔数」这类迁就设备的建议。
-    top = max(stroke_items, key=lambda item: item.exceeded_by)
-    label = _param_label(_to_business_param_name(top.param_name))
-    others = len(stroke_items) - 1
-    reason = (
-        '%s当前 %smm，超出本机注射行程 %smm%s，本机无法生产该制品，请更换行程更大的设备'
-        % (label,
-           _format_limit_number(top.current_value),
-           _format_limit_number(top.limit),
-           ('（另有 %d 项超出行程）' % others) if others else '')
-    )
-    _logger.warning(
-        "[optimize] 位置类超行程（仅告知，不阻断）: %s ｜ 告知: %s",
-        [item.to_trace() for item in stroke_items], reason)
-
-    # 【注意】**不就地改入参列表**：``_call_algorithms`` 返回的 ``recommendations`` 与
-    #    ``algorithm_sources[subtype]`` 是**同一个 list 对象** ⇒ 就地 append 会把
-    #    「引擎产出」污染成「引擎产出 + 本层告知」⇒ 选优/溯源口径失真。
-    #    这里返回**新列表**，入参保持原样。
-    return recommendations + [{
-        'param': top.param_name,
-        'current_value': top.current_value,
-        'recommended_value': None,
-        'confidence': None,
-        'direction': 'check',
-        'source': 'fuzzy.check',
-        'reason': reason,
-    }]
-
-
+# --- 越限守卫（设备安全红线 / 位置类超行程）---
+# 【注意】实现见 :mod:`process.services.over_limit_guard` —— 初始化与优化两条链路
+#    共用同一判据、同一错误码、同一文案 ⇒ 同一台机、同一产品，两边报错说的是同一件事。
 
 
 # --- 应用推荐 + 构造 suggestion ---
@@ -859,34 +599,6 @@ def _quantize_numeric_fields(
     return out
 
 
-def _unlandable_veto(
-    baseline: Dict[str, Any],
-    scenario: Optional[ScenarioPolicy],
-) -> Dict[str, str]:
-    """本轮**落不了地**的候选项 → 让位理由（第2层不该选它当保留项）。
-
-    物理背景（底座声明：:data:`process.algorithms.anchors.FREEDOM_YIELDS`）：
-    注射阶段是**速度控制** ⇒ 改「注射时间」要让位给「注射速度」；
-    而第3层的让位是**值回退**（改了也不生效）——
-    ⇒ 当让位对象本轮不可调（场景禁入 / 基线项）时，
-    被让位的量**改了也是白改** ⇒ 不能让它占掉本轮唯一的名额。
-
-    【注意】**不选它 ≠ 丢掉它**：它仍进裁决留痕（让位理由），
-    只是不占名额 ⇒ 名额**顺延**到下一个可落地的候选。
-    """
-    if scenario is None:
-        return {}
-    blocked = scenario.blocked_params or ()
-    available = {name for name, value in baseline.items() if value is not None}
-    return {
-        name: f'本轮落不了地（让位对象 {free} 不可调）⇒ 让位'
-        for name, free in unlandable_params(
-            blocked_params=blocked,
-            available_params=available,
-        ).items()
-    }
-
-
 def _apply_decision_status(
     recommendations: List[Dict[str, Any]],
     decision: StrategyDecision,
@@ -914,51 +626,73 @@ def _apply_decision_status(
     return recommendations
 
 
-def _resolve_direction(
-    baseline: Dict[str, Any],
+def _decide_plan_by_strategy(
     algorithm_recommendations: List[Dict[str, Any]],
-    strategy_table: Optional[PriorityTable] = None,
-    scenario: Optional[ScenarioPolicy] = None,
+    priority_table: Optional[PriorityTable] = None,
+    scenario: Optional[ScenarioStrategy] = None,
     context: Optional[ScenarioContext] = None,
-) -> Direction:
-    """【第2层】结合实际情况，确定**明确的调整方向**。
+) -> AdjustmentPlan:
+    """【第2层】按调机策略筛选规则，给出**明确的调整计划**。
 
     输入：算法给的平级建议（第1层的产出）+ 实际情况 + 策略数据。
-    输出：**明确的调整方向** —— 调哪几个、调到什么值、谁让位、谁暂缓。
+    输出：**明确的调整计划** —— 调哪几个、谁让位、谁暂缓、**什么口径**。
+
+    【注意】**本层不碰参数**（用户口径）—— 只做**规则筛选**：
+
+    - 「这个字段**本机有没有值**」**不在这里判** ⇒ 本层不读参数集；
+    - 「**这是不是工艺量**」在**候选准入**判（命名契约：静态字段字典）⇒
+      不是工艺量的（``IPOS`` 这类规则库专用参数）**不进候选**，
+      不靠下游兜底（兜底 = 掩饰错误）；
+    - 「让位对象当前有没有值」**不在这里判** ⇒ 第2层不预判「改了会不会白改」
+      （那是个案兜底，结构上不该由第2层承担）；
+    - 「改成多少」（``MEL`` 标 → 计量位置的物理换算）归**第3层** ——
+      本层只把「MEL 目标值 + 口径」带出去，不碰参数。
 
     注意：算法返回的 ``param`` 是算法命名空间（``IV0`` / ``BT1``），
-    必须先译回业务字段名（``inj_spd_1`` / ``brl_temp_1``）才能命中 baseline。
+    必须先译回业务字段名（``inj_spd_1`` / ``brl_temp_1``）才能当成候选。
 
-    **方向定在 MEL 翻译之前**（歧义消解归第2层）—— 否则看不见 MEL 的意图
+    **裁决定在 MEL 翻译之前**（歧义消解归第2层）—— 否则看不见 MEL 的意图
     （只看得到「调计量位置」），规则无处安放。
+    ⇒ 本层裁的是「MEL 这条建议要不要用」，**翻成计量位置是第3层的事**。
 
-    【注意】``strategy_table`` 为空且 ``scenario`` 为空 ⇒ **不裁决** ⇒ 行为与
+    【注意】``priority_table`` 为空且 ``scenario`` 为空 ⇒ **不裁决** ⇒ 行为与
     「不接第2层」完全一致。
 
     【注意】``context``：**实际情况**（缺陷码 / 实测重量 / 目标重量）。
-    场景要求按**充填量比例**解算行程且目标可解 ⇒ MEL 保留项直接落行程目标值，
-    不再走「MEL 增量 → 计量位置」口径；目标解不出来 ⇒ 回落增量口径。
+    场景要求按**充填量比例**解算行程 ⇒ 本层只把**口径**带出去
+    （重量随 :func:`_fill_weights` 交给第3层）。
     """
     candidates = collect_candidates(
         algorithm_recommendations,
-        baseline,
-        name_of=_to_business_param_name,
+        name_of=_to_candidate_param_name,
     )
-    direction = resolve_direction(
+    plan = build_plan(
         candidates.names,
         candidates.targets,
-        baseline,
         context=context,
-        policy=scenario,
-        table=strategy_table,
-        veto_params=_unlandable_veto(baseline, scenario),
+        strategy=scenario,
+        table=priority_table,
     )
 
     # 决策留痕：有让位 / 暂缓时才落日志（正常路径不产噪声）
-    if direction.decision.yielded or direction.decision.deferred:
-        _logger.info('infer direction: %s', direction.decision.to_trace())
+    if plan.selection.yielded or plan.selection.deferred:
+        _logger.info('infer plan: %s', plan.selection.to_trace())
 
-    return direction
+    return plan
+
+
+def _fill_weights(
+    context: Optional[ScenarioContext],
+) -> Optional[Tuple[float, float]]:
+    """充填量比例口径的输入：（目标重量, 实测重量）。
+
+    【注意】缺任一个 ⇒ ``None`` ⇒ 第3层回落「MEL 增量」口径（不臆造）。
+    """
+    if context is None:
+        return None
+    if context.target_weight is None or context.actual_weight is None:
+        return None
+    return (context.target_weight, context.actual_weight)
 
 
 def _zero_landing_detail(integrated: IntegratedParams) -> str:
@@ -978,7 +712,7 @@ def _zero_landing_detail(integrated: IntegratedParams) -> str:
 
 def _guard_zero_landing(
     baseline: Dict[str, Any],
-    direction: Direction,
+    plan: AdjustmentPlan,
     integrated: IntegratedParams,
     interface_tag: str,
 ) -> None:
@@ -995,14 +729,14 @@ def _guard_zero_landing(
     【注意】**不管另一种形态**：第2层**根本没保留任何候选**
     （规则没给出可用调整）属于另一回事，既有行为不变，不在本守卫范围内。
     """
-    if not direction.decision.kept:
+    if not plan.selection.kept:
         return
     if diff_numeric_fields(baseline, integrated.values):
         return
     detail = _zero_landing_detail(integrated)
     _logger.warning(
         '[optimize] %s 零落地（保留项=%s，但无任何参数变化）: %s',
-        interface_tag, list(direction.decision.kept), detail,
+        interface_tag, list(plan.selection.kept), detail,
     )
     raise BizException(
         ERROR_OPERATION_FAILED,
@@ -1174,6 +908,14 @@ def _normalize_recommendations(
        只会把"保持不变"当成建议推给工艺员
     3. ``reason`` 重写为业务文案（参数名用中文标签）
 
+    【注意】第 2 步是**去噪**，**不是取舍** —— 取舍（用哪几条、按什么次序、
+    谁让位）归**第2层**（:func:`_decide_plan_by_strategy`）⇒ 去噪留在进第2层之前，
+    不干扰第2层的裁决。
+
+    【注意】**这份不是定版点** —— 规范化之后，第2层裁决完还会**就地回填**
+    ``decision_status`` / ``decision_reason``（:func:`_apply_decision_status`）
+    ⇒ 落库（``Recommendation.recommendations``）与展示读的都是**回填后**那份。
+
     必须在**落库前**调用：``Recommendation.recommendations`` 存的就是这份，
     否则库里存的是 ``模糊推理 (sources=['numeric'])`` 这种内部状态。
 
@@ -1193,9 +935,9 @@ def _normalize_recommendations(
             except (TypeError, ValueError):
                 pass
 
-        param = _to_business_param_name(rec.get("param"))
+        param = to_business_param_name(rec.get("param"))
         rec["param"] = param
-        rec["param_label"] = _param_label(param)
+        rec["param_label"] = param_label(param)
         rec["reason"] = _build_description(rec)
         normalized.append(rec)
     return normalized
@@ -1210,7 +952,7 @@ def _build_suggestion_payload(
     """扁平推荐按 category 分组，构建 SuggestionGroup。
 
     baseline 不为 None 时只保留在 baseline 中存在的推荐字段
-    （与 collect_candidates 严格对齐）。
+    （**展示层过滤** —— 与候选准入的「是不是工艺量」同口径）。
 
     ``applied_values``：**已采用项的实际落地值**（字段名 → 值）。
     当轮响应传 ``integrated.values``（整合后的最终参数集，**未量化**）；
@@ -1222,12 +964,12 @@ def _build_suggestion_payload(
     if not algorithm_recommendations:
         return {"source_type": source_type, "groups": []}
 
-    # 一致性过滤：与 collect_candidates 严格对齐
+    # 展示层过滤：本机没有的字段不展示
     # （过滤与分类都按**业务字段名**，算法命名空间的前缀规则匹配不到）
     if baseline is not None:
         filtered_recs = [
             rec for rec in algorithm_recommendations
-            if _to_business_param_name(rec.get("param")) in baseline
+            if to_business_param_name(rec.get("param")) in baseline
         ]
     else:
         filtered_recs = algorithm_recommendations
@@ -1237,7 +979,7 @@ def _build_suggestion_payload(
 
     grouped: Dict[str, Dict[str, Any]] = {}
     for rec in filtered_recs:
-        param_name = _to_business_param_name(rec.get("param", ""))
+        param_name = to_business_param_name(rec.get("param", ""))
         category, icon = _categorize_param(param_name)
 
         if category not in grouped:
@@ -1734,9 +1476,10 @@ def _infer_kernel(
     # 【注意】判的是**当前设定值** vs 机台物理上限（**纯事实**）⇒ 不等结论、直接拒。
     #    超限往往就是「推不出结论」的根因 ⇒ 先报根因比报「推荐算法暂不可用」准确。
     #    （参数按算法命名判定 —— 翻译规则见 field_names.to_algo_params）
-    _guard_over_limit_settings(
+    guard_over_limit_settings(
         process_parameter=field_names.to_algo_params(baseline),
         machine_info=machine_info,
+        scope='optimize',
         interface_tag=interface_tag,
     )
 
@@ -1765,41 +1508,17 @@ def _infer_kernel(
             "推荐算法暂不可用，请稍后重试或联系管理员",
         )
 
-    # 位置类超行程：剔除该参数的**数值推荐** + 追加一条 check 告知
-    # （**告知，不阻断**）—— 详见 _drop_over_stroke_value_recommendations
-    #   与 _append_position_over_stroke_notices。
-    # 【注意】必须放在 fail-fast **之后**：否则「只有超行程告知、没有任何数值建议」会被
-    #    fail-fast 当成「有推荐」而放行，掩盖真正的「推不出结论」。
-    stroke_items = detect_over_stroke_limits(
-        algorithm_context.get('process_parameter') or {},
-        resolve_position_limits(machine_info),
-    )
-    raw_recommendations, dropped_recommendations = (
-        _drop_over_stroke_value_recommendations(raw_recommendations, stroke_items)
-    )
-    if dropped_recommendations:
-        # 留痕：剔了什么、为什么（超行程的参数不能再往上推）
-        _logger.warning(
-            "[optimize] 剔除超行程位置参数的数值推荐: %s ｜ 超行程参数: %s",
-            [{'param': rec.get('param'),
-              'current': rec.get('current_value'),
-              'recommended': rec.get('recommended_value')}
-             for rec in dropped_recommendations],
-            [item.to_trace() for item in stroke_items],
-        )
-    raw_recommendations = _append_position_over_stroke_notices(
-        raw_recommendations, stroke_items,
-    )
-
-    # 规范化：业务字段名 + 业务文案 + 过滤零变化项
-    # （落库与展示共用这一份，Recommendation.recommendations 存的就是它）
+    # 规范化：业务字段名 + 业务文案 + **去噪**（丢弃零变化项）
+    # （落库与展示共用这一份，Recommendation.recommendations 存的就是它；
+    #  【注意】这里**不是定版点** —— 第2层裁决后还会就地回填裁决状态）
     algorithm_recommendations = _normalize_recommendations(raw_recommendations)
 
-    # 第2层的策略数据：**业务知识在策略清单文件**（场景 / 优先集 / 名额 /
+    # ---------- 第2层：结合实际情况，确定明确的调整方向 ----------
+    # 【备料】策略数据：**业务知识在策略清单文件**（场景 / 优先集 / 名额 /
     # 目标口径）—— 这里只做「读取 + 匹配 + 组装」；没命中 ⇒ 不裁决。
     # 【注意】场景条件引用**本轮实际处理的缺陷**（收敛后的 `feedback['defects']`）
     #    ⇒ 只能在本层算（调用方拿不到收敛结果）。
-    policy_resolution = resolve_policies(
+    strategy_inputs = resolve_strategy_inputs(
         feedback=feedback,
         mold_info=mold_info,
     )
@@ -1811,31 +1530,49 @@ def _infer_kernel(
     _logger.info(
         '[optimize] %s 阶段进度: %s',
         interface_tag,
-        (policy_resolution.stage_progress.to_trace()
-         if policy_resolution.stage_progress else None),
+        (strategy_inputs.stage_progress.to_trace()
+         if strategy_inputs.stage_progress else None),
     )
 
-    # ---------- 第2层：结合实际情况，确定明确的调整方向 ----------
-    direction = _resolve_direction(
-        baseline=baseline,
+    # 【裁决】按策略梳理候选，留下**要采用的**（目标值求解不在这一层）
+    plan = _decide_plan_by_strategy(
         algorithm_recommendations=algorithm_recommendations,
-        strategy_table=(policy_resolution.priority_table if policy_resolution else None),
-        scenario=(policy_resolution.scenario if policy_resolution else None),
-        context=(policy_resolution.context if policy_resolution else None),
+        priority_table=strategy_inputs.priority_table,
+        scenario=strategy_inputs.scenario,
+        context=strategy_inputs.context,
     )
 
     # 裁决状态回填到建议（**就地**）⇒ 响应 / 落库 / 历史回显三处一致
-    _apply_decision_status(algorithm_recommendations, direction.decision)
+    _apply_decision_status(algorithm_recommendations, plan.selection)
 
     # ---------- 第3层：整合参数（写入方向 + 锚点传导自洽）----------
     # 放在这里 ⇒ **落库值与响应值同源**（响应体就是这份 dict）。
-    integrated = apply_direction(baseline, direction, previous=baseline)
+    # 【注意】**「改成多少」在这一层算**（用户口径）：第2层只给「调哪个 +
+    # 什么口径」⇒ MEL 这类**派生量**的物理换算（标 → 计量位置）在这里做，
+    # 它手上有旧值（``previous``）⇒ 换算得出。
+    integrated = apply_plan(
+        baseline, plan, previous=baseline,
+        fill_weights=_fill_weights(strategy_inputs.context),
+    )
     if integrated.touched:
         _logger.info('infer integration: %s', integrated.summary())
 
+    # 位置类超行程：**机台能力校验** ⇒ 检出即拒绝本轮优化（不做事后回退）
+    # 【注意】判据是**落地值**（第3层整合后的参数集）：越限是关于**参数值**的
+    #    事实，算法给建议时还看不到落点 ⇒ 这一层才谈得上「改完会不会越限」；
+    #    且整合值 ⊇ 基线值 ⇒ 一道同时覆盖「当前值本来就超」与「本轮推过头」。
+    # 【注意】仍在 fail-fast **之后**（fail-fast 判的是「算法有没有给出结论」，
+    #    与机台能力是两件事）⇒ 超行程不会把「推不出结论」伪装成「有推荐」。
+    guard_position_over_stroke(
+        values=integrated.values,
+        machine_info=machine_info,
+        scope='optimize',
+        interface_tag=interface_tag,
+    )
+
     # 零落地守卫：**本该落地却一个量都没动** ⇒ 明确报错
     # （不静默产出「与上一轮一模一样」的新轮次）
-    _guard_zero_landing(baseline, direction, integrated, interface_tag)
+    _guard_zero_landing(baseline, plan, integrated, interface_tag)
 
     # ---------- 第4层：校验参数合理性（只报不阻断）----------
     # 出口参数统一量化（最多 2 位小数）—— 落库（``_create_new_round``）

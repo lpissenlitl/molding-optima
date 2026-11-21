@@ -304,8 +304,9 @@ OPTIMIZE_POLYMER_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
 #
 # 【注意】**制品级字段来自 Mold 下的关联表**（不是 Mold 主表）：
 #    ``GatingSystem``（流道）→ ``Cavity``（型腔）→ ``Gate``（浇口）
-#    ⇒ service 层按「逐级取第一个」展开后交给 `_extract_orm_fields_by_spec`
-#    （见 ``parameter_optimize._extract_mold_info``）；某一级缺失 ⇒ 该字段缺失
+#    ⇒ service 层按「逐级取第一个」展开后交给
+#    ``services.spec_extract.extract_mold_info``
+#    （见 ``services.spec_extract.extract_mold_info``）；某一级缺失 ⇒ 该字段缺失
 #    ⇒ 回落经验论域，**不报错、不阻塞**。
 #
 # 未来候选（本期未纳入，需成对使用才有意义）：

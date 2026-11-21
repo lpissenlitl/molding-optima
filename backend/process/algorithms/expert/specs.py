@@ -299,7 +299,7 @@ POLYMER_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
 #   - attr_name: ORM 属性名（计算字段时为 None，service 层特殊处理）
 #   - condition: "必填" / "液压机必填" / "条件必填" / "可选" / "推荐"
 #   - condition_when: 条件必填的触发条件字典
-# service 层 _build_mold_info_from_snapshot 按 (source_model, attr_name) 通用提取，
+# service 层 spec_extract.build_mold_info_from_snapshot 按 (source_model, attr_name) 通用提取，
 # 特殊 case（如 Gate.outer_diameter / 2）针对字段写代码处理
 MOLD_INFO_SPEC: Dict[str, Dict[str, Any]] = {
     # ---- Mold ORM 主表字段 ----

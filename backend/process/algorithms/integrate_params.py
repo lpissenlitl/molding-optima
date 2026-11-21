@@ -1,4 +1,4 @@
-"""第3层：整合参数 —— 把方向变成**物理上自洽**的参数集。
+"""第3层：整合参数 —— 把调整计划变成**物理上自洽**的参数集。
 
 这一层只干一件事：**让参数集自洽**。它不知道参数是怎么来的
 （算法建议 / 手工编辑 / 初始化），也不判断合不合理（第4层 ``check_params.py`` 的事）。
@@ -7,7 +7,7 @@
 
 .. code-block:: text
 
-    方向落地   apply_direction()   第2层方向 ──▶ 写入 ──▶ 锚点传导
+    计划落地   apply_plan()         第2层计划 ──▶ 写入 ──▶ 锚点传导
     参数集自洽 integrate()          差分 ──▶ 锚点传导 ──▶ 按差异回填
     锚点传导   propagate()          改了什么 ──▶ 连带算出别的量
 
@@ -56,11 +56,14 @@ from .anchors import (
     FREEDOM_YIELDS,
     G1_AUTO_FIELD,
     G1_BACKOFF_FIELD,
+    FillTarget,
+    apply_mel_targets,
     find_chain_break,
     last_stage_field,
+    resolve_fill_target,
     resolve_stage_count,
 )
-from .decide_direction import Direction
+from .decide_direction import AdjustmentPlan
 
 
 # ===========================================================================
@@ -137,8 +140,8 @@ LINK_RULES: Tuple[LinkRule, ...] = (
 #: 所以改时间的建议让位给速度 —— 留痕且**值回退**（让位 = 不生效）。
 #:
 #: 【注意】**声明在底座**（:data:`process.algorithms.anchors.FREEDOM_YIELDS`）——
-#: 第2层也要用它（让位对象不可调 ⇒ 被让位的量本轮落不了地 ⇒ 不该占名额），
-#: 放底座才能只定义一次、两层各自引用。
+#: 底座只定义一次，各层各自引用。
+#: （此前第2层也用它做「落不了地」预筛，批次 14.1 已拿掉 ⇒ 第2层不掺合参数。）
 FREEDOM_OVERRIDES: Mapping[str, str] = FREEDOM_YIELDS
 
 
@@ -343,6 +346,7 @@ class IntegratedParams:
         conflicts: 两端同时改导致无解的字段组合（已按「自动计算量优先」处置）。
         unresolved: 没能联动的说明（缺量 / 口径不适用 / 违反硬约束）。
         landed: 第2层方向**实际写入**的字段（按写入次序）。
+        fill_target: 本轮采用的**充填量目标**（``None`` = 没走比例口径）。
     """
 
     values: Dict[str, Any]
@@ -352,6 +356,7 @@ class IntegratedParams:
     conflicts: Tuple[str, ...] = ()
     unresolved: Tuple[str, ...] = ()
     landed: Tuple[str, ...] = ()
+    fill_target: Optional[FillTarget] = None
 
     @property
     def touched(self) -> bool:
@@ -365,12 +370,14 @@ class IntegratedParams:
 
     def summary(self) -> str:
         """一行可读摘要（给日志用）。"""
+        fill = self.fill_target.reason if self.fill_target is not None else '-'
         return (
             f'direct={list(self.direct_fields)} '
             f'derived={list(self.derived_fields)} '
             f'superseded={list(self.superseded_fields)} '
             f'conflicts={list(self.conflicts)} '
-            f'unresolved={list(self.unresolved)}'
+            f'unresolved={list(self.unresolved)} '
+            f'fill_target={fill}'
         )
 
 
@@ -491,40 +498,84 @@ def integrate(
 
 
 # ===========================================================================
-# 三、方向落地（第2层方向 ──▶ 参数集）
+# 三、计划落地（第2层计划 ──▶ 参数集）
 # ===========================================================================
 
 
-def apply_direction(
+def apply_plan(
     baseline: Mapping[str, Any],
-    direction: Direction,
+    plan: AdjustmentPlan,
     previous: Optional[Mapping[str, Any]] = None,
+    *,
+    fill_weights: Optional[Tuple[float, float]] = None,
 ) -> IntegratedParams:
-    """把第2层的**明确方向**整合进参数集（写入 + 锚点传导自洽）。
+    """把第2层的**调整计划**整合进参数集（写入 + 锚点传导自洽）。
 
-    流程：**写入方向 → 差分 → 传导 → 按差异回填**。
+    流程：**写入计划 → 差分 → 传导 → 按差异回填**。
 
-    - **写入方向**：按方向次序写进基线（先定 ML，再确定 MEL ⇒ ``MEL``
+    - **写入计划**：按计划次序写进基线（先定 ML，再确定 MEL ⇒ ``MEL``
       永远是由计量位置算出来的派生量）；
     - **差分**：写入后才知道「这次改动了哪些量」⇒ 与旧值比；
     - **传导**：按物理联动规则把连带量算出来（:func:`propagate`）。
 
+    【注意】**「改成多少」在这一层算**（用户口径）—— 第2层只给「调哪个 +
+    什么口径」；``MEL`` 是算法侧的**标**（由 ``ML_N + DDAM`` 算出）⇒ 这里按
+    ``plan.target_mode`` 把它翻成计量位置（决策量）：
+
+    - ``'fill_ratio'``：按充填量比例解算**行程目标**（行程 ∝ 重量），
+      需 ``fill_weights``（目标重量, 实测重量）；解不出来 ⇒ **回落增量口径**；
+    - 其它（增量口径）：``旧MEL + ΔMEL`` ⇒ 计量位置。
+
+    【注意】**本层不做存在性兜底**（用户口径）—— 「这条规则要调的参数是不是
+    工艺量」在**候选准入**就判掉了（命名契约：静态字段字典）⇒ 不是工艺量的
+    （``IPOS`` 这类规则库专用参数）**进不来**，本层写到的每一个名字都是
+    工艺量 ⇒ 无需再判，也无从掩饰（兜底 = 掩饰错误：规则有误该改规则）。
+
     Args:
         baseline: 现状参数集（旧值基线）。
-        direction: 第2层给出的**明确方向**（字段名 + 目标值）。
+        plan: 第2层给出的**调整计划**（字段名 + 目标值 + 口径）。
         previous: 改动前的参数集；``None`` ⇒ 取 ``baseline``。
+        fill_weights: （目标重量, 实测重量）—— 充填量比例口径的输入。
 
     Returns:
         :class:`IntegratedParams` —— 整合后的参数集 + 留痕。
     """
     values: Dict[str, Any] = dict(baseline)
     landed: List[str] = []
-    for name, value in direction.decisions:
+    for name, value in plan.assignments:
         values[name] = value
         landed.append(name)
 
+    # MEL 是算法侧的「标」⇒ 这里按口径换算成可落地的计量位置目标
+    fill_target: Optional[FillTarget] = None
+    if plan.mel_targets:
+        old_values = previous if previous is not None else baseline
+        if plan.target_mode == 'fill_ratio' and fill_weights is not None:
+            target_weight, actual_weight = fill_weights
+            resolved = resolve_fill_target(
+                values,
+                target_weight=target_weight,
+                actual_weight=actual_weight,
+                previous=old_values,
+            )
+            if resolved is not None and resolved.field_name in values:
+                values[resolved.field_name] = resolved.target_value
+                landed.append(resolved.field_name)
+                fill_target = resolved
+            else:
+                # 比例口径解不出来 ⇒ 回落增量口径
+                landed.extend(apply_mel_targets(
+                    values, plan.mel_targets, previous=old_values))
+        else:
+            landed.extend(apply_mel_targets(
+                values, plan.mel_targets, previous=old_values))
+
     outcome = integrate(values, previous if previous is not None else baseline)
-    return replace(outcome, landed=tuple(landed))
+    return replace(
+        outcome,
+        landed=tuple(landed),
+        fill_target=fill_target,
+    )
 
 
 __all__ = [
@@ -541,5 +592,5 @@ __all__ = [
     'numeric_snapshot',
     'is_number',
     # 方向落地
-    'apply_direction',
+    'apply_plan',
 ]

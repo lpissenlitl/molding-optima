@@ -12,23 +12,29 @@
   =============  ==========  ==================================  ============
   device        设定值类     **操作设备涉及安全** —— 上限 100 而   **拒绝** 400
                              人为设 200 ⇒ 严重风险
-  stroke        位置类       **产品做不出来** —— 当前值超出设备   留痕（不阻断）
-                             注射行程 ⇒ 这台机做不出这个产品
+  stroke        位置类       **产品做不出来** —— 当前值超出设备   **拒绝** 400
+                             注射行程 ⇒ 这台机做不出这个产品       （机台能力校验）
   material      温度类       材料降解 / 变色（不涉及设备操作安全） 告警 / 兜底
   （无上限）      时间类       无设备约束                            不识别
   =============  ==========  ==================================  ============
 
-【注意】``device`` 与 ``stroke`` 的**根本差别**（决定了处理方式不能统一）：
-  - ``device``（设定值类）= 用户把某个参数**设错了**，改个值就好 ⇒ 值得拦；
+【注意】``device`` 与 ``stroke`` 的**根本差别**（决定的是**拦了之后说什么**）：
+  - ``device``（设定值类）= 用户把某个参数**设错了**，改个值就好 ⇒ 出路是「改值」；
   - ``stroke``（位置类）= **这个产品在这台设备上做不出来**（实测 MEL 56/70 行
-    超行程：行程 200mm 而产品充填需 291mm）⇒ 用户**改不了** ⇒ 拦了也没有出路。
-⇒ ``stroke`` **永不进** :data:`BLOCKING_LIMIT_SOURCES`。
+    超行程：行程 200mm 而产品充填需 291mm）⇒ 用户**改不了** ⇒ 出路是「换机」。
+⇒ 两者**都拒绝**（用户口径：「超限先报错」）—— 差别在**文案出路**，不在拦不拦。
+
+【注意】``stroke`` **不进** :data:`BLOCKING_LIMIT_SOURCES`：那套常量管的是
+  **设定值类上限**（按族前缀查，:func:`detect_over_limits`），
+  而位置类的上限是**设备实测行程**（另一套识别函数 :func:`detect_over_stroke_limits`）
+  ⇒ 阻断由 service 层的**机台能力守卫**执行
+（``process.services.over_limit_guard``，初始化与优化两条链路共用）⇒ 两边口径一致。
 
 【注意】**本模块不抛异常、不改建议**：
   - **不告警**：不改 `AlgorithmRecommendation`，不产出 `fuzzy.check` 文本建议；
   - **不拒绝**：`engine.recommend()` 的异常边界会把任何异常**降级成空推荐**
     （"什么都给不出来"，比不拦更糟）⇒ 拒绝必须由 **service 层**在**调用算法之前**
-    转 `BizException`（`parameter_optimize._guard_over_limit_settings`）；
+    转 `BizException`（`process.services.over_limit_guard.guard_over_limit_settings`）；
     判据是**纯事实**（当前设定值 vs 机台上限）⇒ 不需要结论做参照；
   - **不改建议**：推荐值侧的封顶裁剪在 `engine._apply_machine_limits`，本模块不碰。
 
@@ -48,7 +54,7 @@ from process.algorithms.fuzzy.specs import lookup_position_limit, param_family
 # --- 上限来源（= 安全分层的维度）---
 # 'device'   —— 机台物理上限（操作设备涉及安全）⇒ 越限必须阻断
 # 'material' —— 材料工艺窗口（降解/变色）⇒ 不涉及设备操作安全 ⇒ 不阻断
-# 'stroke'   —— 设备实测注射行程（位置类）⇒ 产品在本机做不出来 ⇒ 不阻断
+# 'stroke'   —— 设备实测注射行程（位置类）⇒ 产品在本机做不出来 ⇒ 拒绝（出路：换机）
 LIMIT_SOURCE_DEVICE = 'device'
 LIMIT_SOURCE_MATERIAL = 'material'
 LIMIT_SOURCE_STROKE = 'stroke'
@@ -191,13 +197,15 @@ def detect_over_stroke_limits(
        设定值类（``IP0`` → ``IP``）；位置类既有分段（``IL0``~``IL5`` /
        ``ML0``~``ML3``）也有**整段**（``MEL`` / ``VPTL``），整段取不到族 ⇒ 走
        位置类自己的**两级匹配**（:func:`specs.lookup_position_limit`）。
-    2. **风险性质不同** ⇒ 处理方式不能统一（详见模块 docstring 的安全分层表）：
-       设定值类超限 = 用户把参数设错了（改个值就好）⇒ 阻断；位置类超行程 =
-       **这个产品在这台设备上做不出来**（实测 MEL 56/70 行超行程）⇒ 用户改不了
-       ⇒ **只留痕，永不阻断**。
+    2. **风险性质不同** ⇒ 拦了之后给的**出路**不同（详见模块 docstring 的安全
+       分层表）：设定值类超限 = 用户把参数设错了（改个值就好）⇒ 出路是「改值」；
+       位置类超行程 = **这个产品在这台设备上做不出来**（实测 MEL 56/70 行超行程）
+       ⇒ 用户改不了 ⇒ 出路是「换机」。
 
     【注意】本函数的产出**永远不进** :data:`BLOCKING_LIMIT_SOURCES`
-    ⇒ 不参与 :func:`detect_blocking_over_limits` ⇒ service 层不会 400。
+    ⇒ 不参与 :func:`detect_blocking_over_limits`（那边只查**设定值类**上限）
+    ⇒ 阻断由 service 层的**机台能力守卫**执行（见模块 docstring）——
+    与初始化链路同一套判据、同一错误码、同一文案。
 
     Args:
         process_parameter: 算法命名的工艺参数当前值（``{'MEL': 491.04, ...}``）。

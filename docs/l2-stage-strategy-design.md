@@ -8,7 +8,7 @@
 > **当前 pytest 基线：135 passed**（12.1 / 12.2 前后一致 ⇒ 行为零变化；**12.3 是第一次真正改变输出**，测试仍全过 ⇒ 现有用例未覆盖 L2 裁决路径）。
 > **关联**：`docs/l2-strategy-layer-discussion.md`（§6 表 ⑧ / §4 差距清单）、
 > `backend/process/references/04-defect-adjustment-rules.md`（规则原料）、
-> `backend/process/algorithms/decide_direction.py`（`ScenarioPolicy` 机制）。
+> `backend/process/algorithms/decide_direction.py`（`ScenarioStrategy` 机制）。
 
 ---
 
@@ -37,7 +37,7 @@
 | 概念 | 回答什么 | 落在哪 | 例子 |
 |---|---|---|---|
 | **规则 rule** | 「遇到这个现象 ⇒ 调这个量」 | 规则库（**已有**） | 短射 ⇒ `MEL` 加 2 |
-| **策略 policy** | 「**这一轮**允许调哪些、按什么次序、调几个、口径多少」 | `ScenarioPolicy`（**机制已有；12.3 起清单有 2 条**） | 短射场景 ⇒ 只准动 `met_end_pos`、一次一个、按重量比例算行程 |
+| **策略 strategy** | 「**这一轮**允许调哪些、按什么次序、调几个、口径多少」 | `ScenarioStrategy`（**机制已有；12.3 起清单有 2 条**） | 短射场景 ⇒ 只准动 `met_end_pos`、一次一个、按重量比例算行程 |
 | **阶段 stage** | 「这一轮处在调机的第几步」 | **本设计要定的**（尚未有） | 第 1 步打足 → 第 2 步补缩 → 第 3 步外观 |
 
 > 一句话：**规则说"短射就加胶量"，策略说"这轮只准动充填量、一次一个、按比例算"，阶段说"现在还没轮到这一步"。**
@@ -129,7 +129,7 @@
 | 落点 | 职责 | 用阶段表做什么 | 现状 |
 |---|---|---|---|
 | `algorithms/defect_selection.py`（**L1 侧**） | 选哪个缺陷去推理 | **排**（按阶段优先级重排后取第一个） | ✅ **批次 12.7 起生效**：`StagePriorityDefectStrategy` = 按阶段优先级重排后取第一个（**当前唯一实现**；`FirstValidDefectStrategy` 已于 2026-11-19 删除） |
-| `algorithms/decide_direction.py`（**L2 侧**） | 调什么、怎么调 | **查**（阶段进度 —— `derive_stage_progress()` 推导 `current_stage`，经 `ScenarioContext.extra` 注入） | `select_policy` 已就位；12.3 起清单有 2 条（S1 + 兜底） |
+| `algorithms/decide_direction.py`（**L2 侧**） | 调什么、怎么调 | **查**（阶段进度 —— `derive_stage_progress()` 推导 `current_stage`，经 `ScenarioContext.extra` 注入） | `select_strategy` 已就位；12.3 起清单有 2 条（S1 + 兜底） |
 
 ⚠️ **这两处必须读同一份阶段优先级表**，否则会打架：
 选了 `SHORTSHOT`（S1），策略却匹配到 `SHRINKAGE`（S2）的条件 ⇒ 方向与缺陷对不上。
@@ -151,7 +151,7 @@
 
 ```python
 # S1 打足 —— 充填量两个旋钮，先 MEL 后 VPTL
-ScenarioPolicy(
+ScenarioStrategy(
     scenario_code='stage1_filling',
     conditions=(
         {'field': 'selected_defect', 'operator': 'in_set', 'value': ('SHORTSHOT',)},
@@ -166,7 +166,7 @@ ScenarioPolicy(
 )
 
 # S2 补缩 —— 二段压力 / 二段时间（锚点是浇口封冻）
-ScenarioPolicy(
+ScenarioStrategy(
     scenario_code='stage2_shrinking',
     conditions=(
         {'field': 'selected_defect', 'operator': 'in_set',
@@ -246,7 +246,7 @@ ScenarioPolicy(
 前提 ⑦ 的**载体变了、判定口径不变**：缺陷选取仍在 service 预处理层做**一次**，
 结果**写回 `feedback`**（`defects` 收敛成一条 + `defect_selection` 留痕），
 **不再**用 context 顶层键 `selected_defect` ⇒ L1 与 L2 仍共用同一份 ⇒
-场景条件仍引用 `selected_defect`（由 `services/policies.py` 从收敛后的
+场景条件仍引用 `selected_defect`（由 `services/strategy_inputs.py` 从收敛后的
 `defects[0]` 取出注入 `extra`）。
 
 ⚠️ ① 直接触及 `§6.2` 撤回策略表的理由②（「条件字段集写死在代码里 ⇒ 表达不了需要表达的东西」）

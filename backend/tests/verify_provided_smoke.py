@@ -22,7 +22,7 @@ django.setup()
 
 from unittest.mock import patch
 from process.services import parameter_optimize as _opt_mod  # 模块级函数（service 层无类封装）
-from process.services.policies import PolicyResolution
+from process.services.strategy_inputs import StrategyInputs
 from process.algorithms.base import AlgorithmRecommendation
 
 
@@ -93,8 +93,8 @@ def main():
         return_value=algorithm_result,
     ), patch.object(
         _opt_mod,
-        "resolve_policies",
-        return_value=PolicyResolution(),
+        "resolve_strategy_inputs",
+        return_value=StrategyInputs(),
     ):
         result = _opt_mod.optimize_from_provided(
             parameter=baseline,
@@ -152,8 +152,8 @@ def main():
         return_value=algorithm_result,
     ), patch.object(
         _opt_mod,
-        "resolve_policies",
-        return_value=PolicyResolution(),
+        "resolve_strategy_inputs",
+        return_value=StrategyInputs(),
     ):
         result2 = _opt_mod.optimize_from_provided(
             parameter=baseline,

@@ -33,6 +33,11 @@ from process.services import parameter_optimize as opt  # noqa: E402
 from process.services.parameter_optimize import (  # noqa: E402
     _to_full_dict,
 )
+from process.services.spec_extract import (  # noqa: E402
+    extract_machine_info,
+    extract_mold_info,
+    extract_polymer_info,
+)
 
 # 缺陷输入（业务口径：缺陷类型 + 程度 + 位置）
 DEFECT_NAME = os.environ.get("MOULD_DEFECT", "SHORTSHOT")
@@ -91,9 +96,9 @@ def _run(condition, parent, position):
     result = opt.optimize_from_provided(
         parameter=baseline,
         feedback=feedback,
-        mold_info=opt._extract_mold_info(condition),
-        machine_info=opt._extract_machine_info(condition),
-        polymer_info=opt._extract_polymer_info(condition),
+        mold_info=extract_mold_info(condition),
+        machine_info=extract_machine_info(condition),
+        polymer_info=extract_polymer_info(condition),
     )
     return result, baseline
 

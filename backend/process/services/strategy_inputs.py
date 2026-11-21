@@ -5,7 +5,7 @@
 
 - **实际情况**（``ScenarioContext``）：本轮的缺陷码、实测重量、目标重量、充填缺口
   （从反馈与模具上下文派生，不查库）；
-- **命中哪个场景**（``ScenarioPolicy``）：条件求值 + 取第一条命中；
+- **命中哪个场景**（``ScenarioStrategy``）：条件求值 + 取第一条命中；
 - **字段级优先级表**（``PriorityTable``）：随场景一起来（清单里自带）。
 
 【注意】**清单里没有 ⇒ 不裁决**（行为与「不接第2层」完全一致）：
@@ -15,7 +15,7 @@
 本模块只负责取、匹配、组装。
 
 【注意】**充填量目标不在这里算** —— 它是「结合实际情况算目标」，属第2层的职责
-（:func:`process.algorithms.decide_direction.resolve_direction`）。
+（:func:`process.algorithms.decide_direction.build_plan`）。
 """
 
 from dataclasses import dataclass, field, replace
@@ -24,20 +24,20 @@ from typing import Any, Mapping, Optional
 from process.algorithms.decide_direction import (
     PriorityTable,
     ScenarioContext,
-    ScenarioPolicy,
+    ScenarioStrategy,
     build_scenario_context,
-    select_policy,
+    select_strategy
 )
 from process.algorithms.tuning_strategy import (
     StageProgress,
     derive_stage_progress,
-    sorted_scenario_policies,
+    sorted_scenario_strategies
 )
 
 
 @dataclass(frozen=True)
-class PolicyResolution:
-    """策略解析的结果（供编排层直接喂给第2层）。
+class StrategyInputs:
+    """策略侧的**输入**（供编排层直接喂给第2层裁决）。
 
     Attributes:
         context: **实际情况**（缺陷码 / 实测重量 / 目标重量 / 充填缺口）。
@@ -49,7 +49,7 @@ class PolicyResolution:
     """
 
     context: ScenarioContext = field(default_factory=ScenarioContext)
-    scenario: Optional[ScenarioPolicy] = None
+    scenario: Optional[ScenarioStrategy] = None
     priority_table: Optional[PriorityTable] = None
     stage_progress: Optional[StageProgress] = None
     trace: Mapping[str, Any] = field(default_factory=dict)
@@ -67,11 +67,11 @@ def _selected_defect_code(feedback: Optional[Mapping[str, Any]]) -> Optional[str
     return selected.get('keyword_name')
 
 
-def resolve_policies(
+def resolve_strategy_inputs(
     *,
     feedback: Optional[Mapping[str, Any]] = None,
     mold_info: Optional[Mapping[str, Any]] = None,
-) -> PolicyResolution:
+) -> StrategyInputs:
     """取策略清单 → 判定场景 → 组装第2层要的数据。
 
     Args:
@@ -84,7 +84,7 @@ def resolve_policies(
             ⇒ 会命中错场景。
 
     Returns:
-        :class:`PolicyResolution` —— **无命中 ⇒ 场景与优先级表为空**（不裁决）。
+        :class:`StrategyInputs` —— **无命中 ⇒ 场景与优先级表为空**（不裁决）。
     """
     context = build_scenario_context(
         feedback,
@@ -101,32 +101,32 @@ def resolve_policies(
         extra={**context.extra, 'current_stage': progress.current},
     )
 
-    policies = sorted_scenario_policies()
-    if not policies:
-        return PolicyResolution(context=context, stage_progress=progress)
+    strategies = sorted_scenario_strategies()
+    if not strategies:
+        return StrategyInputs(context=context, stage_progress=progress)
 
-    policy = select_policy(policies, context)
-    if policy is None:
-        return PolicyResolution(context=context, stage_progress=progress)
+    strategy = select_strategy(strategies, context)
+    if strategy is None:
+        return StrategyInputs(context=context, stage_progress=progress)
 
     trace = {
-        'scenario_code': policy.scenario_code,
-        'reason': policy.reason,
-        'target_mode': policy.target_mode,
-        'max_items': policy.max_items,
-        'preferred_params': list(policy.preferred_params),
+        'scenario_code': strategy.scenario_code,
+        'reason': strategy.reason,
+        'target_mode': strategy.target_mode,
+        'max_items': strategy.max_items,
+        'preferred_params': list(strategy.preferred_params),
         'defect_codes': list(context.defect_codes),
         'selected_defect': context.extra.get('selected_defect'),
         'fill_gap': context.fill_gap,
         'stage_progress': progress.to_trace(),
     }
-    return PolicyResolution(
+    return StrategyInputs(
         context=context,
-        scenario=policy,
-        priority_table=policy.priority_table,
+        scenario=strategy,
+        priority_table=strategy.priority_table,
         stage_progress=progress,
         trace=trace,
     )
 
 
-__all__ = ['PolicyResolution', 'resolve_policies']
+__all__ = ['StrategyInputs', 'resolve_strategy_inputs']
