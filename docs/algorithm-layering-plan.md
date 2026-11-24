@@ -7,6 +7,75 @@
 
 ---
 
+## 📌 本轮调整总结（2026-11-24 收口）
+
+### 一句话
+
+一次收掉三处长期越界：**setting / position 的伪分类**、**算法名越界**、**层编排住在算法层**
+⇒ 落成**四层目录** + **限值域单模块** + **算法命名空间关回 fuzzy 内部**。
+
+### 起点 → 终点
+
+| | 位置 | 说明 |
+|---|---|---|
+| **起点** | `services/parameter_optimize.py` **L1414-1420**（预处理层基线越限守卫） | 取上限 / 判越限 / 出文案与算法层写死在一处；且当时还要按 setting / position 二分 |
+| **终点** | `services/shared/param_limits.py` + `services/shared/param_naming.py` | 校验归 service 层**单模块**、命名判据归 service 层**单模块**；算法层只剩**查表 + 翻译** |
+
+### 四个落位（判据：**谁引用它 / 变更原因是否相同**）
+
+| 落位 | 装什么 | 判据 | 依赖方向（已实测） |
+|---|---|---|---|
+| `algorithms/common/` | `field_contract` 字段契约机制 + `material_physics` 材料物理常量 | **真跨算法线公共** | **零外部依赖**（不 import 任何算法包 / ORM） |
+| `algorithms/fuzzy/` | `field_names` 命名翻译 + `device_limits` 查表与跨命名空间翻译 | **算法命名空间只在 fuzzy 内成立** | 只依赖 `common` |
+| `services/shared/` | `param_limits` 限值域 + `param_naming` 命名域 + `spec_extract` 提取机制 | **多链路共用**（初始化 + 优化） | **零算法层依赖**（`param_limits` / `param_naming` 均不 import `process.algorithms.*`；只有 `spec_extract` 引 spec 契约） |
+| `services/optimize_chain/` | `anchors` / `decide_direction` / `integrate_params` / `check_params` / `tuning_strategy` / `defect_selection` | **层编排与领域计算**，不是 AI 推理算法 | **6 个模块全部零算法层依赖** |
+
+⇒ `algorithms/` 根目录只剩 `base.py` ⇒ **看文件落在哪，就知道它是不是算法**。
+
+### 两条硬口径（贯穿全轮）
+
+1. **算法名（`IV0` / `IP0` / `MEL` / `IPOS`）只存在于 fuzzy 推理内部** ——
+   service ⇄ algorithms 的交接面（context / 限值表 / recommendation）**一律 ORM 业务字段名**；
+   翻译由**算法端完成**：入口 `to_algo_params`、出口 `to_business_name`
+   （`fuzzy/engine.py` L247：`to_business_name(...) or 原样保留`）。
+2. **限值域单模块** —— `LIMIT_SOURCES`（**11 个业务键**）是**唯一真相源**
+   → `build_limits`（业务键区间表）
+   → `to_upper_limits`（业务键标量上限表，第 4 层用）/ `to_family_limits`（算法族上界表，算法层翻译）
+   → `find_over_limits` / `guard_parameter_limits` / `detect_over_limits`（校验）。
+
+### 本轮做掉的事
+
+| # | 事项 | 落点 |
+|---|---|---|
+| 1 | 调参链 4 层 + 底座 `anchors` + 两份配套，物理迁出 `algorithms/` | `services/optimize_chain/`（6 模块） |
+| 2 | 设备上限事实从 `fuzzy/specs.py` 拆出（它曾 re-export ⇒ **已撤**，同一事实只留一个入口） | 契约件 → `algorithms/fuzzy/device_limits.py`；来源声明 + 取值 + 组装 + 识别 + 拦截 + 文案 → `services/shared/param_limits.py` |
+| 3 | `setting_limits.py` + `over_limit.py` + `over_limit_guard.py` **三件合并** | `services/shared/param_limits.py` **一个模块** |
+| 4 | 越限判据统一：8 个旧符号退役（`SETTING_FAMILY_LIMIT_FIELDS` / `POSITION_FAMILY_LIMIT_FIELDS` / `resolve_param_limits` / `resolve_stroke_limit` / `expand_position_limits` / `detect_blocking_over_limits` / `guard_setting_limit` / `guard_position_over_stroke`） | `find_over_limits` / `guard_parameter_limits` / `OverLimit` / `OverLimitItem` / `detect_over_limits` |
+| 5 | 论域替换路径统一（`_apply_device_bound` + `_apply_position_bound` 合为一条） | `fuzzy/engine.py::_apply_declared_bound`（H1）/ `_apply_product_bound`（G7） |
+| 6 | 命名域改名归位（`optimize_common.py` 的 "optimize" 前缀误导 —— 它被两条链路共用） | `services/shared/param_naming.py` |
+| 7 | 初始化链路补设定值类越限守卫（与优化链路**同一守卫 / 同一错误码 / 同一文案**，命中拒 400） | `parameter_initialize.py::_guard_initial_params` |
+| 8 | 设备能力字段命名统一到 ORM 真名（`_velocity` 别名 → `_speed`） | 初始化接口 schema + spec 契约 |
+| 9 | service 包**不 re-export 业务模块**（`import process.services` 不拉起算法链） | `services/__init__.py` / `shared/__init__.py` / `optimize_chain/__init__.py` |
+| 10 | 经验推理「参数不存在」不再伪装成 `0.0`（`None` = 该参数在当前工艺里不存在） | `algorithms/base.py::AlgorithmRecommendation.current_value: Optional[float]` |
+
+### 验收
+
+- `pytest tests` **290 passed**（含本轮新增护栏）；
+- **零算法层依赖不变量**：`services/shared/param_limits.py`、`param_naming.py` 与
+  `services/optimize_chain/` 6 模块均不 import `process.algorithms.*`
+  （`spec_extract.py` 只引 spec 契约）；`algorithms/common/` **零外部依赖**；
+- **数值回归**：推荐值 **0 变动**、越限口径收敛后判定一致
+  （详见 `docs/limit-domain-unification-plan.md` §9.3）；
+- 旧路径 / 旧符号引用已全仓同步（换算表见下方「路径变更公告」）。
+
+### 遗留
+
+本轮改造产生的待拍板项**只登记在 `docs/open-questions.md`**（单一真相源，此处不重复以免两处漂移）：
+C1 合格态提交、C2 `source_type` 取值域、C3 优先级表漂移、C4 无 ORM 对应列的算法名落库后不可展示、
+expert 设备极限组 3 个别名 key、对外初始化接口缺 `drive_system`。
+
+---
+
 ## ⚠️ 路径变更公告（2026-11-23 · 目录归位；2026-11-24 · 收口定稿）
 
 > **本文正文里的 `algorithms/xxx.py` 路径已随本次归位失效**，阅读时按下表换算。
