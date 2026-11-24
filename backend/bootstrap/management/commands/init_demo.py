@@ -1115,7 +1115,7 @@ DEMO_INJECTION_MACHINES = [
 #   早期 demo 数据只填了 6 个基础字段（喷嘴/螺杆/直径/行程/射胶量/塑化量），
 #   导致算法入参校验直接拦截，报错形如：
 #     machine_info.max_set_injection_pressure (最大可设定注射压力 [MPa]（HMI）)
-#     machine_info.max_set_injection_velocity (最大可设定注射速度 [mm/s]（HMI）)
+#     machine_info.max_set_injection_speed (最大可设定注射速度 [mm/s]（HMI）)
 #     ... 共 8 项（5 项必填 + 3 项「液压机必填」）
 #   → 此处补齐「设备极限（max_*）」与「HMI 可设定上限（max_set_*）」两组字段。
 #

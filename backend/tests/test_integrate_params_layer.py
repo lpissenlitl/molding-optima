@@ -1,6 +1,6 @@
 """第3层（整合参数）的护栏。
 
-参照系 = 第3层的机制口径（见 ``algorithms/integrate_params.py``）：
+参照系 = 第3层的机制口径（见 ``services/optimize_chain/integrate_params.py``）：
 「**把方向变成物理上自洽的参数集**」。
 
 每条用例挂一个**独立于被测实现**的参照系：
@@ -14,8 +14,8 @@
 
 import pytest
 
-from process.algorithms.anchors import apply_mel_targets, resolve_mel_target
-from process.algorithms.integrate_params import (
+from process.services.optimize_chain.anchors import apply_mel_targets, resolve_mel_target
+from process.services.optimize_chain.integrate_params import (
     diff_numeric_fields,
     integrate,
     propagate,

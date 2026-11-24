@@ -388,8 +388,7 @@
   "expected": {
     "recommendations": [
       {
-        "param_name": "MBP0",
-        "business_param_name": "met_back_pres_1",
+        "param_name": "met_back_pres_1",
         "current_value": 5.0,
         "recommended_value": 6.013435906654223,
         "confidence": 0.5036328649770389,
@@ -397,8 +396,7 @@
         "source": "fuzzy.numeric"
       },
       {
-        "param_name": "IT",
-        "business_param_name": "inj_t",
+        "param_name": "inj_t",
         "current_value": 4.0,
         "recommended_value": 4.508983828436806,
         "confidence": 0.37660804686050675,
@@ -406,8 +404,7 @@
         "source": "fuzzy.numeric"
       },
       {
-        "param_name": "PV0",
-        "business_param_name": "hold_spd_1",
+        "param_name": "hold_spd_1",
         "current_value": 24.0,
         "recommended_value": 26.217550223576886,
         "confidence": 0.06220875391965844,
@@ -415,8 +412,7 @@
         "source": "fuzzy.numeric"
       },
       {
-        "param_name": "IV0",
-        "business_param_name": "inj_spd_1",
+        "param_name": "inj_spd_1",
         "current_value": 30.0,
         "recommended_value": 32.29421497216299,
         "confidence": 0.04599877505949625,
@@ -424,8 +420,7 @@
         "source": "fuzzy.numeric"
       },
       {
-        "param_name": "PP0",
-        "business_param_name": "hold_pres_1",
+        "param_name": "hold_pres_1",
         "current_value": 44.0,
         "recommended_value": 46.38907549320796,
         "confidence": 0.03478381075116348,

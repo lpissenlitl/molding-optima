@@ -1,7 +1,7 @@
 # 实施方案：缺陷档位 5/7 档词降级（静默失活修复）（2026-11-10）
 
 > **状态**：✅ **已实施并验收通过**（2026-11-10，9 条口径全过）。
-> **来源**：[a5-shortshot-filling-rule-plan.md](a5-shortshot-filling-rule-plan.md) §5.5（A′ 验收时新发现）。
+> **来源**：短射规则方案 A′ 验收时新发现（原始方案稿已清理）。
 > **目标**：接口传入当前档数下无法解析的缺陷档位词（5/7 档独有词、编号轨越界词）时，**不再让整个缺陷维度掉出推理网络**（当前为静默失活）。
 >
 > **修订记录（2026-11-10）**：根据复核反馈修正两处 ——
@@ -235,7 +235,7 @@ value = level_to_domain_value(kp.lvl, word, kp.min_val, kp.max_val)
 | 8 | 降级留痕不重复 | ✅ 一次请求内 `field_reports` 里 `LEVEL_DOWNGRADE` **只 1 条** |
 | 9 | 降级矩阵按档数正确 | ✅ 3 档降级 8 词 / 5 档降级 4 词 / 7 档降级 0 词 |
 
-**回归矩阵**（`backend/tests/verify_fuzzy_algo_db.py`，工况 `condition_id=104`）：
+**回归矩阵**（`backend/tests/_verify_fuzzy_algo_db.py`，工况 `condition_id=104`）：
 
 | 缺陷 level | 建议条数 | `met_end_pos` | 降级留痕 |
 |---|---|---|---|

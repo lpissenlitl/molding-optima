@@ -16,9 +16,9 @@ from dataclasses import replace
 from typing import List, Dict, Any, Optional, Tuple
 
 from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
-# 【注意】**物理常量来自中立层**（`algorithms/material_physics.py`）：材料大类解析是
+# 【注意】**物理常量来自中立层**（`algorithms/common/material_physics.py`）：材料大类解析是
 #    **物理事实**，不属于任何算法包的私有口径 ⇒ 与专家引擎共用同一份。
-from process.algorithms.material_physics import (
+from process.algorithms.common.material_physics import (
     DEFAULT_COOL_FACTOR,
     parse_material_family,
 )
@@ -51,18 +51,24 @@ from process.algorithms.fuzzy.fuzzy_core.rules_filter import (
     FilteredRules,
     build_rule_objects,
 )
-from process.algorithms.fuzzy.over_limit import (
-    detect_over_limits,
-    detect_over_stroke_limits,
+# 【注意】**设备上限的「查表 + 翻译」在本包**（`algorithms/fuzzy/device_limits.py`）：
+#    算法层做**查表**（`lookup_limit` / `param_family`）与**翻译**
+#    （`to_family_limits`：业务键区间表 → 算法族上界表）
+#    —— **不知道**参数有没有上下限、也不持有「哪个族配哪个字段」。
+#    **上限表的来源声明与取值都由 service 层负责、经 context 传入**
+#    ⇒ 算法层不碰 ORM 字段名（context 里是**业务键**区间表）。
+from .device_limits import (
+    lookup_limit,
+    param_family,
+    to_family_limits,
+)
+from .field_names import (
+    to_algo_params,
+    to_business_name,
 )
 from process.algorithms.fuzzy.specs import (
     is_time_domain_field,
-    lookup_param_limit,
-    lookup_position_limit,
-    param_family,
     resolve_domain_limits,
-    resolve_param_limits,
-    resolve_position_limits,
     resolve_product_limits,
     resolve_temperature_limits,
 )
@@ -86,15 +92,13 @@ FIELD_SOURCE_GUESSED = 'guessed'
 # 【注意】**禁止静默兜底**：凡是没拿到权威源的参数，都必须落到下面这些
 #    **明确的**标签上，并在诊断清单里可见 ⇒ 不允许「不知道论域从哪来，
 #    却看起来像个正常值」。
-DOMAIN_SOURCE_DEVICE = 'device'                  # 设备实测可设上限（设定值类）
-DOMAIN_SOURCE_STROKE = 'stroke'                  # 设备实测最大注射行程（位置类）
+DOMAIN_SOURCE_DEVICE = 'device'                  # 机台可设定上限（**所有参数一视同仁**）
 DOMAIN_SOURCE_MATERIAL = 'material'              # 材料温度区间（温度类）
 DOMAIN_SOURCE_PRODUCT = 'product'                # 制品级物理推导基准（产品类，如 CT）
 DOMAIN_SOURCE_EXPERIENCE = 'experience_domain'   # RuleKeyword 经验域（**无权威源**）
 # 'kept_experience_domain' 表示「权威源已拿到，但**守卫拒绝**用它」
 #   ⇒ 保留了 RuleKeyword 经验域。触发条件：
-#   H1（设备上限 < 当前设定值，见 `_device_limit_below_current`）
-#   / G6（当前值超出设备行程，见 `_apply_position_bound`）
+#   H1（当前值 > 该参数自己的可设定上限，见 `_apply_declared_bound`）
 #   / G7（当前值超出产品域物理上界，见 `_apply_product_bound`）。
 DOMAIN_SOURCE_KEPT_EXPERIENCE = 'kept_experience_domain'
 DOMAIN_SOURCE_GUESSED = 'guessed'                # 整段论域由引擎按当前值推测
@@ -220,6 +224,9 @@ class FuzzyEngine(AlgorithmBase):
 
         Returns:
             List[AlgorithmRecommendation]
+
+        【注意】**出口已译成业务字段名**（``param_name`` = ORM 业务字段名）⇒
+            算法名只存在于引擎内部，不外传给 service 层。
         """
         # 诊断容器**每请求新建**：本引擎是模块级单例（见文件末尾
         # `AlgorithmRegistry.register`），放实例属性会让并发请求互相清空/串写
@@ -232,6 +239,12 @@ class FuzzyEngine(AlgorithmBase):
                 # 模糊算法失败不应该让整条 optimize 链 500。
                 logger.exception('[FuzzyEngine] 模糊推理异常，已降级为空推荐')
                 result = []
+
+        # 出口翻译：**算法字段名 → 业务字段名**（算法名不外传）
+        # 【注意】翻译放在**裁剪与诊断之后** ⇒ 引擎内部（裁剪查族表 / 诊断留痕）
+        #   继续用算法名，两个命名空间不混。
+        for rec in result:
+            rec.param_name = to_business_name(rec.param_name) or rec.param_name
 
         # 把诊断容器移交给实例槽位 ⇒ 请求返回后仍能读到本次诊断
         # （`tests/fuzzy_kernel/_snapshot_core.py` 与 `_verify_e2_offline.py` 依赖这个约定）。
@@ -247,54 +260,23 @@ class FuzzyEngine(AlgorithmBase):
         4) 并行推理 —— 数值层走 TSK，提示层走文本建议 / Mamdani（层间互不影响）
         5) 合并     —— 同参数聚合 + 跨层覆盖
 
-        0) 越限识别（**输入体检**，插在最前面）：详见下方注释。
+        【注意】**入参体检不在这里**：越限识别与拒绝是**入参校验** ⇒ 归 service 层
+        （``services/shared/param_limits.py``）⇒
+        算法层只管「算出建议」，不判传进来的值合不合规。
         """
-        # 0) 输入体检 —— **识别**当前值超出机台可设定上限的参数。
-        #
-        # 为什么放在**最前面**（而不是跟着推理走）：
-        #   它回答的是「**进来的参数本身**合不合规」，与「本次有没有规则可推」无关 ——
-        #   即使因为无缺陷 / 无规则而提前返回，越限这条事实也该被记录下来。
-        #
-        # 【注意】**只识别，不处理**（用户口径：「首先要做到的点是能识别超限，
-        #    再考虑别的问题」）：不告警、不拒绝、不改建议 ⇒ 对外输出零变化。
-        #    不同参数类型的处理不一样（设定值类 = 设备安全红线；温度类 = 材料降解；
-        #    时间类 = 无设备约束）⇒ **处理方式留待后续分层决策**，
-        #    识别结果自带 `limit_source` 正是给分层用的依据。
-        #
-        # 机台物理上限（机台上限是**必填**等级字段）：一次解析，供「识别」与
-        # 「第 6 步裁剪」共用 ⇒ 两处看到的是**同一份**上限，不会各自算一遍而漂移。
-        param_limits = resolve_param_limits(context.get('machine_info') or {})
-        over_limits = detect_over_limits(
-            context.get('process_parameter') or {}, param_limits)
-        if over_limits:
-            self._diag.over_limits.extend(item.to_trace() for item in over_limits)
-            logger.warning(
-                '[FuzzyEngine] 检测到 %d 个参数超出机台可设定上限（仅识别，未处理）: %s',
-                len(over_limits),
-                ['%s=%.4f>%.4f' % (i.param_name, i.current_value, i.limit)
-                 for i in over_limits[:5]])
-
-        # 位置类超行程识别（**输入体检**，与设定值类超限同一层）：
-        #   位置类的上限 = 设备实测的最大注射行程；当前值超出行程 ⇒
-        #   **这个产品在这台设备上做不出来**（实测 MEL 56/70 行超行程：
-        #   行程 200mm 而产品充填需 291mm）⇒ 用户改不了 ⇒ **只留痕、永不阻断**。
-        #   【注意】与设定值类超限的**处理方式不能统一**：那边是「用户把参数设错了」
-        #      （改个值就好）⇒ 值得拦；这边是「产品与机台能力不匹配」⇒ 拦了没出路。
-        position_limits = resolve_position_limits(context.get('machine_info') or {})
-        stroke_over_limits = detect_over_stroke_limits(
-            context.get('process_parameter') or {}, position_limits)
-        if stroke_over_limits:
-            self._diag.over_limits.extend(
-                item.to_trace() for item in stroke_over_limits)
-            logger.warning(
-                '[FuzzyEngine] 检测到 %d 个位置类参数超出设备注射行程'
-                '（仅识别，未处理；通常意味着该产品在本机无法成形）: %s',
-                len(stroke_over_limits),
-                ['%s=%.4f>%.4f' % (i.param_name, i.current_value, i.limit)
-                 for i in stroke_over_limits[:5]])
+        # 设备上限表（**service 层解析好、经 context 传入**）—— 算法层不碰 ORM 字段名。
+        # 【注意】**只有一张表**：机台**可设定**上限（族 / 整段名 → 上限）⇒
+        #   所有参数一视同仁（位置参数与压力 / 速度参数同构，差别只在
+        #   「上限取自哪个设备字段」：实测行程 vs 可设定最大值）。
+        #   这张表既作**判级论域上界**，也作**推荐值物理天花板**（裁剪）。
+        #   缺表（机台没录 / 调用方没给）⇒ 空表 ⇒ 相关逻辑按「缺权威源」处理
+        #   （回落经验域、不裁剪、不报错）。
+        # 【注意】**传入的是业务键区间表**（业务字段名 → 允许区间）⇒
+        #   「业务键 → 算法族」的翻译**在算法内部做**（算法名不外传）。
+        param_limits = to_family_limits(context.get('param_limits') or {})
 
         # 1) 认缺陷 —— **选取已在 service 预处理层做完**（只做一次）
-        #    （见 `services/parameter_optimize.py::_resolve_defect_selection`）
+        #    （见 `services/optimize_chain/defect_selection.py::select_defect`）
         #    ⇒ 本引擎**不再自己挑缺陷**，只读整理结果。
         # 选取依据留痕（决策级，与 `field_reports` / `diagnostics` 那两个
         # 规则级清单分开）—— 记的是预处理层写回 feedback 的完整 trace。
@@ -347,10 +329,12 @@ class FuzzyEngine(AlgorithmBase):
                 len(filtered.skipped), [s['reason'] for s in filtered.skipped][:5])
 
         # 去掉空值字段：论域计算需要数值，None 会让隶属度函数直接抛错
-        process_parameter = {
+        # 【注意】**翻译在算法内部做**：context 传的是**业务字段名**，
+        #   引擎内才译成算法字段名 ⇒ 算法名只存在于推理这一侧，不外传。
+        process_parameter = to_algo_params({
             k: v for k, v in (context.get('process_parameter') or {}).items()
             if v is not None
-        }
+        })
         # 【注意】编排层**不传** `iteration_trend` ⇒ 恒为 'unknown' ⇒ 系数恒 1.0。
         #    该乘数策略已判定**业务上不成立**（历史趋势 ≠ 本次建议幅度），
         #    故**刻意不启用**。
@@ -358,22 +342,20 @@ class FuzzyEngine(AlgorithmBase):
         adjustment_factor = self._trend_to_factor(trend.get('trend', 'unknown'))
 
         # 4) 并行推理（层间隔离：一层失败不影响另一层）
-        #    判级论域上界 = 设备实测值（仅**必填等级**字段，用户口径：
-        #    「我们定义必填的字段，必须校验并且替换，其余字段的论域可以用默认值」）。
+        #    判级论域上界 = 设备实测值（仅**必填等级**字段：必填字段必须校验
+        #    并替换，其余字段的论域可以用默认值）。
         #    缺失的必填字段在 service 层已被校验器拦（400），到这里不会有缺失。
-        domain_limits = resolve_domain_limits(context.get('machine_info') or {})
+        #    设备类论域上界 = **机台对每个参数的可设定上限**（权威源 = 设备维度）
+        #    —— **一张表覆盖所有参数**（位置参数与压力 / 速度参数同构）。
+        #    【注意】位置类真实值域可达 27~716，远超规则库种子域（IL [0,150] / MEL [0,200]）
+        #    ⇒ 回落经验域时这组「充填量第一优先」的规则会失活。
+        #    缺权威源（机台没录上限）⇒ 回落经验域，不报错、不阻塞。
+        domain_limits = resolve_domain_limits(param_limits)
         #    温度类论域 = **材料温度区间**（权威源 = 材料维度，不是设备）：
         #    温度类没有设备上限字段（`max_set_*` 不含温度），而材料的熔体/模温
         #    区间是物理红线。缺权威源 ⇒ 该参数回落经验域，不阻塞（见 specs）。
         temperature_limits = resolve_temperature_limits(
             context.get('polymer_info') or {})
-        #    位置类论域上界 = **设备实测的最大注射行程**（权威源 = 设备维度）：
-        #    注射位置 IL / 计量位置 ML / 储料终止位置 MEL / VP 切换位置 VPTL
-        #    【注意】位置类真实值域可达 27~716，远超规则库种子域（IL [0,150] / MEL [0,200]）
-        #    ⇒ 回落经验域时这组「充填量第一优先」的规则会失活。
-        #    缺权威源（机台没录行程）⇒ 回落经验域，不报错、不阻塞。
-        #    【注意】`position_limits` 已在「0) 输入体检」处算好 ⇒ **识别与论域共用
-        #       同一份**（不会各自算一遍而漂移）。
         #    产品类论域 = **制品级物理推导基准**（权威源 = 产品维度）：
         #    冷却时间 CT 的判级上界 = f(制品最大壁厚, 材料大类)
         #    —— 冷却时间 ∝ 壁厚²（Fourier 热扩散）⇒ 厚壁件要冷却更久。
@@ -387,10 +369,10 @@ class FuzzyEngine(AlgorithmBase):
         self._trace_product_family(context, product_limits)
         numeric_results = self._infer_numeric_layer(
             filtered, process_parameter, defect_ctx, domain_limits,
-            temperature_limits, position_limits, product_limits)
+            temperature_limits, product_limits)
         advisory_results = self._infer_advisory_layer(
             filtered, process_parameter, domain_limits, defect_ctx,
-            temperature_limits, position_limits, product_limits)
+            temperature_limits, product_limits)
 
         # 5) 合并：同层聚合 + 跨层覆盖
         #    归并与格式化逻辑已抽到 recommendations.py（纯函数层），这里只负责“调一下”——
@@ -423,7 +405,8 @@ class FuzzyEngine(AlgorithmBase):
 
         Args:
             recommendations: 聚合层产出的推荐列表
-            limits: {算法参数前缀: 机台物理上限}（见 specs.resolve_param_limits）
+            limits: {算法参数前缀: 机台物理上限}（service 层解析好、经 context
+                传入的 ``param_limits``）
 
         Returns:
             裁剪后的推荐列表（就地修改原对象）
@@ -438,7 +421,7 @@ class FuzzyEngine(AlgorithmBase):
                 clipped.append(rec)
                 continue
 
-            limit = lookup_param_limit(rec.param_name, limits)
+            limit = lookup_limit(rec.param_name, limits)
             if limit is None or value <= limit:
                 clipped.append(rec)
                 continue
@@ -531,7 +514,7 @@ class FuzzyEngine(AlgorithmBase):
         - `position`：缺陷位置（`DL` + 缺陷名 + 段号）
 
         【注意】**选取不在本引擎** —— 缺陷选取由 service 预处理层做**一次**
-           （`services/parameter_optimize.py::_resolve_defect_selection`），
+           （`services/optimize_chain/defect_selection.py::select_defect`），
            结果写回 ``feedback``（``defects`` 只剩本轮处理的那条）；
            本方法**只读、不挑**。
            返回形状保持不变（`defect_name` / `level` / `position`）。
@@ -612,23 +595,20 @@ class FuzzyEngine(AlgorithmBase):
         process_parameter: Dict[str, Any],
         domain_limits: Optional[Dict[str, float]] = None,
         temperature_limits: Optional[Dict[str, Tuple[float, float]]] = None,
-        position_limits: Optional[Dict[str, float]] = None,
         product_limits: Optional[Dict[str, Tuple[float, float]]] = None,
     ) -> List[KeywordProfile]:
         """按参数名批量拉论域元数据（缺失的走兜底分支）。
 
-        论域来源**按参数族分流**（五者语义不同，不可混用）：
+        论域来源**按参数族分流**（四者语义不同，不可混用）：
 
-        - **设定值类**（压力/速度/转速）：上界 = 设备实测值，但**只对必填等级字段
-          生效**（用户口径：「我们定义必填的字段，必须校验并且替换，其余字段的
-          论域可以用默认值」），下界仍取经验域下界（RuleKeyword.range_min）；
-          **H1 守卫**：设备上限已低于当前设定值时**不替换**（保留经验域，
-          见 :meth:`_device_limit_below_current`）。
-        - **位置类**（``IL`` / ``ML`` / ``MEL`` / ``VPTL``）：判级论域 =
-          **[0, 设备实测的最大注射行程]**（权威源 = 设备维度，见
-          :func:`specs.resolve_position_limits`）—— **下界统一 0**：
+        - **设备类**（**所有参数一视同仁**：压力 / 速度 / 转速 / 位置类
+          ``IL`` / ``ML`` / ``MEL`` / ``VPTL``）：判级论域整段换成
+          **[0, 机台对每个参数的可设定上限]**（权威源 = 设备维度，见
+          :meth:`_apply_declared_bound`）—— **下界统一 0**：
+          设备不会设负值，也设不出不存在的值；
           经验下界（如 VPTL 的 30）是**档位语义**、不是物理下限，
-          真实值低于它就判不出档（规则恒失活）；物理上 0mm 总是可设定的。
+          真实值低于它就判不出档（规则恒失活）。
+          **H1 守卫**：当前设定值 > 该参数自己的上限时**不替换**（保留经验域）。
         - **温度类**（`NT`/`BT`/`ET`/`MT`）：论域**整体**换成材料温度区间
           （权威源 = 材料维度，见 :func:`specs.resolve_temperature_limits`）。
         - **产品类**（``CT`` 冷却时间）：论域**整体**换成 **[0, 制品级物理推导
@@ -638,18 +618,17 @@ class FuzzyEngine(AlgorithmBase):
           RuleKeyword 默认域（range_min / range_max），不动 —— 这三个时间类
           的产品级基准本轮实测判定不划算（见 ``specs.PRODUCT_DOMAIN_FIELDS``）。
 
-        缺权威源（材料区间 / 设备行程 / 制品壁厚缺失）⇒ **回落经验域**，
+        缺权威源（设备上限 / 材料区间 / 制品壁厚缺失）⇒ **回落经验域**，
         不报错、不阻塞。
 
         【注意】**B1-4：论域来源统一分支** —— 每个档案都会被打上
         ``domain_source`` 标记（这个论域的边界**最终从哪来**）：
 
-        - ``device`` —— 设定值类：论域上界 = 设备实测可设上限
-        - ``stroke`` —— 位置类：判级论域 = [0, 设备实测最大注射行程]
+        - ``device`` —— 设备类：判级论域 = [0, 机台可设定上限]
         - ``material`` —— 温度类：论域整体 = 材料温度区间
         - ``product`` —— 产品类：判级论域 = [0, 制品级物理推导基准]
         - ``kept_experience_domain`` —— 权威源已拿到但**守卫拒绝**
-          （H1：设备上限 < 当前设定值 / G6：当前值超行程 /
+          （H1：当前值 > 该参数自己的可设定上限 /
           G7：当前值超产品域物理上界）⇒ 保留经验域
         - ``experience_domain`` —— 其余参数保留经验域
         - ``guessed`` —— 连 RuleKeyword 档案都没有 ⇒ 整段论域由引擎推测
@@ -669,66 +648,43 @@ class FuzzyEngine(AlgorithmBase):
                 logger.warning('[FuzzyEngine] 加载 RuleKeyword 失败: %s', e)
 
         # ---- 论域来源统一分支（B1-4）------------------------------------
-        #    逐参数判定「这个论域最终从哪来」：四类权威源互斥、只取其一；
+        #    逐参数判定「这个论域最终从哪来」：三类权威源互斥、只取其一；
         #    拿不到权威源的统一落回**经验域**并标记来源 ⇒ 不再有「静默兜底」。
         resolved: List[KeywordProfile] = []
         for kp in keyword_profiles:
             current = _as_float(process_parameter.get(kp.keyword))
             source = DOMAIN_SOURCE_EXPERIENCE
 
-            # (1) 必填等级字段：论域上界替换成设备实测值
-            #     【注意】**H1 守卫**：设备上限已低于当前设定值 ⇒ **不替换**（保留经验域）。
-            #        拿设备上限当判级上界时，当前状态会落到论域之外 ⇒ 档位方向算反。
-            device_max = self._device_limit_below_current(
+            # (1) 设备类字段（**所有参数一视同仁**）：论域整段换成 [0, 机台可设定上限]
+            #     【注意】**H1 守卫**：当前设定值 > 该参数自己的上限 ⇒ **不替换**
+            #        （保留经验域）—— 拿一个装不下当前状态的上界当判级上界，
+            #        当前状态会落到论域之外 ⇒ 档位方向整体算反。
+            #     【注意】**守卫判据对所有参数同源**：位置参数与压力 / 速度参数
+            #        一律按「当前值 > 该参数自己的可设定上限」判 ⇒ 一条守卫、
+            #        一个标签。
+            #     【注意】返回**新档案**，不修改传入对象（上限逐请求不同，
+            #        就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
+            before_device = kp
+            kp, declared_limit, guarded = self._apply_declared_bound(
                 kp, domain_limits, current)
-            if device_max is not None:
+            if guarded:
                 source = DOMAIN_SOURCE_KEPT_EXPERIENCE
                 self._diag.field_reports.append({
                     'layer': 'domain_source',
                     'param': kp.keyword,
                     'domain_source': DOMAIN_SOURCE_KEPT_EXPERIENCE,
                     'guard': 'H1',
-                    'device_limit': device_max,
+                    'device_limit': declared_limit,
                     'current_value': current,
                 })
                 logger.warning(
-                    '[FuzzyEngine] %s 设备上限 %.4f 低于当前设定值 %.4f'
+                    '[FuzzyEngine] %s 当前值 %.4f 超出机台可设定上限 %.4f'
                     '⇒ 保留经验论域（拿它当判级上界会把当前状态判成越界）',
-                    kp.keyword, device_max, current)
-            elif self._apply_device_bound(kp, domain_limits):
+                    kp.keyword, current, declared_limit)
+            elif kp is not before_device:
                 source = DOMAIN_SOURCE_DEVICE
 
-            # (2) 位置类字段：论域替换成 [0, 设备实测行程]
-            # 【注意】返回**新档案**，不修改传入对象（行程逐请求不同，
-            #    就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
-            # 【注意】当前值超出设备行程 ⇒ 该参数回落经验论域（**G6 守卫**）：
-            #    「制品超机台能力」是**选机 / 录数据**层面的事，算法不阻断，
-            #    但要**留痕**（别静默把脏数据当合法值判档）。
-            stroke_limit = lookup_position_limit(kp.keyword, position_limits or {})
-            before_position = kp
-            kp = self._apply_position_bound(kp, position_limits, current)
-            if kp is not before_position:
-                source = DOMAIN_SOURCE_STROKE
-            elif (stroke_limit is not None and current is not None
-                  and current > stroke_limit):
-                # 【注意】这里的判据与 `_apply_position_bound` 内的 G6 判据**同源**
-                #    （同一个 `lookup_position_limit` 取值、同一个「>」比较）
-                #    —— 本段只负责**留痕**，判档行为仍由那个方法决定。
-                source = DOMAIN_SOURCE_KEPT_EXPERIENCE
-                self._diag.field_reports.append({
-                    'layer': 'domain_source',
-                    'param': kp.keyword,
-                    'domain_source': DOMAIN_SOURCE_KEPT_EXPERIENCE,
-                    'guard': 'G6',
-                    'device_limit': stroke_limit,
-                    'current_value': current,
-                })
-                logger.warning(
-                    '[FuzzyEngine] %s 当前值 %.4f 超出设备行程 %.4f'
-                    '⇒ 保留经验论域（该产品在本机无法成形）',
-                    kp.keyword, current, stroke_limit)
-
-            # (3) 温度类字段：论域替换成材料温度区间（权威源 = 材料）
+            # (2) 温度类字段：论域替换成材料温度区间（权威源 = 材料）
             # 【注意】返回**新档案**，不修改传入对象（材料区间逐请求不同，
             #    就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
             before_temperature = kp
@@ -736,7 +692,7 @@ class FuzzyEngine(AlgorithmBase):
             if kp is not before_temperature:
                 source = DOMAIN_SOURCE_MATERIAL
 
-            # (4) 产品类字段：论域替换成 [0, 制品级物理推导基准]（权威源 = 产品）
+            # (3) 产品类字段：论域替换成 [0, 制品级物理推导基准]（权威源 = 产品）
             # 【注意】返回**新档案**，不修改传入对象（壁厚 / 材料逐请求不同，
             #    就地改会污染共享/缓存的档案 ⇒ H2 跨请求污染）。
             # 【注意】**G7 守卫**：当前设定值 > 产品域上界 ⇒ **不替换**（保留经验域）：
@@ -792,9 +748,11 @@ class FuzzyEngine(AlgorithmBase):
             if max_val <= 0.0:
                 max_val = 0.01
             # 【注意】**论域来源**（不是元数据来源）：推测档案的论域边界可能取自
-            #    权威源（设备值 / 材料区间 / 行程）⇒ 照实标记。
+            #    权威源（设备值 / 材料区间 / 制品基准）⇒ 照实标记。
             domain_source = DOMAIN_SOURCE_GUESSED
-            device_max = lookup_param_limit(name, domain_limits or {})
+            # 设备类（**含位置类**）：机台可设定上限是权威源（比「当前值 × 2」
+            # 可靠 —— 当前值只是**一个样本**，不能拿来定论域）。
+            device_max = lookup_limit(name, domain_limits or {})
             if device_max is not None and device_max > 0.0:
                 max_val = float(device_max)
                 domain_source = DOMAIN_SOURCE_DEVICE
@@ -805,12 +763,6 @@ class FuzzyEngine(AlgorithmBase):
             if temp_range is not None:
                 min_val, max_val = float(temp_range[0]), float(temp_range[1])
                 domain_source = DOMAIN_SOURCE_MATERIAL
-            # 位置类：设备实测行程同样是权威源（比「当前值 × 2」可靠 ——
-            # 当前值只是**一个样本**，不能拿来定论域）。
-            position_max = lookup_position_limit(name, position_limits or {})
-            if position_max is not None:
-                max_val = float(position_max)
-                domain_source = DOMAIN_SOURCE_STROKE
             # 产品类：制品级物理推导基准同样是权威源（比「当前值 × 2」可靠）。
             product_bounds = _product_limit_for(name, product_limits or {})
             if product_bounds is not None:
@@ -837,86 +789,67 @@ class FuzzyEngine(AlgorithmBase):
         return keyword_profiles
 
     @staticmethod
-    def _device_limit_below_current(
+    def _apply_declared_bound(
         profile: KeywordProfile,
-        domain_limits: Optional[Dict[str, float]],
-        current_value: Optional[float],
-    ) -> Optional[float]:
-        """设备上限是否已低于当前设定值（**H1 守卫**的判据）。
+        limits: Optional[Dict[str, float]],
+        current_value: Optional[float] = None,
+    ) -> Tuple[KeywordProfile, Optional[float], bool]:
+        """把论域整段换成 **[0, 该参数自己的可设定上限]**（一条路径，所有参数同构）。
 
-        设备上限取自机台 HMI 的可设定上界；当前设定值已经超过它，说明这台机
-        在这个参数上**装不下当前状态**（实测：熔胶压力 ``MP0`` 设定 18MPa、
-        机台上限 10MPa）。此时拿设备上限当**判级论域上界**，当前状态就落到
-        论域之外（``MP0`` 落在上界外 80%）⇒ 档位方向整体算反。
+        **所有参数一视同仁**：位置参数（注射位置 / 计量位置 / 储料终止
+        位置 / VP 切换位置）与压力 / 速度 / 转速参数**同构** —— 它们都是「设定
+        工艺参数」，上限都是「这台机器这个能力项最多能设到多少」⇒ 判定路径
+        只有这一条，差别只在**上限取自哪个设备字段**（实测行程 vs 可设定最大值）。
 
-        ⇒ 命中时**不替换**上界（保留经验域），并在诊断里留痕
-        ``domain_source='kept_experience_domain'``。
+        **整段换 [0, 上限]**（下界统一 0）：
 
-        【注意】**不用当前值去顶边界**：把上界改成当前值等于「拿实测值定论域」，
-        既没有工艺依据，也会让当前值永远落在最高档。
+        - 下界 0 是**物理下限**（设备不会设负值，也设不出不存在的值）；
+        - 经验下界（如 VPTL 的 30mm）是**档位语义**、不是物理下限 ⇒ 真实值低于
+          它时（如 VPTL 13.92）判不出档，规则恒失活 ⇒ 不能拿它当下界。
 
-        【注意】判据用「当前值 **>** 设备上限」而不是「≥」：相等时当前值恰在论域
-        上边界（判成最高档）是**物理正确**的，回落经验域反而会把它判成最低档。
-        位置类的超行程守卫（G6）用的是同一套语义。
+        【注意】**返回新档案，不修改传入对象**：上限**逐请求不同**（每台机不一样），
+        而 ``KeywordProfile`` 可能来自仓库缓存 / 共享对象 ⇒ 就地改会跨请求串数据
+        （H2 跨请求污染）。
+
+        【注意】**守卫**：当前值 > 上限 ⇒ **回落经验论域**（视同缺权威源）——
+        拿一个装不下当前状态的上界当判级上界，当前状态会落到论域之外 ⇒ 档位
+        方向整体算反。判据用严格「>」（相等时当前值恰在上界、判成最高档是物理
+        正确的）。**守卫判据对所有参数同源**：位置参数与压力 / 速度参数一律按
+        「当前值 > 该参数自己的可设定上限」判。
 
         Args:
-            profile: 论域档案（取其参数名去查设备上限）。
-            domain_limits: {算法参数族前缀: 设备实测上限}。
-            current_value: 该参数的当前设定值（``None`` = 没有值 ⇒ 不判）。
+            profile: 权威论域档案（**不修改**）。
+            limits: {算法参数族前缀 / 整段参数名: 可设定上限}。
+            current_value: 该参数的当前设定值（``None`` = 没有值 ⇒ 不判守卫）。
 
         Returns:
-            命中的设备上限值；未命中返回 ``None``。
+            Tuple[档案, 上限, 守卫命中]:
+              - 档案：换过论域的**新档案**；无可用上限 / 守卫命中时**原样返回**；
+              - 上限：命中的上限值（守卫命中时也返回，供调用方留痕）；未命中为 None；
+              - 守卫命中：当前值 > 上限（⇒ 调用方标记 ``kept_experience_domain``）。
         """
-        if current_value is None:
-            return None
-        limits = domain_limits or {}
+        limits = limits or {}
         if not limits:
-            return None
-        device_max = lookup_param_limit(profile.keyword, limits)
-        if device_max is None or device_max <= 0.0:
-            return None
-        device_max = float(device_max)
-        if current_value > device_max:
-            return device_max
-        return None
+            return profile, None, False
+        declared_max = lookup_limit(profile.keyword, limits)
+        if declared_max is None or declared_max <= 0.0:
+            # 无权威源（机台没录上限 / 该参数没配来源）⇒ 回落经验论域
+            return profile, None, False
+        new_max = float(declared_max)
 
-    @staticmethod
-    def _apply_device_bound(
-        profile: KeywordProfile,
-        domain_limits: Optional[Dict[str, float]],
-    ) -> bool:
-        """把权威论域的**上界**替换成设备实测值（step 按跨度等比缩放）。
-
-        只对**必填等级**字段生效（见 :func:`specs.resolve_domain_limits`）：
-        下界仍是经验域下界（RuleKeyword.range_min），**只换上界**。
-
-        【注意】**H1 守卫不在这里**：设备上限已低于当前设定值时，调用方
-        （:meth:`_load_keyword_profiles`）会先拦下、保留经验域并留痕
-        ⇒ 本方法只负责「替换」这一个动作。
-
-        Args:
-            profile: 权威论域档案（就地修改）
-            domain_limits: {算法参数前缀: 论域上界}
-
-        Returns:
-            是否发生了替换（未替换返回 False）
-        """
-        limits = domain_limits or {}
-        if not limits:
-            return False
-        device_max = lookup_param_limit(profile.keyword, limits)
-        if device_max is None or device_max <= 0.0:
-            return False
-        new_max = float(device_max)
-        if new_max <= profile.min_val:
+        # ---- 守卫：当前值 > 上限 ⇒ 回落经验论域 ----
+        if current_value is not None and current_value > new_max:
             logger.warning(
-                '[FuzzyEngine] %s 设备上限 %s 不大于经验下界 %s，保留经验论域',
-                profile.keyword, new_max, profile.min_val)
-            return False
+                '[FuzzyEngine] %s 当前值 %.4f 超出机台可设定上限 %.4f'
+                '⇒ 回落经验论域',
+                profile.keyword, current_value, new_max)
+            return profile, new_max, True
 
+        new_min = 0.0
+        old_min = profile.min_val
         old_max = profile.max_val
-        old_span = old_max - profile.min_val
-        new_span = new_max - profile.min_val
+        old_span = old_max - old_min
+        new_span = new_max - new_min
         if new_max > old_max:
             logger.warning(
                 '[FuzzyEngine] %s 设备上限 %s 大于经验域上界 %s'
@@ -925,16 +858,16 @@ class FuzzyEngine(AlgorithmBase):
         # step 按跨度**等比缩放**：保持「档位粒度 / 论域跨度」的比例不变，
         # 换算后档位切分仍保持均匀（否则缩放会让步长与论域不匹配）。
         if old_span > 0 and profile.step > 0:
-            profile.step = profile.step * new_span / old_span
+            step = profile.step * new_span / old_span
         else:
-            profile.step = max(new_span / 3.0, 0.01)
-        if profile.step <= 0:
-            profile.step = max(new_span / 3.0, 0.01)
-        profile.max_val = new_max
+            step = max(new_span / 3.0, 0.01)
+        if step <= 0:
+            step = max(new_span / 3.0, 0.01)
+
         logger.info(
-            '[FuzzyEngine] %s 论域上界 %s → %s（设备实测值，step 缩放为 %s）',
-            profile.keyword, old_max, new_max, profile.step)
-        return True
+            '[FuzzyEngine] %s 论域 [%s, %s] → [%s, %s]（机台可设定上限，step 缩放为 %s）',
+            profile.keyword, old_min, old_max, new_min, new_max, step)
+        return replace(profile, min_val=new_min, max_val=new_max, step=step), new_max, False
 
     @staticmethod
     def _apply_temperature_bound(
@@ -943,9 +876,9 @@ class FuzzyEngine(AlgorithmBase):
     ) -> KeywordProfile:
         """把温度类字段的论域换成**材料温度区间**（上下界一起换）。
 
-        与 :meth:`_apply_device_bound` 的区别（三处）：
+        与 :meth:`_apply_declared_bound` 的区别（三处）：
 
-        1. **上下界都换**（设备那套只换上界）；
+        1. **上下界都换**（设备那套下界固定 0）；
         2. **整段替换**而不是裁剪（材料窗口就是该场景的合理工艺区间）；
         3. **返回新档案**，不改传入对象。
 
@@ -986,7 +919,7 @@ class FuzzyEngine(AlgorithmBase):
         old_min, old_max = profile.min_val, profile.max_val
         old_span = old_max - old_min
         new_span = new_max - new_min
-        # step 按跨度**等比缩放**（与 _apply_device_bound 同口径）：
+        # step 按跨度**等比缩放**（与 _apply_declared_bound 同口径）：
         # 保持「档位粒度 / 论域跨度」的比例不变，换算后档位切分仍保持均匀。
         if old_span > 0 and profile.step > 0:
             step = profile.step * new_span / old_span
@@ -997,89 +930,6 @@ class FuzzyEngine(AlgorithmBase):
 
         logger.info(
             '[FuzzyEngine] %s 论域 [%s, %s] → [%s, %s]（材料温度区间，step 缩放为 %s）',
-            profile.keyword, old_min, old_max, new_min, new_max, step)
-        return replace(profile, min_val=new_min, max_val=new_max, step=step)
-
-    @staticmethod
-    def _apply_position_bound(
-        profile: KeywordProfile,
-        position_limits: Optional[Dict[str, float]],
-        current_value: Optional[float] = None,
-    ) -> KeywordProfile:
-        """把位置类字段的判级论域换成 **[0, 设备实测的最大注射行程]**。
-
-        与 :meth:`_apply_device_bound` 的区别（三处）：
-
-        1. **匹配方式不同**：设备那套按**族前缀**查（`lookup_param_limit`，
-           靠正则取族）⇒ 取不到整段参数（``MEL`` / ``VPTL``）；这里走位置类
-           自己的名单（精确 + 族前缀两级匹配，见
-           :func:`specs.lookup_position_limit`）。
-        2. **返回新档案**（不改传入对象）：行程**逐请求不同**，就地改会污染
-           共享/缓存的档案（同 `_apply_temperature_bound` 的理由）。
-        3. **权威源可缺**：行程没录入 ⇒ 回落经验论域，不报错、不阻塞。
-
-        **下界统一取 0**（与设备那套只换上界的口径**不同**，是本轮口径变更）：
-
-        - 位置类的经验下界是**档位语义**（如 ``VPTL`` 的 30mm = VP 切换位置的
-          经验档位起点），**不是物理下限** ⇒ 真实值低于它时（如 VPTL 13.92）
-          判不出档，规则恒失活；
-        - 物理上 0mm 总是可设定的（用户口径：「我们不可能设定一个机器不存在的
-          值」）⇒ 判级区间必须是 **[0, 行程]**，不能把经验档位起点当成下限；
-        - 经验档位表本身**保留**（``RuleKeyword.range_min/max`` 不动）⇒
-          回落经验论域时仍是原口径。
-
-        【注意】**当前值超出设备行程 ⇒ 回落经验论域**（视同缺权威源）：
-          当前值超出设备物理行程 = **这个产品在这台设备上做不出来**
-          （实测 MEL 56/70 行超行程）⇒ 该参数判不出档（论域上界 < 当前值
-          ⇒ 隶属度趋 0）⇒ 回落经验论域**不改变判档结果**，只是让「回落」
-          这件事在诊断里可解释。
-
-        Args:
-            profile: 权威论域档案（**不修改**）
-            position_limits: {位置类参数名 / 族前缀: 论域上界}
-                （见 :func:`specs.resolve_position_limits`）
-            current_value: 该参数的当前值；超出行程时触发回落经验论域。
-
-        Returns:
-            换过论域的新档案；该参数不是位置类 / 没有权威源 / 当前值超行程时
-            **原样返回**（= 经验论域）
-        """
-        limits = position_limits or {}
-        if not limits:
-            return profile
-        device_max = lookup_position_limit(profile.keyword, limits)
-        if device_max is None or device_max <= 0.0:
-            return profile
-        new_max = float(device_max)
-        new_min = 0.0
-
-        if current_value is not None and current_value > new_max:
-            logger.warning(
-                '[FuzzyEngine] %s 当前值 %.4f 超出设备行程 %.4f ⇒ 回落经验论域'
-                '（该产品在本机无法成形）',
-                profile.keyword, current_value, new_max)
-            return profile
-
-        old_min = profile.min_val
-        old_max = profile.max_val
-        old_span = old_max - old_min
-        new_span = new_max - new_min
-        if new_max > old_max:
-            logger.warning(
-                '[FuzzyEngine] %s 设备行程上限 %s 大于经验域上界 %s'
-                '（设备能力 > 经验共识 ⇒ 论域被放宽；请核对该上限的录入值）',
-                profile.keyword, new_max, old_max)
-        # step 按跨度**等比缩放**（与 _apply_device_bound 同口径）：
-        # 保持「档位粒度 / 论域跨度」的比例不变，换算后档位切分仍保持均匀。
-        if old_span > 0 and profile.step > 0:
-            step = profile.step * new_span / old_span
-        else:
-            step = max(new_span / 3.0, 0.01)
-        if step <= 0:
-            step = max(new_span / 3.0, 0.01)
-
-        logger.info(
-            '[FuzzyEngine] %s 论域 [%s, %s] → [%s, %s]（最大注射行程，step 缩放为 %s）',
             profile.keyword, old_min, old_max, new_min, new_max, step)
         return replace(profile, min_val=new_min, max_val=new_max, step=step)
 
@@ -1110,7 +960,7 @@ class FuzzyEngine(AlgorithmBase):
     ) -> KeywordProfile:
         """把产品类字段的判级论域换成 **[0, 制品级物理推导基准]**。
 
-        与 :meth:`_apply_position_bound` 同形（四处一致）：
+        与 :meth:`_apply_declared_bound` 同形（四处一致）：
 
         1. **匹配方式**：两级匹配（精确 + 族前缀），见 :func:`_product_limit_for`；
         2. **返回新档案**（不改传入对象）：壁厚 / 材料**逐请求不同**，
@@ -1169,7 +1019,7 @@ class FuzzyEngine(AlgorithmBase):
                 '[FuzzyEngine] %s 产品域上界 %s 大于经验域上界 %s'
                 '（物理推导时间 > 经验共识 ⇒ 论域被放宽；请核对该件的壁厚/材料）',
                 profile.keyword, new_max, old_max)
-        # step 按跨度**等比缩放**（与 _apply_device_bound 同口径）：
+        # step 按跨度**等比缩放**（与 _apply_declared_bound 同口径）：
         # 保持「档位粒度 / 论域跨度」的比例不变，换算后档位切分仍保持均匀。
         if old_span > 0 and profile.step > 0:
             step = profile.step * new_span / old_span
@@ -1219,7 +1069,6 @@ class FuzzyEngine(AlgorithmBase):
         layer: str = 'numeric',
         domain_limits: Optional[Dict[str, float]] = None,
         temperature_limits: Optional[Dict[str, Tuple[float, float]]] = None,
-        position_limits: Optional[Dict[str, float]] = None,
         product_limits: Optional[Dict[str, Tuple[float, float]]] = None,
     ):
         """加载规则字段的论域元数据，并做一次字段体检。
@@ -1231,10 +1080,9 @@ class FuzzyEngine(AlgorithmBase):
                         论域（lvl=3；当前值非正时兜底为 [0, 0.01]）
         - ``unknown``  ：既无权威元数据也无当前值 ⇒ 规则少了一个门控条件，激活度偏高
 
-        【注意】必填等级字段的**论域上界会被替换成设备实测值**（见
-        :func:`_load_keyword_profiles`；设备上限已低于当前设定值时除外 ——
-        H1 守卫保留经验域）；**位置类字段的论域上界会被替换成设备
-        实测的最大注射行程**；**温度类字段的论域会被整体替换成
+        【注意】**设备类字段的论域会整段换成 [0, 机台可设定上限]**（见
+        :func:`_load_keyword_profiles`；当前设定值超出该上限时除外 ——
+        H1 守卫保留经验域）；**温度类字段的论域会被整体替换成
         材料温度区间**；**产品类字段的论域会被整体替换成 [0, 制品级
         物理推导基准]**；其余字段保持 RuleKeyword 默认域。
 
@@ -1246,9 +1094,8 @@ class FuzzyEngine(AlgorithmBase):
                 编排层不从规则串里抠参数名）。
             process_parameter: 当前工艺参数（字段名已归一化；不含设备/材料/模具信息）。
             layer: 层名（numeric / advisory），仅用于日志与清单归类。
-            domain_limits: {算法参数前缀: 论域上界}（必填等级字段的设备实测值）。
+            domain_limits: {算法参数前缀 / 整段参数名: 机台可设定上限}（所有参数一视同仁）。
             temperature_limits: {算法参数名: (下界, 上界)}（温度类的材料温度区间）。
-            position_limits: {位置类参数名 / 族前缀: 论域上界}（位置类的设备行程）。
             product_limits: {算法参数名: (下界, 上界)}（产品类的制品级物理基准）。
 
         Returns:
@@ -1256,7 +1103,7 @@ class FuzzyEngine(AlgorithmBase):
         """
         keyword_profiles = self._load_keyword_profiles(
             param_names, process_parameter, domain_limits, temperature_limits,
-            position_limits, product_limits)
+            product_limits)
 
         guessed = {kp.keyword for kp in keyword_profiles
                    if kp.meta_source == FIELD_SOURCE_GUESSED}
@@ -1464,7 +1311,6 @@ class FuzzyEngine(AlgorithmBase):
         defect_ctx: Dict[str, Any],
         domain_limits: Optional[Dict[str, float]] = None,
         temperature_limits: Optional[Dict[str, Tuple[float, float]]] = None,
-        position_limits: Optional[Dict[str, float]] = None,
         product_limits: Optional[Dict[str, Tuple[float, float]]] = None,
     ) -> List[RuleAdjustment]:
         """数值层推理（NumTskRuleNet，数值/百分比结论）。
@@ -1481,7 +1327,7 @@ class FuzzyEngine(AlgorithmBase):
 
         keyword_profiles, _classification = self._build_field_context(
             filtered.numeric_param_names, process_parameter, 'numeric',
-            domain_limits, temperature_limits, position_limits, product_limits)
+            domain_limits, temperature_limits, product_limits)
 
         if not keyword_profiles:
             logger.info('[FuzzyEngine] 数值层无可用 RuleKeyword，跳过')
@@ -1540,7 +1386,6 @@ class FuzzyEngine(AlgorithmBase):
         domain_limits: Optional[Dict[str, float]] = None,
         defect_ctx: Optional[Dict[str, Any]] = None,
         temperature_limits: Optional[Dict[str, Tuple[float, float]]] = None,
-        position_limits: Optional[Dict[str, float]] = None,
         product_limits: Optional[Dict[str, Tuple[float, float]]] = None,
     ) -> List[RuleAdjustment]:
         """提示层推理。
@@ -1584,7 +1429,7 @@ class FuzzyEngine(AlgorithmBase):
 
         keyword_profiles, _classification = self._build_field_context(
             filtered.mamdani_param_names, process_parameter, 'advisory',
-            domain_limits, temperature_limits, position_limits, product_limits)
+            domain_limits, temperature_limits, product_limits)
         if not keyword_profiles:
             return out
 

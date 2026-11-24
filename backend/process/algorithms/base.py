@@ -34,7 +34,9 @@ class AlgorithmRecommendation:
 
     Attributes:
         param_name: 参数名称
-        current_value: 当前值
+        current_value: 当前值；``None`` 表示**该参数在当前工艺里不存在**
+            （经验推理遇到没设过的参数时留空，不报 0.0 ——
+            「值是 0」与「没这个参数」不能混为一谈）
         recommended_value: 推荐值
         confidence: 置信度 (0-1)
         reason: 推荐原因
@@ -46,7 +48,7 @@ class AlgorithmRecommendation:
             会把「建议调高」误渲染成「维持不变」。
     """
     param_name: str
-    current_value: float
+    current_value: Optional[float]
     recommended_value: float
     confidence: float
     reason: str = ""

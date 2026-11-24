@@ -64,6 +64,11 @@ fuzzy 算法构造隶属度函数时需要参数论域 `[min_val, max_val]`，�
 `screw_diameter` / `max_injection_volume` / `plasticizing_capacity` 等 —— 对调优无意义，
 initialize 才需要。
 
+**例外**：`max_injection_stroke`（最大注射行程）**两条链路都纳入** —— 它是位置类
+判级论域上界的**唯一权威源**（fuzzy 必填），也是 expert 契约的必填字段
+（初始化链路同样缺了就报错）。两个对外 schema 都有它，否则会被 `extra="ignore"`
+静默丢弃。
+
 ### 1.8 OptimizeMachineInfoSchema：命名空间
 
 本 schema 的字段名 == ORM 字段名（`InjectionUnit` / `InjectionMoldingMachine`），

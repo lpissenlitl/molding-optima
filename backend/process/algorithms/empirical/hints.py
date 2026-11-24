@@ -15,55 +15,70 @@
   - decrease: 推荐调低的参数代码列表
 
 命名空间说明：
-- 参数代码是**算法命名空间**（与 RuleKeyword.keyword_name 同名同段号），
-  不是业务字段名。业务侧是 `inj_pres_1`（1-based），算法侧是 `IP0`（0-based）。
-- 原因：编排层（parameter_optimize）把业务参数翻译成算法命名后再喂给算法，
-  算法返回值也在算法命名空间；经验引擎若返回业务名，
-  `process_parameter.get(param_code)` 永远取不到当前值，current_value 恒为 0。
+- 参数代码用**业务字段名**（``inj_pres_1`` / ``brl_temp_1``）—— 与 ORM 工艺
+  参数表、前端展示、工艺单是同一套名字 ⇒ 工程师写经验时不必心算段号。
+- 【注意】**段号是 1-based**（``inj_pres_1`` = 注射压力第 1 段）；模糊规则库那边
+  是 0-based（``IP0`` = 注射压力第 1 段）⇒ 两套编号差一位，对照见下表。
+- 【注意】**算法名不进来**：算法字段名（``IV0`` / ``IP0`` / ``MEL``）是模糊规则库
+  的内部命名，只在 ``algorithms/fuzzy/`` 内成立 ⇒ 经验库不认算法名，
+  本引擎也不 import fuzzy 的命名契约。
+
+业务字段名 ↔ 规则库参数码对照（写经验时对照用）
+==================================================
+==========================================  ======================
+业务字段名                                    规则库参数码
+==========================================  ======================
+``inj_pres_1``                                ``IP0``
+``inj_spd_1``                                 ``IV0``
+``inj_t``                                     ``IT``
+``hold_pres_1``                               ``PP0``
+``hold_spd_1``                                ``PV0``
+``hold_t_1``                                  ``PT0``
+``cool_t``                                    ``CT``
+``brl_temp_1`` / ``brl_temp_2`` / ``brl_temp_3``  ``BT1`` / ``BT2`` / ``BT3``
+``vps_pos``                                   ``VPTL``
+==========================================  ======================
 
 数据维护：
 - 由工艺工程师根据经验持续扩充
 - 新增缺陷时直接在这里加 key 即可（key 用英文缺陷码）
-- 段号基准：规则库以 0-based 为主（IV0 / PP0 / ...），这里与之保持一致；
-  料筒温度例外 —— BT1..BT9 是 1-based（BT1=料筒温度一段），
-  与业务 brl_temp_1..9 同构，命名契约里偏移为 0。
 """
 
 
-# 缺陷码 -> 推荐调高 / 调低的参数代码（算法命名空间）
+# 缺陷码 -> 推荐调高 / 调低的参数代码（业务字段名）
 EMPIRICAL_HINTS: dict = {
     # 短射：整体充填不足 → 提高注射压力 / 速度 / 延长注射时间
-    "SHORTSHOT": {"increase": ["IP0", "IV0", "IT"], "decrease": []},
+    "SHORTSHOT": {"increase": ["inj_pres_1", "inj_spd_1", "inj_t"], "decrease": []},
     # 缩水：体积收缩 → 提高保压压力 / 延长保压时间 / 延长冷却时间
-    "SHRINKAGE": {"increase": ["PP0", "PT0", "CT"], "decrease": []},
+    "SHRINKAGE": {"increase": ["hold_pres_1", "hold_t_1", "cool_t"], "decrease": []},
     # 飞边：压力过高溢料 → 降低注射压力 / 速度
-    "FLASH": {"increase": [], "decrease": ["IP0", "IV0"]},
+    "FLASH": {"increase": [], "decrease": ["inj_pres_1", "inj_spd_1"]},
     # 熔接痕：料流未熔合 → 提高料筒温度 / 注射速度
-    "WELDLINE": {"increase": ["BT1", "BT2", "BT3", "IV0"], "decrease": []},
+    "WELDLINE": {"increase": ["brl_temp_1", "brl_temp_2", "brl_temp_3", "inj_spd_1"], "decrease": []},
     # 困气：困气排气不良 → 提高 VP 切换位置 / 降低注射速度
-    "AIRTRAP": {"increase": ["VPTL"], "decrease": ["IV0"]},
+    "AIRTRAP": {"increase": ["vps_pos"], "decrease": ["inj_spd_1"]},
     # 气纹：气流纹 → 提高冷却时间 / 料筒温度，降低注射速度
-    "GASVEINS": {"increase": ["CT", "BT1"], "decrease": ["IV0"]},
+    "GASVEINS": {"increase": ["cool_t", "brl_temp_1"], "decrease": ["inj_spd_1"]},
     # 烧焦：过热焦烧 → 降低注射速度 / 料筒温度
-    "BURN": {"increase": [], "decrease": ["IV0", "BT1", "BT2"]},
+    "BURN": {"increase": [], "decrease": ["inj_spd_1", "brl_temp_1", "brl_temp_2"]},
     # 料花：料流花纹 → 提高料筒温度，降低注射速度
-    "MATERIALFLOWER": {"increase": ["BT1", "BT2"], "decrease": ["IV0"]},
+    "MATERIALFLOWER": {"increase": ["brl_temp_1", "brl_temp_2"], "decrease": ["inj_spd_1"]},
     # 色差：色差 → 提高料筒温度
-    "SHADING": {"increase": ["BT1", "BT2", "BT3"], "decrease": []},
+    "SHADING": {"increase": ["brl_temp_1", "brl_temp_2", "brl_temp_3"], "decrease": []},
     # 水波纹：熔接线波纹 → 提高料筒温度 / 冷却时间
-    "WATERRIPPLE": {"increase": ["BT1", "CT"], "decrease": []},
+    "WATERRIPPLE": {"increase": ["brl_temp_1", "cool_t"], "decrease": []},
     # 脱模不良：脱模困难 → 延长冷却时间，降低保压压力
-    "HARDDEMOLDING": {"increase": ["CT"], "decrease": ["PP0"]},
+    "HARDDEMOLDING": {"increase": ["cool_t"], "decrease": ["hold_pres_1"]},
     # 顶白：顶白 → 降低保压压力 / 保压速度
-    "TOPWHITE": {"increase": [], "decrease": ["PP0", "PV0"]},
+    "TOPWHITE": {"increase": [], "decrease": ["hold_pres_1", "hold_spd_1"]},
     # 变形：翘曲变形 → 延长冷却时间，降低保压压力
-    "WARPING": {"increase": ["CT"], "decrease": ["PP0"]},
+    "WARPING": {"increase": ["cool_t"], "decrease": ["hold_pres_1"]},
     # 尺寸偏大：尺寸过大 → 降低保压压力 / 缩短保压时间
-    "OVERSIZE": {"increase": [], "decrease": ["PP0", "PT0"]},
+    "OVERSIZE": {"increase": [], "decrease": ["hold_pres_1", "hold_t_1"]},
     # 尺寸偏小：尺寸过小 → 提高保压压力 / 延长保压时间
-    "UNDERSIZE": {"increase": ["PP0", "PT0"], "decrease": []},
+    "UNDERSIZE": {"increase": ["hold_pres_1", "hold_t_1"], "decrease": []},
     # 浇口印：浇口痕明显 → 延长冷却时间，降低保压压力
-    "GATEMARK": {"increase": ["CT"], "decrease": ["PP0"]},
+    "GATEMARK": {"increase": ["cool_t"], "decrease": ["hold_pres_1"]},
     # 阴阳面：阴阳面 → 提高料筒温度 / 注射速度
-    "ABERRATION": {"increase": ["BT1", "BT2", "IV0"], "decrease": []},
+    "ABERRATION": {"increase": ["brl_temp_1", "brl_temp_2", "inj_spd_1"], "decrease": []},
 }

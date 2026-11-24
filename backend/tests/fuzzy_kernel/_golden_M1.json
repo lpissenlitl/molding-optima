@@ -121,15 +121,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_very_high THEN inj_pres_1_add_5",
+     "IF IP0_very_high THEN IP0_add_5",
      "0.8817844423959299",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.11821555760407007",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ]
    ]
@@ -138,15 +138,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_very_low THEN inj_pres_1_add_5",
+     "IF IP0_very_low THEN IP0_add_5",
      "0.8817844423959299",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ],
     [
-     "IF inj_pres_1_low THEN inj_pres_1_add_5",
+     "IF IP0_low THEN IP0_add_5",
      "0.11821555760407007",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ]
    ]
@@ -155,21 +155,21 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_medium THEN inj_pres_1_add_5",
+     "IF IP0_medium THEN IP0_add_5",
      "0.9486458956105202",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "1.0"
     ],
     [
-     "IF inj_pres_1_low THEN inj_pres_1_add_5",
+     "IF IP0_low THEN IP0_add_5",
      "0.025677052194739976",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.025677052194739976",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ]
    ]
@@ -178,15 +178,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_very_high THEN inj_pres_1_add_5",
+     "IF IP0_very_high THEN IP0_add_5",
      "0.88178444239593",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.11821555760407007",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ]
    ]
@@ -195,15 +195,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_very_low THEN inj_pres_1_add_5",
+     "IF IP0_very_low THEN IP0_add_5",
      "0.88178444239593",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ],
     [
-     "IF inj_pres_1_low THEN inj_pres_1_add_5",
+     "IF IP0_low THEN IP0_add_5",
      "0.11821555760407007",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ]
    ]
@@ -212,21 +212,21 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_medium THEN inj_pres_1_add_5",
+     "IF IP0_medium THEN IP0_add_5",
      "0.9486458956105202",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "1.0"
     ],
     [
-     "IF inj_pres_1_low THEN inj_pres_1_add_5",
+     "IF IP0_low THEN IP0_add_5",
      "0.025677052194739976",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.025677052194739976",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ]
    ]
@@ -235,15 +235,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_very_high THEN inj_pres_1_add_5",
+     "IF IP0_very_high THEN IP0_add_5",
      "0.8817844423959299",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.11821555760407007",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ]
    ]
@@ -252,15 +252,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_very_low THEN inj_pres_1_add_5",
+     "IF IP0_very_low THEN IP0_add_5",
      "0.8817844423959299",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ],
     [
-     "IF inj_pres_1_low THEN inj_pres_1_add_5",
+     "IF IP0_low THEN IP0_add_5",
      "0.11821555760407007",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ]
    ]
@@ -269,21 +269,21 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_medium THEN inj_pres_1_add_5",
+     "IF IP0_medium THEN IP0_add_5",
      "0.9486458956105202",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "1.0"
     ],
     [
-     "IF inj_pres_1_low THEN inj_pres_1_add_5",
+     "IF IP0_low THEN IP0_add_5",
      "0.025677052194739976",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.025677052194739976",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ]
    ]
@@ -292,9 +292,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level5 THEN inj_pres_1_add_5",
+     "IF IP0_level5 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ]
    ]
@@ -303,9 +303,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level1 THEN inj_pres_1_add_5",
+     "IF IP0_level1 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ]
    ]
@@ -314,9 +314,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level3 THEN inj_pres_1_add_5",
+     "IF IP0_level3 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "1.0"
     ]
    ]
@@ -325,9 +325,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level5 THEN inj_pres_1_add_5",
+     "IF IP0_level5 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ]
    ]
@@ -336,9 +336,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level1 THEN inj_pres_1_add_5",
+     "IF IP0_level1 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ]
    ]
@@ -347,9 +347,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level3 THEN inj_pres_1_add_5",
+     "IF IP0_level3 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "1.0"
     ]
    ]
@@ -358,9 +358,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level5 THEN inj_pres_1_add_5",
+     "IF IP0_level5 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ]
    ]
@@ -369,9 +369,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level1 THEN inj_pres_1_add_5",
+     "IF IP0_level1 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.7261490370736909"
     ]
    ]
@@ -380,9 +380,9 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_level3 THEN inj_pres_1_add_5",
+     "IF IP0_level3 THEN IP0_add_5",
      "1.0",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "1.0"
     ]
    ]
@@ -436,15 +436,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.8",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_15",
+     "IF IP0_high THEN IP0_add_15",
      "0.2",
-     "{'inj_pres_1': 15.0}",
+     "{'IP0': 15.0}",
      "0.09735045119199434"
     ]
    ]
@@ -453,10 +453,10 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_low THEN IV0_add_3",
+     "IF IV0_low THEN IV0_add_3",
      "1.0",
      "{'IV0': 3.0}",
-     "0.09735045119199434"
+     "0.9231163463866358"
     ]
    ]
   },
@@ -464,21 +464,21 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_low THEN IV0_add_3",
+     "IF IV0_low THEN IV0_add_3",
      "1.0",
      "{'IV0': 3.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.8",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_15",
+     "IF IP0_high THEN IP0_add_15",
      "0.2",
-     "{'inj_pres_1': 15.0}",
+     "{'IP0': 15.0}",
      "0.027067056647322542"
     ]
    ]
@@ -487,15 +487,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.8",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_15",
+     "IF IP0_high THEN IP0_add_15",
      "0.2",
-     "{'inj_pres_1': 15.0}",
+     "{'IP0': 15.0}",
      "0.09735045119199434"
     ]
    ]
@@ -504,10 +504,10 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_low THEN IV0_add_3",
+     "IF IV0_low THEN IV0_add_3",
      "1.0",
      "{'IV0': 3.0}",
-     "0.09735045119199434"
+     "0.9231163463866358"
     ]
    ]
   },
@@ -515,21 +515,21 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_low THEN IV0_add_3",
+     "IF IV0_low THEN IV0_add_3",
      "1.0",
      "{'IV0': 3.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.8",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_15",
+     "IF IP0_high THEN IP0_add_15",
      "0.2",
-     "{'inj_pres_1': 15.0}",
+     "{'IP0': 15.0}",
      "0.027067056647322542"
     ]
    ]
@@ -538,15 +538,15 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.8",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.09735045119199434"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_15",
+     "IF IP0_high THEN IP0_add_15",
      "0.2",
-     "{'inj_pres_1': 15.0}",
+     "{'IP0': 15.0}",
      "0.09735045119199434"
     ]
    ]
@@ -555,10 +555,10 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_low THEN IV0_add_3",
+     "IF IV0_low THEN IV0_add_3",
      "1.0",
      "{'IV0': 3.0}",
-     "0.09735045119199434"
+     "0.9231163463866358"
     ]
    ]
   },
@@ -566,21 +566,21 @@
    "extra": "{}",
    "results": [
     [
-     "IF inj_pres_1_low THEN IV0_add_3",
+     "IF IV0_low THEN IV0_add_3",
      "1.0",
      "{'IV0': 3.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_5",
+     "IF IP0_high THEN IP0_add_5",
      "0.8",
-     "{'inj_pres_1': 5.0}",
+     "{'IP0': 5.0}",
      "0.027067056647322542"
     ],
     [
-     "IF inj_pres_1_high THEN inj_pres_1_add_15",
+     "IF IP0_high THEN IP0_add_15",
      "0.2",
-     "{'inj_pres_1': 15.0}",
+     "{'IP0': 15.0}",
      "0.027067056647322542"
     ]
    ]
@@ -2808,7 +2808,7 @@
  "gauss_face_count": 2016,
  "infer": {
   "advisory_adjust|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT')]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -2816,7 +2816,7 @@
      "current_value": "90.0",
      "direction": "check",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理建议：请检查锁模力是否不合理",
      "recommended_value": "None",
      "rule": null,
@@ -2825,7 +2825,7 @@
    ]
   },
   "advisory_adjust|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT')]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -2833,7 +2833,7 @@
      "current_value": "10.0",
      "direction": "check",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理建议：请检查锁模力是否不合理",
      "recommended_value": "None",
      "rule": null,
@@ -2842,7 +2842,7 @@
    ]
   },
   "advisory_adjust|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT')]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -2850,7 +2850,7 @@
      "current_value": "50.0",
      "direction": "check",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理建议：请检查锁模力是否不合理",
      "recommended_value": "None",
      "rule": null,
@@ -2867,7 +2867,7 @@
      "current_value": "90.0",
      "direction": "hold",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['advisory'])",
      "recommended_value": "90.0",
      "rule": null,
@@ -2884,7 +2884,7 @@
      "current_value": "10.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['advisory'])",
      "recommended_value": "10.202096971307029",
      "rule": null,
@@ -2901,7 +2901,7 @@
      "current_value": "50.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['advisory'])",
      "recommended_value": "50.30956189844851",
      "rule": null,
@@ -2910,7 +2910,7 @@
    ]
   },
   "advisory_popup|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT')]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -2918,7 +2918,7 @@
      "current_value": "90.0",
      "direction": "check",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理建议：建议检查模具温度",
      "recommended_value": "None",
      "rule": null,
@@ -2927,7 +2927,7 @@
    ]
   },
   "advisory_popup|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT')]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -2935,7 +2935,7 @@
      "current_value": "10.0",
      "direction": "check",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理建议：建议检查模具温度",
      "recommended_value": "None",
      "rule": null,
@@ -2944,7 +2944,7 @@
    ]
   },
   "advisory_popup|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT')]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -2952,7 +2952,7 @@
      "current_value": "50.0",
      "direction": "check",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理建议：建议检查模具温度",
      "recommended_value": "None",
      "rule": null,
@@ -2974,7 +2974,7 @@
      "current_value": "10.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "12.0",
      "rule": null,
@@ -2991,7 +2991,7 @@
      "current_value": "50.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "52.0",
      "rule": null,
@@ -3000,7 +3000,7 @@
    ]
   },
   "five_level|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('inj_pres_1',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3017,7 +3017,7 @@
    ]
   },
   "five_level|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('inj_pres_1',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3034,7 +3034,7 @@
    ]
   },
   "five_level|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('inj_pres_1',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3051,7 +3051,7 @@
    ]
   },
   "level_number|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('inj_pres_1',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3068,7 +3068,7 @@
    ]
   },
   "level_number|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('inj_pres_1',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3085,7 +3085,7 @@
    ]
   },
   "level_number|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('inj_pres_1',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3102,7 +3102,7 @@
    ]
   },
   "mixed|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1')), ('get_keywords_by_names', ('SHORTSHOT',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0')), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3119,7 +3119,7 @@
    ]
   },
   "mixed|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1')), ('get_keywords_by_names', ('SHORTSHOT',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0')), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3127,7 +3127,7 @@
      "current_value": "10.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "12.0",
      "rule": null,
@@ -3136,7 +3136,7 @@
    ]
   },
   "mixed|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1')), ('get_keywords_by_names', ('SHORTSHOT',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0')), ('get_keywords_by_names', ('SHORTSHOT',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3144,7 +3144,7 @@
      "current_value": "50.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "52.0",
      "rule": null,
@@ -3164,7 +3164,7 @@
    ]
   },
   "multi|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1')), ('get_keywords_by_names', ('SHORTSHOT',)), ('get_keywords_by_names', ('IV0',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0')), ('get_keywords_by_names', ('SHORTSHOT',)), ('get_keywords_by_names', ('IV0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3183,7 +3183,7 @@
      "current_value": "90.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric', 'advisory'])",
      "recommended_value": "93.0",
      "rule": null,
@@ -3192,7 +3192,7 @@
    ]
   },
   "multi|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1')), ('get_keywords_by_names', ('SHORTSHOT',)), ('get_keywords_by_names', ('IV0',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0')), ('get_keywords_by_names', ('SHORTSHOT',)), ('get_keywords_by_names', ('IV0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3200,7 +3200,7 @@
      "current_value": "10.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric', 'advisory'])",
      "recommended_value": "20.0",
      "rule": null,
@@ -3209,7 +3209,7 @@
    ]
   },
   "multi|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1')), ('get_keywords_by_names', ('SHORTSHOT',)), ('get_keywords_by_names', ('IV0',))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0')), ('get_keywords_by_names', ('SHORTSHOT',)), ('get_keywords_by_names', ('IV0',))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3228,7 +3228,7 @@
      "current_value": "50.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric', 'advisory'])",
      "recommended_value": "56.5",
      "rule": null,
@@ -3237,7 +3237,7 @@
    ]
   },
   "spec_mix_cross_group|ctx_high": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1'))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0'))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3254,15 +3254,15 @@
    ]
   },
   "spec_mix_cross_group|ctx_low": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1'))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0'))]",
    "diagnostics": "[]",
    "recs": [
     {
-     "confidence": "0.09735045119199434",
+     "confidence": "0.9231163463866358",
      "current_value": "10.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "13.0",
      "rule": null,
@@ -3271,7 +3271,7 @@
    ]
   },
   "spec_mix_cross_group|ctx_mid": {
-   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0', 'inj_pres_1'))]",
+   "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IP0', 'IV0'))]",
    "diagnostics": "[]",
    "recs": [
     {
@@ -3279,7 +3279,7 @@
      "current_value": "50.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "53.0",
      "rule": null,
@@ -3312,7 +3312,7 @@
      "current_value": "10.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "14.0",
      "rule": null,
@@ -3329,7 +3329,7 @@
      "current_value": "50.0",
      "direction": "increase",
      "level": null,
-     "param_name": "IV0",
+     "param_name": "inj_spd_1",
      "reason": "模糊推理 (sources=['numeric'])",
      "recommended_value": "54.0",
      "rule": null,

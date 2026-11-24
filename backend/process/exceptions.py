@@ -55,17 +55,21 @@ ERROR_POLYMER_NOT_FOUND = BizErrorCode.create(MOD_PROCESS, 20, "材料不存在"
 ERROR_PROCESS_CONDITION_NOT_FOUND      = BizErrorCode.create(MOD_PROCESS, 30, "工艺条件不存在")
 ERROR_PROCESS_CONDITION_ALREADY_EXISTS  = BizErrorCode.create(MOD_PROCESS, 31, "工艺条件已存在")
 ERROR_PROCESS_PARAMETER_NOT_FOUND      = BizErrorCode.create(MOD_PROCESS, 32, "工艺参数不存在")
-ERROR_PROCESS_PARAMETER_INVALID        = BizErrorCode.create(MOD_PROCESS, 33, "工艺参数无效")
+# 【注意】code 33 原为「工艺参数无效」（ERROR_PROCESS_PARAMETER_INVALID）——
+#    全项目零引用 ⇒ 按 YAGNI 删掉，需要时再加；**code 33 留空不复用**。
 ERROR_PROCESS_PARAMETER_GENERATION_FAILED = BizErrorCode.create(MOD_PROCESS, 34, "工艺参数生成失败")
 ERROR_PROCESS_SNAPSHOT_INVALID         = BizErrorCode.create(MOD_PROCESS, 35, "工艺条件快照无效")
 ERROR_PROCESS_INSUFFICIENT_FIELDS      = BizErrorCode.create(MOD_PROCESS, 36, "工艺参数输入字段不足")
 # 归档轮次（已落库试模评价）参数不可改；评价仍可改（两者生命周期不同，分开设防）
 ERROR_PROCESS_ROUND_SEALED             = BizErrorCode.create(MOD_PROCESS, 37, "该调机轮次已归档，参数不可修改")
-# 位置类参数（注射位置 / 计量位置 / 储料终止位置）超出机台最大注射行程
-# ⇒ 算出来的初值机台根本设不进去 ⇒ 直接拒绝（产品与机台能力不匹配，用户改不了）
-# 【注意】文案口径：**以产品为目标**（产品形态已定）⇒ 出路只有「换行程更大的机」，
-#    不给「减轻制品重量 / 减少型腔数」这类迁就设备的建议
-ERROR_PROCESS_OVER_STROKE               = BizErrorCode.create(MOD_PROCESS, 38, "当前设备无法生产该制品")
+# 算出来的参数值超出机台对它设定的可设定上限（注射压力 / 保压压力 / 注射位置 …）
+# ⇒ 机台根本设不进去 ⇒ 直接拒绝本轮优化。
+# 【注意】**标题只说事实、不下结论**：超出上限有两种可能 ——
+#    ① 机台能力确实不够（要换机）；② **用户误输入**（改参数即可）⇒
+#    结论由正文给出两条出路（「请检查参数设置或更换设备」），标题不预设是哪一种。
+# 【注意】**所有参数一视同仁**：位置参数与压力 / 速度参数同构，唯一的差别是
+#    「上限取自哪个能力项」（实测行程 vs 可设定最大值）—— 概念上是同一类东西。
+ERROR_PROCESS_UNFIT_PARAM               = BizErrorCode.create(MOD_PROCESS, 38, "参数不符合机台设定要求")
 
 
 # ============================================================

@@ -1,296 +1,45 @@
-"""Smoke test for optimize (工艺参数调优) call chain (offline, no DB connection needed).
+r"""工艺参数调优调用链的冒烟护栏（离线，不连 DB）。
 
-This test verifies:
-1. All imports work (schema, service, view, urls)
-2. Schema validation accepts well-formed requests and rejects malformed ones
-3. Service can be instantiated
-4. URL routing is registered
+覆盖：
+1. 所有 import 可用（schema / service / view / urls）
+2. Schema 校验接受合法请求、拒绝非法请求
+3. Service 公开入口可调用
+4. URL 路由已注册
+5. 算法层接口契约（``OptimizeDataValidator``，字段名用 ORM 命名空间）
+
+运行：
+  cd backend
+  ..\.venv\Scripts\python.exe -m pytest tests/test_optimize_smoke.py -q
 """
 import os
+
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_moldx.settings")
 django.setup()
 
-from pydantic import ValidationError
+from unittest.mock import patch  # noqa: E402
 
-# 1. Imports
-from process.schemas import (
-    ProcessOptimizeFromConditionSchema,
-    ProcessOptimizeFromProvidedSchema,
-    FeedbackSchema,
-    DefectFeedbackDataSchema,
-    CycleObservationSchema,
-    SuggestionSchema,
-    SuggestionGroupSchema,
-    SuggestionItemSchema,
-)
-from process.services import parameter_optimize as _opt_mod  # 模块级函数（service 层无类封装）
-from process.urls import urlpatterns
-print("[1/4] Imports OK")
+import pytest  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
-# 2. Schema validation
-valid_request = {
-    "condition_id": 100,
-    "parent_seq_idx": 1,
-    "parameter": {"inj_spd_1": 50.0, "inj_pres_1": 60.0},
-    "feedback": {
-        "defects": [
-            {"keyword_name": "短射", "level": "high", "position": "DL飞边3"},
-            {"keyword_name": "飞边", "level": "medium", "position": "DL飞边2"},
-        ],
-        "observations": [
-            {"param_key": "actual_product_weight", "value": 85.0},
-            {"param_key": "peak_pressure", "value": None},
-        ],
-        "tuning_result": "ineffective",
-    },
-}
-parsed = ProcessOptimizeFromConditionSchema.model_validate(valid_request)
-assert parsed.condition_id == 100
-assert parsed.parent_seq_idx == 1
-# parameter 是 ProcessParameterSchema 实例（不再是自由 dict），用属性访问
-assert parsed.parameter.inj_spd_1 == 50.0
-assert parsed.parameter.inj_pres_1 == 60.0
-assert len(parsed.feedback.defects) == 2
-assert parsed.feedback.tuning_result == "ineffective"
-print("[2/4] ProcessOptimizeFromConditionSchema validation OK (flat parameter)")
-
-# 2b. Schema rejects malformed requests
-try:
-    ProcessOptimizeFromConditionSchema.model_validate({"parent_seq_idx": 1})
-    assert False, "should reject missing condition_id"
-except Exception as e:
-    print(f"[2/4] Schema correctly rejects missing fields: {type(e).__name__}")
-
-# 2c. Suggestion schema
-suggestion_dict = {
-    "source_type": "fuzzy_rule",
-    "recommendation_id": 42,
-    "groups": [
-        {
-            "category": "注射参数",
-            "icon": "mdi:speedometer",
-            "items": [
-                {
-                    "description": "降低一段注射速度 5 mm/s",
-                    "direction": "decrease",
-                    "rule_refs": ["M001"],
-                }
-            ],
-        }
-    ]
-}
-suggestion = SuggestionSchema.model_validate(suggestion_dict)
-assert suggestion.source_type == "fuzzy_rule"
-assert len(suggestion.groups) == 1
-assert suggestion.groups[0].items[0].direction == "decrease"
-print("[2/4] SuggestionSchema validation OK")
-
-# 2d. DefectFeedbackDataSchema 允许 keyword_name 为 null
-empty_defect_schema = DefectFeedbackDataSchema.model_validate({
-    "keyword_name": None,
-    "level": None,
-    "position": "",
-})
-assert empty_defect_schema.keyword_name is None
-print("[2/4] DefectFeedbackDataSchema accepts null keyword_name OK")
-
-# 2e. 缺省时也走默认值 None
-default_defect = DefectFeedbackDataSchema.model_validate({})
-assert default_defect.keyword_name is None
-print("[2/4] DefectFeedbackDataSchema default None OK")
-
-# 2f. 包含未选缺陷的完整请求也能通过
-req_with_empty = {
-    "condition_id": 100,
-    "parent_seq_idx": 1,
-    "feedback": {
-        "defects": [
-            {"keyword_name": None},  # 用户未选
-        ],
-    },
-}
-parsed2 = ProcessOptimizeFromConditionSchema.model_validate(req_with_empty)
-assert parsed2.feedback.defects[0].keyword_name is None
-print("[2/4] ProcessOptimizeFromConditionSchema accepts defect with null keyword_name OK")
-
-# 2g. parameter 为 None：合法，用户没改参数，service 走 ORM 反查 baseline
-req_no_param = {
-    "condition_id": 100,
-    "parent_seq_idx": 1,
-    "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
-}
-p_no = ProcessOptimizeFromConditionSchema.model_validate(req_no_param)
-assert p_no.parameter is None
-print("[2/4] ProcessOptimizeFromConditionSchema accepts parameter=None OK")
-
-# 2h. parameter = {} 空对象：应被拒（前端忘翻译 / 误传空 dict 都会落入此情形）
-try:
-    ProcessOptimizeFromConditionSchema.model_validate({
-        "condition_id": 100, "parent_seq_idx": 1,
-        "parameter": {},
-        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
-    })
-    assert False, "should reject empty parameter dict"
-except ValidationError as e:
-    msg = str(e)
-    assert "parameter" in msg or "工艺字段" in msg, f"error message should mention parameter: {msg}"
-    print("[2/4] ProcessOptimizeFromConditionSchema rejects parameter={} OK")
-
-# 2i. parameter 只含业务元数据（无标量工艺字段）：应被拒
-try:
-    ProcessOptimizeFromConditionSchema.model_validate({
-        "condition_id": 100, "parent_seq_idx": 1,
-        "parameter": {"parent_seq_idx": 5, "param_source": "manual"},
-        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
-    })
-    assert False, "should reject parameter with only business metadata"
-except ValidationError as e:
-    print(f"[2/4] ProcessOptimizeFromConditionSchema rejects business-meta-only parameter OK: {type(e).__name__}")
-
-# 2j. parameter 含一个标量工艺字段（稀疏覆盖）：合法
-req_sparse = {
-    "condition_id": 100, "parent_seq_idx": 1,
-    "parameter": {"inj_spd_1": 50.0},   # 只改一段注射速度
-    "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
-}
-p_sp = ProcessOptimizeFromConditionSchema.model_validate(req_sparse)
-assert p_sp.parameter.inj_spd_1 == 50.0
-assert p_sp.parameter.inj_pres_1 is None   # 未覆盖的字段仍是 None
-print("[2/4] ProcessOptimizeFromConditionSchema accepts sparse flat override OK")
-
-# 2k. FromProvided：三维上下文是「必填对象」，但对象内字段可缺
-#     两层设计：对象存在性由 pydantic 拦，字段级必填等级由 algorithms/fuzzy/specs.py 拦
-provided_min = {
-    "parameter": {"inj_pres_1": 60.0},
-    "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
-    "mold_info": {"product_category": "空调"},
-    "machine_info": {"drive_system": "hydraulic"},
-    "polymer_info": {"abbreviation": "PP"},
-}
-p1 = ProcessOptimizeFromProvidedSchema.model_validate(provided_min)
-assert p1.machine_info.drive_system == "hydraulic"
-assert p1.machine_info.max_set_injection_pressure is None
-# rule_library_code 已从公共 schema 移除（算法内部资源选择，上游自解）
-assert not hasattr(p1, "rule_library_code")
-print("[2/4] ProcessOptimizeFromProvidedSchema accepts minimal (3 对象齐、字段可缺) OK")
-
-# 2g'. 缺任意一个维度对象必须被拒（论域上界无来源 → 模糊等级不可信）
-for missing_dim in ("machine_info", "polymer_info", "mold_info"):
-    bad = {k: v for k, v in provided_min.items() if k != missing_dim}
-    try:
-        ProcessOptimizeFromProvidedSchema.model_validate(bad)
-        assert False, f"should reject missing {missing_dim}"
-    except ValidationError:
-        pass
-print("[2/4] ProcessOptimizeFromProvidedSchema rejects missing context dimension OK")
-
-# 2h. FromProvided：三维齐全；未知字段应被 BaseSchema 的 extra='ignore' 丢弃
-provided_full = {
-    "parameter": {"inj_pres_1": 60.0, "brl_temp_3": 220.0, "unknown_biz_field": 1},
-    "feedback": {"defects": [{"keyword_name": "飞边", "level": "medium", "position": "分型面"}]},
-    "mold_info": {"product_category": "空调", "target_cycle_time": 45.0},
-    "machine_info": {
-        "drive_system": "hydraulic",
-        "max_set_injection_pressure": 180.0,
-        "max_set_holding_pressure": 120.0,
-        "bogus": 9,
-    },
-    "polymer_info": {"abbreviation": "PP", "min_melt_temp": 200.0, "max_melt_temp": 260.0},
-}
-p2 = ProcessOptimizeFromProvidedSchema.model_validate(provided_full)
-assert p2.machine_info.max_set_injection_pressure == 180.0
-assert p2.polymer_info.max_melt_temp == 260.0
-assert p2.mold_info.product_category == "空调"
-assert not hasattr(p2.machine_info, "bogus")
-print("[2/4] ProcessOptimizeFromProvidedSchema accepts full 3-dim context OK")
-
-# 2i. FromProvided：缺 parameter 必须报错（调优作用对象缺失）
-try:
-    ProcessOptimizeFromProvidedSchema.model_validate({"feedback": {}})
-    assert False, "should reject missing parameter"
-except Exception:
-    print("[2/4] ProcessOptimizeFromProvidedSchema rejects missing parameter OK")
-
-# 3. Service 公开入口（模块级函数 —— 无类封装）
-assert hasattr(_opt_mod, "optimize_from_condition")
-assert hasattr(_opt_mod, "optimize_from_provided")
-# 模块顶层 helper
-assert hasattr(_opt_mod, "_resolve_condition")
-assert hasattr(_opt_mod, "_resolve_parent_parameter")
-assert hasattr(_opt_mod, "_resolve_baseline")
-assert hasattr(_opt_mod, "_build_suggestion_payload")
-# 纯算法内核（Step 3+4，两个入口共用，对应 parameter_initialize._infer_kernel 模式）
-assert hasattr(_opt_mod, "_infer_kernel")
-assert hasattr(_opt_mod, "_resolve_baseline")
-assert hasattr(_opt_mod, "_compose_algorithm_context")
-print("[3/4] Service 公开入口 OK + _infer_kernel pure-kernel present")
-
-# 3a. optimize_from_provided：缺 feedback.defects 必拒（与 optimize_from_condition() 同一套约束镜像）
-from extensions.exceptions import BizException
-try:
-    _opt_mod.optimize_from_provided(
-        parameter={"inj_pres_1": 60.0},
-        feedback={"defects": []},   # 空缺陷列表
-        mold_info={"product_category": "空调"},
-        machine_info={"drive_system": "hydraulic"},
-        polymer_info={"abbreviation": "PP"},
-    )
-    assert False, "should reject empty defect list"
-except BizException as e:
-    assert "缺陷" in str(e) or "feedback" in str(e).lower() or "defect" in str(e).lower()
-    print("[3/4] optimize_from_provided rejects empty defect list OK")
-
-# 3b. optimize_from_provided：完整输入走通整条链路
-#     （接受 2 种结果：成功（返回 new_parameter+suggestion） / fail-fast（无推荐 BizException），
-#      只要不 NameError 即说明 _call_algorithms 的 engines 变量已修好）
-try:
-    result = _opt_mod.optimize_from_provided(
-        parameter={"inj_pres_1": 60.0, "brl_temp_3": 220.0},
-        feedback={"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
-        mold_info={"product_category": "空调"},
-        machine_info={
-            "drive_system": "hydraulic",
-            "max_set_injection_pressure": 180.0,
-            "max_set_injection_speed": 300.0,
-            "max_set_holding_pressure": 120.0,
-            "max_set_holding_speed": 150.0,
-            "max_set_screw_rotation_speed": 200.0,
-            "max_set_metering_pressure": 100.0,
-            "max_set_metering_back_pressure": 15.0,
-            "max_set_decompression_pressure": 10.0,
-        },
-        polymer_info={"abbreviation": "PP"},
-    )
-    # 成功路径：从 provided 返回的 new_parameter / suggestion 无落库 ID
-    assert "new_parameter" in result, f"missing new_parameter: {result.keys()}"
-    assert "suggestion" in result, f"missing suggestion: {result.keys()}"
-    # 无 parameter_id / seq_idx（说明不落库语义正确）
-    assert "parameter_id" not in result["new_parameter"]
-    assert "seq_idx" not in result["new_parameter"]
-    assert "recommendation_id" not in result["suggestion"]
-    # baseline 字段被保留（应用推荐前是 baseline 字典）
-    assert result["new_parameter"].get("inj_pres_1") in (60.0, None) or isinstance(
-        result["new_parameter"].get("inj_pres_1"), (int, float)
-    )
-    print("[3/4] optimize_from_provided full happy path OK")
-except BizException as e:
-    # fail-fast 路径：算法无推荐（测试环境可能规则集不全）—— 也算链路打通
-    assert "推荐算法" in str(e), f"unexpected BizException: {e}"
-    print(f"[3/4] optimize_from_provided full path → fail-fast as expected (no rule match): {e}")
-
-# 4. URL routing
-optimize_routes = [p for p in urlpatterns if "algorithms/optimize" in str(p.pattern)]
-assert len(optimize_routes) == 1, f"expected 1 optimize route, got {len(optimize_routes)}"
-print(f"[4/4] URL route registered: {optimize_routes[0].pattern}")
-
-# 5. 算法层接口契约（OptimizeDataValidator，字段名用 ORM 命名空间）
-from process.algorithms.fuzzy.specs import (
+from extensions.exceptions import BizException  # noqa: E402
+from process.algorithms.fuzzy.specs import (  # noqa: E402
     OPTIMIZE_MACHINE_INFO_FIELDS,
     OptimizeDataValidator,
 )
+from process.schemas import (  # noqa: E402
+    DefectFeedbackDataSchema,
+    ProcessOptimizeFromConditionSchema,
+    ProcessOptimizeFromProvidedSchema,
+    SuggestionSchema,
+)
+from process.services import parameter_optimize as _opt_mod  # noqa: E402  模块级函数（service 层无类封装）
+from process.urls import urlpatterns  # noqa: E402
 
+#: 一台液压机的完整上限
+#: 【注意】``max_injection_stroke``（实测行程）**是必填**：位置类判级论域上界的
+#: 唯一权威源（``max_injection_stroke`` 属于必填字段）。
 FULL_MACHINE = {
     "drive_system": "hydraulic",
     "max_set_injection_pressure": 180.0,
@@ -301,55 +50,406 @@ FULL_MACHINE = {
     "max_set_metering_pressure": 100.0,
     "max_set_metering_back_pressure": 15.0,
     "max_set_decompression_pressure": 10.0,
+    "max_injection_stroke": 200.0,
 }
 OK_POLYMER = {"abbreviation": "PP"}
 OK_MOLD = {"product_category": "空调"}
 
-OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, OK_MOLD)
-print("[5/5] OptimizeDataValidator accepts complete hydraulic input OK")
 
-# 5a. 缺机台上限 → **必拒**：设备实际值是**判级论域上界的
-#     必需来源**（用户口径：「从设备读取参数主要是为了用实际值补全参数的论域」
-#     +「必须用设备值，设备值没有就报错」）⇒ 缺了论域上界无法确定 ⇒ 模糊等级判错
-#     ⇒ 直接拒，而不是「不拦请求、只不裁剪」。
-_missing_pressure = {k: v for k, v in FULL_MACHINE.items()
-                     if k != "max_set_injection_pressure"}
-try:
-    OptimizeDataValidator.validate(_missing_pressure, OK_POLYMER, OK_MOLD)
-    raise AssertionError("缺 max_set_injection_pressure 应当被拒（必填）")
-except ValueError as exc:
-    assert "max_set_injection_pressure" in str(exc), str(exc)
-print("[5/5] OptimizeDataValidator rejects missing injection limit (required) OK")
+# ---------------------------------------------------------------- schema 校验
 
-# 5b. 液压机缺计量压力 → **必拒**（标「液压机必填」⇒ 液压机必须有计量压力）
-_missing_metering = {k: v for k, v in FULL_MACHINE.items()
-                     if k != "max_set_metering_pressure"}
-try:
-    OptimizeDataValidator.validate(_missing_metering, OK_POLYMER, OK_MOLD)
-    raise AssertionError("液压机缺 max_set_metering_pressure 应当被拒")
-except ValueError as exc:
-    assert "max_set_metering_pressure" in str(exc), str(exc)
-print("[5/5] OptimizeDataValidator rejects missing metering limit on hydraulic OK")
+def test_condition_schema_accepts_valid_request():
+    """参照系（业务口径）：合法的调优请求能被解析成结构化对象。"""
+    parsed = ProcessOptimizeFromConditionSchema.model_validate({
+        "condition_id": 100,
+        "parent_seq_idx": 1,
+        "parameter": {"inj_spd_1": 50.0, "inj_pres_1": 60.0},
+        "feedback": {
+            "defects": [
+                {"keyword_name": "短射", "level": "high", "position": "DL飞边3"},
+                {"keyword_name": "飞边", "level": "medium", "position": "DL飞边2"},
+            ],
+            "observations": [
+                {"param_key": "actual_product_weight", "value": 85.0},
+                {"param_key": "peak_pressure", "value": None},
+            ],
+            "tuning_result": "ineffective",
+        },
+    })
 
-# 5c. 全电机缺计量压力 → **不拒**（标「液压机必填」⇒ 全电机 HMI 物理上无此栏，
-#     缺失属正常，不能当数据缺失拦人）
-ELECTRIC = {
-    **{k: v for k, v in FULL_MACHINE.items() if k != "max_set_metering_pressure"},
-    "drive_system": "electric",
-}
-OptimizeDataValidator.validate(ELECTRIC, OK_POLYMER, OK_MOLD)
-print("[5/5] OptimizeDataValidator tolerates electric machine without metering limit OK")
+    assert parsed.condition_id == 100
+    assert parsed.parent_seq_idx == 1
+    # parameter 是 ProcessParameterSchema 实例（不再是自由 dict），用属性访问
+    assert parsed.parameter.inj_spd_1 == 50.0
+    assert parsed.parameter.inj_pres_1 == 60.0
+    assert len(parsed.feedback.defects) == 2
+    assert parsed.feedback.tuning_result == "ineffective"
 
-# 5d. 规则库筛选键（abbreviation / product_category）现在都是「可选」：为精度旋钮，
-#     填了命中高特异度规则，不填退到默认规则，算法并不因缺它们而无法运行
-OptimizeDataValidator.validate(FULL_MACHINE, {}, OK_MOLD)
-print("[5/5] OptimizeDataValidator tolerates missing polymer abbreviation (精度旋钮) OK")
-OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, {})
-print("[5/5] OptimizeDataValidator tolerates missing product_category (精度旋钮) OK")
 
-# 5e. 温度类字段是「推荐」：缺失不拦（触发条件在本维度外，强拦会挡住纯压力类调优）
-OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, OK_MOLD)  # 未带任何温度字段
-assert OPTIMIZE_MACHINE_INFO_FIELDS["max_set_decompression_speed"]["condition"] == "可选"
-print("[5/5] OptimizeDataValidator treats temperature bounds as recommended OK")
+def test_condition_schema_rejects_missing_condition_id():
+    """参照系（业务口径）：缺 condition_id ⇒ 拒（调优对象不明确）。"""
+    with pytest.raises(Exception):
+        ProcessOptimizeFromConditionSchema.model_validate({"parent_seq_idx": 1})
 
-print("\n=== Smoke test PASSED ===")
+
+def test_suggestion_schema_accepts_wellformed_payload():
+    """参照系（业务口径）：建议载荷结构被 schema 接受。"""
+    suggestion = SuggestionSchema.model_validate({
+        "source_type": "fuzzy_rule",
+        "recommendation_id": 42,
+        "groups": [
+            {
+                "category": "注射参数",
+                "icon": "mdi:speedometer",
+                "items": [
+                    {
+                        "description": "降低一段注射速度 5 mm/s",
+                        "direction": "decrease",
+                        "rule_refs": ["M001"],
+                    }
+                ],
+            }
+        ],
+    })
+
+    assert suggestion.source_type == "fuzzy_rule"
+    assert len(suggestion.groups) == 1
+    assert suggestion.groups[0].items[0].direction == "decrease"
+
+
+def test_defect_feedback_schema_allows_null_keyword_name():
+    """参照系（业务口径）：未选中的缺陷 keyword_name 可以为 null。"""
+    empty_defect_schema = DefectFeedbackDataSchema.model_validate({
+        "keyword_name": None,
+        "level": None,
+        "position": "",
+    })
+
+    assert empty_defect_schema.keyword_name is None
+
+
+def test_defect_feedback_schema_defaults_to_none():
+    """参照系（业务口径）：缺省时也走默认值 None。"""
+    default_defect = DefectFeedbackDataSchema.model_validate({})
+
+    assert default_defect.keyword_name is None
+
+
+def test_condition_schema_accepts_defect_with_null_keyword_name():
+    """参照系（业务口径）：含未选缺陷的完整请求也能通过。"""
+    parsed = ProcessOptimizeFromConditionSchema.model_validate({
+        "condition_id": 100,
+        "parent_seq_idx": 1,
+        "feedback": {"defects": [{"keyword_name": None}]},
+    })
+
+    assert parsed.feedback.defects[0].keyword_name is None
+
+
+def test_condition_schema_accepts_parameter_none():
+    """参照系（业务口径）：parameter 为 None 合法（用户没改参数 ⇒ service 走 ORM 反查 baseline）。"""
+    parsed = ProcessOptimizeFromConditionSchema.model_validate({
+        "condition_id": 100,
+        "parent_seq_idx": 1,
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+    })
+
+    assert parsed.parameter is None
+
+
+def test_condition_schema_rejects_empty_parameter_dict():
+    """参照系（业务口径）：parameter={} 应被拒（前端忘翻译 / 误传空 dict 都会落入此情形）。"""
+    with pytest.raises(ValidationError) as exc:
+        ProcessOptimizeFromConditionSchema.model_validate({
+            "condition_id": 100, "parent_seq_idx": 1,
+            "parameter": {},
+            "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        })
+
+    msg = str(exc.value)
+    assert "parameter" in msg or "工艺字段" in msg, f"error message should mention parameter: {msg}"
+
+
+def test_condition_schema_rejects_business_metadata_only_parameter():
+    """参照系（业务口径）：parameter 只含业务元数据（无标量工艺字段）⇒ 拒。"""
+    with pytest.raises(ValidationError):
+        ProcessOptimizeFromConditionSchema.model_validate({
+            "condition_id": 100, "parent_seq_idx": 1,
+            "parameter": {"parent_seq_idx": 5, "param_source": "manual"},
+            "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        })
+
+
+def test_condition_schema_accepts_sparse_flat_override():
+    """参照系（业务口径）：只覆盖一个标量工艺字段 ⇒ 合法，未覆盖字段保持 None。"""
+    parsed = ProcessOptimizeFromConditionSchema.model_validate({
+        "condition_id": 100, "parent_seq_idx": 1,
+        "parameter": {"inj_spd_1": 50.0},
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+    })
+
+    assert parsed.parameter.inj_spd_1 == 50.0
+    assert parsed.parameter.inj_pres_1 is None
+
+
+def test_provided_schema_accepts_minimal_context():
+    """参照系（业务口径）：三维对象齐、字段可缺（两层设计：对象存在性由 pydantic 拦，
+    字段级必填等级由 ``algorithms/fuzzy/specs.py`` 拦）。"""
+    parsed = ProcessOptimizeFromProvidedSchema.model_validate({
+        "parameter": {"inj_pres_1": 60.0},
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        "mold_info": {"product_category": "空调"},
+        "machine_info": {"drive_system": "hydraulic"},
+        "polymer_info": {"abbreviation": "PP"},
+    })
+
+    assert parsed.machine_info.drive_system == "hydraulic"
+    assert parsed.machine_info.max_set_injection_pressure is None
+    # rule_library_code 已从公共 schema 移除（算法内部资源选择，上游自解）
+    assert not hasattr(parsed, "rule_library_code")
+
+
+@pytest.mark.parametrize("missing_dim", ["machine_info", "polymer_info", "mold_info"])
+def test_provided_schema_rejects_missing_context_dimension(missing_dim):
+    """参照系（业务口径）：缺任意一个维度对象必须被拒（论域上界无来源 ⇒ 模糊等级不可信）。"""
+    provided_min = {
+        "parameter": {"inj_pres_1": 60.0},
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        "mold_info": {"product_category": "空调"},
+        "machine_info": {"drive_system": "hydraulic"},
+        "polymer_info": {"abbreviation": "PP"},
+    }
+    bad = {k: v for k, v in provided_min.items() if k != missing_dim}
+
+    with pytest.raises(ValidationError):
+        ProcessOptimizeFromProvidedSchema.model_validate(bad)
+
+
+def test_provided_schema_accepts_full_context_and_drops_unknown_fields():
+    """参照系（业务口径）：三维齐全 ⇒ 接受；未知字段由 BaseSchema 的 extra='ignore' 丢弃。"""
+    parsed = ProcessOptimizeFromProvidedSchema.model_validate({
+        "parameter": {"inj_pres_1": 60.0, "brl_temp_3": 220.0, "unknown_biz_field": 1},
+        "feedback": {"defects": [{"keyword_name": "飞边", "level": "medium", "position": "分型面"}]},
+        "mold_info": {"product_category": "空调", "target_cycle_time": 45.0},
+        "machine_info": {
+            "drive_system": "hydraulic",
+            "max_set_injection_pressure": 180.0,
+            "max_set_holding_pressure": 120.0,
+            "bogus": 9,
+        },
+        "polymer_info": {"abbreviation": "PP", "min_melt_temp": 200.0, "max_melt_temp": 260.0},
+    })
+
+    assert parsed.machine_info.max_set_injection_pressure == 180.0
+    assert parsed.polymer_info.max_melt_temp == 260.0
+    assert parsed.mold_info.product_category == "空调"
+    assert not hasattr(parsed.machine_info, "bogus")
+
+
+def test_provided_schema_keeps_injection_stroke():
+    """参照系（业务口径）：接口层**保留**实测行程字段。
+
+    【注意】``BaseSchema`` 是 ``extra="ignore"`` ⇒ schema 未声明的字段会被
+    **静默丢弃** ⇒ 行程若没在 schema 里声明，契约层会误判「缺行程」而拒。
+    """
+    parsed = ProcessOptimizeFromProvidedSchema.model_validate({
+        "parameter": {"inj_pres_1": 60.0},
+        "feedback": {"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+        "mold_info": {"product_category": "空调"},
+        "machine_info": {"drive_system": "hydraulic", "max_injection_stroke": 200.0},
+        "polymer_info": {"abbreviation": "PP"},
+    })
+
+    assert parsed.machine_info.max_injection_stroke == 200.0
+
+
+def test_provided_schema_rejects_missing_parameter():
+    """参照系（业务口径）：缺 parameter 必须报错（调优作用对象缺失）。"""
+    with pytest.raises(Exception):
+        ProcessOptimizeFromProvidedSchema.model_validate({"feedback": {}})
+
+
+# ---------------------------------------------------------------- service 入口
+
+def test_service_exposes_public_entrypoints():
+    """参照系（业务口径）：service 层公开入口与纯算法内核都在。"""
+    assert hasattr(_opt_mod, "optimize_from_condition")
+    assert hasattr(_opt_mod, "optimize_from_provided")
+    # 模块顶层 helper
+    assert hasattr(_opt_mod, "_resolve_condition")
+    assert hasattr(_opt_mod, "_resolve_parent_parameter")
+    assert hasattr(_opt_mod, "_resolve_baseline")
+    assert hasattr(_opt_mod, "_build_suggestion_payload")
+    # 纯算法内核（Step 3+4，两个入口共用，对应 parameter_initialize._infer_kernel 模式）
+    assert hasattr(_opt_mod, "_infer_kernel")
+    assert hasattr(_opt_mod, "_compose_algorithm_context")
+
+
+def test_optimize_from_provided_rejects_empty_defect_list():
+    """参照系（业务口径）：缺 feedback.defects 必拒（与 optimize_from_condition 同一套约束镜像）。"""
+    with pytest.raises(BizException) as exc:
+        _opt_mod.optimize_from_provided(
+            parameter={"inj_pres_1": 60.0},
+            feedback={"defects": []},
+            mold_info={"product_category": "空调"},
+            machine_info={"drive_system": "hydraulic"},
+            polymer_info={"abbreviation": "PP"},
+        )
+
+    assert "缺陷" in str(exc.value) or "feedback" in str(exc.value).lower() or "defect" in str(exc.value).lower()
+
+
+def test_optimize_from_provided_full_path_runs():
+    """参照系（业务口径）：完整输入能走通整条链路。
+
+    接受 2 种结果：成功（返回 new_parameter+suggestion）/ fail-fast（无推荐 BizException）——
+    只要不是 NameError 就说明链路是通的。
+
+    【注意】``_resolve_visible_libraries`` 是唯一碰 DB 的点 ⇒ 桩成空库列表，
+    本用例保持离线可跑。
+    """
+    try:
+        with patch.object(_opt_mod, "_resolve_visible_libraries", return_value=[]):
+            result = _opt_mod.optimize_from_provided(
+                parameter={"inj_pres_1": 60.0, "brl_temp_3": 220.0},
+                feedback={"defects": [{"keyword_name": "短射", "level": "high", "position": "DL1"}]},
+                mold_info={"product_category": "空调"},
+                machine_info={
+                    "drive_system": "hydraulic",
+                    "max_set_injection_pressure": 180.0,
+                    "max_set_injection_speed": 300.0,
+                    "max_set_holding_pressure": 120.0,
+                    "max_set_holding_speed": 150.0,
+                    "max_set_screw_rotation_speed": 200.0,
+                    "max_set_metering_pressure": 100.0,
+                    "max_set_metering_back_pressure": 15.0,
+                    "max_set_decompression_pressure": 10.0,
+                    "max_injection_stroke": 200.0,
+                },
+                polymer_info={"abbreviation": "PP"},
+            )
+    except BizException as exc:
+        # fail-fast 路径：算法无推荐（规则集不全）—— 也算链路打通
+        assert "推荐算法" in str(exc), f"unexpected BizException: {exc}"
+        return
+
+    # 成功路径：从 provided 返回的 new_parameter / suggestion 无落库 ID
+    assert "new_parameter" in result, f"missing new_parameter: {result.keys()}"
+    assert "suggestion" in result, f"missing suggestion: {result.keys()}"
+    assert "parameter_id" not in result["new_parameter"]
+    assert "seq_idx" not in result["new_parameter"]
+    assert "recommendation_id" not in result["suggestion"]
+
+
+# ---------------------------------------------------------------- URL 路由
+
+def test_optimize_route_is_registered():
+    """参照系（业务口径）：调优入口的 URL 路由已注册且唯一。"""
+    optimize_routes = [p for p in urlpatterns if "algorithms/optimize" in str(p.pattern)]
+
+    assert len(optimize_routes) == 1, f"expected 1 optimize route, got {len(optimize_routes)}"
+
+
+# ---------------------------------------------------------------- 算法层契约
+
+def test_validator_accepts_complete_hydraulic_input():
+    """参照系（业务口径）：完整的液压机输入通过算法层契约校验。"""
+    OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, OK_MOLD)
+
+
+def test_validator_rejects_missing_injection_limit():
+    """参照系（业务口径）：缺机台上限 ⇒ **必拒**。
+
+    设备实际值是**判级论域上界的必需来源**（从设备读取参数是为了用实际值补全
+    参数的论域；设备值没有就报错）⇒ 缺了论域上界无法确定
+    ⇒ 模糊等级判错 ⇒ 直接拒，而不是「不拦请求、只不裁剪」。
+    """
+    missing_pressure = {k: v for k, v in FULL_MACHINE.items()
+                        if k != "max_set_injection_pressure"}
+
+    with pytest.raises(ValueError) as exc:
+        OptimizeDataValidator.validate(missing_pressure, OK_POLYMER, OK_MOLD)
+
+    assert "max_set_injection_pressure" in str(exc.value), str(exc.value)
+
+
+def test_validator_rejects_missing_metering_limit_on_hydraulic():
+    """参照系（业务口径）：液压机缺计量压力 ⇒ **必拒**（标「液压机必填」）。"""
+    missing_metering = {k: v for k, v in FULL_MACHINE.items()
+                        if k != "max_set_metering_pressure"}
+
+    with pytest.raises(ValueError) as exc:
+        OptimizeDataValidator.validate(missing_metering, OK_POLYMER, OK_MOLD)
+
+    assert "max_set_metering_pressure" in str(exc.value), str(exc.value)
+
+
+def test_validator_rejects_missing_injection_stroke():
+    """参照系（业务口径）：缺实测行程 ⇒ **必拒**。
+
+    行程是位置类判级论域上界的**唯一权威源**（``max_injection_stroke``
+    属于必填字段）⇒ 缺失 ⇒ 位置类判级区间没有上界 ⇒ 「充填量第一优先」的那组
+    规则失活 ⇒ 直接拒，而不是「回落经验论域」。
+    """
+    missing_stroke = {k: v for k, v in FULL_MACHINE.items()
+                      if k != "max_injection_stroke"}
+
+    with pytest.raises(ValueError) as exc:
+        OptimizeDataValidator.validate(missing_stroke, OK_POLYMER, OK_MOLD)
+
+    assert "max_injection_stroke" in str(exc.value), str(exc.value)
+
+
+def test_validator_tolerates_electric_machine_without_metering_limit():
+    """参照系（业务口径）：全电机缺计量压力 ⇒ **不拒**。
+
+    标「液压机必填」⇒ 全电机 HMI 物理上无此栏，缺失属正常，不能当数据缺失拦人。
+    """
+    electric = {
+        **{k: v for k, v in FULL_MACHINE.items() if k != "max_set_metering_pressure"},
+        "drive_system": "electric",
+    }
+
+    OptimizeDataValidator.validate(electric, OK_POLYMER, OK_MOLD)
+
+
+def test_validator_tolerates_missing_optional_keys():
+    """参照系（业务口径）：规则库筛选键（abbreviation / product_category）都是「可选」
+    —— 为精度旋钮，填了命中高特异度规则，不填退到默认规则，算法并不因缺它们而无法运行。"""
+    OptimizeDataValidator.validate(FULL_MACHINE, {}, OK_MOLD)
+    OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, {})
+
+
+def test_validator_treats_temperature_bounds_as_recommended():
+    """参照系（业务口径）：温度类字段是「推荐」—— 缺失不拦
+    （触发条件在本维度外，强拦会挡住纯压力类调优）。"""
+    OptimizeDataValidator.validate(FULL_MACHINE, OK_POLYMER, OK_MOLD)  # 未带任何温度字段
+
+    assert OPTIMIZE_MACHINE_INFO_FIELDS["max_set_decompression_speed"]["condition"] == "可选"
+
+
+def main():
+    """独立跑法（不依赖 pytest）：``python -m tests.test_optimize_smoke``。"""
+    import inspect
+
+    cases = [
+        fn for name, fn in sorted(globals().items())
+        if name.startswith('test_') and inspect.isfunction(fn)
+    ]
+    failed = []
+    for fn in cases:
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001 - 独立跑法需要汇总全部失败
+            print(f'[FAIL] {fn.__name__}: {exc}')
+            failed.append(fn.__name__)
+    print('\n' + '=' * 60)
+    if failed:
+        print(f'[FAIL] {len(failed)}/{len(cases)} 个用例失败：{failed}')
+        return 1
+    print(f'[PASS] {len(cases)}/{len(cases)} 个用例通过')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

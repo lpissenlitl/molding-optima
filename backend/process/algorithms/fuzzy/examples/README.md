@@ -114,7 +114,8 @@ MBP0   met_back_pres_1               5.0 6.16369649146612   0.041337  increase
 
 2. **复用生产适配器，口径零重复**
    `keywords` → `KeywordProfile` 走生产的 `RuleKeywordAdapter`（含 `step` 为空时
-   `span/3` 的推导逻辑）；业务名 → 算法名走生产的 `field_names.to_algo_params`。
+   `span/3` 的推导逻辑）；业务名 → 算法名的翻译**在引擎内部**做
+   （`fuzzy/engine.py` 的 `to_algo_params` / `to_family_limits`）。
    案例目录里**没有**第二份口径。
 
 3. **数据源可替换**

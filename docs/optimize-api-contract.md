@@ -35,7 +35,14 @@
 
 因此调用方**不需要也不应该**传 `machine_id` / `polymer_id` / `mold_id`。
 
-**上下文契约校验**：三维反查完成后，service 跑一遍算法层契约校验（`OptimizeDataValidator`），失败转 400。当前实际拦截面只有一条 —— **机台没填驱动方式**。
+**上下文契约校验**：三维反查完成后，service 跑一遍算法层契约校验（`OptimizeDataValidator`），失败转 400。实际拦截面：
+
+| 维度 | 拦截项 |
+|---|---|
+| `machine_info` | **机台没填驱动方式**（`drive_system`）|
+| `machine_info` | **设备上限缺失**（6 项）：`max_set_injection_pressure` / `max_set_injection_speed` / `max_set_holding_pressure` / `max_set_holding_speed` / `max_set_screw_rotation_speed` / `max_injection_stroke`（实测最大注射行程 —— 位置类判级论域上界的**唯一权威源**，缺则位置类规则失活）|
+
+设备上限缺任一项 ⇒ 论域上界缺失 ⇒ 判级失真 ⇒ 提前拒（不拖到推理阶段才发现）。
 
 ### 2.2 `parent_seq_idx`（必填）
 
@@ -133,9 +140,11 @@ baseline = 库里基准轮的全量字段  ⊕  用户传入 parameter 的非 No
     "parameter_no": "PP-20261117-162732-001",
     "inj_stg": 1, "inj_spd_1": 34.0, "...": "其余工艺字段"
   },
-  "suggestion": { "source_type": "fuzzy_rule", "groups": [ "..." ], "recommendation_id": 456 }
+  "suggestion": { "source_type": "fuzzy", "groups": [ "..." ], "recommendation_id": 456 }
 }
 ```
+
+⚠️ `source_type` 取的是**引擎 subtype**（当前主链路为 `fuzzy`），**不是** `Recommendation.SOURCE_TYPE_CHOICES` 里的 `fuzzy_rule` ⇒ 落库值与 choices 不一致，见 `docs/open-questions.md` C2。
 
 `parameter` 是**落库后的新轮次完整对象**（ORM 镜像）：
 
@@ -148,32 +157,30 @@ baseline = 库里基准轮的全量字段  ⊕  用户传入 parameter 的非 No
 | `parameter_no` | 新轮次的系统编号 |
 | 其余工艺字段 | 本轮推理结果（与落库同源）|
 
-### 5.2 合格态短路（`tuning_result = qualified`）
+### 5.2 合格态（`tuning_result = qualified`）
 
-```json
-{
-  "parameter": null,
-  "suggestion": null,
-  "skipped": true,
-  "skip_reason": "qualified",
-  "message": "产品已合格，本轮仅记录评价，未进行工艺优化"
-}
-```
+**合格态不短路** —— 与其它评价档位走同一条链路（推理 → 落库 → 建新轮次），响应形状与 §5.1 完全相同。
 
-产品已合格 ⇒ 没有缺陷可驱动优化 ⇒ **不跑推理、不建新轮次**。但本轮评价**仍要落库**（写回手改参数 + 写合格标签 + 丢弃缺陷），提交通道保持可用，为「合格状态下的优化需求」预留扩展点。
+service 层**不预判合格**：缺陷列表为空是被允许的（`allow_empty`），由算法空跑决定结果。
+
+⚠️ **已知边界**：合格态下缺陷列表为空 ⇒ 算法通常产不出推荐 ⇒ 命中 fail-fast 抛 `ERROR_OPERATION_FAILED`。该异常发生在落库事务**之前**，因此本轮合格标签**写不进** `TuningRecord`。这是否符合预期（合格态是否应「只落库、不推理」）待定 —— 见 `docs/open-questions.md` C1。
 
 ---
 
 ## 六、落库副作用（单事务）
 
-1. 回写用户手改的参数到父记录
-2. 更新父轮的 `TuningRecord`（缺陷反馈 + 试模结果）
-3. 更新上一轮 `Recommendation.is_adopted`（训练标签）
+1. 回写用户手改的参数到基准记录
+2. 更新**基准轮自己**的 `TuningRecord`（缺陷反馈 + 实测观察 + 试模结果）
+3. 更新**上一轮**（基准轮的父轮）上那条 `Recommendation.is_adopted`（训练标签；仅 `ineffective` 时置 False）
 4. 新建 `ProcessParameter`（`param_source = system_inferred`，父节点 = 基准轮）
 5. 新建 `TuningRecord`（`pending`，等待该轮自身的试模反馈）
-6. 新建 `Recommendation`
+6. 新建 `Recommendation`（挂在**基准轮**上 —— 它是「针对基准轮给的建议」，下一轮照它调）
 
 以上六步与回写同属一个 `atomic` 事务，任一步失败整体回滚。
+
+**锚点提示**：`Recommendation` 挂在**被建议的那一轮**上。`parent_seq_idx` 定位到的是「本次提交反馈的那一轮」（第 N 轮），不是「上一轮已完成的轮次」⇒ 第 3 步要更新的是**第 N-1 轮**的那条建议。
+
+**兜底**：第 2 步若基准轮没有 `TuningRecord`，会补建一条（业务层应保证 1:1）。
 
 ---
 
@@ -183,7 +190,7 @@ baseline = 库里基准轮的全量字段  ⊕  用户传入 parameter 的非 No
 - 不接收 `subrule_no` —— 后端算法自动识别
 - 不接收上一轮 `suggestion` —— 后端实时推理
 - 不接受入参指定关系字段（见 §四）
-- 合格态下不建新轮次（见 §5.2）
+- 合格态**不短路** —— 与其它档位同链路（见 §5.2）
 
 ---
 
@@ -234,6 +241,7 @@ baseline = 库里基准轮的全量字段  ⊕  用户传入 parameter 的非 No
 | 入参 schema | `backend/process/schemas/optimization.py::ProcessOptimizeFromConditionSchema` |
 | 工艺参数契约 | `backend/process/schemas/parameter.py::ProcessParameterSchema` |
 | 编排与落库 | `backend/process/services/parameter_optimize.py::optimize_from_condition` |
+| 未决口径 | `docs/open-questions.md`（含本文标记的 C1 / C2）|
 | 初始化同族端点 | `backend/process/services/parameter_initialize.py::ParameterInitializeService` |
 | parameter 展开出口 | `backend/extensions/models.py::BaseModel.to_dict`（ORM 镜像；FK 输出 `{name}_id`）|
 | 数据模型 | `backend/process/models/parameter.py::ProcessParameter` |

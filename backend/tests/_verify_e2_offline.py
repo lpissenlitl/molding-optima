@@ -82,12 +82,12 @@ def make_rule(rule_str):
 
 CONTEXT = {
     'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'low'}]},
-    'process_parameter': {'IV0': 10.0},
+    'process_parameter': {'inj_spd_1': 10.0},
     'iteration_trend': {'trend': 'stable'},
 }
 
 # 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
-from process.algorithms.defect_selection import select_defect  # noqa: E402
+from process.services.optimize_chain.defect_selection import select_defect  # noqa: E402
 CONTEXT['feedback'] = select_defect(CONTEXT.get('feedback') or {})
 
 failures = []
@@ -107,8 +107,8 @@ engine = FuzzyEngine(repository=repo)
 recs = engine.recommend(CONTEXT)
 check('V1 注入 FakeRepository 后 recommend 可离线跑通',
       len(recs) == 1, f'实际 recs={recs}')
-check('V1 产出的是 IV0 且方向为 increase',
-      bool(recs) and recs[0].param_name == 'IV0' and recs[0].direction == 'increase',
+check('V1 产出的是 inj_spd_1 且方向为 increase',
+      bool(recs) and recs[0].param_name == 'inj_spd_1' and recs[0].direction == 'increase',
       f'实际 recs={recs}')
 check('V1 确实调用了注入的仓库（未被真实实现顶替）',
       any(c[0] == 'get_rules' for c in repo.calls), f'实际 calls={repo.calls}')

@@ -42,7 +42,7 @@ from process.algorithms.fuzzy.fuzzy_core.models.rules import NumTskRule  # noqa:
 from process.algorithms.fuzzy.fuzzy_core.parsing import parse_rule  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.profiles import RuleProfile  # noqa: E402
 from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
-from process.algorithms.defect_selection import select_defect  # noqa: E402
+from process.services.optimize_chain.defect_selection import select_defect  # noqa: E402
 from process.algorithms.fuzzy.library.rules import RuleService  # noqa: E402
 
 OUT = sys.argv[1]
@@ -149,7 +149,7 @@ class Kw(dict):
 
 KEYWORDS = [
     Kw('IV0', 3, 0.0, 100.0, 1.0),
-    Kw('inj_pres_1', 5, 0.0, 200.0, 5.0),
+    Kw('IP0', 5, 0.0, 200.0, 5.0),
     Kw('SHORTSHOT', 3, 0.0, 10.0, 1.0),
 ]
 
@@ -206,26 +206,26 @@ def mk(spec_rule, priority=1.0, kind=None):
 SCENARIOS = [
     ('basic', ['IF SHORTSHOT_low AND IV0_low THEN IV0_add_2']),
     ('multi', [
-        'IF inj_pres_1_high THEN inj_pres_1_add_5',
-        'IF inj_pres_1_low AND IV0_medium THEN IV0_add_10',
+        'IF IP0_high THEN IP0_add_5',
+        'IF IP0_low AND IV0_medium THEN IV0_add_10',
         'IF SHORTSHOT_high THEN IV0_add_3',
         'IF IV0_low THEN IV0_add_low',
     ]),
     ('five_level', [
-        'IF inj_pres_1_very_low THEN inj_pres_1_add_5',
-        'IF inj_pres_1_low THEN inj_pres_1_add_5',
-        'IF inj_pres_1_medium THEN inj_pres_1_add_5',
-        'IF inj_pres_1_high THEN inj_pres_1_add_5',
-        'IF inj_pres_1_very_high THEN inj_pres_1_add_5',
+        'IF IP0_very_low THEN IP0_add_5',
+        'IF IP0_low THEN IP0_add_5',
+        'IF IP0_medium THEN IP0_add_5',
+        'IF IP0_high THEN IP0_add_5',
+        'IF IP0_very_high THEN IP0_add_5',
     ]),
     ('level_number', [
-        'IF inj_pres_1_level1 THEN inj_pres_1_add_5',
-        'IF inj_pres_1_level3 THEN inj_pres_1_add_5',
-        'IF inj_pres_1_level5 THEN inj_pres_1_add_5',
+        'IF IP0_level1 THEN IP0_add_5',
+        'IF IP0_level3 THEN IP0_add_5',
+        'IF IP0_level5 THEN IP0_add_5',
     ]),
     ('mixed', [
         'IF SHORTSHOT_low AND IV0_low THEN IV0_add_2',
-        'IF SHORTSHOT_high THEN inj_pres_1_add_5',
+        'IF SHORTSHOT_high THEN IP0_add_5',
     ]),
     # ---- 提示层（advisory）场景：之前完全没覆盖 ----
     ('advisory_adjust', [
@@ -249,21 +249,24 @@ SCENARIOS = [
     ]),
     # 跨参数组：不同组的占比**各自**归一化到 1，互不稀释
     ('spec_mix_cross_group', [
-        ('IF inj_pres_1_high THEN inj_pres_1_add_5', 1),
-        ('IF inj_pres_1_high THEN inj_pres_1_add_15', 4),
-        ('IF inj_pres_1_low THEN IV0_add_3', 3),
+        ('IF IP0_high THEN IP0_add_5', 1),
+        ('IF IP0_high THEN IP0_add_15', 4),
+        ('IF IV0_low THEN IV0_add_3', 3),
     ]),
 ]
 
+# 【注意】**context 的工艺参数用算法命名空间**（与真实规则库、规则串同构）：
+#    引擎内部自己把**业务字段名**译成算法名 ⇒ 快照脚本喂的必须是**引擎内部**那一侧
+#    的形态，否则 ``infer`` 块与 ``activations`` 块会变成两套口径。
 CONTEXTS = [
     ('ctx_low', {'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'low'}]},
-                 'process_parameter': {'IV0': 10.0, 'inj_pres_1': 20.0},
+                 'process_parameter': {'IV0': 10.0, 'IP0': 20.0},
                  'iteration_trend': {'trend': 'stable'}}),
     ('ctx_high', {'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}]},
-                  'process_parameter': {'IV0': 90.0, 'inj_pres_1': 180.0},
+                  'process_parameter': {'IV0': 90.0, 'IP0': 180.0},
                   'iteration_trend': {'trend': 'stable'}}),
     ('ctx_mid', {'feedback': {'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'medium'}]},
-                 'process_parameter': {'IV0': 50.0, 'inj_pres_1': 100.0},
+                 'process_parameter': {'IV0': 50.0, 'IP0': 100.0},
                  'iteration_trend': {'trend': 'stable'}}),
 ]
 

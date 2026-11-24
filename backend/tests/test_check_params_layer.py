@@ -1,6 +1,6 @@
 """第4层（校验参数合理性）的护栏。
 
-参照系 = 第4层的机制口径（见 ``algorithms/check_params.py``）：
+参照系 = 第4层的机制口径（见 ``services/optimize_chain/check_params.py``）：
 「**只识别，不处理**」—— 越限的处置落在 service 层，识别层只透传事实。
 
 三类检查各自的参照系：
@@ -12,7 +12,7 @@
 
 import pytest
 
-from process.algorithms.check_params import (
+from process.services.optimize_chain.check_params import (
     detect_anchor_violations,
     detect_range_violations,
     detect_window_violations,

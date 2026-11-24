@@ -42,7 +42,7 @@ def _log_selection(trace: dict) -> None:
     有跳过才说明「为什么放弃了后面的缺陷」，那才是需要被看见的情况。
 
     【注意】选取**不在本引擎**（service 预处理层做一次，见
-    `services/parameter_optimize.py::_resolve_defect_selection`）⇒ 本函数
+    `services/optimize_chain/defect_selection.py::select_defect`）⇒ 本函数
     只转述预处理层写回 feedback 的 trace。
     """
     trace = trace or {}
@@ -60,7 +60,8 @@ class EmpiricalReasoning(AlgorithmBase):
             含 keyword_name / level / position）
 
     输出：
-        AlgorithmRecommendation 列表（increase / decrease 方向）
+        AlgorithmRecommendation 列表（increase / decrease 方向）；
+        参数名用**业务字段名**（经验库与 context 同一命名空间 ⇒ 出口无需翻译）
     """
 
     algorithm_name = "经验推理"
@@ -82,14 +83,14 @@ class EmpiricalReasoning(AlgorithmBase):
                 'feedback': {
                     'defects': [{'keyword_name': 'SHORTSHOT', 'level': 'high'}, ...]
                 },
-                'process_parameter': {...}   # 可选，用于填充 current_value
+                'process_parameter': {...}   # 可选（业务字段名），用于填充 current_value
             }
 
         Returns:
             AlgorithmRecommendation 列表
         """
         # 缺陷 —— **选取已在 service 预处理层做完**（只做一次）
-        # （见 `services/parameter_optimize.py::_resolve_defect_selection`）
+        # （见 `services/optimize_chain/defect_selection.py::select_defect`）
         # ⇒ 本引擎**不再自己挑缺陷**，只读整理结果。
         # 反馈传的是 keyword_name（SHORTSHOT / SHRINKAGE / ...），
         # 与 RuleMethod.defect_code、RuleKeyword.keyword_name 对齐。
@@ -112,27 +113,34 @@ class EmpiricalReasoning(AlgorithmBase):
         recommendations: List[AlgorithmRecommendation] = []
 
         # increase 方向
-        for param_code in hint.get('increase', []):
-            current = process_parameter.get(param_code)
+        for param_name in hint.get('increase', []):
+            # 【注意】经验库用**业务字段名**（与 context 同一命名空间）⇒ 直接查
+            current = process_parameter.get(param_name)
             recommendations.append(AlgorithmRecommendation(
-                param_name=param_code,
-                current_value=float(current) if current is not None else 0.0,
+                param_name=param_name,
+                # 【注意】参数不存在 ⇒ None（**不是 0.0**）：「当前值是 0」
+                #   与「压根没这个参数」是两回事 —— 报 0 会被下游当成真实数值
+                #   展示（看起来像「该参数被调到 0」），也会参与数值比较。
+                current_value=float(current) if current is not None else None,
                 recommended_value=None,  # 经验不给出具体数值
                 confidence=None,        # 经验无置信度
-                reason=f"经验推理：缺陷 {defect_name} 建议调高 {param_code}",
+                reason=f"经验推理：缺陷 {defect_name} 建议调高 {param_name}",
                 source='empirical',
                 direction='increase',
             ))
 
         # decrease 方向
-        for param_code in hint.get('decrease', []):
-            current = process_parameter.get(param_code)
+        for param_name in hint.get('decrease', []):
+            current = process_parameter.get(param_name)
             recommendations.append(AlgorithmRecommendation(
-                param_name=param_code,
-                current_value=float(current) if current is not None else 0.0,
+                param_name=param_name,
+                # 【注意】参数不存在 ⇒ None（**不是 0.0**）：「当前值是 0」
+                #   与「压根没这个参数」是两回事 —— 报 0 会被下游当成真实数值
+                #   展示（看起来像「该参数被调到 0」），也会参与数值比较。
+                current_value=float(current) if current is not None else None,
                 recommended_value=None,
                 confidence=None,
-                reason=f"经验推理：缺陷 {defect_name} 建议调低 {param_code}",
+                reason=f"经验推理：缺陷 {defect_name} 建议调低 {param_name}",
                 source='empirical',
                 direction='decrease',
             ))

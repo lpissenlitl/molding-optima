@@ -17,8 +17,8 @@ Service 层职责：
 - 输出后处理：4 维算法结果 → 拍扁为 ProcessParameter + TuningRecord 落库
 - 推理算法：委托给 algorithms/expert/ProcessInitializer（含 DataValidator）
   校验失败 raise ValueError，service 层转 BizException 400
-- 机台能力校验：位置类参数超出机台注射行程 ⇒ BizException 400
-  （算出来的初值机台根本设不进去 ⇒ 不产出错参数）
+- 设定值能力校验：算出来的初值超出允许区间（上限按参数取自哪个设备字段）⇒
+  BizException 400（初值根本设不进去 ⇒ 不产出错参数）
 """
 
 import logging
@@ -33,11 +33,11 @@ from masterdata.models.material import Polymer
 from masterdata.models.mold import Mold
 from process.algorithms.expert.initializer import ProcessInitializer
 from process.algorithms.expert.rule_matcher import InitRuleMatcher
-from process.algorithms.integrate_params import (  # 第3层：整合参数
+from .optimize_chain.integrate_params import (  # 第3层：整合参数
     integrate,
     numeric_snapshot,
 )
-from process.algorithms.check_params import validate  # 第4层：校验参数合理性
+from .optimize_chain.check_params import validate  # 第4层：校验参数合理性
 from process.exceptions import (
     ERROR_MACHINE_NOT_FOUND,
     ERROR_MOLD_NOT_FOUND,
@@ -50,13 +50,14 @@ from process.models.condition import ProcessCondition
 from process.models.parameter import ProcessParameter
 from process.models.tuning_record import TuningRecord
 from utils.objects import safe_json
-from .spec_extract import (  # 参数提取专区（优化 / 初始化两条链路共用；按需自取）
+from .shared.spec_extract import (  # 参数提取专区（优化 / 初始化两条链路共用；按需自取）
     build_machine_info_from_snapshot,
     build_mold_info_from_snapshot,
     build_polymer_info_from_snapshot,
 )
-from .over_limit_guard import (  # 越限守卫专区（与优化链路共用同一判据与文案）
-    guard_position_over_stroke,
+from .shared.param_limits import (  # 参数限值专区（准备 + 校验，与优化链路共用同一判据与文案）
+    build_limits,  # 允许区间表取值（守卫只收表，取值归本层）
+    guard_parameter_limits,  # 统一的参数区间守卫
 )
 
 logger = logging.getLogger(__name__)
@@ -194,8 +195,8 @@ def _build_process_context_snapshot(
     return safe_json(raw)
 
 
-# --- 越限守卫（位置类超行程）---
-# 【注意】实现见 :mod:`process.services.over_limit_guard` —— 与优化链路共用同一判据、
+# --- 越限守卫（所有参数统一按允许区间判）---
+# 【注意】实现见 :mod:`process.services.shared.param_limits` —— 与优化链路共用同一判据、
 #    同一错误码、同一文案 ⇒ 同一台机、同一产品，初始化报错说什么、优化报错也说什么。
 
 
@@ -324,13 +325,12 @@ class ParameterInitializeService:
                 "process_set": process_set,
             }
 
-            # Step 3.5: 机台能力校验 —— 位置类参数超出机台注射行程 ⇒ 400 拒绝
-            # （算出来的初值本身就是超行程的 ⇒ 落库就是让操作工去设一个
-            #   机台根本设不进去的值 ⇒ 拒绝，不产出错参数）
-            guard_position_over_stroke(
+            # Step 3.5: 设定值能力校验 —— 初值超出可设定范围 ⇒ 400 拒绝
+            # （算出来的初值根本设不进去 ⇒ 落库就是让操作工去设一个
+            #   设不进去的值 ⇒ 拒绝，不产出错参数）
+            _guard_initial_params(
                 values=process_params_to_flat(result['process']),
                 machine_info=machine_info,
-                scope='initialize',
                 interface_tag='from_masterdata',
             )
 
@@ -494,11 +494,10 @@ class ParameterInitializeService:
         flat = process_params_to_flat(result['process'])
         result = {k: v for k, v in result.items() if k != 'process'}
         result['parameter'] = flat
-        # 机台能力校验（与 from_masterdata 同口径）：位置类超行程 ⇒ 400 拒绝
-        guard_position_over_stroke(
+        # 设定值能力校验（与 from_masterdata 同口径）：初值超出可设定范围 ⇒ 400 拒绝
+        _guard_initial_params(
             values=result['parameter'],
             machine_info=machine_info,
-            scope='initialize',
             interface_tag='from_provided',
         )
         return result
@@ -645,6 +644,44 @@ def process_params_to_flat(proc_dict: Dict[str, Any]) -> Dict[str, Any]:
         for i in range(n_stages):
             flat[fmt.format(i + 1)] = steps[i] if i < len(steps) else None
     return flat
+
+
+def _guard_initial_params(
+    *,
+    values: Dict[str, Any],
+    machine_info: Dict[str, Any],
+    interface_tag: str,
+    strict: bool = True,
+) -> None:
+    """初始化算出的初值 —— 统一的参数区间守卫。
+
+    **所有参数都跟「允许区间」比**：parameter 里的参数**全都是设定值**（位置参数
+    也是）⇒ 上限按参数取自哪个设备字段而定（机台可设定最大值 / 机台实测注射
+    行程）⇒ **不分类、不设特例**，越界即拒绝（与优化链路同口径：同一守卫、
+    同一错误码、同一文案）。
+
+    【注意】**拒不拒是严格度策略**：strict=True ⇒ 越界即 400；strict=False ⇒
+    只报不拒（测试算法时仍要拿到这组参数）。
+
+    【注意】``initialize_from_condition`` **不跑推理算法**（复制源工艺的已有
+    参数）⇒ 没有算法初值 ⇒ 不经过本函数。
+
+    Args:
+        values: 拍扁后的初值（业务字段名 → 数值）。
+        machine_info: 算法入参 machine_info（含机台上限字段）。
+        interface_tag: 本次调用标识（进日志，便于定位是哪一次调用）。
+        strict: True ⇒ 越界即拒绝（400）；False ⇒ 只报不拒。
+
+    Raises:
+        BizException: 初值越限（ERROR_DATA_INVALID）。
+    """
+    guard_parameter_limits(
+        parameters=values,
+        limits=build_limits(machine_info),
+        strict=strict,
+        scope='initialize',
+        interface_tag=interface_tag,
+    )
 
 
 def _create_process_parameter(

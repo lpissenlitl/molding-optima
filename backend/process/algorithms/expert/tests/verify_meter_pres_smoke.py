@@ -51,9 +51,9 @@ def _machine(power_method='液压机', nozzle_type='直通型', max_metering_pre
     return {
         'screw_diameter': 40,
         'max_set_injection_pressure': 150.0,
-        'max_set_injection_velocity': 100.0,
+        'max_set_injection_speed': 100.0,
         'max_set_holding_pressure': 100.0,
-        'max_set_holding_velocity': 100.0,
+        'max_set_holding_speed': 100.0,
         'max_set_screw_rotation_speed': 150.0,
         'max_set_metering_pressure': max_metering_pres,
         'nozzle_type': nozzle_type,
@@ -61,6 +61,7 @@ def _machine(power_method='液压机', nozzle_type='直通型', max_metering_pre
         'drive_system': power_method,              # MACHINE_INFO_FIELDS 必填（与 power_method 同源）
         'max_set_metering_back_pressure': 20.0,   # 液压机必填（算法不消费，仅契约校验）
         'max_set_decompression_pressure': 100.0,  # 液压机必填（算法不消费，仅契约校验）
+        'max_injection_stroke': 200.0,          # 必填（螺杆可推进的物理位移上限）
     }
 
 

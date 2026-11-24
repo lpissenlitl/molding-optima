@@ -52,7 +52,6 @@ def _forbid_sql(self, sql, *args, **kwargs):
 
 db_utils.CursorWrapper.execute = _forbid_sql
 
-from process.algorithms.fuzzy import field_names  # noqa: E402
 from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.profiles import (  # noqa: E402
     RuleProfile,
@@ -60,6 +59,7 @@ from process.algorithms.fuzzy.fuzzy_core.profiles import (  # noqa: E402
 from process.algorithms.fuzzy.library.keywords import (  # noqa: E402
     RuleKeywordAdapter,
 )
+from process.services.shared.param_limits import build_limits  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CASES_DIR = os.path.join(HERE, 'cases')
@@ -111,12 +111,18 @@ def build_repository(case):
 
 
 def build_context(case):
-    """案例 → 引擎上下文（工艺参数做业务名 → 算法名翻译，与生产同一条路）。"""
+    """案例 → 引擎上下文（**业务字段名进、算法名只在引擎内部**）。"""
     ctx = dict(case['context'])
-    ctx['process_parameter'] = field_names.to_algo_params(
-        case['context']['process_parameter'])
+    # 设备上限表：**service 层取值**（算法层只收表，不碰 ORM 字段名）——
+    # 从案例里的 machine_info 现算，与生产链路（``_compose_algorithm_context``）
+    # 同一口径 ⇒ 离线复现的论域上界 / 推荐值裁剪与线上一致。
+    machine_info = case['context'].get('machine_info') or {}
+    # 【注意】**只有一张表**：位置参数与压力 / 速度参数同构 ⇒ 全部参数走
+    # 同一条判定路径（上限取自哪个设备字段，由 service 层配置决定）。
+    # 【注意】**传的是业务键区间表** ⇒ 「业务键 → 算法族」由引擎内部翻译。
+    ctx['param_limits'] = build_limits(machine_info)
     # 缺陷选取在调用方收敛一次（引擎只读结果，不再各自挑缺陷）
-    from process.algorithms.defect_selection import select_defect
+    from process.services.optimize_chain.defect_selection import select_defect
     ctx['feedback'] = select_defect(ctx.get('feedback') or {})
     return ctx
 
@@ -185,7 +191,6 @@ def refresh_expected(case_id, case, recs):
     case['expected']['recommendations'] = [
         {
             'param_name': r.param_name,
-            'business_param_name': field_names.to_business_name(r.param_name),
             'current_value': r.current_value,
             'recommended_value': r.recommended_value,
             'confidence': r.confidence,
@@ -212,13 +217,12 @@ def print_case(case, recs):
     print('规则池: %d 条    论域元数据: %d 条'
           % (len(case['rules']), len(case['keywords'])))
     print()
-    print('%-6s %-18s %14s %14s %10s  %s'
-          % ('参数', '业务名', '当前值', '推荐值', '置信度', '方向'))
+    print('%-18s %14s %14s %10s  %s'
+          % ('参数', '当前值', '推荐值', '置信度', '方向'))
     print('-' * 74)
     for r in recs:
-        print('%-6s %-18s %14s %14s %10.6f  %s'
+        print('%-18s %14s %14s %10.6f  %s'
               % (r.param_name,
-                 field_names.to_business_name(r.param_name) or '-',
                  r.current_value, r.recommended_value,
                  r.confidence, r.direction))
     print()

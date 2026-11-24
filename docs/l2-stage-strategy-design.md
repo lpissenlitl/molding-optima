@@ -1,14 +1,30 @@
 # L2 阶段化调机：口径设计（2026-11-12）
 
-> **目的**：把「调机按什么组织」定成**可落数据**的口径 —— 这是 `l2-strategy-layer-discussion.md`
-> §6 表 ⑧ 挂着的待办。
+> **目的**：把「调机按什么组织」定成**可落数据**的口径 —— 此前挂在 L2 形态讨论里的待办项。
 > **状态**：**口径已定**（2026-11-12 拍板 A–G，见 §10）；**批次 12.1 / 12.2 / 12.3 / 12.4a / 12.5 / 12.6a / 12.6b / 12.6c / 12.7 已落地**（见 §11）。
 > ⚠️ **2026-11-13 口径修正**：**L2 不重选缺陷**（L2 的输入 = 规则 + 已确定的缺陷信息），见 §5。
 > ⚠️ **2026-11-13 口径修正 2**：**基线项不靠白名单排挤，而用独立的禁入清单**（见 §7.2）。
 > **当前 pytest 基线：135 passed**（12.1 / 12.2 前后一致 ⇒ 行为零变化；**12.3 是第一次真正改变输出**，测试仍全过 ⇒ 现有用例未覆盖 L2 裁决路径）。
-> **关联**：`docs/l2-strategy-layer-discussion.md`（§6 表 ⑧ / §4 差距清单）、
-> `backend/process/references/04-defect-adjustment-rules.md`（规则原料）、
-> `backend/process/algorithms/decide_direction.py`（`ScenarioStrategy` 机制）。
+> **关联**：`backend/process/references/04-defect-adjustment-rules.md`（规则原料）、
+> `backend/process/services/optimize_chain/decide_direction.py`（`ScenarioStrategy` 机制）、
+> `docs/open-questions.md`（本文遗留的未决项）。
+
+> ⚠️ **路径变更公告（2026-11-23 · 目录归位）**：**本文正文的 ``algorithms/xxx.py``
+> 路径已随目录归位失效**，阅读时按下表换算（机制本身未变，只是文件搬家 / 合并）：
+>
+> | 旧路径 | 现址 |
+> |---|---|
+> | `algorithms/decide_direction.py` | `services/optimize_chain/decide_direction.py` |
+> | `algorithms/defect_selection.py` | `services/optimize_chain/defect_selection.py` |
+> | `algorithms/tuning_strategy.py` | `services/optimize_chain/tuning_strategy.py` |
+> | `algorithms/stage_order.py` | `services/optimize_chain/tuning_strategy.py`（阶段表已并入） |
+> | `algorithms/strategies.py` | `services/optimize_chain/tuning_strategy.py`（场景清单已并入） |
+> | `services/policies.py` | `services/optimize_chain/decide_direction.py`（已并入） |
+> | `algorithms/integrate_params.py` | `services/optimize_chain/integrate_params.py` |
+> | `algorithms/check_params.py` | `services/optimize_chain/check_params.py` |
+> | `algorithms/anchors.py` | `services/optimize_chain/anchors.py` |
+>
+> 归位理由见 `docs/algorithm-layering-plan.md` 的「路径变更公告」。
 
 ---
 
@@ -93,8 +109,8 @@
 `current`（当前应推进的阶段）注入 `ScenarioContext.extra`（场景条件可引用，
 **当前无场景引用 ⇒ 行为零变化**）+ 进第2层留痕。
 ⚠️ **让位机制本身未落地** —— 经核实，拿阶段达成信号做「前提」在现有架构下
-**恒不触发**（场景命中即该阶段未达成；白名单又排在 `satisfied` 之前）⇒ 详见
-`l2-strategy-layer-discussion.md` §3.5。
+**恒不触发**（场景命中即该阶段未达成；白名单又排在 `satisfied` 之前）⇒ 判据待定，见
+`docs/open-questions.md` Q2。
 
 ---
 
@@ -246,8 +262,10 @@ ScenarioStrategy(
 前提 ⑦ 的**载体变了、判定口径不变**：缺陷选取仍在 service 预处理层做**一次**，
 结果**写回 `feedback`**（`defects` 收敛成一条 + `defect_selection` 留痕），
 **不再**用 context 顶层键 `selected_defect` ⇒ L1 与 L2 仍共用同一份 ⇒
-场景条件仍引用 `selected_defect`（由 `services/strategy_inputs.py` 从收敛后的
-`defects[0]` 取出注入 `extra`）。
+→→场景条件仍引用 `selected_defect`（由 `algorithms/decide_direction.py` 的
+→→`build_scenario_context` **从 feedback 内部派生**后放入 `ScenarioContext.extra`
+→→—— 优先取 `defect_selection['selected']['keyword_name']`（选取的一手出口），
+→→回落 `defects[0]['keyword_name']`；**service 层不再注入**）。
 
 ⚠️ ① 直接触及 `§6.2` 撤回策略表的理由②（「条件字段集写死在代码里 ⇒ 表达不了需要表达的东西」）
 ⇒ 扩字段时**不要再把字段名写死成枚举**，否则等于把撤回的理由又请回来。
@@ -256,7 +274,7 @@ ScenarioStrategy(
 
 ---
 
-## 9. 与 `l2-strategy-layer-discussion.md` §4 差距清单的收敛
+## 9. 与 L2 形态讨论差距清单的收敛
 
 | §4 差距 | 阶段口径的影响 |
 |---|---|
@@ -284,7 +302,7 @@ ScenarioStrategy(
 | **F** | 阶段优先级表位置 | ✅ **`algorithms/` 下独立文件** —— `defect_selection` 与 `strategies` **共读**（前者**排**、后者**查**） | 新增一个文件 |
 | **G** | S3 本轮范围 | ✅ **先做 2–3 条验证形态** —— `FLASH` / `BURN` / `GASVEINS`（覆盖「减胶量」「先提示修模」「查背压」三种不同形态） | 决定本轮工作量 |
 | **H** | 多缺陷反馈的选取口径 | ✅ **已定**（2026-11-16，批次 12.7）—— 选取**只做一次**、在 **service 预处理层**（不在算法层或各层各挑一遍）；**当前生效规则 = 阶段序**（`stage_priority`）：多缺陷按调机阶段取（打足 → 补缩 → 外观），**不按列表第一项**（用户口径：「结合入参进行分析」，例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。⚠️ **2026-11-19 更新**：`first_valid` 口径与 `FIRST_VALID_STRATEGY` 常量**已删除**（早期为跑通流程设计的占位实现，核验阶段已无价值）；**策略接口（Protocol）与 `strategy` 形参也一并删除** —— 当前用不到切换机制，按「用不到就不写代码」原则不留空壳，将来真有第二个口径时再加回 | L1/L2 选取口径统一；⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条**（L1 推理对象 + L2 命中场景随之变） |
-| **I** | L2 场景条件的缺陷口径 | ✅ **已修**（2026-11-16）—— L2 场景条件引用 **`selected_defect`**（本轮实际处理的缺陷码，经 `ScenarioContext.extra` 注入），**不再用** `defect_codes` | §8 ⑦ 闭环 |
+| **I** | L2 场景条件的缺陷口径 | ✅ **已修**（2026-11-16）—— L2 场景条件引用 **`selected_defect`**（本轮实际处理的缺陷码，由 `build_scenario_context` 从 feedback 内部派生后放入 `ScenarioContext.extra`），**不再用** `defect_codes` | §8 ⑦ 闭环 |
 
 ⚠️ 拍板 **E** 连带出一条**新增技术前提**（§8 前提 ⑤）：
 现有 `_compare` 的 `in` 语义是「**目标 ⊆ 字段值**」（`_contains(field_value, target)`），
@@ -306,7 +324,7 @@ ScenarioStrategy(
 | **12.3** | ✅ **已落地**（2026-11-13）—— 策略清单落 **S1 一条**（条件引用**已确定的缺陷码** + `fill_gap`）+ **兜底一条**（`conditions=()` 恒命中、`max_items=1` ⇒ 兼容旧版「一轮只调一个量」） | ✅ 短射+缺料 ⇒ 只动 `met_end_pos`、按 `fill_ratio` 解算（``ML_N = VPTL + 行程×重量比``）；短射但重量充足 / 缩水 / 缺重量 ⇒ 落兜底（只留 1 个）；pytest **135 passed**；一次性核对 **34 项全过**（含「`max_items=None` ⇒ 多参数保留全部」的多参数出口验证） |
 | **12.4** | **12.4a 已落地**（2026-11-13）—— 策略清单填 **S2 + S3 三条**（`shrinking_first` / `flash_first` / `burn_first` / `gasveins_first`）+ **两类不可调机制**（白名单 `allowed_params` = 场景范围、禁入清单 `blocked_params` = 基线项）+ **新增 `in_any` 运算子**（§8 ⑥） | ✅ pytest **135 passed**；一次性核对 **41 项全过**（含「白名单外全部让位 ⇒ 本场景无输出」「禁入清单优先于白名单」「`max_items=None` ⇒ 多参数保留全部」）；⚠️ **12.4b 未做**：切阶段选取策略 + 把 L1 选取结果透出给 L2（§8 ⑦） |
 | **12.4b** | ❌ **已撤回**（2026-11-16）—— 原计划「① fuzzy 切阶段选取策略；② 把 L1 选取结果透出给 L2」：① **撤回**（阶段序接线把「只选第一条」换成另一套规则，且选取散落在两个引擎里 ⇒ 同一份反馈可能推出两个不同缺陷；用户定调「选取只做一次、在预处理层」）；② 改由 **12.6c** 落地 | ⚠️ 撤回后：当前生效规则 = **「只选第一条」**（`first_valid`）；`stage_priority` 降级为**未接线的候选规则**；`first_only` 仅作历史语义参照 —— ⚠️ **该状态已由 12.7 终结**（撤回理由里的「选取散落」已被 12.6 消除） |
-| **12.5** | ✅ **已落地**（2026-11-16）—— **阶段达成信号 + 留痕**（**只观测，不裁决**）：`algorithms/stage_order.py` 新增 `derive_stage_progress()` + `StageProgress`（达成 = 该阶段缺陷码在本轮反馈中全部消失；**纯推导、不落库**）；`services/policies.py` 把 `current_stage` 注入 `ScenarioContext.extra`（场景条件可引用，**当前无场景引用 ⇒ 行为零变化**）+ `PolicyResolution.stage_progress` 进留痕 | ✅ pytest **135 passed**；核对 20 项全过；黄金快照差异数不变（仍为 6，历史遗留）；⚠️ **条件式让位未落地** —— 经核实「拿阶段达成信号当前提」在现有架构下**恒不触发** ⇒ 详见 `l2-strategy-layer-discussion.md` §3.5 |
+| **12.5** | ✅ **已落地**（2026-11-16）—— **阶段达成信号 + 留痕**（**只观测，不裁决**）：`algorithms/stage_order.py` 新增 `derive_stage_progress()` + `StageProgress`（达成 = 该阶段缺陷码在本轮反馈中全部消失；**纯推导、不落库**）；`services/policies.py` 把 `current_stage` 注入 `ScenarioContext.extra`（场景条件可引用，**当前无场景引用 ⇒ 行为零变化**）+ `PolicyResolution.stage_progress` 进留痕 | ✅ pytest **135 passed**；核对 20 项全过；黄金快照差异数不变（仍为 6，历史遗留）；⚠️ **条件式让位未落地** —— 经核实「拿阶段达成信号当前提」在现有架构下**恒不触发** ⇒ 判据待定，见 `docs/open-questions.md` Q2 |
 | **12.6a** | ✅ **已落地**（2026-11-16）—— **feedback 预处理层**（service 层）新增「缺陷整理」：调一次 `select_defect`，结果经 `DefectSelection.to_context()` 随 context 的 `selected_defect` 下传（**只加能力、不接线** ⇒ 行为零变化） | ✅ pytest **135 passed**；内联核对 3 项全过（多缺陷取第一条 / 首项无效跳过后选次项 / 载荷形状）；行为零变化 |
 | **12.6b** | ✅ **已落地**（2026-11-16）—— **引擎侧改为只读载荷**：`fuzzy` / `empirical` 的 `recommend` / `is_available` 全部改读 `context['selected_defect']`，**不再各自调用 `select_defect`**；新增 `ensure_selected_defect(context)`（幂等）供绕过 service 层的调用点（condition chain / 离线 runner / 黄金快照脚本） | ✅ pytest **135 passed** + 4 个手工脚本全过 + 黄金快照差异数不变；内联核对 4 项全过（两引擎选中的缺陷 = 预处理层选的那个）；⚠️ 行为变化：① fuzzy 多缺陷下由阶段序回到「列表第一条」；② empirical 在「首项无效、次项有效」时由放弃改为处理次项 |
 | **12.6c** | ✅ **已落地**（2026-11-16）—— **L2 接入同一份**：5 条场景条件的 `field` 由 `defect_codes` 改为 `selected_defect`（运算子统一 `in_set`）；`resolve_policies` 增 `selected_defect` 参数（经 `ScenarioContext.extra` 注入）；调用点由两个入口挪进 `_infer_kernel`（与 L1 同一层、同一份口径） | ✅ pytest **135 passed**；场景判定核对 4 项全过（多缺陷 ⇒ 命中本轮缺陷的场景 / 旧口径对照实证会错配 / 单缺陷零回归 / 无缺陷落兜底）⇒ **§8 ⑦ 闭环** |

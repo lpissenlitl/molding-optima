@@ -4,9 +4,15 @@
 
 为什么独立成文件
 ----------------
-命名契约是**静态数据**（3 张表 + 双向映射函数），与引擎的运行时行为
+命名契约是**静态数据**（3 张表 + 映射函数），与引擎的运行时行为
 （拉规则 / 推理 / 聚合）完全无关。放在 `FuzzyEngine` 类里，读者要在几十个
 行为方法之间找「这个字段到底叫什么」；搬出来后，引擎只管流程，命名只管名字。
+
+【注意】**为什么住在 ``algorithms/fuzzy/``**（曾一度上移到 ``algorithms/common/``）：
+  算法字段名（``IV0`` / ``IP0`` / ``MEL``）是**模糊规则库的内部命名**，
+  只在 fuzzy 推理网络里成立 ⇒ 命名契约与被命名的算法住同一个包。
+  **跨出算法边界的字段名一律是 ORM 业务字段名**（``inj_spd_1`` / ``met_end_pos``）
+  ⇒ service 层不认算法名；规则挖掘链要生成规则串时才显式来取这张表。
 
 三张表的分工
 ------------
@@ -194,6 +200,47 @@ def to_algo_name(business_name: str) -> Optional[str]:
     #    - 带空白的名字（' inj_spd_1 '）：不认 ⇒ 原样保留。
     #      若这里做 trim，两个不同键会塌缩成同一个算法名 ⇒ 静默丢值。
     return None
+
+
+def to_algo_family(business_key: str) -> Optional[str]:
+    """业务参数键（裸前缀 / 整段全名）→ 算法族前缀。
+
+    **纯命名映射**：只回答「这一族参数在算法侧叫什么」，
+    **不涉及任何上下限** —— 上限从哪来、允许多大，是 service 层的判断。
+
+    与 :func:`to_algo_name` 的区别（易混点，务必看清再选）：
+
+    ================================  ==============================  ================
+    函数                              输入                             输出
+    ================================  ==============================  ================
+    :func:`to_algo_name`              具体参数字段（``inj_spd_1``）  算法字段名（``IV0``）
+    :func:`to_algo_family`            参数族（``inj_spd``）          算法族前缀（``IV``）
+    ================================  ==============================  ================
+
+    ⇒ :func:`to_algo_name` 翻译的是**某一个参数字段**，裸前缀（``inj_spd``）
+      **不认**（没有段号，不是有效参数字段）；
+    ⇒ :func:`to_algo_family` 翻译的是**一族参数**，裸前缀正是它的输入形态。
+
+    【注意】返回值既可能是**族前缀**（``IV``），也可能是**整段参数名**
+    （``MEL`` / ``VPTL``）—— 与 ``device_limits.lookup_limit`` 的两级匹配口径
+    一致（上限表的键 = 族前缀 **或** 整段参数名）。
+
+    Args:
+        business_key: 业务侧参数键（``inj_spd`` / ``met_end_pos``）。
+
+    Returns:
+        算法族前缀（``IV`` / ``MEL``）；该参数没有对应算法族时返回 None。
+    """
+    if not isinstance(business_key, str) or not business_key:
+        return None
+
+    # 1) 分段参数前缀（inj_spd → IV）
+    algo_prefix = PREFIX_FIELD_ALIAS.get(business_key)
+    if algo_prefix:
+        return algo_prefix
+
+    # 2) 整段参数（met_end_pos → MEL / vps_pos → VPTL）
+    return FULL_FIELD_ALIAS.get(business_key)
 
 
 def to_algo_params(params: Dict[str, Any]) -> Dict[str, Any]:

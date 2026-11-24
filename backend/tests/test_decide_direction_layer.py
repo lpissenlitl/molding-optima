@@ -1,6 +1,6 @@
 """第2层（结合实际情况，确定明确的调整计划）的护栏。
 
-参照系 = 第2层的机制口径（见 ``algorithms/decide_direction.py``）与分层约定：
+参照系 = 第2层的机制口径（见 ``services/optimize_chain/decide_direction.py``）与分层约定：
 「**歧义消解归第2层**（谁让位 / 谁能同调），第3层只做参数整合」。
 
 这些用例锁的是**机制契约**，不是某张具体优先级表 —— 表由调用方注入。
@@ -10,8 +10,8 @@
 """
 import pytest
 
-from process.algorithms.anchors import resolve_fill_target
-from process.algorithms.decide_direction import (
+from process.services.optimize_chain.anchors import resolve_fill_target
+from process.services.optimize_chain.decide_direction import (
     ScenarioContext,
     ScenarioStrategy,
     build_plan,
@@ -22,7 +22,7 @@ from process.algorithms.decide_direction import (
     resolve_priority,
     select_strategy,
 )
-from process.algorithms.integrate_params import apply_plan
+from process.services.optimize_chain.integrate_params import apply_plan
 
 
 # 基线：ML_N 357.29 + DDAM 3.5 = MEL 360.79（自洽）
@@ -75,7 +75,7 @@ def test_yielded_candidate_is_not_applied():
     """
     plan, outcome = _apply(
         BASE,
-        [_rec('MEL', 361.0), _rec('DDAM', 5.0)],
+        [_rec('met_end_pos', 361.0), _rec('pst_met_decomp_dist', 5.0)],
         satisfied=('pst_met_decomp_dist',),   # DDAM 目标已达成 ⇒ 让位
     )
 
@@ -97,7 +97,7 @@ def test_yielded_mel_is_not_translated():
     """
     plan, outcome = _apply(
         BASE,
-        [_rec('MEL', 361.0)],
+        [_rec('met_end_pos', 361.0)],
         satisfied=('met_end_pos',),          # MEL 让位
     )
 
@@ -114,9 +114,9 @@ def test_empty_table_keeps_all_candidates_in_order():
     参照系：``PriorityTable`` 的设计（次序是数据；表为空即无次序）。
     """
     recommendations = [
-        _rec('MEL', 361.0),
-        _rec('DDAM', 5.0),
-        _rec('IV0', 45.0),
+        _rec('met_end_pos', 361.0),
+        _rec('pst_met_decomp_dist', 5.0),
+        _rec('inj_spd_1', 45.0),
     ]
 
     plan, outcome = _apply(BASE, recommendations)
@@ -135,7 +135,7 @@ def test_trace_records_deferred_candidates():
     """
     plan, _outcome = _apply(
         BASE,
-        [_rec('IV0', 45.0), _rec('HOLD', 4.0), _rec('CT', 18.0)],
+        [_rec('inj_spd_1', 45.0), _rec('HOLD', 4.0), _rec('cool_t', 18.0)],
         max_items=1,
     )
 
@@ -158,7 +158,7 @@ def test_priority_table_is_the_only_source_of_order():
 
     plan, _outcome = _apply(
         BASE,
-        [_rec('DDAM', 5.0), _rec('MEL', 361.0)],
+        [_rec('pst_met_decomp_dist', 5.0), _rec('met_end_pos', 361.0)],
         table=table,
     )
 
@@ -170,16 +170,16 @@ def test_priority_table_is_the_only_source_of_order():
 
 
 def test_candidates_drop_only_non_suggestions():
-    """候选集只筛「**根本不算建议**」的条目 —— 不掺合参数（用户口径）。
+    """候选集只筛「**根本不算建议**」的条目 —— 不掺合参数。
 
     参照系：``plan.collect_candidates`` 的候选口径：
-    没有推荐值 / 译不出业务字段名 ⇒ 不进；**「本机有没有这个字段的值」不在这里判**
+    没有推荐值 / 不是 ORM 工艺字段 ⇒ 不进；**「本机有没有这个字段的值」不在这里判**
     （本层不读参数集 ⇒ 是工艺量、但本机没值也照样进）。
     """
     candidates = collect_candidates([
-        _rec('IV0', 45.0),          # 算法名 → 业务名 ⇒ 进
-        _rec('HOLD', None),         # 没有推荐值 ⇒ 不进
-        _rec('NOT_A_PARAM', 1.0),   # 译不出业务字段名 ⇒ 不进
+        _rec('inj_spd_1', 45.0),      # 是工艺量 ⇒ 进
+        _rec('HOLD', None),           # 没有推荐值 ⇒ 不进
+        _rec('NOT_A_PARAM', 1.0),     # 不是 ORM 工艺字段 ⇒ 不进
     ])
 
     assert candidates.names == ('inj_spd_1',)
@@ -195,7 +195,7 @@ def test_layer2_does_not_check_local_value_presence():
     ⇒ ``inj_spd_2`` 是**工艺量**、但不在本机基线里 ⇒ 照常进候选、照常落地；
     第3层也**不做存在性兜底**（兜底 = 掩饰错误）。
     """
-    candidates = collect_candidates([_rec('IV1', 45.0)])   # inj_spd_2 ∉ BASE
+    candidates = collect_candidates([_rec('inj_spd_2', 45.0)])   # inj_spd_2 ∉ BASE
 
     # 第2层照样把它当候选
     assert candidates.names == ('inj_spd_2',)
@@ -212,12 +212,12 @@ def test_layer2_does_not_check_local_value_presence():
 def test_non_process_params_never_enter_candidates():
     """**不是工艺量的不进候选** ⇒ 下游不需要存在性兜底。
 
-    参照系：候选准入的判据 = **命名契约**（静态字段字典），不是本机现状 ⇒
-    ``IPOS`` / ``CUSION`` 这类规则库专用参数翻不出业务名 ⇒ 不进候选
+    参照系：候选准入的判据 = **ORM 字段字典**（静态字段定义），不是本机现状 ⇒
+    ``IPOS`` / ``CUSION`` 这类规则库专用参数不是工艺量 ⇒ 不进候选
     （否则它们会一路流到落库，把参数集写坏）。
     """
     candidates = collect_candidates([
-        _rec('IV0', 45.0),        # 算法名 → 业务名 ⇒ 进
+        _rec('inj_spd_1', 45.0),  # 是工艺量 ⇒ 进
         _rec('IPOS', 1.0),        # 规则库专用参数 ⇒ 不进
         _rec('CUSION', 2.0),      # 规则库专用参数 ⇒ 不进
     ])
@@ -260,7 +260,7 @@ def test_scenario_preferred_params_lead_the_order():
 
     plan, _outcome = _apply(
         BASE,
-        [_rec('DDAM', 5.0), _rec('MEL', 361.0)],
+        [_rec('pst_met_decomp_dist', 5.0), _rec('met_end_pos', 361.0)],
         table=table,
         strategy=scenario,
     )
@@ -283,7 +283,7 @@ def test_scenario_allowed_params_yield_the_rest():
 
     plan, outcome = _apply(
         BASE,
-        [_rec('MEL', 361.0), _rec('IV0', 45.0)],
+        [_rec('met_end_pos', 361.0), _rec('inj_spd_1', 45.0)],
         strategy=scenario,
     )
 
@@ -303,7 +303,7 @@ def test_scenario_max_items_overrides_call_level_limit():
 
     plan, _outcome = _apply(
         BASE,
-        [_rec('IV0', 45.0), _rec('CT', 18.0)],
+        [_rec('inj_spd_1', 45.0), _rec('cool_t', 18.0)],
         max_items=2,
         strategy=scenario,
     )
@@ -323,7 +323,7 @@ def test_kept_reasons_record_the_basis():
         reasons={'met_end_pos': '充填成形优先'},
     )
 
-    plan, _outcome = _apply(BASE, [_rec('MEL', 361.0)], table=table)
+    plan, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0)], table=table)
 
     assert plan.selection.kept_reasons['met_end_pos'] == '充填成形优先'
     assert 'kept_reasons' in plan.selection.to_trace()
@@ -334,7 +334,7 @@ def test_no_scenario_keeps_previous_behavior():
 
     参照系：``resolve_priority`` 的「无场景」口径。
     """
-    plan, _outcome = _apply(BASE, [_rec('MEL', 361.0), _rec('DDAM', 5.0)])
+    plan, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0), _rec('pst_met_decomp_dist', 5.0)])
 
     assert plan.selection.scenario_code == ''
     assert plan.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
@@ -382,7 +382,7 @@ def test_fill_target_replaces_mel_delta():
 
     plan, outcome = _apply(
         FILL_BASE,
-        [_rec('MEL', 361.0)],
+        [_rec('met_end_pos', 361.0)],
         strategy=scenario,
         context=context,
     )
@@ -403,7 +403,7 @@ def test_without_fill_target_mel_uses_delta():
 
     参照系：``anchors.resolve_mel_target`` 的两步式推算。
     """
-    plan, outcome = _apply(FILL_BASE, [_rec('MEL', 361.0)])
+    plan, outcome = _apply(FILL_BASE, [_rec('met_end_pos', 361.0)])
 
     assert plan.mel_targets == (361.0,)
     assert outcome.values['met_pos_1'] == pytest.approx(357.5)
@@ -411,12 +411,12 @@ def test_without_fill_target_mel_uses_delta():
 
 
 def test_layer2_gives_direction_not_landed_values():
-    """**第2层只给「方向 + 口径」，不求落地值**（用户口径）。
+    """**第2层只给「方向 + 口径」，不求落地值**。
 
     参照系：分层约定「**改成多少归第3层**」—— 第2层不碰参数
     ⇒ ``MEL`` 只以「目标值 + 口径」的形式带出去，不翻成计量位置。
     """
-    plan, _outcome = _apply(BASE, [_rec('MEL', 361.0)])
+    plan, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0)])
 
     # MEL 保留 ⇒ 带的是「目标值 + 口径」，不是「已翻好的计量位置」
     assert 'met_end_pos' in plan.kept
@@ -429,7 +429,7 @@ def test_layer2_carries_absolute_values_of_plain_fields():
 
     参照系：分层约定「非派生量不必等第3层」—— 只有派生量（MEL）才需换算。
     """
-    plan, outcome = _apply(BASE, [_rec('DDAM', 5.0)])
+    plan, outcome = _apply(BASE, [_rec('pst_met_decomp_dist', 5.0)])
 
     assert plan.assignments == (('pst_met_decomp_dist', 5.0),)
     assert plan.mel_targets == ()
@@ -460,7 +460,7 @@ def _feedback(defect='SHORTSHOT', actual_weight=None):
 def test_scenario_context_derives_fill_gap():
     """派生量：充填缺口 = 制品总重 − 实测重量。
 
-    参照系：``algorithms/decide_direction.py`` 的派生量口径。
+    参照系：``services/optimize_chain/decide_direction.py`` 的派生量口径。
     """
     context = build_scenario_context(
         _feedback(actual_weight=95.0),

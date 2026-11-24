@@ -39,11 +39,11 @@ from django.db.models import Max, Q
 from extensions.exceptions import (
     BizException, ERROR_ACCESS_DENIED, ERROR_DATA_NOT_FOUND, ERROR_ILLEGAL_ARGUMENT,
 )
-from process.algorithms.integrate_params import (  # 第3层：整合参数
+from .optimize_chain.integrate_params import (  # 第3层：整合参数
     integrate,
     numeric_snapshot,
 )
-from process.algorithms.check_params import validate  # 第4层：校验参数合理性
+from .optimize_chain.check_params import validate  # 第4层：校验参数合理性
 from process.exceptions import ERROR_PROCESS_ROUND_SEALED
 from process.models import ProcessParameter, ProcessCondition, TuningRecord
 from utils.db import build_filters, parse_ordering, paginate_queryset

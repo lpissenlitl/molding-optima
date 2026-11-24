@@ -37,15 +37,14 @@ class Diagnostic:
     内容结构也**保持原样** —— 黄金快照 `_golden_ABC.json` 会记录
     `_diagnostics` 的 repr，结构一变快照就 diff。
 
-    【注意】`selections` 是**后加的第三个容器**（决策级留痕，来源见
-    `process/algorithms/defect_selection.py`）：刻意**独立**于上面两个清单 ——
+    【注意】`selections` 是**第三个容器**（决策级留痕，来源见
+    `process/services/optimize_chain/defect_selection.py`）：刻意**独立**于上面两个清单 ——
     它们是「规则级诊断」，它是「决策级留痕」，性质不同；
     且**不动**那两个 ⇒ 黄金快照仍然零差异。
 
-    【注意】`over_limits` 是**后加的第四个容器**（**输入体检级**留痕，来源见
-    `process/algorithms/fuzzy/over_limit.py`）：性质与上面三个都不同 ——
-    上面三个是「本次推荐**怎么算出来**的」，它是「**进来的参数本身**合不合规」；
-    同样刻意独立、且**不动**前面三个 ⇒ 黄金快照仍然零差异。
+    【注意】**算法层不判入参合规**：越限识别与拒绝在 service 层
+    （``services/shared/param_limits.py``）⇒ 不设「进来的参数合不合规」这类
+    输入体检留痕。
     """
 
     # 字段定性降级清单（每层一条）+ 机台物理上限裁剪记录
@@ -54,12 +53,10 @@ class Diagnostic:
     diagnostics: List[Dict[str, Any]] = field(default_factory=list)
     # 决策级留痕清单（本轮选了哪个缺陷 / 依据是什么）
     selections: List[Dict[str, Any]] = field(default_factory=list)
-    # 输入体检清单（当前值超设备上限的记录）—— **只识别，不处理**
-    over_limits: List[Dict[str, Any]] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         return (not self.field_reports and not self.diagnostics
-                and not self.selections and not self.over_limits)
+                and not self.selections)
 
     def to_payload(self) -> Dict[str, Any]:
         """→ 结构化日志的载荷（纯 dict，可 JSON 序列化）。"""
@@ -68,7 +65,6 @@ class Diagnostic:
             'field_reports': list(self.field_reports),
             'diagnostics': list(self.diagnostics),
             'selections': list(self.selections),
-            'over_limits': list(self.over_limits),
         }
 
     def emit(self) -> None:

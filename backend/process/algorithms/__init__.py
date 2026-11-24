@@ -1,8 +1,7 @@
 """AI 推理类算法库。
 
 本目录（process/algorithms/）是 process app 下所有 AI 推理类算法的统一实现库。
-物理位置统一（平铺），通过 algorithm_type 字段区分业务场景。
-子模块按 algorithm_type 分类：
+通过 algorithm_type 字段区分业务场景，子模块按 algorithm_type 分类：
 - 'optimization' 类型（通过 AlgorithmRegistry 编排 chain）：
     - fuzzy/         algorithm_subtype='fuzzy'
     - llm/           algorithm_subtype='llm'
@@ -11,6 +10,10 @@
     - expert/        algorithm_subtype='expert'
 - 'mining' 类型（未来由独立 service 编排）：
     - mining/        含 rule_miner.py（algorithm_subtype='rule_miner'）
+
+**例外**：``common/`` **不是算法子包** —— 它不注册任何 algorithm_type，
+是被多条算法线与 service 层共同引用的**跨算法线公共底座**（详见
+``common/__init__.py``）；不要把它当成一条算法线。
 
 注意：
 - 子模块在 __init__ 中显式 import 是为了触发 AlgorithmRegistry.register
@@ -21,56 +24,34 @@
 
 
 ================================================================================
-调参链的 4 层（用户口径）
+本目录只放「算法」与「跨算法线公共件」
 ================================================================================
 
-本目录里的**四个平级模块**就是调参链的 4 层，每层只回答一个问题，
-依赖**单向**（``anchors ← decide_direction ← integrate_params ← check_params``）：
-
-==============  ==============================  ==============================
-层              模块                            回答什么
-==============  ==============================  ==============================
-第1层           各算法包（fuzzy/llm/empirical） 算法给出调整方向（平级建议）
-第2层           ``decide_direction.py``         按调机策略筛规则，给出**明确的**调整计划
-第3层           ``integrate_params.py``         整合参数（物理上自洽）
-第4层           ``check_params.py``             校验参数合理性（**只读**，不改值）
-底座            ``anchors.py``                  字段口径 + 锚点关系（只定义一次）
-==============  ==============================  ==============================
-
-**service 层把它们串成直线**（每层一次调用）：
-
-.. code-block:: python
-
-    # 第2层：按调机策略筛规则，给出明确的调整计划
-    #   from process.algorithms.decide_direction import build_plan
-    plan = build_plan(candidates, targets, ...)
-
-    # 第3层：整合参数（写入方向 + 锚点传导自洽）
-    #   from process.algorithms.integrate_params import apply_plan
-    integrated = apply_plan(baseline, plan, previous=baseline)
-
-    # 第4层：校验参数合理性（只报不阻断）
-    #   from process.algorithms.check_params import validate
-    validation = validate(integrated.values)
-
-【注意】**红线**：业务判断（场景是什么 / 调哪些 / 按什么次序 / 留几个）必须是**数据**
-（策略清单文件 ``tuning_strategy.py``），代码只负责读 + 匹配 + 裁决；
-**第2层不碰参数** —— 物理算式（充填量→行程、MEL 目标→计量位置）落在**第3层**
-（要拿现状参数（旧值）才能算）；「是不是工艺量」在**候选准入**判（命名契约：
-静态字段字典）⇒ 不是工艺量的**不进候选**，不靠下游兜底
-⇒ 第2层的入参只有三类：**候选建议 + 实际情况 + 策略数据**。
-
-**根目录其它文件**（不属于 4 层链路）：
+**调参链的 4 层不在本目录** —— L2 裁决 / L3 整合 / L4 校验 + 底座 ``anchors``
++ 两份配套（``tuning_strategy`` / ``defect_selection``）是**优化链路的编排与
+领域计算**，不是 AI 推理算法 ⇒ 住在 ``process/services/optimize_chain/``
+（见该包的 docstring，含 4 层链路表与红线）。
 
 =============================  ==============================================
-文件                           职责
+文件 / 目录                     职责
 =============================  ==============================================
 ``base.py``                    算法包基类 + 注册中心（``AlgorithmRegistry``）
-``field_contract.py``          算法入参契约机制（字段字典 ⊥ 校验机制分离）
-``material_physics.py``        材料物理常量 + 派生公式（专家/模糊共用）
-``defect_selection.py``        缺陷选取（唯一入口：service 预处理层）
-``tuning_strategy.py``        策略清单（文件版）：第2层的规则来源
+``common/``                    跨算法线公共底座（**不是算法子包**）：
+                               ``field_contract.py`` 算法入参契约机制
+                               ``material_physics.py`` 材料物理常量 + 派生公式
+``fuzzy/`` 内的算法命名空间：  ``field_names.py`` 字段名映射（业务 ↔ 算法）
+                               ``device_limits.py`` 算法族表（区间类型 + 查表 + 跨命名空间翻译）
 =============================  ==============================================
+
+【注意】**``common/`` 全目录零外部依赖** —— 每个模块都只 import
+同包相对模块或标准库，**不 import 任何算法包 / Django / ORM** ⇒ 依赖方向恒为
+「算法包 / service 层 → common」⇒ 公共底座**不反向依赖任何算法线**
+⇒ **无循环导入风险**。
+
+【注意】**根目录只留 ``base.py``**：它是 ``algorithm_type`` /
+``algorithm_subtype`` 的**标注处**（=「算法是什么」的定义），也是本包的门面
+（``__all__`` 导出 3 个符号）⇒ 必须住在根。其余件要么是算法子包，要么归
+``common/`` ⇒ **看文件落在哪，就知道它是不是算法**（无歧义）。
 """
 
 from .base import AlgorithmBase, AlgorithmRegistry, AlgorithmRecommendation

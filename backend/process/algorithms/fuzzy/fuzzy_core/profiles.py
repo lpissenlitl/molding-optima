@@ -120,12 +120,12 @@ class KeywordProfile:
     domain_source : str
         **论域边界**（`min_val` / `max_val`）的来源标记（可选）：
 
-        - ``'device'`` —— 设备实测可设上限（设定值类）
-        - ``'stroke'`` —— 设备实测最大注射行程（位置类）
+        - ``'device'`` —— 机台可设上限（service 层 ``LIMIT_SOURCES`` 声明的
+          那个能力项；**所有参数一视同仁**，位置参数与压力 / 速度参数同构）
         - ``'material'`` —— 材料温度区间（温度类）
         - ``'experience_domain'`` —— RuleKeyword 经验域（**本轮无权威源**）
         - ``'kept_experience_domain'`` —— 权威源已拿到但**守卫拒绝**
-          （H1：设备上限 < 当前值 / G6：当前值超行程）⇒ 保留经验域
+          （H1：当前值 > 它的可设上限）⇒ 保留经验域
         - ``'guessed'`` —— 整段论域由引擎按当前值**推测**
         - 空串 = 未标注
 

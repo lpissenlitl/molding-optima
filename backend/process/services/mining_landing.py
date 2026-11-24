@@ -15,7 +15,7 @@
 
     翻译要解决三件事：
     1. **命名空间**：业务字段名 → 算法字段名（``inj_pres_1`` → ``IP0``，
-       走 `fuzzy.field_names.to_algo_name`）
+       走 `algorithms.fuzzy.field_names.to_algo_name`）
     2. **档位**：变更**前**的参数值落在哪一档 —— 用 `RuleKeyword` 的量程
        （range_min/range_max）与该字段自己的档位词表算，不做
        「increase ⇒ 偏低」的反推假设（反推会把「已经很高还在调高」
@@ -299,7 +299,7 @@ def _build_one_rule(
             'reason': '参数无算法命名空间',
             'detail': (
                 f'参数 {param} 在模糊规则命名空间里没有对应字段名'
-                f'（`fuzzy.field_names` 未收录），无法生成条件与动作'
+                f'（`algorithms.fuzzy.field_names` 未收录），无法生成条件与动作'
             ),
         }
 

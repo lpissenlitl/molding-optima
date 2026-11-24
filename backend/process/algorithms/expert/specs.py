@@ -16,7 +16,7 @@
 
 from typing import Any, Dict, Tuple
 
-from ..field_contract import (
+from ..common.field_contract import (
     audit_field_completeness,
     derive_required_fields,
     drive_system_to_power_method,
@@ -55,13 +55,17 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
     },
 
     # 塑化与注射能力（设备极限）
+    # 【注意】**必填**：行程是**螺杆可推进的物理位移上限** ——
+    #    螺杆从最大位置（行程）回退到计量终止位置（MEL）的位移 = 消耗的物料量；
+    #    MEL 超行程 ⇒ 这个产品在这台设备上打不出来 ⇒ 位置类参数没有物理
+    #    天花板可言 ⇒ 缺失即报错，不猜。
     'max_injection_stroke': {
         'source_model': 'InjectionUnit',
         'source': 'InjectionUnit.max_injection_stroke',
         'attr_name': 'max_injection_stroke',
-        'desc': '最大注射行程 [mm]',
+        'desc': '最大注射行程 [mm]（螺杆向前推进的最大距离；螺杆从最大位置回退到计量终止位置的位移 = 消耗的物料量）',
         'type': float,
-        'condition': '可选',
+        'condition': '必填',
     },
     'max_injection_pressure': {
         'source_model': 'InjectionUnit',
@@ -150,9 +154,9 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'type': float,
         'condition': '必填',
     },
-    'max_set_injection_velocity': {
+    'max_set_injection_speed': {
         'source_model': 'InjectionUnit',
-        'source': 'InjectionUnit.max_set_injection_speed',  # ORM 用 _speed
+        'source': 'InjectionUnit.max_set_injection_speed',
         'attr_name': 'max_set_injection_speed',
         'desc': '最大可设定注射速度 [mm/s]（HMI）',
         'type': float,
@@ -170,9 +174,9 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'type': float,
         'condition': '必填',
     },
-    'max_set_holding_velocity': {
+    'max_set_holding_speed': {
         'source_model': 'InjectionUnit',
-        'source': 'InjectionUnit.max_set_holding_speed',  # ORM 用 _speed
+        'source': 'InjectionUnit.max_set_holding_speed',
         'attr_name': 'max_set_holding_speed',
         'desc': '最大可设定保压速度 [mm/s]（HMI）',
         'type': float,
@@ -194,9 +198,9 @@ MACHINE_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
         'type': float,
         'condition': '液压机必填',
     },
-    'max_set_decompression_velocity': {
+    'max_set_decompression_speed': {
         'source_model': 'InjectionUnit',
-        'source': 'InjectionUnit.max_set_decompression_speed',  # ORM 用 _speed
+        'source': 'InjectionUnit.max_set_decompression_speed',
         'attr_name': 'max_set_decompression_speed',
         'desc': '最大可设定松退速度 [mm/s]（HMI）',
         'type': float,
@@ -299,7 +303,7 @@ POLYMER_INFO_FIELDS: Dict[str, Dict[str, Any]] = {
 #   - attr_name: ORM 属性名（计算字段时为 None，service 层特殊处理）
 #   - condition: "必填" / "液压机必填" / "条件必填" / "可选" / "推荐"
 #   - condition_when: 条件必填的触发条件字典
-# service 层 spec_extract.build_mold_info_from_snapshot 按 (source_model, attr_name) 通用提取，
+# service 层 shared/spec_extract.build_mold_info_from_snapshot 按 (source_model, attr_name) 通用提取，
 # 特殊 case（如 Gate.outer_diameter / 2）针对字段写代码处理
 MOLD_INFO_SPEC: Dict[str, Dict[str, Any]] = {
     # ---- Mold ORM 主表字段 ----
@@ -438,9 +442,9 @@ MOLD_INFO_SPEC: Dict[str, Dict[str, Any]] = {
 
 # ---- 派生：单一数据源原则 ----
 # 通用机制（condition 求值 / 必填集派生 / 完整性核查 / 驱动形式标准化）已下沉到
-# algorithms/field_contract.py —— 那是与具体算法无关的纯函数，各算法只保留自己的字段字典。
+# algorithms/common/field_contract.py —— 那是与具体算法无关的纯函数，各算法只保留自己的字段字典。
 # 本文件 re-export 仅为兼容既有调用方（data_validator / initializer 都从 specs 取这些名字）；
-# 新代码请直接 import algorithms.field_contract，不要再经由某个算法包转发。
+# 新代码请直接 import algorithms.common.field_contract，不要再经由某个算法包转发。
 # 各算法包之间不互相 import，各自维护自己的字段字典与契约。
 
 # 单一数据源：自动从 mapping.condition 派生
@@ -449,7 +453,7 @@ REQUIRED_MACHINE_FIELDS: Tuple[str, ...] = derive_required_fields(MACHINE_INFO_F
 REQUIRED_POLYMER_FIELDS: Tuple[str, ...] = derive_required_fields(POLYMER_INFO_FIELDS)
 
 
-# 字段完整性校验与字段转换函数：见 algorithms/field_contract.py
+# 字段完整性校验与字段转换函数：见 algorithms/common/field_contract.py
 #（通用机制，非 expert 专属；本文件只定 expert 自己的字段字典）
 
 
@@ -462,7 +466,7 @@ __all__ = [
     "REQUIRED_MOLD_INFO_FIELDS",
     "REQUIRED_MACHINE_FIELDS",
     "REQUIRED_POLYMER_FIELDS",
-    # 以下为 algorithms/field_contract.py 的 re-export（兼容旧调用方，非本文件定义）
+    # 以下为 algorithms/common/field_contract.py 的 re-export（兼容旧调用方，非本文件定义）
     "audit_field_completeness",
     "drive_system_to_power_method",
 ]

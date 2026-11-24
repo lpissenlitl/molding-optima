@@ -169,11 +169,11 @@ class OptimizeMachineInfoSchema(BaseSchema):
     （无对应规则参数族，不参与判级论域）；
     max_set_metering_pressure / max_set_metering_back_pressure 是「液压机必填」
     （全电机 HMI 物理上无此栏，缺失属正常）；
-    其余 5 个（注射压力/速度、保压压力/速度、螺杆转速）是「必填」
+    其余 6 个（注射压力/速度、保压压力/速度、螺杆转速、**最大注射行程**）是「必填」
     ——缺上界不是精度下降，而是判级错误。
     【注意】**单位不在算法层考虑**：这里取的就是**界面值**（HMI 面板显示上限），
-    算法侧直接用，**不做单位换算、不做单位一致性校验**（用户口径：
-    「我们取的就是界面值，不需要关心单位」）。ORM 字段声明的单位仅作字段描述用。
+    算法侧直接用，**不做单位换算、不做单位一致性校验**。ORM 字段声明的单位仅作
+    字段描述用。
 
     """
 
@@ -194,6 +194,15 @@ class OptimizeMachineInfoSchema(BaseSchema):
     max_set_screw_rotation_speed: Optional[float] = Field(None, description="最大可设定螺杆转速（HMI 界面值）")
     max_set_decompression_pressure: Optional[float] = Field(None, description="最大可设定松退压力（HMI 界面值）")
     max_set_decompression_speed: Optional[float] = Field(None, description="最大可设定松退速度（HMI 界面值）")
+
+    # --- 设备实测能力（InjectionUnit「行程」段）：位置类判级论域上界的唯一权威源 ---
+    # 【注意】**必填**：行程缺失 ⇒ 位置类判级区间没有上界 ⇒
+    # 「充填量第一优先」的规则失活 ⇒ 契约层直接报错（400），不回落经验论域。
+    # 【注意】**必须在这里声明**：BaseSchema 是 ``extra="ignore"``
+    # ⇒ 未声明的字段会被**静默丢弃** ⇒ 契约层会误判「缺行程」。
+    max_injection_stroke: Optional[float] = Field(
+        None, description="最大注射行程 [mm]（螺杆向前推进的最大距离）",
+    )
 
 
 class OptimizePolymerInfoSchema(BaseSchema):

@@ -2,9 +2,10 @@
 """案例导出工具（开发期）—— 从生产库抽一个业务案例，固化成可离线复现的 JSON。
 
 【注意】**这是开发期工具，不是运行时组件**：
-   它 import 了 service 层（`process.services.spec_extract`）来还原
-   「机台 / 材料 / 模具 / 工艺参数」的真实抽取口径 ——
-   算法包内的**运行时**代码不依赖 service 层（依赖方向：service → algorithm）。
+   它 import 了 service 层（``process.services.shared.spec_extract`` /
+   ``param_limits``）来还原「机台 / 材料 / 模具 / 工艺参数」的真实抽取口径
+   与**设备上限表** —— 算法包内的**运行时**代码不依赖 service 层
+   （依赖方向：service → algorithm）。
    本脚本只是站在 service 那一侧取数，产出数据后即可删掉。
 
 用法：
@@ -34,13 +35,13 @@ django.setup()
 
 from process.models.tuning_record import TuningRecord  # noqa: E402
 from process.models.rules import RuleKeyword  # noqa: E402
-from process.services.spec_extract import (  # noqa: E402
+from process.services.shared.spec_extract import (  # noqa: E402
     extract_machine_info,
     extract_mold_info,
     extract_polymer_info,
 )
-from process.algorithms.fuzzy import field_names  # noqa: E402
-from process.algorithms.defect_selection import select_defect  # noqa: E402
+from process.services.shared.param_limits import build_limits  # noqa: E402
+from process.services.optimize_chain.defect_selection import select_defect  # noqa: E402
 from process.algorithms.fuzzy.engine import FuzzyEngine  # noqa: E402
 from process.algorithms.fuzzy.fuzzy_core.rules_filter import (  # noqa: E402
     build_rule_objects,
@@ -96,7 +97,12 @@ def main():
         'process_parameter': baseline,
     }
     algo_context = dict(biz_context)
-    algo_context['process_parameter'] = field_names.to_algo_params(baseline)
+    # 设备上限表：**service 层取值**（算法层只收表，不碰 ORM 字段名）——
+    # 与生产链路（``parameter_optimize._compose_algorithm_context``）同一口径。
+    # 【注意】**只有一张表**：位置参数与压力 / 速度参数同构 ⇒ 全部参数走
+    # 同一条判定路径（上限取自哪个设备字段，由 service 层配置决定）。
+    # 【注意】**传的是业务键区间表** ⇒ 「业务键 → 算法族」由引擎内部翻译。
+    algo_context['param_limits'] = build_limits(machine_info)
 
     # ---------------- 3) 规则（生产路径取出） ----------------
     # 缺陷选取：与生产路径同一份实现（默认策略 = 阶段序），
@@ -132,7 +138,6 @@ def main():
     for r in recs:
         expected_recs.append({
             'param_name': r.param_name,
-            'business_param_name': field_names.to_business_name(r.param_name),
             'current_value': r.current_value,
             'recommended_value': r.recommended_value,
             'confidence': r.confidence,

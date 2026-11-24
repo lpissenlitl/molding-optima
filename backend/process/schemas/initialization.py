@@ -30,14 +30,34 @@ class MachineInfoSchema(BaseSchema):
     )
 
     # === 注射单元（扁平化，原 InjectionUnitSchema 内容）===
+    # 【注意】**字段名一律用 ORM 真名**（``InjectionUnit`` 的属性名）：
+    #    「设备 HMI 可设定上限」这组字段是**设备能力事实**，与调优接口
+    #    （``OptimizeMachineInfoSchema``）、ORM、``common/device_limits.py``
+    #    **同名** ⇒ 一台机器的同一能力，全项目只有一个名字。
+    # 【注意】**HMI 可设定上限字段集合与调优侧一致**（9 个 ``max_set_*``）——
+    #    少声明会被 ``extra="ignore"`` **静默丢弃** ⇒ 专家契约要求的
+    #    「液压机必填」字段传不进去 ⇒ 直接报缺失。
+    #    （末尾的 ``max_injection_stroke`` 是**实测能力**，不在 ``max_set_*`` 组内。）
     screw_diameter: Optional[float] = Field(None, description="螺杆直径 (mm)")
     max_set_injection_pressure: Optional[float] = Field(None, description="最大设定注射压力")
-    max_set_injection_velocity: Optional[float] = Field(None, description="最大设定注射速度")
+    max_set_injection_speed: Optional[float] = Field(None, description="最大设定注射速度")
     max_set_holding_pressure: Optional[float] = Field(None, description="最大设定保压压力")
-    max_set_holding_velocity: Optional[float] = Field(None, description="最大设定保压速度")
-    max_set_screw_rotation_speed: Optional[float] = Field(None, description="最大设定螺杆转速")
+    max_set_holding_speed: Optional[float] = Field(None, description="最大设定保压速度")
     max_set_metering_pressure: Optional[float] = Field(None, description="最大设定计量压力")
+    max_set_metering_back_pressure: Optional[float] = Field(None, description="最大设定计量背压")
+    max_set_screw_rotation_speed: Optional[float] = Field(None, description="最大设定螺杆转速")
+    max_set_decompression_pressure: Optional[float] = Field(None, description="最大设定松退压力")
+    max_set_decompression_speed: Optional[float] = Field(None, description="最大设定松退速度")
     nozzle_type: Optional[str] = Field(None, description="喷嘴类型：直通型/锁定型")
+
+    # === 设备实测能力：最大注射行程（螺杆可推进的物理位移上限）===
+    # 【注意】**必填**：计量终止位置（MEL）超行程 ⇒ 产品在这台设备上
+    # 打不出来 ⇒ 位置类参数无物理天花板 ⇒ 契约层直接报错，不猜。
+    # 【注意】**必须在这里声明**：BaseSchema 是 ``extra="ignore"``
+    # ⇒ 未声明的字段会被**静默丢弃** ⇒ 契约层会误判「缺行程」。
+    max_injection_stroke: Optional[float] = Field(
+        None, description="最大注射行程 [mm]（螺杆向前推进的最大距离）",
+    )
 
 
 class PolymerInfoSchema(BaseSchema):

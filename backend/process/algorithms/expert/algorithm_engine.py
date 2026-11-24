@@ -1372,7 +1372,7 @@ class AlgorithmEngine:
         计算松退速度（3 维物理化推导）
 
         推导公式：
-            V = max_set_decompression_velocity × family_velo_factor × nozzle_velo_factor
+            V = max_set_decompression_speed × family_velo_factor × nozzle_velo_factor
             V = clamp(V, min_velo, max_velo)
 
         物理依据：详见设计文档
@@ -1403,7 +1403,7 @@ class AlgorithmEngine:
         # 液压机分支
         if mach is None:
             mach = {}
-        max_decomp_velo = mach.get('max_set_decompression_velocity') or 50.0
+        max_decomp_velo = mach.get('max_set_decompression_speed') or 50.0
 
         # 1. family 速度因子（3 级兑底）
         family_velo_map = c_suck.get('family_velo_factor', {})
@@ -2050,7 +2050,7 @@ class AlgorithmEngine:
 
         # ========== 注射参数 ==========
         max_inj_pres = mach['max_set_injection_pressure']  # 必填，audit 兑底
-        max_inj_velo = mach['max_set_injection_velocity']  # 必填，audit 兑底
+        max_inj_velo = mach['max_set_injection_speed']  # 必填，audit 兑底
 
         # 【重构】注射压力 = 材料黏度等级 × 流长比修正（二维物理推导）
         # 推导链：流变学定律 → 材料黏度等级（base_ratio） × 流长比修正（length_factor）
@@ -2198,7 +2198,7 @@ class AlgorithmEngine:
         # ========== 保压参数 ==========
         # 必填字段，audit 兑底
         max_hold_pres = mach['max_set_holding_pressure']
-        max_hold_velo = mach['max_set_holding_velocity']
+        max_hold_velo = mach['max_set_holding_speed']
 
         # 【重构】保压压力 = 注射压力 × 材料相对保压比例 × 壁厚修正 × 浇口修正 × 流道修正
         # 推导链：保压是注射的延续 → 材料黏度等级 × 几何修正（壁厚/浇口） × 流道状态 → 安全钳制

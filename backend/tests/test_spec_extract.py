@@ -1,4 +1,4 @@
-"""参数提取专区（``process.services.spec_extract``）的护栏 + **等价性基线**。
+"""参数提取专区（``process.services.shared.spec_extract``）的护栏 + **等价性基线**。
 
 公共模块按「两条链路各自形态」并列提供提取函数（ORM 直取 / 快照取数），
 **刻意不做统一** ⇒ 这些用例锁两件事：
@@ -36,7 +36,7 @@ from process.algorithms.fuzzy.specs import (
     OPTIMIZE_MOLD_INFO_FIELDS,
     OPTIMIZE_POLYMER_INFO_FIELDS,
 )
-from process.services.spec_extract import (
+from process.services.shared.spec_extract import (
     _assert_known_sources,
     build_machine_info_from_snapshot,
     build_mold_info_from_snapshot,
