@@ -49,29 +49,33 @@ L3（及 L2 / L4 / 底座 `anchors` / 两份配套）属**优化链路的编排�
 `docs/algorithm-layering-plan.md` 的「路径变更公告」（含旧→新路径对照表）。
 
 ⇒ **同批附带**：公共底座的反向依赖一并解除 —— 设备侧上限事实
-从 `fuzzy/specs.py` 拆到 `algorithms/common/device_limits.py`
+从 `fuzzy/specs.py` 拆到算法层（**2026-11-24 收口后归 `algorithms/fuzzy/device_limits.py`**）
 ⇒ `algorithms/common/` **全目录零外部依赖**（不 import 任何算法包）
-⇒ **依赖方向恒为「算法包 / service 层 → common」，**循环导入根源消除**。
+⇒ **依赖方向恒为「算法包 / service 层 → common」，**循环导入根源消除。
 
 ⇒ **同批附带（第三批 · 本轮）**：**上限链路按「契约 / 取值 / 校验」三层归位**
 （用户口径：「算法根本就不知道我们程序是否有这些字段，这些是 service 的 model
-层面定义的……我认为这里的参数上限校验，应该由 service 完成」）：
+层面定义的……我认为这里的参数上限校验，应该由 service 完成」）
+**（2026-11-24 收口后：三层并成两层 —— 契约件在算法层 `algorithms/fuzzy/`，
+取值 + 校验全在 service 层 `services/shared/param_limits.py` 一个模块）**：
 
-- **查表 + 字段映射**（算法层）→ `algorithms/common/device_limits.py`
-  （**第七批已瘦身**：只剩 `param_family` / `lookup_limit`；原
-  `PARAM_LIMIT_FIELDS` / `POSITION_LIMIT_FIELDS` / `STROKE_FIELD` **已移 service 层**
+- **查表 + 字段映射 + 跨命名空间翻译**（算法层）→ `algorithms/fuzzy/device_limits.py`
+  （**第七批已瘦身**、**收口再瘦身**：只剩 `param_family` / `lookup_limit` /
+  `to_family_limits`；原 `PARAM_LIMIT_FIELDS` / `POSITION_LIMIT_FIELDS` /
+  `STROKE_FIELD` **已移 service 层**
   —— 算法层**不知道**参数有没有上下限）与
-  `algorithms/common/field_names.py`（新增 `to_algo_family`：业务参数键 → 算法族前缀）；
-- **来源声明 + 取值**（service）→ `services/shared/setting_limits.py`
-  （`LIMIT_SOURCES` 唯一真相源 + **派生族视图**
-  `SETTING_FAMILY_LIMIT_FIELDS` / `POSITION_FAMILY_LIMIT_FIELDS` +
-  `resolve_param_limits` / `resolve_stroke_limit` —— **第六批已去重**：
-  位置类上限不再另抄一张表，**只给行程标量**）；
-- **组装 + 识别 + 拦截**（service）→ `services/shared/over_limit.py`
-  （**第五批已合并**：识别 + 拦截 + 文案同一个文件；**第六批**新增
-  `expand_position_limits` —— 按 service 层族视图把行程标量展开成位置类上限表；
-  拦截层**只收两张表**：入参表 + 上限表，不碰 `machine_info` ⇒ 它不需要知道
-  「哪台机器」）。
+  `algorithms/fuzzy/field_names.py`（新增 `to_algo_family`：业务参数键 → 算法族前缀）；
+- **来源声明 + 取值 + 组装 + 识别 + 拦截 + 文案**（service，**一个模块**）
+  → `services/shared/param_limits.py`
+  （`LIMIT_SOURCES` 唯一真相源 + `build_limits` 出业务键区间表 +
+  `to_upper_limits` 取上界 + `find_over_limits` / `guard_parameter_limits` /
+  `detect_over_limits` + `OverLimit` / `OverLimitItem` + 文案函数；
+  **原 `setting_limits.py` 与 `over_limit.py` 已并入本文件**；
+  原 `SETTING_FAMILY_LIMIT_FIELDS` / `POSITION_FAMILY_LIMIT_FIELDS` /
+  `resolve_param_limits` / `resolve_stroke_limit` / `expand_position_limits` **已删**
+  —— 位置类上限不再另抄一张表，行程标量经 `LIMIT_SOURCES` 的 `max_injection_stroke`
+  统一出表；拦截层**只收两张表**：入参表 + 上限表，不碰 `machine_info`
+  ⇒ 它不需要知道「哪台机器」）。
 
 ⇒ 算法层**不再判入参超限**（`fuzzy/engine.py` 的「0) 输入体检」整块删除），
 设备上限表经 `context` 传入 ⇒ 算法层不碰 ORM 字段名。
@@ -144,7 +148,7 @@ L3（及 L2 / L4 / 底座 `anchors` / 两份配套）属**优化链路的编排�
   3. 硬路由只作用于缺陷维、不波及参数维门控 —— 是否认可？
   4. 纯缺陷维规则（如 `IF SHORTSHOT_low THEN BT1_add_1`，无参数前件）该保留吗？
 - **影响面**：现状跨档规则 raw=0.135335 仍被放行 ⇒ 低档 / 中档规则会混入输出。
-- **关联代码**：`backend/process/algorithms/fuzzy/fuzzy_core/nets.py`（缺陷维 τ 判定）、`algorithms/fuzzy/library/` 规则组装层
+- **关联代码**：`backend/process/algorithms/fuzzy/fuzzy_core/models/nets.py`（缺陷维 τ 判定）、`algorithms/fuzzy/library/` 规则组装层
 
 ### Q11 · 挖掘置信度 / `lift` 未进推理（参数优先级机制）
 
@@ -156,7 +160,7 @@ L3（及 L2 / L4 / 底座 `anchors` / 两份配套）属**优化链路的编排�
   3. `iteration`（轮次）要不要进 Apriori 的关联维度？
   4. `lift` / `support` 怎么映射到有效性度量（`lift` 无限界需归一化）？
 - **影响面**：挖掘出的有效性在推理侧完全不可见。
-- **关联代码**：`backend/process/services/mining_landing.py`、`algorithms/fuzzy/library/adapters.py`、`fuzzy_core/nets.py`
+- **关联代码**：`backend/process/services/mining_landing.py`、`algorithms/fuzzy/library/adapters.py`、`fuzzy_core/models/nets.py`
 
 ---
 

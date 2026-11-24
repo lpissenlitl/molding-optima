@@ -1,17 +1,21 @@
 # 算法分层改造计划（`_infer_kernel` 编排层）
 
-> **状态：未拍板。**
-> 本文所有方向、分层判定与阶段切分均**未经用户确认**，**不得据此实施**。
-> 本文的唯一用途是**供用户逐条审阅与批注**（用户原话：「我建议你先写个plan文档，我好检查」）。
-> 审阅通过后，需要把「已拍板」的结论回写进本文，再按 §七 的顺序逐阶段开工。
+> **状态：已实施完成（2026-11-24）。**
+> 本文原为「待审阅的方案」，逐条拍板后已全部落地 —— 分层判定、目录归位、
+> 命名空间收口均已实施；**当前路径以下方「路径变更公告」的最终形态为准**。
+> 验收：`pytest tests` **290 passed**（含本轮新增护栏）。
 
 ---
 
-## ⚠️ 路径变更公告（2026-11-23 · 目录归位）
+## ⚠️ 路径变更公告（2026-11-23 · 目录归位；2026-11-24 · 收口定稿）
 
 > **本文正文里的 `algorithms/xxx.py` 路径已随本次归位失效**，阅读时按下表换算。
+> 下表是**最终形态**（2026-11-24 收口后）：算法命名空间只活在 `algorithms/fuzzy/`；
+> 限值域归并为 `services/shared/param_limits.py` **一个模块**（零算法层依赖）。
+> （表内旧路径均**相对 `backend/process/`**；正文若写作 `backend/process/algorithms/xxx.py`，
+> 同样按下表换算 —— 前缀已含。）
 
-| 旧路径 | 新路径 |
+| 旧路径 | 新路径（最终形态） |
 |---|---|
 | `algorithms/anchors.py` | `services/optimize_chain/anchors.py` |
 | `algorithms/decide_direction.py` | `services/optimize_chain/decide_direction.py` |
@@ -19,15 +23,44 @@
 | `algorithms/check_params.py` | `services/optimize_chain/check_params.py` |
 | `algorithms/tuning_strategy.py` | `services/optimize_chain/tuning_strategy.py` |
 | `algorithms/defect_selection.py` | `services/optimize_chain/defect_selection.py` |
-| `algorithms/field_names.py` | `algorithms/common/field_names.py` |
-| `algorithms/over_limit.py` | `services/shared/over_limit.py`（**第三批再迁**：识别归 service；**第五批再合**：拦截也并进来） |
+| `algorithms/field_names.py` | `algorithms/fuzzy/field_names.py`（算法命名空间只在 fuzzy 内成立） |
 | `algorithms/field_contract.py` | `algorithms/common/field_contract.py` |
 | `algorithms/material_physics.py` | `algorithms/common/material_physics.py` |
-| `algorithms/fuzzy/specs.py` 的设备侧上限**契约**件 | `algorithms/common/device_limits.py`（**第七批再瘦身**：只留查表「怎么用一张上限表查某个参数」；「哪个族要哪个设备字段」的**来源声明归 service 层**） |
-| 设备上限**来源声明 + 取值**（从 `machine_info` 挖值） | `services/shared/setting_limits.py`（**service 层**；**第七批**：上限来源声明也归此处，算法层只做字段映射） |
-| `services/over_limit_guard.py` | **已合并进** `services/shared/over_limit.py`（**第五批**：识别 + 拦截合一） |
+| `algorithms/fuzzy/specs.py` 的设备侧上限**契约**件 | `algorithms/fuzzy/device_limits.py`（只留查表 + 跨命名空间翻译） |
+| 设备上限**来源声明 + 取值 + 组装 + 识别 + 拦截 + 文案**（从 `machine_info` 挖值） | `services/shared/param_limits.py`（**唯一一张限值域模块**） |
+| `algorithms/over_limit.py` | `services/shared/param_limits.py`（识别 + 拦截 + 文案，与越限守卫合并成一个模块） |
+| `algorithms/common/over_limit.py` | **已并入** `services/shared/param_limits.py`（中途暂存于 common，最终归 service 层单模块） |
+| `services/over_limit_guard.py` | **已合并进** `services/shared/param_limits.py` |
+| `services/strategy_inputs.py` | `services/optimize_chain/tuning_strategy.py` |
 | `services/spec_extract.py` | `services/shared/spec_extract.py` |
 | `services/optimize_common.py` | `services/shared/param_naming.py`（同时改名） |
+| `algorithms/common/field_names.py` | `algorithms/fuzzy/field_names.py`（中途暂存于 common，最终归 fuzzy） |
+| `algorithms/common/device_limits.py` | `algorithms/fuzzy/device_limits.py`（同上） |
+| `algorithms/common/limit_mapping.py` | **已并入** `algorithms/fuzzy/device_limits.py::to_family_limits` |
+| `services/shared/setting_limits.py` | **已并入** `services/shared/param_limits.py` |
+| `services/shared/over_limit.py` | **已并入** `services/shared/param_limits.py` |
+
+**符号级换算**（正文里出现的旧符号名）：
+
+| 旧符号 | 现位置 / 现状 |
+|---|---|
+| `SETTING_FAMILY_LIMIT_FIELDS` / `POSITION_FAMILY_LIMIT_FIELDS` | **已删** —— 族视图不再需要；`to_family_limits` 直接从业务键表翻译 |
+| `resolve_param_limits` | `services/shared/param_limits.py::build_limits` |
+| `resolve_stroke_limit` | **已删** —— 行程上限经 `LIMIT_SOURCES` 的 `max_injection_stroke` 统一出表 |
+| `expand_position_limits` | **已删** —— 区间表直接可用；`to_upper_limits` 取上界 |
+| `detect_blocking_over_limits` / `guard_setting_limit` / `guard_position_over_stroke` | 统一为 `find_over_limits` / `guard_parameter_limits` / `OverLimit`（`services/shared/param_limits.py`） |
+| `PARAM_LIMIT_FIELDS` / `POSITION_LIMIT_FIELDS` / `STROKE_FIELD` | **已删**（`STROKE_FIELD` 退役见 §13） |
+| `DOMAIN_SOURCE_STROKE` | **已删** —— 与 `DOMAIN_SOURCE_DEVICE` 归一（`fuzzy/engine.py`） |
+| `engine._apply_device_bound` / `_apply_position_bound` | `engine._apply_declared_bound`（H1）/ `engine._apply_product_bound`（G7） |
+
+**测试与验证脚本**（正文里出现的旧文件名）：
+
+| 旧文件名 | 现址 / 现状 |
+|---|---|
+| `tests/test_fuzzy_position_domain.py` | `backend/tests/test_fuzzy_declared_domain.py`（声明域收口后改名） |
+| `tests/test_check_params_position_violations.py` | `backend/tests/test_check_params_over_limit_violations.py`（越限守卫统一后改名） |
+| `tests/test_fuzzy_machine_limits.py` | `backend/tests/test_fuzzy_engine_limits.py` |
+| `_dev_refs/_verify_range_limits.py` / `_dev_refs/_verify_interval_limits.py` | **已删**（一次性等价性验证脚本，用完即弃、不入库） |
 
 **为什么这样归**：
 1. **调参链的 4 层**（L2 裁决 / L3 整合 / L4 校验 + 底座 `anchors` + 两份配套
@@ -56,6 +89,14 @@
    整条算法链（实测 django / process.models / process.algorithms 均**未进** sys.modules）
    ⇒ 离线 runner 的「不碰 service 层启动期」更干净；② 调用方**按需导入**、自己
    指明来源（`from process.services.tuning import TuningService`）⇒ 看得到自己要什么。
+6. **2026-11-24 收口修正**：入件判据（谁引用它 / 变更原因是否相同）在收口时被
+   **重新判了一次** —— **算法命名空间（`field_names` / `device_limits`）只被 fuzzy
+   一条线使用 ⇒ 不属「跨算法线公共」** ⇒ 归 `algorithms/fuzzy/`；
+   `algorithms/common/` 只剩**真跨算法线**的两件（`field_contract` 字段契约机制 /
+   `material_physics` 材料物理常量），仍是零外部依赖的底座。
+   设备侧上限事实的**最终**落点：**来源声明 + 取值 + 组装 + 识别 + 拦截**全在
+   `services/shared/param_limits.py`（service 层，**零算法层依赖**）；
+   算法层只留**查表 + 跨命名空间翻译**（`algorithms/fuzzy/device_limits.py`）。
 
 **结果**：`algorithms/` 根目录只剩 `base.py`（`algorithm_type` 的标注处 + 门面）
 ⇒ **看文件落在哪，就知道它是不是算法**（无歧义）。

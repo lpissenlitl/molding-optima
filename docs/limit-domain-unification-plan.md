@@ -4,6 +4,18 @@
 > 验收：`pytest tests` **226 passed**；`_verify_zero_dep.py` / `_verify_e2_offline.py` / `_verify_expert_smoke.py` 全 exit=0；
 > `run_demo.py` exit=0（案例与历史基线逐位一致）；`export_case.py` import OK；
 > **数值回归**：推荐值 **0 变动**、第4层新增判出 **0 条**（详见 §9.3 实测结果）。
+>
+> **【路径现状】**（2026-11-24 模块分割收口后）：**§2 记录的是「改前」事实，保留原样便于对照**；
+> **当前限值域模块** = `backend/process/services/shared/param_limits.py`
+> （§2 里的 `setting_limits.py` / `over_limit.py` **已并入本文件**；
+> `STROKE_FIELD` / `_POSITION_KEYS` / `_SETTING_KEYS` / `build_setting_limits` /
+> `build_position_limits` / `resolve_stroke_limit` **已退役**）
+> ⇒ **当前导出**：`Limit` / `LimitSpec` / `LIMIT_SOURCES` / `build_limits` /
+> `read_positive_float` / `OverLimit` / `find_over_limits` / `guard_parameter_limits` /
+> `format_over_limit_message` / `format_limit_number` / `OverLimitItem` /
+> `detect_over_limits` / `format_unfit_param_message` / `to_upper_limits`。
+> 算法侧的查表件在 `backend/process/algorithms/fuzzy/device_limits.py`
+> （`param_family` / `lookup_limit` / `to_family_limits`）。
 
 ---
 
@@ -191,7 +203,7 @@ engine  一条「声明上界」路径：查该参数自己的上限 → 整段�
 - `backend/process/algorithms/fuzzy/specs.py`：`resolve_domain_limits` 的口径注释
 - `backend/process/algorithms/fuzzy/fuzzy_core/profiles.py`：`domain_source` 取值说明
 - `backend/process/algorithms/fuzzy/examples/run_demo.py` / `export_case.py`：context 组装两行合一
-- 测试：`tests/test_fuzzy_position_domain.py` / `tests/test_check_params_range_limits.py` / `tests/test_check_params_position_violations.py` / `tests/test_fuzzy_engine_limits.py` / `tests/test_spec_contract_alignment.py`（若受影响）
+- 测试：`tests/test_fuzzy_declared_domain.py`（原 `test_fuzzy_position_domain.py`）/ `tests/test_check_params_range_limits.py` / `tests/test_check_params_over_limit_violations.py`（原 `test_check_params_position_violations.py`）/ `tests/test_fuzzy_engine_limits.py` / `tests/test_spec_contract_alignment.py`（若受影响）
 
 ---
 

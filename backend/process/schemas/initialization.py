@@ -32,7 +32,7 @@ class MachineInfoSchema(BaseSchema):
     # === 注射单元（扁平化，原 InjectionUnitSchema 内容）===
     # 【注意】**字段名一律用 ORM 真名**（``InjectionUnit`` 的属性名）：
     #    「设备 HMI 可设定上限」这组字段是**设备能力事实**，与调优接口
-    #    （``OptimizeMachineInfoSchema``）、ORM、``common/device_limits.py``
+    #    （``OptimizeMachineInfoSchema``）、ORM、``fuzzy/device_limits.py``
     #    **同名** ⇒ 一台机器的同一能力，全项目只有一个名字。
     # 【注意】**HMI 可设定上限字段集合与调优侧一致**（9 个 ``max_set_*``）——
     #    少声明会被 ``extra="ignore"`` **静默丢弃** ⇒ 专家契约要求的

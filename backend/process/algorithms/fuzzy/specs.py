@@ -13,7 +13,7 @@
 - 【注意】别把 process_parameter 也当成本契约的一部分：工艺参数走的是**另一套**
   命名空间——由算法侧命名契约 `field_names.to_algo_params` 翻译
   （业务 1-based → 算法 0-based，如 `inj_spd_1` → `IV0`），
-  见 `process/algorithms/common/field_names.py`。
+  见 `process/algorithms/fuzzy/field_names.py`。
 
 设备设定上限（max_set_*）是判级论域上界的**必需来源**，不是可选的裁剪参考：
 - **标必填**（计量压力 / 计量背压为「液压机必填」：全电机无油缸，HMI 上没有
@@ -44,7 +44,7 @@
 校验、也**不在字段描述里断言单位**（ORM 层的 `verbose_name` 声明了单位，那是数据层
 的事实，不在算法契约层重复声明 —— 声明了等于替数据层担保，而算法并不保证这一点）。
 同理，数值「物理上说不通」（如计量背压 100 而经验域 [10,50]）也**不在算法层做
-特殊处理**：脏数据照用，只在引擎层留一条 warning（见 `engine._apply_device_bound`）
+特殊处理**：脏数据照用，只在引擎层留一条 warning（见 `engine._apply_declared_bound`）
 —— 现阶段要的是**逻辑正确**，不是数据清洗。
 
 校验机制复用 algorithms/common/field_contract.py（与具体算法无关的纯函数）：

@@ -6,7 +6,7 @@ r"""设备物理上限 → 推荐值裁剪。
   3. engine._apply_machine_limits —— 越限封顶 + 方向重算 + 留痕
 
 【注意】**分层**：上限表的**取值**在 service 层（``services/shared/param_limits.py``），
-**跨命名空间翻译 + 查表规则**在算法层（``algorithms/common/device_limits.py``）
+**跨命名空间翻译 + 查表规则**在算法层（``algorithms/fuzzy/device_limits.py``）
 ⇒ 本文件三边都用。
 
 参照系（均独立于被测实现，不是"实现 == 它自己调的另一个函数"）：
@@ -67,7 +67,7 @@ def _family_limits(machine_info):
 
     service 层只出业务键区间表（``{'inj_pres': (0.0, 100.0)}``），
     算法族（``IP`` / ``IL``）由算法层自己认 ⇒ 翻译在
-    ``algorithms/common/device_limits.to_family_limits``。
+    ``algorithms/fuzzy/device_limits.to_family_limits``。
 
     【注意】**只有一张表**：位置参数与压力 / 速度参数同源同构。
     """

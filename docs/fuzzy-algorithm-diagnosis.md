@@ -3,6 +3,19 @@
 > 聚焦模块：`backend/process/algorithms/fuzzy/`（模糊推理引擎，服务于「智能调机」的优化环节）
 > 触发原因：用户反馈「页面功能大体符合预期，但算法部分不准，还有大量问题」
 > 本报告为**只读诊断**结论，未改动任何业务代码。
+>
+> **【路径现状】**（2026-11-24 模块分割收口后，本文引用按下述口径换算）：
+> 限值域统一在 `backend/process/services/shared/param_limits.py`
+> （`LIMIT_SOURCES` / `build_limits` / `to_upper_limits` / `find_over_limits` /
+> `guard_parameter_limits` / `detect_over_limits`）；
+> 算法侧查表件在 `backend/process/algorithms/fuzzy/device_limits.py`
+> （`param_family` / `lookup_limit` / `to_family_limits`）；
+> 论域上界替换统一走 `fuzzy/engine.py::_apply_declared_bound`（原 `_apply_device_bound`）
+> 与 `_apply_product_bound`（G7）；
+> 原 `setting_limits.py` / `over_limit.py` 与 `POSITION_LIMIT_FIELDS` /
+> `POSITION_FAMILY_LIMIT_FIELDS` / `SETTING_FAMILY_LIMIT_FIELDS` /
+> `resolve_stroke_limit` / `expand_position_limits` / `_apply_position_bound`
+> **均已退役**。
 
 ---
 
@@ -45,7 +58,7 @@
 
 1. `specs.resolve_domain_limits()`：取**必填等级**设备上限（IP/IV/PP/PV/MP/MBP/MSR 七族）作为**论域上界**；
    下界固定取 `RuleKeyword.range_min`。
-2. `engine._apply_device_bound()`：只换上界，**下界不动**。
+2. `engine._apply_declared_bound()`（**原 `_apply_device_bound`，2026-11-24 改名**）：只换上界，**下界不动**。
 3. `macros.bucket_centers()`：把 `[下界, 上界]` 等分成 `lvl` 桶（现网 5 档）。
 4. `nets.py::_construct_numtskruleNet()`：规则里的 `X_low/high` 按**该字段自己的 5 档词表**定位桶索引，
    再用高斯隶属度算该桶的 μ；μ < `GATE_TAU`(0.1353) ⇒ 整条规则出局。
@@ -321,7 +334,7 @@ IV0(24)  VPTL(20)  IP0(18)  PP0(14)  MEL(13)  MBP0(11)  BT(11)  CLAMP(4)  PV0(4)
 | # | 缺口 | 归属 | 备注 |
 |---|---|---|---|
 | G1 | **设备库只有上限、没有下限** | 设备库 | 需新增 9 个 `min_set_*`（HMI 可设定下限）—— 这就是「设备上限 + 合理下限」缺的**下限**那一半 |
-| ~~G2~~ | ✅ **原结论有误，已闭环（2026-11-09）** —— 位置类（`IL`/`MEL`/`ML`/`VPTL`）**并非“无权威源”**：`InjectionUnit.max_injection_stroke`（最大注射行程 [mm]）**字段早已存在**（demo 种子 180/200/220），且专家引擎 `expert/specs.py` **已在用同一字段源**（`source_model: InjectionUnit`）⇒ 口径一致。**错在“需新增行程字段”——缺的是接线，不是字段** | 设备库 | 已按旧版口径接线：位置类论域**上界** = 设备实测行程（`services/shared/setting_limits.py::POSITION_FAMILY_LIMIT_FIELDS` / `resolve_stroke_limit` + `services/shared/over_limit.py::expand_position_limits`；`fuzzy/engine.py::_apply_position_bound`）。详见 §5.4 |
+| ~~G2~~ | ✅ **原结论有误，已闭环（2026-11-09）** —— 位置类（`IL`/`MEL`/`ML`/`VPTL`）**并非“无权威源”**：`InjectionUnit.max_injection_stroke`（最大注射行程 [mm]）**字段早已存在**（demo 种子 180/200/220），且专家引擎 `expert/specs.py` **已在用同一字段源**（`source_model: InjectionUnit`）⇒ 口径一致。**错在“需新增行程字段”——缺的是接线，不是字段** | 设备库 | 已按旧版口径接线：位置类论域**上界** = 设备实测行程（**2026-11-24 收口后**：上限来源在 `services/shared/param_limits.py::LIMIT_SOURCES` 的 `max_injection_stroke` + `build_limits`；算法侧查表在 `algorithms/fuzzy/device_limits.py::to_family_limits`；论域替换走 `fuzzy/engine.py::_apply_declared_bound`）。详见 §5.4 |
 | G3 | **时间类（`CT`/`IT`/`PT`）无权威源** | 产品维度 | 依既有分层（时间类安全等级 🟢）走「产品特征 + 兜底论域」 |
 | G4 | **材料库 `recommend_back_pressure` / `recommend_injection_rate` 是单值** | 材料库 | 要当区间用需补 min/max 字段 |
 | G5 | **设定值类缺权威源时必须 400** | — | 🔴 设备安全红线，**不得**借「降级兜底」拆掉 |
@@ -515,7 +528,7 @@ M-1 的 competition 语义是「规则引用的桶，是不是该维度上隶属
 旧版（`inovance-cooperation/HsMoldingService/mdprocess`）用**设备实测上限改写论域上界**，
 覆盖 6 类：最大注射压力 / 最大注射速度 / **最大注射行程** / 最大保压压力 / 最大保压速度 / `MP0=150`。
 
-当前版只覆盖 7 族压力·速度（`services/shared/setting_limits.py::SETTING_FAMILY_LIMIT_FIELDS`：IP/IV/PP/PV/MP/MBP/MSR），
+当前版只覆盖 7 族压力·速度（**2026-11-24 收口后**：`services/shared/param_limits.py::LIMIT_SOURCES` + `build_limits` 出业务键区间表，算法侧 `algorithms/fuzzy/device_limits.py::to_family_limits` 翻成族表：IP/IV/PP/PV/MP/MBP/MSR），
 **位置类（IL / ML / MEL / VPTL）一律不动** ⇒ 论域停留在 `RuleKeyword` 种子默认
 （`IL*` [0,150] / `ML*` [0,200] / `MEL` [0,200] / `VPTL` [30,60]）。
 
@@ -552,16 +565,16 @@ M-1 的 competition 语义是「规则引用的桶，是不是该维度上隶属
 
 | 文件 | 改动 |
 |---|---|
-| `fuzzy/specs.py` | ① `OPTIMIZE_MACHINE_INFO_FIELDS` 新增 `max_injection_stroke`（`source_model=InjectionUnit`，condition=可选）<br>② 新增 `POSITION_LIMIT_FIELDS`（IL/ML/MEL/VPTL → `max_injection_stroke`，**第六批由 `POSITION_DOMAIN_FIELDS` 改名**）<br>③ 新增 `resolve_position_limits`（缺值/非数值/非正 ⇒ 不产出，回落经验域）与 `lookup_position_limit`（**两级匹配**：整段名精确 → 族前缀 `IL0→IL`；因 `param_family()` 的 `^([A-Za-z]+)(\d+)$` 正则取不到整段参数）<br>⚠️ **现址已归位**（2026-11-23 第三批 → **2026-11-24 第七批再归位**）：**来源声明 + 取值**均在 `services/shared/setting_limits.py`（`LIMIT_SOURCES` 唯一真相源，位置类族视图 `POSITION_FAMILY_LIMIT_FIELDS` **由它派生**；取值层只给行程**标量** `resolve_stroke_limit`，展开成表在 `services/shared/over_limit.expand_position_limits`）—— **算法层不再持有上限来源声明**（`device_limits.py` 只剩 `param_family` / `lookup_limit`） |
-| `fuzzy/engine.py` | ① `_recommend` 解析 `position_limits` 并透传两层<br>② `_load_keyword_profiles` 新增位置类分流（**返回新档案**，不就地改 —— 行程逐请求不同，就地改会污染共享档案）<br>③ 新增 `_apply_position_bound`（只换上界、step 按跨度等比缩放）<br>④ 推测论域兜底分支也用行程 |
+| `fuzzy/specs.py` | ① `OPTIMIZE_MACHINE_INFO_FIELDS` 新增 `max_injection_stroke`（`source_model=InjectionUnit`，condition=可选）<br>② 新增 `POSITION_LIMIT_FIELDS`（IL/ML/MEL/VPTL → `max_injection_stroke`，**第六批由 `POSITION_DOMAIN_FIELDS` 改名**）<br>③ 新增 `resolve_position_limits`（缺值/非数值/非正 ⇒ 不产出，回落经验域）与 `lookup_position_limit`（**两级匹配**：整段名精确 → 族前缀 `IL0→IL`；因 `param_family()` 的 `^([A-Za-z]+)(\d+)$` 正则取不到整段参数）<br>⚠️ **现址已归位**（2026-11-23 第三批 → **2026-11-24 第七批再归位 → 2026-11-24 收口定稿**）：**来源声明 + 取值 + 校验**统一在 `services/shared/param_limits.py` **一个模块**（`LIMIT_SOURCES` 唯一真相源 + `build_limits` 出业务键区间表 + `to_upper_limits` 取上界 + `find_over_limits` / `guard_parameter_limits` / `detect_over_limits`；原 `setting_limits.py` / `over_limit.py` 已并入本文件，`POSITION_FAMILY_LIMIT_FIELDS` / `resolve_stroke_limit` / `expand_position_limits` **已删**）—— **算法层不再持有上限来源声明**（`algorithms/fuzzy/device_limits.py` 只剩 `param_family` / `lookup_limit` / `to_family_limits`） |
+| `fuzzy/engine.py` | ① `_recommend` 解析 `position_limits` 并透传两层<br>② `_load_keyword_profiles` 新增位置类分流（**返回新档案**，不就地改 —— 行程逐请求不同，就地改会污染共享档案）<br>③ 新增 `_apply_position_bound`（只换上界、step 按跨度等比缩放）—— **2026-11-24 收口后并入 `_apply_declared_bound`**（位置类与压力·速度类共用同一条论域替换路径）<br>④ 推测论域兜底分支也用行程 |
 | `tests/test_fuzzy_field_report.py` | 仓库替身签名同步补 `position_limits=None` |
 
 #### 验收结果（真实库）
 
-**接线链路**：字段字典 → `machine_info.max_injection_stroke`（实测 200.0）→ `resolve_stroke_limit`
-（**service 层取值**：`services/shared/setting_limits.py`）→ `expand_position_limits`
-（按算法层契约展开成表）
-⇒ `{'IL':200,'ML':200,'MEL':200,'VPTL':200}` → `_apply_position_bound`
+**接线链路**（**2026-11-24 收口后的现行链路**）：字段字典 → `machine_info.max_injection_stroke`（实测 200.0）→ `build_limits`
+（**service 层取值**：`services/shared/param_limits.py`；上限来源由 `LIMIT_SOURCES` 的 `max_injection_stroke` 声明）→ `to_family_limits`
+（按算法层契约展开成族表：`algorithms/fuzzy/device_limits.py`）
+⇒ `{'IL':200,'ML':200,'MEL':200,'VPTL':200}` → `_apply_declared_bound`（原 `_apply_position_bound`）
 ⇒ `IL0` [0,150]→[0,200]（step 50→66.67）、`VPTL` [30,60]→[30,200]（step 10→56.67）、`MEL` [0,200]→[0,200]（不变）。
 
 **匹配正确性**：`IL0/IL5/ML0/ML3/MEL/VPTL` → 200；`VPTM/IP0/NT/MT/IPOS` → None（**无误伤**）。
@@ -587,7 +600,7 @@ M-1 的 competition 语义是「规则引用的桶，是不是该维度上隶属
 从「完全不出现在推荐里」变成「有建议」。
 
 **step 口径疑点已排除**：旧版 `read_machine_setting_para` 只改 `max_val`、**不动 `step`**；
-当前版按跨度等比缩放（与 `_apply_device_bound` 同范式）。实测 **504 组对照中 0 组**
+当前版按跨度等比缩放（与 `_apply_declared_bound` 同范式）。实测 **504 组对照中 0 组**
 因 step 处理不同而出现差异 ⇒ 位置类结论是**数值层绝对量**（`add_2` / `reduce_0.5`），
 `step`（仅作用于 Mamdani 输出侧论域 `[0,step]`）不影响端到端数值。
 
