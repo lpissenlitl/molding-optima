@@ -15,7 +15,12 @@ import logging
 from dataclasses import replace
 from typing import List, Dict, Any, Optional, Tuple
 
-from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
+from process.algorithms.base import (
+    AlgorithmBase,
+    AlgorithmRecommendation,
+    AlgorithmRegistry,
+    filter_unchanged,
+)
 # 【注意】**物理常量来自中立层**（`algorithms/common/material_physics.py`）：材料大类解析是
 #    **物理事实**，不属于任何算法包的私有口径 ⇒ 与专家引擎共用同一份。
 from process.algorithms.common.material_physics import (
@@ -246,6 +251,10 @@ class FuzzyEngine(AlgorithmBase):
         for rec in result:
             rec.param_name = to_business_name(rec.param_name) or rec.param_name
 
+        # 丢掉「值没变」的建议 —— 放在**裁剪之后**：裁剪可能把推荐值压回当前值
+        # （封顶值恰好等于当前值）⇒ 那条建议同样没有可执行内容。
+        result = filter_unchanged(result)
+
         # 把诊断容器移交给实例槽位 ⇒ 请求返回后仍能读到本次诊断
         # （`tests/fuzzy_kernel/_snapshot_core.py` 与 `_verify_e2_offline.py` 依赖这个约定）。
         self._last_diag = diag
@@ -454,9 +463,8 @@ class FuzzyEngine(AlgorithmBase):
         if not self._extract_defect_context(context):
             return False
 
-        # 【注意】编排层不传 `iteration_trend` ⇒ 该分支在 optimize 链**不生效**；
-        #    condition 链会传（见 condition.py）⇒ 那里终态时 fuzzy 不参与 chain。
-        #    启用该分支前必须先解决「终态无推荐 ⇒ fail-fast 报『算法暂不可用』」的问题。
+        # 【注意】**编排层不传 `iteration_trend`** ⇒ 该分支恒不触发（context 里没这个键）。
+        #    启用前必须先解决「终态无推荐 ⇒ fail-fast 报『算法暂不可用』」的问题。
         trend = context.get('iteration_trend', {}) or {}
         if trend.get('trend') == 'final':
             return False

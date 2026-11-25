@@ -15,7 +15,8 @@ ORM）⇒ 依赖方向恒为「算法包 / service 层 → common」⇒ **无循
 import ...``（两种写法等价）。
 
 【注意】**本目录只放「跨算法线真公共」的东西**：**字段契约机制**
-（``field_contract``）+ 材料物理常量（``material_physics``）。
+（``field_contract``）+ 材料物理常量（``material_physics``）+ 缺陷码词表
+（``defect_codes``）。
 【注意】**算法命名空间不在这里**：**字段映射**（``field_names``）与**算法族表**
 （``device_limits``）是模糊规则库的内部命名（``IV0`` / ``IP0`` / ``MEL``），
 只在 ``fuzzy/`` 内成立 ⇒ 已归位到 ``process/algorithms/fuzzy/``。
@@ -25,9 +26,10 @@ import ...``（两种写法等价）。
 要不要拒绝」。
 """
 
-from . import field_contract, material_physics  # noqa: F401
+from . import defect_codes, field_contract, material_physics  # noqa: F401
 
 __all__ = [
+    'defect_codes',
     'field_contract',
     'material_physics',
 ]

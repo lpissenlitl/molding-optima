@@ -49,7 +49,14 @@ def tuning_result_from_record(result: Optional[str]) -> Optional[str]:
 def is_qualified_result(tuning_result: Optional[str]) -> bool:
     """tuning_result 是否为「合格」。
 
-    合格态的产品没有缺陷 ⇒ 提交的缺陷信息一律丢弃，且不进入缺陷驱动的优化流程。
+    **判据源 = 反馈原文的 ``tuning_result``**（唯一出处）⇒ 「合格」是**试模评价**
+    的一种取值，不是流程闸门：合格态照样走完整链路（推理 → 落库 → 建新轮次）。
+
+    合格态的产品没有缺陷 ⇒ 提交的缺陷信息一律丢弃（仅影响缺陷相关的一处落库与
+    一处契约校验），**不进入缺陷驱动的推理**（缺陷驱动引擎本就无输入）；
+    但**不短路**、不跳过优化流程。
+
+    【注意】**不得用「没有缺陷」或「引擎零产出」反推合格** —— 两者都不是判据。
     """
     return tuning_result == "qualified"
 

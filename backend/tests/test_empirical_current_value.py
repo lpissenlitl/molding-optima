@@ -34,7 +34,7 @@ from process.algorithms.empirical.empirical_algorithm import (  # noqa: E402
 )
 from process.algorithms.empirical.hints import EMPIRICAL_HINTS  # noqa: E402
 from process.services.parameter_optimize import (  # noqa: E402
-    _normalize_recommendations,
+    _annotate_recommendations,
 )
 from process.services.shared.param_naming import param_label  # noqa: E402
 
@@ -139,12 +139,12 @@ def test_all_hints_leave_none_when_no_params():
 # =============================================================================
 
 
-def test_normalize_keeps_none_and_description_gives_direction_only():
-    """归一化 + 文案：current_value 缺失时不崩，且仍只说方向不给数值。"""
+def test_annotate_keeps_none_and_description_gives_direction_only():
+    """标注 + 文案：current_value 缺失时不崩，且仍只说方向不给数值。"""
     recs = EmpiricalReasoning(hints=HINTS).recommend(_ctx({'inj_pres_1': 35.0}))
     raw = [r.to_dict() for r in recs]
-    normalized = _normalize_recommendations(raw)
-    by_name = {rec['param']: rec for rec in normalized}
+    annotated = _annotate_recommendations(raw)
+    by_name = {rec['param']: rec for rec in annotated}
 
     assert by_name['inj_t']['current_value'] is None
     assert by_name['inj_pres_1']['current_value'] == 35.0

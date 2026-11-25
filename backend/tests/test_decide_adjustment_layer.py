@@ -1,6 +1,6 @@
-"""第2层（结合实际情况，确定明确的调整计划）的护栏。
+"""第2层（结合实际情况，确定明确的调整方案）的护栏。
 
-参照系 = 第2层的机制口径（见 ``services/optimize_chain/decide_direction.py``）与分层约定：
+参照系 = 第2层的机制口径（见 ``services/optimize_chain/decide_adjustment.py``）与分层约定：
 「**歧义消解归第2层**（谁让位 / 谁能同调），第3层只做参数整合」。
 
 这些用例锁的是**机制契约**，不是某张具体优先级表 —— 表由调用方注入。
@@ -10,19 +10,18 @@
 """
 import pytest
 
-from process.services.optimize_chain.anchors import resolve_fill_target
-from process.services.optimize_chain.decide_direction import (
-    ScenarioContext,
+from process.services.optimize_chain.anchors import FILL_RATIO_MODE, resolve_fill_target
+from process.services.optimize_chain.decide_adjustment import (
     ScenarioStrategy,
-    build_plan,
-    build_scenario_context,
     collect_candidates,
+    collect_facts,
     match_conditions,
     priority_table_from_mapping,
     resolve_priority,
+    resolve_scheme,
     select_strategy,
 )
-from process.services.optimize_chain.integrate_params import apply_plan
+from process.services.optimize_chain.integrate_params import apply_scheme
 
 
 # 基线：ML_N 357.29 + DDAM 3.5 = MEL 360.79（自洽）
@@ -41,39 +40,33 @@ def _rec(param, value):
     return {'param': param, 'recommended_value': value}
 
 
-def _fill_weights(context):
-    """充填量比例口径的输入（与 service 层 ``_fill_weights`` 同口径）。"""
-    if context is None:
-        return None
-    if context.target_weight is None or context.actual_weight is None:
-        return None
-    return (context.target_weight, context.actual_weight)
+def _apply(baseline, recommendations, feedback=None, mold_info=None, **kwargs):
+    """第2层定方案 → 第3层整合（与 service 层同一条链）。
 
-
-def _apply(baseline, recommendations, **kwargs):
-    """第2层定计划 → 第3层整合（与 service 层同一条链）。
+    【注意】``feedback`` / ``mold_info`` 是**原料** —— 第3层自己从里面取
+    充填量比例口径要的重量（上层不替它挑）。
 
     Returns:
-        ``(plan, integrated)`` —— 第2层的调整计划 + 第3层整合后的参数集。
+        ``(scheme, integrated)`` —— 第2层的调整方案 + 第3层整合后的参数集。
     """
     candidates = collect_candidates(recommendations)
-    plan = build_plan(
+    scheme = resolve_scheme(
         candidates.names,
         candidates.targets,
         **kwargs,
     )
-    return plan, apply_plan(
-        baseline, plan,
-        fill_weights=_fill_weights(kwargs.get('context')),
+    return scheme, apply_scheme(
+        baseline, scheme,
+        feedback=feedback, mold_info=mold_info,
     )
 
 
 def test_yielded_candidate_is_not_applied():
     """让位是**显式决定不做** ⇒ 该字段保持旧值，且留痕里能查到为什么。
 
-    参照系：``decide_direction.resolve_priority`` 的让位口径（第 2 条）。
+    参照系：``decide_adjustment.resolve_priority`` 的让位口径（第 2 条）。
     """
-    plan, outcome = _apply(
+    scheme, outcome = _apply(
         BASE,
         [_rec('met_end_pos', 361.0), _rec('pst_met_decomp_dist', 5.0)],
         satisfied=('pst_met_decomp_dist',),   # DDAM 目标已达成 ⇒ 让位
@@ -82,10 +75,10 @@ def test_yielded_candidate_is_not_applied():
     # 让位的候选没落地
     assert outcome.values['pst_met_decomp_dist'] == pytest.approx(3.5)
     # 让位是显式决策，不静默丢弃
-    assert 'pst_met_decomp_dist' in plan.selection.yielded
-    assert 'pst_met_decomp_dist' not in plan.selection.kept
+    assert 'pst_met_decomp_dist' in scheme.selection.yielded
+    assert 'pst_met_decomp_dist' not in scheme.selection.kept
     # 留痕答得出「为什么没落地」
-    assert 'pst_met_decomp_dist' in plan.selection.to_trace()['yielded']
+    assert 'pst_met_decomp_dist' in scheme.selection.to_trace()['yielded']
 
 
 def test_yielded_mel_is_not_translated():
@@ -95,15 +88,15 @@ def test_yielded_mel_is_not_translated():
     （若第2层在翻译之后，它只看得到「调计量位置」，规则无处安放）。
     【注意】翻译在第3层 ⇒ 这里只需验「第2层不把让位的 MEL 带出去」。
     """
-    plan, outcome = _apply(
+    scheme, outcome = _apply(
         BASE,
         [_rec('met_end_pos', 361.0)],
         satisfied=('met_end_pos',),          # MEL 让位
     )
 
     # MEL 被让位 ⇒ 不进保留集 ⇒ 第3层没东西可翻 ⇒ 计量位置不动
-    assert plan.selection.yielded.keys() == {'met_end_pos'}
-    assert plan.mel_targets == ()
+    assert scheme.selection.yielded.keys() == {'met_end_pos'}
+    assert scheme.mel_targets == ()
     assert outcome.values['met_pos_1'] == pytest.approx(357.29)
     assert 'met_pos_1' not in outcome.landed
 
@@ -119,11 +112,11 @@ def test_empty_table_keeps_all_candidates_in_order():
         _rec('inj_spd_1', 45.0),
     ]
 
-    plan, outcome = _apply(BASE, recommendations)
+    scheme, outcome = _apply(BASE, recommendations)
 
-    assert plan.selection.kept == ('met_end_pos', 'pst_met_decomp_dist', 'inj_spd_1')
-    assert plan.selection.yielded == {}
-    assert plan.selection.deferred == {}
+    assert scheme.selection.kept == ('met_end_pos', 'pst_met_decomp_dist', 'inj_spd_1')
+    assert scheme.selection.yielded == {}
+    assert scheme.selection.deferred == {}
     # MEL 照常翻译成决策量（先定 ML，再确定 MEL）
     assert outcome.values['met_pos_1'] == pytest.approx(357.5)
 
@@ -133,37 +126,37 @@ def test_trace_records_deferred_candidates():
 
     参照系：``StrategyDecision.to_trace`` 的留痕完整性口径。
     """
-    plan, _outcome = _apply(
+    scheme, _outcome = _apply(
         BASE,
         [_rec('inj_spd_1', 45.0), _rec('HOLD', 4.0), _rec('cool_t', 18.0)],
         max_items=1,
     )
 
-    assert len(plan.selection.kept) == 1
-    assert plan.selection.deferred
-    trace = plan.selection.to_trace()
-    assert trace['deferred'] == dict(plan.selection.deferred)
-    assert set(trace['deferred']) == set(plan.selection.deferred)
+    assert len(scheme.selection.kept) == 1
+    assert scheme.selection.deferred
+    trace = scheme.selection.to_trace()
+    assert trace['deferred'] == dict(scheme.selection.deferred)
+    assert set(trace['deferred']) == set(scheme.selection.deferred)
 
 
 def test_priority_table_is_the_only_source_of_order():
     """次序**只来自数据** —— 换一张表，保留集随之改变。
 
-    参照系：``decide_direction`` 模块红线「本模块不内置任何业务次序」。
+    参照系：``decide_adjustment`` 模块红线「本模块不内置任何业务次序」。
     """
     table = priority_table_from_mapping(
         {'met_end_pos': 1, 'pst_met_decomp_dist': 2},
         reasons={'met_end_pos': '充填成形优先', 'pst_met_decomp_dist': '松退次之'},
     )
 
-    plan, _outcome = _apply(
+    scheme, _outcome = _apply(
         BASE,
         [_rec('pst_met_decomp_dist', 5.0), _rec('met_end_pos', 361.0)],
         table=table,
     )
 
-    assert plan.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
-    assert plan.selection.order == ('met_end_pos', 'pst_met_decomp_dist')
+    assert scheme.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
+    assert scheme.selection.order == ('met_end_pos', 'pst_met_decomp_dist')
 
 
 # --- 候选集（进第2层之前的准备）--------------------------------------------
@@ -172,7 +165,7 @@ def test_priority_table_is_the_only_source_of_order():
 def test_candidates_drop_only_non_suggestions():
     """候选集只筛「**根本不算建议**」的条目 —— 不掺合参数。
 
-    参照系：``plan.collect_candidates`` 的候选口径：
+    参照系：``decide_adjustment.collect_candidates`` 的候选口径：
     没有推荐值 / 不是 ORM 工艺字段 ⇒ 不进；**「本机有没有这个字段的值」不在这里判**
     （本层不读参数集 ⇒ 是工艺量、但本机没值也照样进）。
     """
@@ -200,8 +193,8 @@ def test_layer2_does_not_check_local_value_presence():
     # 第2层照样把它当候选
     assert candidates.names == ('inj_spd_2',)
 
-    plan = build_plan(candidates.names, candidates.targets)
-    outcome = apply_plan(BASE, plan)
+    scheme = resolve_scheme(candidates.names, candidates.targets)
+    outcome = apply_scheme(BASE, scheme)
 
     # 第3层：照写（不剔除、不留痕）
     assert outcome.values['inj_spd_2'] == pytest.approx(45.0)
@@ -258,16 +251,16 @@ def test_scenario_preferred_params_lead_the_order():
         reason='充填成形优先',
     )
 
-    plan, _outcome = _apply(
+    scheme, _outcome = _apply(
         BASE,
         [_rec('pst_met_decomp_dist', 5.0), _rec('met_end_pos', 361.0)],
         table=table,
         strategy=scenario,
     )
 
-    assert plan.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
-    assert plan.selection.scenario_code == 'filling_first'
-    assert '场景优先' in plan.selection.kept_reasons['met_end_pos']
+    assert scheme.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
+    assert scheme.selection.scenario_code == 'filling_first'
+    assert '场景优先' in scheme.selection.kept_reasons['met_end_pos']
 
 
 def test_scenario_allowed_params_yield_the_rest():
@@ -281,15 +274,15 @@ def test_scenario_allowed_params_yield_the_rest():
         reason='充填成形优先',
     )
 
-    plan, outcome = _apply(
+    scheme, outcome = _apply(
         BASE,
         [_rec('met_end_pos', 361.0), _rec('inj_spd_1', 45.0)],
         strategy=scenario,
     )
 
-    assert plan.selection.kept == ('met_end_pos',)
-    assert 'inj_spd_1' in plan.selection.yielded
-    assert '本场景不允许' in plan.selection.yielded['inj_spd_1']
+    assert scheme.selection.kept == ('met_end_pos',)
+    assert 'inj_spd_1' in scheme.selection.yielded
+    assert '本场景不允许' in scheme.selection.yielded['inj_spd_1']
     # 让位是真不做：值保持旧值
     assert outcome.values['inj_spd_1'] == pytest.approx(50.0)
 
@@ -301,16 +294,16 @@ def test_scenario_max_items_overrides_call_level_limit():
     """
     scenario = ScenarioStrategy(scenario_code='filling_first', max_items=1)
 
-    plan, _outcome = _apply(
+    scheme, _outcome = _apply(
         BASE,
         [_rec('inj_spd_1', 45.0), _rec('cool_t', 18.0)],
         max_items=2,
         strategy=scenario,
     )
 
-    assert len(plan.selection.kept) == 1
-    assert len(plan.selection.deferred) == 1
-    assert '本轮名额已满 ⇒ 暂缓' in plan.selection.deferred['cool_t']
+    assert len(scheme.selection.kept) == 1
+    assert len(scheme.selection.deferred) == 1
+    assert '本轮名额已满 ⇒ 暂缓' in scheme.selection.deferred['cool_t']
 
 
 def test_kept_reasons_record_the_basis():
@@ -323,10 +316,10 @@ def test_kept_reasons_record_the_basis():
         reasons={'met_end_pos': '充填成形优先'},
     )
 
-    plan, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0)], table=table)
+    scheme, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0)], table=table)
 
-    assert plan.selection.kept_reasons['met_end_pos'] == '充填成形优先'
-    assert 'kept_reasons' in plan.selection.to_trace()
+    assert scheme.selection.kept_reasons['met_end_pos'] == '充填成形优先'
+    assert 'kept_reasons' in scheme.selection.to_trace()
 
 
 def test_no_scenario_keeps_previous_behavior():
@@ -334,12 +327,12 @@ def test_no_scenario_keeps_previous_behavior():
 
     参照系：``resolve_priority`` 的「无场景」口径。
     """
-    plan, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0), _rec('pst_met_decomp_dist', 5.0)])
+    scheme, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0), _rec('pst_met_decomp_dist', 5.0)])
 
-    assert plan.selection.scenario_code == ''
-    assert plan.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
-    assert plan.selection.kept_reasons == {}
-    assert plan.selection.yielded == {}
+    assert scheme.selection.scenario_code == ''
+    assert scheme.selection.kept == ('met_end_pos', 'pst_met_decomp_dist')
+    assert scheme.selection.kept_reasons == {}
+    assert scheme.selection.yielded == {}
 
 
 # --- 充填量目标（按重量比例重算行程）---------------------------------
@@ -377,20 +370,32 @@ def test_fill_target_replaces_mel_delta():
 
     参照系：第3层的充填量目标口径（两种口径互斥）；第2层只把**口径**带出来。
     """
-    scenario = ScenarioStrategy(scenario_code='filling_first', target_mode='fill_ratio')
-    context = ScenarioContext(actual_weight=100.0, target_weight=110.0, fill_gap=10.0)
+    scenario = ScenarioStrategy(
+        scenario_code='filling_first',
+        target_modes={'met_end_pos': FILL_RATIO_MODE},
+    )
+    # 原料：实测制品重量在反馈的观察项里，制品总重在模具上下文里
+    feedback = {
+        'observations': [
+            {'param_key': 'actual_product_weight', 'value': 100.0},
+        ],
+    }
+    mold_info = {'total_product_weight': 110.0}
+    facts = collect_facts(feedback, mold_info)
 
-    plan, outcome = _apply(
+    scheme, outcome = _apply(
         FILL_BASE,
         [_rec('met_end_pos', 361.0)],
         strategy=scenario,
-        context=context,
+        facts=facts,
+        feedback=feedback,
+        mold_info=mold_info,
     )
 
     # 第2层：只记「MEL 目标 + 口径」，**不翻值**
-    assert plan.mel_targets == (361.0,)
-    assert plan.target_mode == 'fill_ratio'
-    assert plan.assignments == ()
+    assert scheme.mel_targets == (361.0,)
+    assert scheme.target_modes == {'met_end_pos': FILL_RATIO_MODE}
+    assert scheme.assignments == ()
     # 第3层：按比例口径落行程目标值
     assert outcome.values['met_pos_1'] == pytest.approx(300.0 + CURRENT_STROKE * 1.1)
     assert outcome.fill_target is not None
@@ -403,9 +408,9 @@ def test_without_fill_target_mel_uses_delta():
 
     参照系：``anchors.resolve_mel_target`` 的两步式推算。
     """
-    plan, outcome = _apply(FILL_BASE, [_rec('met_end_pos', 361.0)])
+    scheme, outcome = _apply(FILL_BASE, [_rec('met_end_pos', 361.0)])
 
-    assert plan.mel_targets == (361.0,)
+    assert scheme.mel_targets == (361.0,)
     assert outcome.values['met_pos_1'] == pytest.approx(357.5)
     assert outcome.fill_target is None
 
@@ -416,12 +421,12 @@ def test_layer2_gives_direction_not_landed_values():
     参照系：分层约定「**改成多少归第3层**」—— 第2层不碰参数
     ⇒ ``MEL`` 只以「目标值 + 口径」的形式带出去，不翻成计量位置。
     """
-    plan, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0)])
+    scheme, _outcome = _apply(BASE, [_rec('met_end_pos', 361.0)])
 
     # MEL 保留 ⇒ 带的是「目标值 + 口径」，不是「已翻好的计量位置」
-    assert 'met_end_pos' in plan.kept
-    assert plan.mel_targets == (361.0,)
-    assert plan.assignments == ()
+    assert 'met_end_pos' in scheme.kept
+    assert scheme.mel_targets == (361.0,)
+    assert scheme.assignments == ()
 
 
 def test_layer2_carries_absolute_values_of_plain_fields():
@@ -429,10 +434,10 @@ def test_layer2_carries_absolute_values_of_plain_fields():
 
     参照系：分层约定「非派生量不必等第3层」—— 只有派生量（MEL）才需换算。
     """
-    plan, outcome = _apply(BASE, [_rec('pst_met_decomp_dist', 5.0)])
+    scheme, outcome = _apply(BASE, [_rec('pst_met_decomp_dist', 5.0)])
 
-    assert plan.assignments == (('pst_met_decomp_dist', 5.0),)
-    assert plan.mel_targets == ()
+    assert scheme.assignments == (('pst_met_decomp_dist', 5.0),)
+    assert scheme.mel_targets == ()
     assert outcome.values['pst_met_decomp_dist'] == pytest.approx(5.0)
 
 
@@ -457,20 +462,20 @@ def _feedback(defect='SHORTSHOT', actual_weight=None):
     }
 
 
-def test_scenario_context_derives_fill_gap():
+def test_facts_derive_fill_gap():
     """派生量：充填缺口 = 制品总重 − 实测重量。
 
-    参照系：``services/optimize_chain/decide_direction.py`` 的派生量口径。
+    参照系：``services/optimize_chain/decide_adjustment.py`` 的派生量口径。
     """
-    context = build_scenario_context(
+    facts = collect_facts(
         _feedback(actual_weight=95.0),
         {'total_product_weight': 100.0},
     )
 
-    assert context.defect_codes == ('SHORTSHOT',)
-    assert context.actual_weight == pytest.approx(95.0)
-    assert context.target_weight == pytest.approx(100.0)
-    assert context.fill_gap == pytest.approx(5.0)
+    assert facts['defect_codes'] == ('SHORTSHOT',)
+    assert facts['actual_weight'] == pytest.approx(95.0)
+    assert facts['target_weight'] == pytest.approx(100.0)
+    assert facts['fill_gap'] == pytest.approx(5.0)
 
 
 def test_missing_observation_blocks_the_scenario():
@@ -478,11 +483,11 @@ def test_missing_observation_blocks_the_scenario():
 
     参照系：``match_conditions`` 的「缺数据不命中」口径。
     """
-    context = build_scenario_context(_feedback(), {'total_product_weight': 100.0})
+    facts = collect_facts(_feedback(), {'total_product_weight': 100.0})
 
-    assert context.actual_weight is None
-    assert context.fill_gap is None
-    assert match_conditions(FILLING_CONDITIONS, context) is False
+    assert facts.get('actual_weight') is None
+    assert facts.get('fill_gap') is None
+    assert match_conditions(FILLING_CONDITIONS, facts) is False
 
 
 def test_conditions_are_and_semantics():
@@ -491,18 +496,18 @@ def test_conditions_are_and_semantics():
     参照系：``match_conditions`` 的 AND 口径。
     """
     # 缺陷对、但重量达标（无缺口）⇒ 不命中
-    context = build_scenario_context(
+    facts = collect_facts(
         _feedback(actual_weight=105.0),
         {'total_product_weight': 100.0},
     )
-    assert match_conditions(FILLING_CONDITIONS, context) is False
+    assert match_conditions(FILLING_CONDITIONS, facts) is False
 
     # 重量有缺口、但缺陷不对 ⇒ 不命中
-    context = build_scenario_context(
+    facts = collect_facts(
         _feedback(defect='FLASH', actual_weight=95.0),
         {'total_product_weight': 100.0},
     )
-    assert match_conditions(FILLING_CONDITIONS, context) is False
+    assert match_conditions(FILLING_CONDITIONS, facts) is False
 
 
 def test_select_strategy_picks_the_first_matched():
@@ -516,20 +521,20 @@ def test_select_strategy_picks_the_first_matched():
         conditions=tuple(FILLING_CONDITIONS),
         preferred_params=('met_end_pos',),
         max_items=1,
-        target_mode='fill_ratio',
+        target_modes={'met_end_pos': FILL_RATIO_MODE},
     )
 
-    context = build_scenario_context(
+    facts = collect_facts(
         _feedback(actual_weight=95.0),
         {'total_product_weight': 100.0},
     )
-    other = build_scenario_context(
+    other = collect_facts(
         _feedback(defect='FLASH', actual_weight=95.0),
         {'total_product_weight': 100.0},
     )
 
     # 候选已按「归属 → 优先级」排好序：更具体的在前
-    assert select_strategy([filling_spec, default_spec], context) is filling_spec
+    assert select_strategy([filling_spec, default_spec], facts) is filling_spec
     # 没有短射 ⇒ 只有默认口径命中
     assert select_strategy([filling_spec, default_spec], other) is default_spec
     # 一条都不命中 ⇒ None ⇒ 不裁决
@@ -541,14 +546,14 @@ def test_unknown_operator_does_not_match():
 
     参照系：``match_conditions`` 的「未知操作符不命中」口径。
     """
-    context = build_scenario_context(
+    facts = collect_facts(
         _feedback(actual_weight=95.0),
         {'total_product_weight': 100.0},
     )
 
     assert match_conditions(
         [{'field': 'defect_codes', 'operator': 'starts_with', 'value': 'SHORT'}],
-        context,
+        facts,
     ) is False
 
 

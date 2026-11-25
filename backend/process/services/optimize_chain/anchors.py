@@ -2,7 +2,7 @@
 
 为什么单独放一个模块：同一批锚点关系要**被多个方向使用** ——
 
-- **第2层**（``decide_direction.py``）：按调机策略**筛规则**（**不碰参数**）；
+- **第2层**（``decide_adjustment.py``）：按调机策略**筛规则**（**不碰参数**）；
 - **第3层**（``integrate_params.py``）：按关系**改值**（联动传播）；
 - **第4层**（``check_params.py``）：按关系**只读校验**（锚点自检）。
 
@@ -12,7 +12,10 @@
 - **字段口径**（本模块）：G1 / G2 / G3 涉及的字段名与模板；
 - **共用判据**（本模块）：:func:`find_chain_break`（回抽链断裂判定）、
   :func:`resolve_stage_count`（段数解析）、:func:`last_stage_field`（末段字段名）、
-  :func:`unlandable_params`（**落不了地**的物理判据）。
+  :func:`unlandable_params`（**落不了地**的物理判据）；
+- **充填量口径的输入**（本模块）：:func:`read_weights`（从原料取两个重量）——
+  「充填量比例口径要哪两个重量」是**口径**的事 ⇒ 第2层（判定重量是否不足）
+  与第3层（解算行程目标）都从这里取，不各取各的。
 
 各层**各自**的只有"拿关系做什么"：第3层改值、第4层透传事实。
 
@@ -67,7 +70,90 @@ STAGE_COUNT_FIELD = 'met_stg'
 FREEDOM_YIELDS: Mapping[str, str] = {'inj_t': 'inj_spd_1'}
 
 
+# --- 目标值求解口径 ---------------------------------------------------------
+
+#: 目标值求解口径名 —— 按**充填量比例**解算注射行程（:func:`resolve_fill_target`）。
+#:
+#: 【注意】**口径名的唯一出处** —— 第2层（场景策略声明用哪个口径）与
+#: 第3层（按口径求解）都从这里取 ⇒ 不会两边各写一个字面量。
+FILL_RATIO_MODE = 'fill_ratio'
+
+#: 目标值求解口径名 —— **递减步进**（:func:`resolve_step_down`）。
+#:
+#: 【注意】**不依赖物理模型** —— 目标 = 当前设定 × (1 − 步长)：
+#: 「上一模合格」只说明「当前设定够用」，**不说明能降到哪** ⇒ 只能小步试探，
+#: 靠试模反馈逼近够用线（省能耗 / 省周期场景用）。
+#:
+#: 【注意】口径名的唯一出处（同 :data:`FILL_RATIO_MODE`）。
+STEP_DOWN_MODE = 'step_down'
+
+#: 递减步进的默认步长比例（**待实测标定**）。
+#:
+#: 【注意】**初值不是结论** —— 只表达「一次只走一小步」这个原则；
+#: 实际步长需按设备与材料标定（见 ``docs/open-questions.md`` Q12 R2）。
+STEP_DOWN_RATIO = 0.05
+
+
+# --- 充填量口径的输入 -------------------------------------------------------
+
+#: 观察项键：实测制品重量（``feedback.observations[].param_key``）。
+ACTUAL_WEIGHT_KEY = 'actual_product_weight'
+
+#: 制品总重在 ``mold_info`` 里的键（契约见 ``fuzzy/specs.py``）。
+TARGET_WEIGHT_KEY = 'total_product_weight'
+
+
 # --- 共用判据 --------------------------------------------------------------
+
+def to_float(value: Any) -> Optional[float]:
+    """转 float；不可解析 / 非数值 ⇒ ``None``（``bool`` 先排除，它是 ``int`` 子类）。"""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _observation_value(
+    observations: Optional[Sequence[Mapping[str, Any]]],
+    param_key: str,
+) -> Optional[float]:
+    """从观察项列表里取某个键的实测值；缺 / 不可解析 ⇒ ``None``。"""
+    for item in observations or ():
+        if not isinstance(item, Mapping):
+            continue
+        if item.get('param_key') != param_key:
+            continue
+        value = to_float(item.get('value'))
+        if value is not None:
+            return value
+    return None
+
+
+def read_weights(
+    feedback: Optional[Mapping[str, Any]] = None,
+    mold_info: Optional[Mapping[str, Any]] = None,
+) -> Tuple[Optional[float], Optional[float]]:
+    """从原料取两个重量：``(制品总重, 实测制品重量)``；缺的项为 ``None``。
+
+    【注意】**充填量比例口径的输入契约** —— 「要哪两个重量」是口径的事
+    （:func:`resolve_fill_target` 的入参）⇒ 取数放在**底座**这里，
+    第2层拿它派生「充填缺口」、第3层拿它解算行程目标，两边不各取各的。
+
+    Args:
+        feedback: 缺陷反馈 —— 实测重量在 ``observations[]`` 里。
+        mold_info: 模具上下文 —— 制品总重在 ``total_product_weight``。
+
+    Returns:
+        Tuple[Optional[float], Optional[float]]: ``(制品总重, 实测制品重量)``。
+    """
+    actual = _observation_value(
+        (feedback or {}).get('observations'), ACTUAL_WEIGHT_KEY,
+    )
+    target = to_float((mold_info or {}).get(TARGET_WEIGHT_KEY))
+    return target, actual
+
 
 def resolve_stage_count(params: Mapping[str, object]) -> Optional[int]:
     """计量段数；缺或不可解析 ⇒ ``None``（回落口径：缺数据不臆造）。"""
@@ -302,6 +388,74 @@ def resolve_fill_target(
     )
 
 
+@dataclass(frozen=True)
+class StepDownTarget:
+    """递减步进目标 —— 把当前设定按固定比例下调一档。
+
+    与 :class:`FillTarget` 是**两种口径**：一个按**比例充填**解算行程，
+    一个按**固定步长**下调任意旋钮（省能耗 / 省周期）。
+
+    Attributes:
+        field_name: 落点字段名。
+        target_value: 目标值（下调后）。
+        current_value: 当前值（下调前）。
+        ratio: 下调后**保留**的比例（= 1 − 步长）。
+        reason: 依据说明（进留痕，回答「为什么降到这个值」）。
+    """
+
+    field_name: str
+    target_value: float
+    current_value: float
+    ratio: float
+    reason: str = ''
+
+
+def resolve_step_down(
+    field_name: str,
+    current_value: object,
+    ratio: float = STEP_DOWN_RATIO,
+) -> Optional[StepDownTarget]:
+    """递减步进目标求解：目标 = 当前设定 × (1 − 步长)。
+
+    .. code-block:: text
+
+        目标值 = 当前设定 × (1 − 步长)
+
+    【注意】**不静默截断**：当前值缺失 / 非数值 / 非正 ⇒ 返回 ``None``
+    （调用方不动这个字段）—— 缺数据不臆造。
+
+    Args:
+        field_name: 落点字段名。
+        current_value: 当前设定值（**本轮改动前的旧值**）。
+        ratio: 下调后保留的比例（默认按 :data:`STEP_DOWN_RATIO` 推导）。
+
+    Returns:
+        :class:`StepDownTarget`；当前值不可用 ⇒ ``None``。
+    """
+    if current_value is None:
+        return None
+    try:
+        current = float(current_value)
+    except (TypeError, ValueError):
+        return None
+    if current <= 0:
+        return None
+    keep = 1.0 - float(ratio)
+    if keep <= 0:
+        return None
+    target = current * keep
+    return StepDownTarget(
+        field_name=field_name,
+        target_value=target,
+        current_value=current,
+        ratio=keep,
+        reason=(
+            f'递减步进：{field_name} {current:g} → {target:g}'
+            f'（下调 {(1 - keep) * 100:g}%，靠试模反馈逼近够用线）'
+        ),
+    )
+
+
 def _pick_value(
     params: Mapping[str, object],
     previous: Optional[Mapping[str, object]],
@@ -388,12 +542,21 @@ __all__ = [
     'G2_CHAIN_TEMPLATE',
     'G2_VPS_FIELD',
     'STAGE_COUNT_FIELD',
+    'FILL_RATIO_MODE',
+    'STEP_DOWN_MODE',
+    'STEP_DOWN_RATIO',
+    'ACTUAL_WEIGHT_KEY',
+    'TARGET_WEIGHT_KEY',
     'FillTarget',
+    'StepDownTarget',
+    'to_float',
+    'read_weights',
     'resolve_stage_count',
     'last_stage_field',
     'chain_stage_fields',
     'resolve_mel_target',
     'apply_mel_targets',
     'resolve_fill_target',
+    'resolve_step_down',
     'find_chain_break',
 ]

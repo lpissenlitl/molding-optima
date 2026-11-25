@@ -48,8 +48,8 @@ def param_label(business_name: str) -> str:
     不是工艺字段时**原样返回**（不臆造中文标签）。
 
     【注意】**ORM 惰性导入**：本模块在算法层的导入链上
-    （``optimize_chain/defect_selection`` → ``tuning_strategy`` →
-    ``decide_direction`` → 本模块）⇒ **导入期不能拉 django**
+    （``optimize_chain/defect_selection`` → ``decide_adjustment`` →
+    本模块）⇒ **导入期不能拉 django**
     （``tests/test_fuzzy_algo_offline.py`` 的
     ``test_algorithm_layer_has_no_django_dependency`` 守着这条红线）
     ⇒ ORM 模型只在**函数调用时**导入。

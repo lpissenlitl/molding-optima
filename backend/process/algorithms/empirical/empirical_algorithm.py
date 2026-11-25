@@ -26,7 +26,12 @@ import json
 import logging
 from typing import List, Optional
 
-from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
+from process.algorithms.base import (
+    AlgorithmBase,
+    AlgorithmRecommendation,
+    AlgorithmRegistry,
+    filter_unchanged,
+)
 from process.algorithms.empirical.hints import EMPIRICAL_HINTS
 
 logger = logging.getLogger(__name__)
@@ -145,7 +150,7 @@ class EmpiricalReasoning(AlgorithmBase):
                 direction='decrease',
             ))
 
-        return recommendations
+        return filter_unchanged(recommendations)
 
     def is_available(self, context: dict) -> bool:
         """

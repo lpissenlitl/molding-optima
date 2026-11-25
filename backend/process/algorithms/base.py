@@ -67,6 +67,35 @@ class AlgorithmRecommendation:
             'direction': self.direction,
         }
 
+    def is_unchanged(self) -> bool:
+        """判断这条建议是否「值没变」（推荐值与当前值实质相同）。
+
+        【注意】**两个值都在才判** —— 推荐值为 None（经验推理只给方向、
+            文本建议没有数值）⇒ 不算值没变。
+        """
+        if self.current_value is None or self.recommended_value is None:
+            return False
+        try:
+            return abs(
+                float(self.recommended_value) - float(self.current_value)
+            ) < 1e-9
+        except (TypeError, ValueError):
+            return False
+
+
+def filter_unchanged(
+    recommendations: List[AlgorithmRecommendation],
+) -> List[AlgorithmRecommendation]:
+    """丢掉「值没变」的建议 —— 这类建议没有可执行内容。
+
+    Args:
+        recommendations: 引擎产出的推荐列表。
+
+    Returns:
+        过滤后的推荐列表（原对象，不复制）。
+    """
+    return [r for r in recommendations if not r.is_unchanged()]
+
 
 class AlgorithmBase(ABC):
     """AI 推理类算法基类。

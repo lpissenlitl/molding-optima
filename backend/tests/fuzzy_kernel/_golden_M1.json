@@ -2861,19 +2861,7 @@
   "advisory_level|ctx_high": {
    "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0',))]",
    "diagnostics": "[]",
-   "recs": [
-    {
-     "confidence": "0.001533810679324463",
-     "current_value": "90.0",
-     "direction": "hold",
-     "level": null,
-     "param_name": "inj_spd_1",
-     "reason": "模糊推理 (sources=['advisory'])",
-     "recommended_value": "90.0",
-     "rule": null,
-     "value": "None"
-    }
-   ]
+   "recs": []
   },
   "advisory_level|ctx_low": {
    "calls": "[('get_rules', 'SHORTSHOT'), ('get_keywords_by_names', ('IV0',))]",

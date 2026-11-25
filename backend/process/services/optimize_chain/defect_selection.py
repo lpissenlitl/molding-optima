@@ -11,7 +11,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from .tuning_strategy import sort_defects_by_stage
+from .decide_adjustment import sort_defects_by_stage
 
 
 @dataclass
@@ -84,7 +84,7 @@ def _collect_candidates(defects: Sequence[Any]) -> List[str]:
 class StagePriorityDefectStrategy:
     """按调机阶段重排后取第一个有效缺陷的选取规则。
 
-    阶段表见 :mod:`process.services.optimize_chain.tuning_strategy`（含缺陷码→阶段映射与
+    阶段表见 :mod:`process.services.optimize_chain.decide_adjustment`（含缺陷码→阶段映射与
     阶段推进顺序）。
 
     【注意】**多缺陷反馈不按列表第一项**，而按**调机阶段**取：
@@ -136,7 +136,7 @@ class StagePriorityDefectStrategy:
 
 
 #: 本模块的选取规则（**阶段序**）—— 阶段推进顺序见
-#: :data:`process.services.optimize_chain.tuning_strategy.STAGE_ORDER`。
+#: :data:`process.services.optimize_chain.decide_adjustment.STAGE_ORDER`。
 DEFAULT_STRATEGY = StagePriorityDefectStrategy()
 
 

@@ -13,7 +13,12 @@
 
 from typing import List
 
-from process.algorithms.base import AlgorithmBase, AlgorithmRecommendation, AlgorithmRegistry
+from process.algorithms.base import (
+    AlgorithmBase,
+    AlgorithmRecommendation,
+    AlgorithmRegistry,
+    filter_unchanged,
+)
 
 
 class LLMEngine(AlgorithmBase):
@@ -48,7 +53,7 @@ class LLMEngine(AlgorithmBase):
             推荐列表
         """
         # TODO: 后续实现 RAG + LLM 推理
-        return []
+        return filter_unchanged([])
 
     def is_available(self, context: dict) -> bool:
         """判断是否可用。

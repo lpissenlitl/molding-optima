@@ -433,7 +433,7 @@ class SuggestionSchema(BaseSchema):
     """算法建议（_infer_kernel 返回的核心对象）。
 
     设计要点：
-    - source_type：算法来源（fuzzy_rule / rule_miner / llm ...）
+    - source_type：算法来源（fuzzy / empirical / rule_miner / llm ...）
     - recommendation_id：落库后产生（关联后端 Recommendation 表）
     - groups：按类别分组的建议项
     """

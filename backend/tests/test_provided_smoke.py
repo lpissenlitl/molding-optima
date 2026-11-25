@@ -9,7 +9,7 @@ r"""``parameter_optimize.optimize_from_provided`` 成功路径护栏。
 
 策略：patch ``_call_algorithms`` 走通整条链路（不调真实算法 / 不查 DB）。
 
-【注意】L2 策略层（场景 / 名额）**本文件不测**（由 ``test_decide_direction_layer.py`` 覆盖）
+【注意】L2 策略层（场景 / 名额）**本文件不测**（由 ``test_decide_adjustment_layer.py`` 覆盖）
 ⇒ 桩成「策略清单为空」⇒ 匹配不到场景 ⇒ 不裁决，所有 in-baseline 推荐都能落地，
 本文件专注于验证**载荷结构**（覆盖 / 保留 / 丢弃 / suggestion 结构）。
 
@@ -31,6 +31,7 @@ import pytest  # noqa: E402
 from extensions.exceptions import BizException  # noqa: E402
 from process.algorithms.base import AlgorithmRecommendation  # noqa: E402
 from process.services import parameter_optimize as _opt_mod  # noqa: E402
+from process.services.optimize_chain import decide_adjustment as _decide_adjustment_mod  # noqa: E402
 
 BASELINE = {
     "inj_pres_1": 60.0,
@@ -98,7 +99,7 @@ def _optimize():
     with patch.object(
         _opt_mod, "_call_algorithms", return_value=_algorithm_result(),
     ), patch.object(
-        _opt_mod, "sorted_scenario_strategies", return_value=(),
+        _decide_adjustment_mod, "sorted_scenario_strategies", return_value=(),
     ), patch.object(
         _opt_mod, "_resolve_visible_libraries", return_value=[],
     ):

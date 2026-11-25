@@ -173,7 +173,6 @@
         获取初始工艺
       </el-button>
       <el-button
-        v-if="!isQualifiedResult"
         type="warning"
         :loading="optimize_loading"
         :disabled="!hasAnyProcess"
@@ -341,8 +340,8 @@ const activeRound = computed(() =>
 )
 
 /**
- * 当前轮是否「合格」：合格态产品没有缺陷 ⇒ 不进入缺陷驱动的优化流程，
- * 所以隐藏【获取优化工艺】。提交通道仍可用 ——【保存当前工艺】照常落库。
+ * 当前轮是否「合格」：合格态产品没有缺陷 ⇒ 缺陷驱动引擎零产出，
+ * 但**调机策略自带合格态策略**（省能耗 / 省周期）⇒【获取优化工艺】照常可用。
  */
 const isQualifiedResult = computed(
   () => activeRound.value?.feedback?.tuning_result === 'qualified',
@@ -733,11 +732,6 @@ async function getOptimizedProcess() {
     ElMessage.warning('当前轮次缺少 seq_idx，请重置后重试')
     return
   }
-  // 合格态不进入缺陷驱动的优化流程（正常路径下按钮已隐藏，这里防御）
-  if (isQualifiedResult.value) {
-    ElMessage.info('产品已合格，无需进行工艺优化')
-    return
-  }
   // 缺陷反馈完整性校验（避免后端静默接收空 feedback 导致不报期望）
   const validation = validateFeedback(activeRound.value?.feedback)
   if (!validation.ok) {
@@ -746,7 +740,8 @@ async function getOptimizedProcess() {
   }
 
   // 无缺陷时算法没有优化对象（后端会 fail-fast 报「推荐算法暂不可用」，对用户是误导）
-  if (!(activeRound.value?.feedback?.defects?.length)) {
+  // 【注意】**合格态例外** —— 合格态走「省能耗 / 省周期」策略，候选由场景自带（不依赖缺陷）
+  if (!isQualifiedResult.value && !(activeRound.value?.feedback?.defects?.length)) {
     ElMessage.warning('本轮未填写缺陷，暂无优化建议')
     return
   }
@@ -767,12 +762,6 @@ async function getOptimizedProcess() {
     })
 
     const inferData = result?.data ?? result ?? {}
-
-    // 合格态短路响应（后端不跑 fuzzy、不建新轮次）——正常路径按钮已隐藏，这里防御别把空轮次塞进时间线
-    if (inferData.skipped) {
-      ElMessage.info(inferData.message || '本轮已记录，未进行工艺优化')
-      return
-    }
 
     // 响应有效性校验：parameter / suggestion.groups 缺失时不进下一轮（排查走服务端日志）
     const hasNewParameter = !!(

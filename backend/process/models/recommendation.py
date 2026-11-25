@@ -10,7 +10,8 @@ class Recommendation(BusinessBaseModel):
     """推荐结果 - 基于缺陷反馈的智能推荐。
 
     可扩展的 AI 推荐插槽，支持多种 AI 算法：
-    - fuzzy_rule: 模糊规则推理
+    - fuzzy: 模糊规则推理
+    - empirical: 经验推理
     - rule_miner: 规则挖掘学习
     - llm: 大语言模型
     - doe: 实验设计优化
@@ -31,7 +32,8 @@ class Recommendation(BusinessBaseModel):
 
     # --- 推荐来源 ---
     SOURCE_TYPE_CHOICES = [
-        ('fuzzy_rule', '模糊规则推理'),
+        ('fuzzy', '模糊规则推理'),
+        ('empirical', '经验推理'),
         ('rule_miner', '规则挖掘学习'),
         ('llm', '大语言模型'),
         ('doe', '实验设计优化'),
@@ -44,7 +46,7 @@ class Recommendation(BusinessBaseModel):
     )
 
     # --- 推荐方案（JSON 格式）---
-    # fuzzy_rule 格式：
+    # fuzzy 格式：
     # [
     #     {
     #         "defect": "短射",

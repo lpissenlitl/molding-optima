@@ -302,8 +302,8 @@ def test_optimize_from_provided_rejects_empty_defect_list():
 def test_optimize_from_provided_full_path_runs():
     """参照系（业务口径）：完整输入能走通整条链路。
 
-    接受 2 种结果：成功（返回 new_parameter+suggestion）/ fail-fast（无推荐 BizException）——
-    只要不是 NameError 就说明链路是通的。
+    接受 2 种结果：成功（返回 parameter+suggestion）/ fail-fast（无推荐 BizException）
+    —— 只要不是 NameError 就说明链路是通的。
 
     【注意】``_resolve_visible_libraries`` 是唯一碰 DB 的点 ⇒ 桩成空库列表，
     本用例保持离线可跑。
@@ -329,15 +329,42 @@ def test_optimize_from_provided_full_path_runs():
                 polymer_info={"abbreviation": "PP"},
             )
     except BizException as exc:
-        # fail-fast 路径：算法无推荐（规则集不全）—— 也算链路打通
-        assert "推荐算法" in str(exc), f"unexpected BizException: {exc}"
+        # fail-fast 路径：算法无推荐（规则集不全）/ 零落地（场景裁决后无可落地参数）
+        # —— 两种都是链路走通的标志
+        assert (
+            "推荐算法" in str(exc) or "无法落地" in str(exc)
+        ), f"unexpected BizException: {exc}"
         return
 
-    # 成功路径：从 provided 返回的 new_parameter / suggestion 无落库 ID
-    assert "new_parameter" in result, f"missing new_parameter: {result.keys()}"
+    # 成功路径：从 provided 返回的 parameter / suggestion 无落库 ID
+    # （入参给的是中文缺陷名「短射」⇒ 转换头把它译成英文码 SHORTSHOT，
+    #   规则库按英文码匹配 ⇒ 能查到规则）
+    assert "parameter" in result, f"missing parameter: {result.keys()}"
     assert "suggestion" in result, f"missing suggestion: {result.keys()}"
-    assert "parameter_id" not in result["new_parameter"]
-    assert "seq_idx" not in result["new_parameter"]
+    assert "parameter_id" not in result["parameter"]
+    assert "seq_idx" not in result["parameter"]
+    assert "recommendation_id" not in result["suggestion"]
+
+
+def test_optimize_from_provided_chinese_defect_name_reaches_success_path():
+    """参照系（业务口径）：中文缺陷名能走通到成功返回（转换头译成英文码）。
+
+    缺陷码词表在算法层公共底座（``algorithms/common/defect_codes.py``）
+    ⇒ 中文名与英文码走同一条路径（阶段推导 / 场景裁决也拿同一份英文码）。
+    """
+    with patch.object(_opt_mod, "_resolve_visible_libraries", return_value=[]):
+        result = _opt_mod.optimize_from_provided(
+            parameter={"inj_pres_1": 60.0, "brl_temp_3": 220.0},
+            feedback={"defects": [{"keyword_name": "缩水", "level": "high", "position": "DL1"}]},
+            mold_info=OK_MOLD,
+            machine_info=FULL_MACHINE,
+            polymer_info=OK_POLYMER,
+        )
+
+    assert "parameter" in result, f"missing parameter: {result.keys()}"
+    assert "suggestion" in result, f"missing suggestion: {result.keys()}"
+    assert "parameter_id" not in result["parameter"]
+    assert "seq_idx" not in result["parameter"]
     assert "recommendation_id" not in result["suggestion"]
 
 

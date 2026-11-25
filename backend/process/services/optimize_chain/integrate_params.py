@@ -1,4 +1,4 @@
-"""第3层：整合参数 —— 把调整计划变成**物理上自洽**的参数集。
+"""第3层：整合参数 —— 把调整方案变成**物理上自洽**的参数集。
 
 这一层只干一件事：**让参数集自洽**。它不知道参数是怎么来的
 （算法建议 / 手工编辑 / 初始化），也不判断合不合理（第4层 ``check_params.py`` 的事）。
@@ -7,7 +7,7 @@
 
 .. code-block:: text
 
-    计划落地   apply_plan()         第2层计划 ──▶ 写入 ──▶ 锚点传导
+    方案落地   apply_scheme()       第2层方案 ──▶ 写入 ──▶ 锚点传导
     参数集自洽 integrate()          差分 ──▶ 锚点传导 ──▶ 按差异回填
     锚点传导   propagate()          改了什么 ──▶ 连带算出别的量
 
@@ -53,17 +53,21 @@ from typing import (
 )
 
 from .anchors import (
+    FILL_RATIO_MODE,
     FREEDOM_YIELDS,
     G1_AUTO_FIELD,
     G1_BACKOFF_FIELD,
+    STEP_DOWN_MODE,
     FillTarget,
     apply_mel_targets,
     find_chain_break,
     last_stage_field,
+    read_weights,
     resolve_fill_target,
     resolve_stage_count,
+    resolve_step_down,
 )
-from .decide_direction import AdjustmentPlan
+from .decide_adjustment import AdjustmentScheme
 
 
 # ===========================================================================
@@ -501,32 +505,36 @@ def integrate(
 
 
 # ===========================================================================
-# 三、计划落地（第2层计划 ──▶ 参数集）
+# 三、方案落地（第2层方案 ──▶ 参数集）
 # ===========================================================================
 
 
-def apply_plan(
+def apply_scheme(
     baseline: Mapping[str, Any],
-    plan: AdjustmentPlan,
+    scheme: AdjustmentScheme,
     previous: Optional[Mapping[str, Any]] = None,
     *,
-    fill_weights: Optional[Tuple[float, float]] = None,
+    feedback: Optional[Mapping[str, Any]] = None,
+    mold_info: Optional[Mapping[str, Any]] = None,
 ) -> IntegratedParams:
-    """把第2层的**调整计划**整合进参数集（写入 + 锚点传导自洽）。
+    """把第2层的**调整方案**整合进参数集（写入 + 锚点传导自洽）。
 
-    流程：**写入计划 → 差分 → 传导 → 按差异回填**。
+    流程：**写入方案 → 差分 → 传导 → 按差异回填**。
 
-    - **写入计划**：按计划次序写进基线（先定 ML，再确定 MEL ⇒ ``MEL``
+    - **写入方案**：按方案次序写进基线（先定 ML，再确定 MEL ⇒ ``MEL``
       永远是由计量位置算出来的派生量）；
     - **差分**：写入后才知道「这次改动了哪些量」⇒ 与旧值比；
     - **传导**：按物理联动规则把连带量算出来（:func:`propagate`）。
 
     【注意】**「改成多少」在这一层算** —— 第2层只给「调哪个 +
     什么口径」；``MEL`` 是算法侧的**标**（由 ``ML_N + DDAM`` 算出）⇒ 这里按
-    ``plan.target_mode`` 把它翻成计量位置（决策量）：
+    ``scheme.target_modes`` 里声明的口径把它翻成计量位置（决策量）：
 
-    - ``'fill_ratio'``：按充填量比例解算**行程目标**（行程 ∝ 重量），
-      需 ``fill_weights``（目标重量, 实测重量）；解不出来 ⇒ **回落增量口径**；
+    - ``fill_ratio``：按充填量比例解算**行程目标**（行程 ∝ 重量），
+      需「目标重量 + 实测重量」（本层**自己**从 ``feedback`` / ``mold_info``
+      取，见 :func:`anchors.read_weights`）；取不到或解不出来 ⇒ **回落增量口径**；
+    - ``step_down``：**递减步进**（目标 = 当前设定 × (1 − 步长)）——
+      合格态省能耗 / 省周期用；**基于旧值**算；解不出来 ⇒ 该字段不动；
     - 其它（增量口径）：``旧MEL + ΔMEL`` ⇒ 计量位置。
 
     【注意】**本层不做存在性兜底** —— 「这条规则要调的参数是不是
@@ -540,55 +548,76 @@ def apply_plan(
 
     Args:
         baseline: 现状参数集（旧值基线）。
-        plan: 第2层给出的**调整计划**（字段名 + 目标值 + 口径）。
+        scheme: 第2层给出的**调整方案**（字段名 + 目标值 + 口径）。
         previous: 改动前的参数集；``None`` ⇒ 取 ``baseline``。
-        fill_weights: （目标重量, 实测重量）—— 充填量比例口径的输入。
+        feedback: 缺陷反馈（原料）—— 充填量比例口径的实测重量从这里取。
+        mold_info: 模具上下文（原料）—— 充填量比例口径的制品总重从这里取。
 
     Returns:
         :class:`IntegratedParams` —— 整合后的参数集 + 留痕。
     """
     values: Dict[str, Any] = dict(baseline)
     landed: List[str] = []
-    for name, value in plan.assignments:
+    old_values = previous if previous is not None else baseline
+    for name, value in scheme.assignments:
         values[name] = value
+        landed.append(name)
+
+    # 逐字段按口径解算（保留项里**非 MEL** 的字段）
+    # 【注意】**基于旧值算** —— 「当前设定」是本轮改动前的值（口径比算法给的
+    #    绝对值更具体 ⇒ 口径优先）。
+    # 【注意】解不出来（字段没值 / 值非正）⇒ **不动这个字段**（不臆造）。
+    for name, mode in scheme.target_modes.items():
+        if name == G1_AUTO_FIELD:
+            continue                      # MEL 走下面的专门分支
+        if mode != STEP_DOWN_MODE:
+            continue
+        resolved = resolve_step_down(name, old_values.get(name))
+        if resolved is None:
+            continue
+        values[name] = resolved.target_value
         landed.append(name)
 
     # MEL 是算法侧的「标」⇒ 这里按口径换算成可落地的计量位置目标
     fill_target: Optional[FillTarget] = None
-    if plan.mel_targets:
-        old_values = previous if previous is not None else baseline
-        if plan.target_mode == 'fill_ratio' and fill_weights is not None:
-            target_weight, actual_weight = fill_weights
-            resolved = resolve_fill_target(
-                values,
-                target_weight=target_weight,
-                actual_weight=actual_weight,
-                previous=old_values,
-            )
+    if scheme.mel_targets:
+        mode = scheme.target_modes.get(G1_AUTO_FIELD)
+        if mode == FILL_RATIO_MODE:
+            # 充填量比例口径的输入由**本层自己**从原料取
+            # （「要哪两个重量」是口径的事 ⇒ 上层不替本层挑）
+            target_weight, actual_weight = read_weights(feedback, mold_info)
+            resolved = None
+            if target_weight is not None and actual_weight is not None:
+                resolved = resolve_fill_target(
+                    values,
+                    target_weight=target_weight,
+                    actual_weight=actual_weight,
+                    previous=old_values,
+                )
             if resolved is not None and resolved.field_name in values:
                 values[resolved.field_name] = resolved.target_value
                 landed.append(resolved.field_name)
                 fill_target = resolved
             else:
-                # 比例口径解不出来 ⇒ 回落增量口径
+                # 比例口径解不出来（含缺实测输入）⇒ 回落增量口径
                 landed.extend(apply_mel_targets(
-                    values, plan.mel_targets, previous=old_values))
+                    values, scheme.mel_targets, previous=old_values))
         else:
             landed.extend(apply_mel_targets(
-                values, plan.mel_targets, previous=old_values))
+                values, scheme.mel_targets, previous=old_values))
 
     outcome = integrate(values, previous if previous is not None else baseline)
     return replace(
         outcome,
         landed=tuple(landed),
         fill_target=fill_target,
-        landing_blocked=_detect_zero_landing(baseline, plan, outcome),
+        landing_blocked=_detect_zero_landing(baseline, scheme, outcome),
     )
 
 
 def _detect_zero_landing(
     baseline: Mapping[str, Any],
-    plan: AdjustmentPlan,
+    scheme: AdjustmentScheme,
     outcome: IntegratedParams,
 ) -> Optional[Tuple[str, ...]]:
     """**第3层自检**：本该落地（上层裁决出了保留项）却一个量都没动。
@@ -605,17 +634,17 @@ def _detect_zero_landing(
 
     Args:
         baseline: 改动前的参数集。
-        plan: 第2层给出的调整计划（判「本该落地」用它）。
+        scheme: 第2层给出的调整方案（判「本该落地」用它）。
         outcome: 本次整合的结果（判「有没有落地」用它）。
 
     Returns:
         ``None`` ⇒ 没这个问题；否则返回**保留项**（诊断用，供调用方留痕）。
     """
-    if not plan.kept:
+    if not scheme.kept:
         return None
     if diff_numeric_fields(baseline, outcome.values):
         return None
-    return tuple(plan.kept)
+    return tuple(scheme.kept)
 
 
 __all__ = [
@@ -632,5 +661,5 @@ __all__ = [
     'numeric_snapshot',
     'is_number',
     # 方向落地
-    'apply_plan',
+    'apply_scheme',
 ]
