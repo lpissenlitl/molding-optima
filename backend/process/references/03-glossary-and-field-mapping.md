@@ -103,7 +103,7 @@
 | **G1** | **模温在优化链路里不可调**：`mold_temp` 只在初始化推理产出，优化链路的字段翻译表 `FIELD_NAME_ALIAS` 里没有 `mold_temp → MT` | `algorithms/fuzzy/field_names.py`；`algorithms/expert/param_types.py`（`MoldTempParams`） | 缩痕 / 周期 / 短射三章的首要工艺原因之一，算法完全看不到 |
 | **G2** | **规则多为定性，缺判据**：如 `hints.py` 的 `"SHRINKAGE": {"increase": ["PP0","PT0","CT"]}` 只说"加大/延长"，没有目标值 | `algorithms/empirical/hints.py` | "加多少"落回拍脑袋；书里二段压力/二段时间都有明确锚点 |
 | **G3** | **缺 `cushion` / `fill time` / `gate seal` 三个前置判据** | — | 多条对策的前置条件无法校验（如"有泄漏就别加大射胶量"） |
-| **G4** | **策略层无 4M 归因**：无法区分"对症调整"与"绕过问题" | `services/optimize_chain/tuning_strategy.py`（原 `algorithms/strategies.py`，场景清单已并入 `SCENARIO_STRATEGIES`） | 会把模/机/料根因当成工艺问题去调参 |
+| **G4** | **策略层无 4M 归因**：无法区分"对症调整"与"绕过问题" | `services/optimize_chain/decide_adjustment.py`（原 `algorithms/strategies.py`，场景清单已并入 `SCENARIO_STRATEGIES`） | 会把模/机/料根因当成工艺问题去调参 |
 | **G5** | **验收只有"参数物理合理性"**，缺书中的四问（工艺窗口 / 外观 / 尺寸 / 测试） | 第 4 层 `check_params` | 调完不知道算不算成功 |
 | **G6** | **充填量有两个旋钮，优先级要明确**：① 胶量端 `met_end_pos`（先动）；② `vps_pos`（缓冲量 / 行程起点，**MEL 偏大后**才轮到；工艺初始化已按产品状态设过） | `services/optimize_chain/anchors.py`（注射行程 = `ML_N − VPTL`）；`services/parameter_initialize.py`（`vps_pos` 初始化） | 策略层需能表达"**胶量已到上限 ⇒ 退到下一旋钮**"，否则只会反复加 MEL |
 | **G7** | **胶量端的「标 vs 决策量」要分清**：`MEL`(`met_end_pos`) 是**标**（= `ML_N + DDAM`），真正落库的是末段计量位置 `met_pos_N` | `services/optimize_chain/anchors.py`（`resolve_mel_target` / `resolve_fill_target`） | 书里的 "shot size" 在本项目落在 `met_end_pos` 口径（不是独立字段） |

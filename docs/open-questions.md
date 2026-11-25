@@ -13,13 +13,13 @@
 
 - **问题**：是否要独立的「参数组级」配置层？现状 —— 组级次序只写在场景优先集里（如 `filling_stage_first` 把「胶量端 → 保压 → 熔体侧 → 料筒温度」排进优先集），没有独立的组级配置层。
 - **影响面**：L2 裁决顺序、建议分组展示。
-- **关联代码**：`backend/process/services/optimize_chain/decide_direction.py`、`backend/process/services/optimize_chain/tuning_strategy.py`
+- **关联代码**：`backend/process/services/optimize_chain/decide_adjustment.py`
 
 ### Q2 · L2 条件式让位的前提判据
 
 - **问题**：让位（`yielded`）的前提判据用什么？现状取「阶段达成信号」，但该信号在当前架构下**恒不触发** ⇒ 让位机制实际不生效。需另定判据（阶段准入 / 参数×缺陷派生量表）。
 - **影响面**：`decision_status='yielded'` 永不出现。
-- **关联代码**：`backend/process/services/optimize_chain/decide_direction.py`
+- **关联代码**：`backend/process/services/optimize_chain/decide_adjustment.py`
 
 ### Q3 · feedback 评估节奏
 
@@ -31,7 +31,7 @@
 
 - **问题**：「充填 → 保压 → 其他」的顺序是否确认？现状只做「场景优先集 + 名额」，组级次序未做。
 - **影响面**：建议采纳顺序。
-- **关联代码**：`backend/process/services/optimize_chain/decide_direction.py`、`optimize_chain/tuning_strategy.py::SCENARIO_POLICIES`
+- **关联代码**：`backend/process/services/optimize_chain/decide_adjustment.py`、`optimize_chain/decide_adjustment.py::SCENARIO_STRATEGIES`
 
 ### Q5 · `VPTL` 下移下限
 
@@ -42,7 +42,7 @@
 ### Q6 · L3 一致性层的落位 ✅ 已结（2026-11-23）
 
 ⇒ **结论：落 service 层** —— `backend/process/services/optimize_chain/`。
-L3（及 L2 / L4 / 底座 `anchors` / 两份配套）属**优化链路的编排与领域计算**，
+L3（及 L2 / L4 / 底座 `anchors` / 配套 `defect_selection`）属**优化链路的编排与领域计算**，
 不是 AI 推理算法；判据 = **不被任何算法线引用**，只被 service 层调用。
 
 ⇒ **落地**：见 `backend/process/services/optimize_chain/__init__.py` 与
@@ -162,17 +162,37 @@ L3（及 L2 / L4 / 底座 `anchors` / 两份配套）属**优化链路的编排�
 - **影响面**：挖掘出的有效性在推理侧完全不可见。
 - **关联代码**：`backend/process/services/mining_landing.py`、`algorithms/fuzzy/library/adapters.py`、`fuzzy_core/models/nets.py`
 
+### Q12 · 合格态经济性调机的口径（**部分已定**，2026-11-24 新增 / 2026-11-25 更新）
+
+- **问题**：合格态降能耗 / 降周期的**目标值算法**与**回退机制**尚未全部拍板 —— **功能边界已定**（见 `docs/qualified-tuning-boundary.md`），本条只登记**待定口径**。
+- **配套七问**（编号对应边界文档 §6；**2026-11-25 随批次 15.1 更新状态**）：
+
+  | # | 待定口径 | 选项 | 状态（2026-11-25） |
+  |---|---|---|---|
+  | R1 | **压力目标值算法** | (a) 递减步进（靠试模逼近够用线，不依赖物理模型）｜(b) 实测峰值当设定目标（设备压降会吃掉余量 ⇒ 有短射风险）｜(c) SS-05「所需段一峰值 × 1.2」（合格态暂无「所需峰值」可靠来源） | ✅ **已定案 (a)** —— 落地为口径 `step_down`（`anchors.py`） |
+  | R2 | **步长口径** | (a) 固定比例｜(b) 固定绝对量｜(c) 两者可配 | 🟡 **初值已落 (a) 固定比例 5%** —— **数值待实测标定** |
+  | R3 | **降过头（试模不合格）** | (a) 回退到上一轮值 + 换旋钮｜(b) 只换旋钮（现状退阶只做让位、**不含回退**） | ⏳ **仍预留**（批次 15.8） |
+  | R4 | **周期目标值算法** | (a) `target_cycle_time` 换算｜(b) 逐档削减 | ⏳ **仍预留**（批次 15.7）—— 同 R1 待标定 |
+  | R5 | **合格态的响应形态与前端表现** | 现前端硬校验 `suggestion.groups` 非空，否则弹「推荐算法暂不可用」⇒ 需区分。⚠️ **2026-11-25 实测**：合格态下**参数真的变了**，但 `groups` **为空**（场景自带候选不产生建议条目）⇒ 前端弹错且不显示新轮次 | ⏳ **仍预留**（批次 15.9） |
+  | R6 | **经济性源与缺陷源并存 / 互斥** | 现按**互斥**设计；若要并存需重定引擎优先级语义 | ✅ **不需要** —— 场景条件互斥，不存在并存语义 |
+  | R7 | **规则原料落地条目** | SS-05 目标值口径 / CY-04「冷却时间取刚好满足顶出」/ CY-06「各段时间冗余 = 纯浪费」—— 在现有规则库**零覆盖** ⇒ 属新增能力，落地须带前提与副作用 | ⏳ **仍预留** |
+
+- **影响面**：合格态调机链 —— **首批已落地**（批次 15.1，2026-11-25）：L2 新增 `qualified_efficiency` 场景（**自带候选** `candidate_params`）+ L3 新增 `step_down` 口径（递减步进，步长 5%）+ 前端恢复【获取优化工艺】入口 ⇒ **C1 随本条一并解决**（合格态不再 fail-fast）。
+- **关联代码**：`backend/process/services/optimize_chain/`（`decide_adjustment.py` / `anchors.py` / `integrate_params.py`）、`backend/process/references/04-defect-adjustment-rules.md` §6 / §9.2
+
 ---
 
 ## 二、一致性遗留待修（2026-11-23 `parameter_optimize.py` 一致性检查）
 
 | # | 问题 | 位置 | 影响面 | 建议 |
 |---|---|---|---|---|
-| C1 | **合格态提交可能报错且不落库**：`tuning_result=qualified` ⇒ 缺陷列表为空 ⇒ 推理无输出 ⇒ 命中 fail-fast 抛 `ERROR_OPERATION_FAILED`；该异常发生在事务**之前** ⇒ 合格标签写不进 `TuningRecord` | `backend/process/services/parameter_optimize.py`（`_infer_kernel` fail-fast / `optimize_from_condition` Step2→Step3） | 合格态提交体验 + 合格标签丢失 | 待拍板：补合格态短路分支（只落库不推理），还是接受现行为并改文档 |
-| C2 | **`source_type` 取值域三方不一致**：代码产出 `'fuzzy'`；ORM choices 是 `fuzzy_rule/rule_miner/llm/doe/genetic`；`'empirical'` 不在 choices 内 | `parameter_optimize.py::_resolve_primary_source`、`models/recommendation.py::SOURCE_TYPE_CHOICES` | 落库值不合规；历史回显回吐 `'fuzzy'` | 待拍板：统一到 choices，还是扩 choices 容纳 `'empirical'` |
-| C3 | **优先级表漂移**：`_resolve_primary_source` 硬编码 `('expert','fuzzy','rule_miner','llm','doe','ga')`，而 `AlgorithmRegistry._priorities` 是 `{'fuzzy':1,'llm':2,'empirical':3}`；同文件另一处注释却写「取自 `_priorities`」 | `parameter_optimize.py::_resolve_primary_source` vs `algorithms/base.py::AlgorithmRegistry._priorities` | 自相矛盾；缺 `'empirical'` 只能靠兜底循环命中 | 改为直接读 `_priorities`（删硬编码表） |
+| C1 | ✅ **已解决**（2026-11-25，随批次 15.1）：原定性「合格标签丢失」**不成立**（合格态走 `tuning-feedback` 通道 ⇒ `result=qualified` 照常落库）；真实缺口 = **合格态走 `optimize` 接口会 fail-fast**（无缺陷 ⇒ 缺陷驱动引擎零产出）⇒ 触发面仅**第三方集成 / `optimize_from_provided`** ⇒ 已用**移位 fail-fast**（从「L1 零产出」移到「L2 零候选」）解决 —— 合格态有**场景自带候选** ⇒ 不再 fail-fast；**非合格态行为完全等价**（消息不变） | `backend/process/services/parameter_optimize.py`（`_infer_kernel` fail-fast） | 接口层（非用户可见）：第三方在合格态调 optimize 会 500 | ✅ **已修**（2026-11-25，批次 15.1）：**禁止**用「短路 + 原样建轮」消除 fail-fast（违反 `docs/optimize-api-contract.md` §5.2「合格态不短路」+ 已否决决策）—— 正确落法是**给合格态一个真实产出**（场景自带候选 + 口径解算） |
+| C2 | ~~**`source_type` 取值域三方不一致**~~ → **已对齐**：ORM choices 改为容纳引擎 subtype（`fuzzy_rule` → `fuzzy`，并补 `'empirical'`）；落库兜底值同步改为 `'fuzzy'` | `parameter_optimize.py::_resolve_primary_source`、`models/recommendation.py::SOURCE_TYPE_CHOICES` | 已解决（2026-11-24，迁移 `0020_alter_recommendation_source_type`） | ⚠️ 存量 `'fuzzy_rule'` 需刷一次，见表下注 |
+| C3 | ~~**优先级表漂移**~~ → **已收敛为单一优先级表**：`_resolve_primary_source` 删掉硬编码表，直接按 `AlgorithmRegistry.get_priority` 排序取第一个有产出的引擎（与 `_select_algorithm_result` **同一份表**）⇒ `'empirical'` 正常进优先级链（fuzzy 1 → llm 2 → empirical 3） | `parameter_optimize.py::_resolve_primary_source` | 已解决（2026-11-24）；**行为等价** —— 注册引擎只有 fuzzy / llm / empirical，旧硬编码表里能命中的也只有 fuzzy / llm，其余组合新旧结果相同 | ⚠️ 未登记优先级的 subtype（如 expert / rule_miner）一律取默认 99 ⇒ 排最后；`'ga'` 与 choices 里的 `'genetic'` 仍不同名（当前无引擎注册，不影响） |
 | C4 | ~~字段名翻译双口径~~ → **已收敛为单一口径**：翻译只在**算法层出口**一处（`algorithms/fuzzy/field_names.py::to_business_name`；`fuzzy/engine.py` L247 `to_business_name(...) or 原样保留`）⇒ service 层 `param_naming` **不做翻译**（只判「是不是 ORM 工艺量」+ 出中文标签）⇒ 原 `_to_candidate_param_name` / `param_naming.to_business_param_name` **均已删** | `algorithms/fuzzy/field_names.py`、`backend/process/services/shared/param_naming.py` | **残留**：无对应 ORM 列的算法名（`IPOS` / `CUSION` / `BT`）⇒ `to_business_name` 返回 `None` ⇒ 原样保留算法名落库，而展示层会过滤掉 ⇒ 库里有、界面看不到 | 待拍板：`BT`（无段号的整体料筒温度）这类算法名是给一个业务侧对应，还是接受「落库但不可展示」 |
 | C5 | **service 层存量两个类形态**（`ParameterInitializeService` / `TuningService`）与「模块级函数 + 数据类为默认」的约定不一致 | `backend/process/services/parameter_initialize.py`、`backend/process/services/tuning.py` | 调用方写法不统一（类静态方法 vs 模块函数） | 待拍板：收敛到模块级函数，还是保留类形态并把约定改成「两类并存」 |
+
+注（C2）：choices 变更**不动 DB schema**（`CharField` 类型与长度不变）⇒ 迁移 `0020` 只是把新取值集写进迁移记录。存量旧码由数据迁移 `0021` 一次性刷齐（`fuzzy_rule` → `fuzzy`，幂等）；**不做反向** —— 改回旧码会把「本来就是 `fuzzy`」的行一并改错（旧世界的真实落库值本就是 `fuzzy`）。
 
 ---
 

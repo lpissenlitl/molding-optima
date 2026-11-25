@@ -1,28 +1,42 @@
 # L2 阶段化调机：口径设计（2026-11-12）
 
 > **目的**：把「调机按什么组织」定成**可落数据**的口径 —— 此前挂在 L2 形态讨论里的待办项。
-> **状态**：**口径已定**（2026-11-12 拍板 A–G，见 §10）；**批次 12.1 / 12.2 / 12.3 / 12.4a / 12.5 / 12.6a / 12.6b / 12.6c / 12.7 已落地**（见 §11）。
+> **状态**：**口径已定**（2026-11-12 拍板 A–G，见 §10）；**批次 12.1 / 12.2 / 12.3 / 12.4a / 12.5 / 12.6a / 12.6b / 12.6c / 12.7 / 13.0 / 13.1 / 14.1 / 15.1 / 15.2 / 15.3 / 15.4 已落地**（见 §11）。
 > ⚠️ **2026-11-13 口径修正**：**L2 不重选缺陷**（L2 的输入 = 规则 + 已确定的缺陷信息），见 §5。
 > ⚠️ **2026-11-13 口径修正 2**：**基线项不靠白名单排挤，而用独立的禁入清单**（见 §7.2）。
-> **当前 pytest 基线：135 passed**（12.1 / 12.2 前后一致 ⇒ 行为零变化；**12.3 是第一次真正改变输出**，测试仍全过 ⇒ 现有用例未覆盖 L2 裁决路径）。
+> **当前 pytest 基线：302 passed**（2026-11-25 实测；此前记录 236 / 135 / 80 passed —— 测试集规模已变）。
 > **关联**：`backend/process/references/04-defect-adjustment-rules.md`（规则原料）、
-> `backend/process/services/optimize_chain/decide_direction.py`（`ScenarioStrategy` 机制）、
-> `docs/open-questions.md`（本文遗留的未决项）。
+> `backend/process/services/optimize_chain/decide_adjustment.py`（`ScenarioStrategy` 机制）、
+> `docs/open-questions.md`（本文遗留的未决项）、
+> `docs/qualified-tuning-boundary.md`（**合格态调机 · 功能边界** —— 第二阶段调机：降能耗 / 降周期）。
 
-> ⚠️ **路径变更公告（2026-11-23 · 目录归位）**：**本文正文的 ``algorithms/xxx.py``
-> 路径已随目录归位失效**，阅读时按下表换算（机制本身未变，只是文件搬家 / 合并）：
+> ⚠️ **路径变更公告（2026-11-23 · 目录归位；2026-11-25 · L2 两模块合并并改名）**：
+> **本文正文的 ``algorithms/xxx.py`` 路径已随目录归位失效**，阅读时按下表换算
+> （机制本身未变，只是文件搬家 / 合并）：
 >
 > | 旧路径 | 现址 |
 > |---|---|
-> | `algorithms/decide_direction.py` | `services/optimize_chain/decide_direction.py` |
+> | `algorithms/decide_direction.py` | `services/optimize_chain/decide_adjustment.py`（2026-11-25 改名 + 并入 `tuning_strategy`） |
 > | `algorithms/defect_selection.py` | `services/optimize_chain/defect_selection.py` |
-> | `algorithms/tuning_strategy.py` | `services/optimize_chain/tuning_strategy.py` |
-> | `algorithms/stage_order.py` | `services/optimize_chain/tuning_strategy.py`（阶段表已并入） |
-> | `algorithms/strategies.py` | `services/optimize_chain/tuning_strategy.py`（场景清单已并入） |
-> | `services/policies.py` | `services/optimize_chain/decide_direction.py`（已并入） |
+> | `algorithms/tuning_strategy.py` | `services/optimize_chain/decide_adjustment.py`（阶段表 + 场景清单已并入，2026-11-25） |
+> | `algorithms/stage_order.py` | `services/optimize_chain/decide_adjustment.py`（阶段表已并入） |
+> | `algorithms/strategies.py` | `services/optimize_chain/decide_adjustment.py`（场景清单已并入） |
+> | `services/policies.py` | `services/optimize_chain/decide_adjustment.py`（已并入） |
+> | `services/optimize_chain/decide_direction.py` | `services/optimize_chain/decide_adjustment.py`（2026-11-25 改名） |
+> | `services/optimize_chain/tuning_strategy.py` | `services/optimize_chain/decide_adjustment.py`（已并入，2026-11-25） |
 > | `algorithms/integrate_params.py` | `services/optimize_chain/integrate_params.py` |
 > | `algorithms/check_params.py` | `services/optimize_chain/check_params.py` |
 > | `algorithms/anchors.py` | `services/optimize_chain/anchors.py` |
+>
+> **符号级换算**（正文里出现的旧符号名）：
+>
+> | 旧符号 | 现位置 / 现状 |
+> |---|---|
+> | `AdjustmentPlan` | `AdjustmentScheme`（`decide_adjustment.py`） |
+> | `build_plan` | `resolve_scheme`（**入口** = `build_adjustment_scheme`） |
+> | `apply_plan` | `apply_scheme`（`integrate_params.py`） |
+> | `ScenarioContext` / `build_scenario_context` | **已删**（批次 15.2）⇒ 改**事实表**（`decide_adjustment.py::collect_facts`） |
+> | `decide_tuning`（曾用名，**未落地**） | `decide_adjustment` |
 >
 > 归位理由见 `docs/algorithm-layering-plan.md` 的「路径变更公告」。
 
@@ -108,9 +122,13 @@
 —— 达成 = 该阶段的缺陷码在本轮反馈中**全部消失**（**纯推导、不落库**，每轮重算）；
 `current`（当前应推进的阶段）注入 `ScenarioContext.extra`（场景条件可引用，
 **当前无场景引用 ⇒ 行为零变化**）+ 进第2层留痕。
+⚠️ **2026-11-25 追加**（批次 15.2）：注入载体由 `ScenarioContext.extra` 改为**事实表**
+（映射）—— `ScenarioContext` 已删（见 §12.2 的现状更新）。
 ⚠️ **让位机制本身未落地** —— 经核实，拿阶段达成信号做「前提」在现有架构下
 **恒不触发**（场景命中即该阶段未达成；白名单又排在 `satisfied` 之前）⇒ 判据待定，见
 `docs/open-questions.md` Q2。
+⚠️ **2026-11-24 追加**：批次 13.1 落地的是**另一类**让位（上轮证伪 ⇒ 不再动它），
+与这里说的「阶段达成信号 ⇒ 让位」是**两件事** ⇒ Q2 仍未闭环。
 
 ---
 
@@ -144,8 +162,8 @@
 
 | 落点 | 职责 | 用阶段表做什么 | 现状 |
 |---|---|---|---|
-| `algorithms/defect_selection.py`（**L1 侧**） | 选哪个缺陷去推理 | **排**（按阶段优先级重排后取第一个） | ✅ **批次 12.7 起生效**：`StagePriorityDefectStrategy` = 按阶段优先级重排后取第一个（**当前唯一实现**；`FirstValidDefectStrategy` 已于 2026-11-19 删除） |
-| `algorithms/decide_direction.py`（**L2 侧**） | 调什么、怎么调 | **查**（阶段进度 —— `derive_stage_progress()` 推导 `current_stage`，经 `ScenarioContext.extra` 注入） | `select_strategy` 已就位；12.3 起清单有 2 条（S1 + 兜底） |
+| `services/optimize_chain/defect_selection.py`（**L1 侧**） | 选哪个缺陷去推理 | **排**（按阶段优先级重排后取第一个） | ✅ **批次 12.7 起生效**：`StagePriorityDefectStrategy` = 按阶段优先级重排后取第一个（**当前唯一实现**；`FirstValidDefectStrategy` 已于 2026-11-19 删除） |
+| `services/optimize_chain/decide_adjustment.py`（**L2 侧**） | 调什么、怎么调 | **查**（阶段进度 —— `derive_stage_progress()` 推导 `current_stage`，进**事实表**） | `select_strategy` 已就位；12.3 起清单有 2 条（S1 + 兜底） |
 
 ⚠️ **这两处必须读同一份阶段优先级表**，否则会打架：
 选了 `SHORTSHOT`（S1），策略却匹配到 `SHRINKAGE`（S2）的条件 ⇒ 方向与缺陷对不上。
@@ -157,26 +175,26 @@
 反馈缺陷列表
    ↓ ① 按阶段优先级排序（S1 → S2 → S3，族内按缺陷码字典序稳定）   ← L1 侧：defect_selection
    ↓ ② 取第一个有效缺陷                                         ← L1 侧：defect_selection
-   ↓ ③ 用「已确定的缺陷」匹配策略（查它属哪个阶段）                ← L2 侧：decide_direction
+   ↓ ③ 用「已确定的缺陷」匹配策略（查它属哪个阶段）                ← L2 侧：decide_adjustment
    ↓ ④ 裁决：准入 / 次序 / 名额 / 口径                            ← L2 侧
 ```
 
 ---
 
-## 6. 阶段 → 策略场景的映射（**示意，未落库**）
+## 6. 阶段 → 策略场景的映射（**示意；场景清单已落库**于 `services/optimize_chain/decide_adjustment.py`）
 
 ```python
 # S1 打足 —— 充填量两个旋钮，先 MEL 后 VPTL
 ScenarioStrategy(
     scenario_code='stage1_filling',
     conditions=(
-        {'field': 'selected_defect', 'operator': 'in_set', 'value': ('SHORTSHOT',)},
+        {'field': 'defect_codes', 'operator': 'in_any', 'value': ('SHORTSHOT',)},
         {'field': 'fill_gap', 'operator': 'gt', 'value': 0},
     ),
     allowed_params=('met_end_pos', 'vps_pos'),   # 基线项 = 其余全部
     preferred_params=('met_end_pos', 'vps_pos'), # 有序 ⇒ 先 MEL，MEL 偏大后才轮到 VPTL
     max_items=1,                                 # 一次只改一个量
-    target_mode='fill_ratio',                    # 按充填量比例解算行程
+    target_modes={'met_end_pos': 'fill_ratio'},   # 口径**按字段**声明（按充填量比例解算行程）
     reason='充填未足 ⇒ 只动充填量：先胶量端 met_end_pos，MEL 偏大后才轮到 vps_pos',
     priority=10,
 )
@@ -185,7 +203,7 @@ ScenarioStrategy(
 ScenarioStrategy(
     scenario_code='stage2_shrinking',
     conditions=(
-        {'field': 'selected_defect', 'operator': 'in_set',
+        {'field': 'defect_codes', 'operator': 'in_any',
          'value': ('SHRINKAGE', 'UNDERSIZE', 'OVERSIZE', 'WARPING')},
     ),
     allowed_params=('hold_pres_1', 'hold_t_1'),
@@ -217,6 +235,11 @@ ScenarioStrategy(
 
 ⚠️ 但"**MEL 偏大**"这个**退阶条件**要能写进 `conditions` ⇒ 见 §8 的前提 ①。
 
+⚠️ **2026-11-24 追加**：已落地的**退阶**（批次 13.1）走的是**排除**路径、
+**不是条件**路径 —— 「上轮试过这个旋钮且没改善 ⇒ 本轮不再动它」（`failed_params` 通道）
+⇒ **零配置改动**（退出的是**被证伪的那一个**，`allowed_params` 的顺序即退阶路径）；
+而「**本轮算出来 MEL 偏大**」这类**同轮推导**的退阶条件**仍未落地** ⇒ 见 §8 前提 ①。
+
 ### 7.2 基线项 = **禁入清单**（`blocked_params`），与白名单分开
 
 用户口径：「注射速度属基线取值，不进阶段调机」。
@@ -231,7 +254,7 @@ ScenarioStrategy(
 | **白名单** | `allowed_params`（空 = 不限制） | **场景范围** —— 这个场景该动哪些旋钮 | 不在名单 ⇒ 让位「本场景不允许」 |
 | **禁入清单** | `blocked_params`（空 = 不禁） | **基线项** —— 任何场景都不该动的旋钮 | 在名单 ⇒ 让位「基线项 ⇒ 不参与阶段调机」 |
 
-⇒ 基线项只需写 **6 个字面量**（`inj_spd_1`~`inj_spd_6`，见 `tuning_strategy.BASELINE_BLOCKED_PARAMS`），
+⇒ 基线项只需写 **6 个字面量**（`inj_spd_1`~`inj_spd_6`，见 `decide_adjustment.BASELINE_BLOCKED_PARAMS`），
 **不需要全集** ⇒ 新增旋钮不用改清单。
 
 ⚠️ **禁入排在准入之前**（裁决序 §2 早于 §3）：基线项是**全局**理由，比
@@ -244,7 +267,7 @@ ScenarioStrategy(
 
 ---
 
-## 8. 需要补的技术前提（**5 条，诚实列出**）
+## 8. 需要补的技术前提（**8 条，诚实列出**）
 
 | # | 前提 | 现状 | 影响 |
 |---|---|---|---|
@@ -255,6 +278,8 @@ ScenarioStrategy(
 | **⑤** | **条件运算子缺 `in_set`** | ✅ **批次 12.2 已落地** —— 新增 `in_set`（单值 ∈ 集合）/ `not_in_set`；原 `in` = `_contains(field_value, target)` = **目标 ⊆ 字段值**，方向**保持不变**（两者并存，靠命名区分） | S2（4 个码）/ S3（12 个码）的条件**写不出来** ⇒ 需新增 `in_set`（单值 ∈ 集合） |
 | **⑥** | **条件运算子缺「集合 ∈ 集合」** | ✅ **批次 12.4a 已落地** —— 新增 `in_any`（**字段值是集合** ⇒ 任一元素 ∈ 目标集合）；与 `in_set`（字段值是单值）**方向相反**，两者并存不混 | ⚠️ `defect_codes` 是**元组**（全部缺陷码）⇒ `in_set` 对它**永远为假** ⇒ S2 的 4 个码写不出来 |
 | ⑦ | **条件引用的是「选中缺陷」还是「含该缺陷」** | ✅ **已修复**（2026-11-16）—— 缺陷选取上移到 **service 预处理层**（**只做一次**），结果经 `DefectSelection.to_context()` 随 context 的 `selected_defect` 下传；**L1（推理）与 L2（策略）共用同一份** ⇒ 场景条件改引用 `selected_defect`（`in_set`），不再用 `defect_codes`（全部缺陷码） | 已消除：多缺陷反馈下 L2 命中的场景 = **本轮实际处理的缺陷**对应的场景，不再错配（白名单不会再挡掉本该调的参数 ⇒ 不再“该轮无输出”） |
+| ⑧ | **上一轮效果与上一轮落地参数要能进 L2** | ✅ **已落地**（2026-11-24，批次 13.1）—— `ScenarioContext` 加 `last_tuning_result`（上一轮试模评价）/ `last_advised_params`（上一轮**实际落地**的参数）两个标准字段；`resolve_priority` 加 `failed_params` 通道（上轮证伪 ⇒ 让位） | 原缺口：算法一直推**同一方向同一量**，换不了旋钮（用户口径：「一个调整逻辑一直打不出合格产品，算法仍然一直推荐相同的调整方向和调整量」） |
+| ⑨ | **目标值求解口径要能按字段声明并被执行** | 🟡 **部分落地**（2026-11-24，批次 14.1）—— 口径位已从「场景级单值 + 只认 `met_end_pos`」换成**按字段声明**（`ScenarioStrategy.target_modes` / `AdjustmentPlan.target_modes`），L3 按字段取口径；**求解器注册表与第二个口径未做**（等 `peak_ratio` 一起定型） | 原缺口：非派生量旋钮（保压压力 / 注射压力 / 背压 / 料筒温度…）的目标值**全是 L1 的「大概值」直接落地**，L2 没有「用实测值修正调整量」的话语权 |
 
 ⚠️ **现状更新（2026-11-19）** —— 缺陷信息**已收进 `feedback`**（收敛后
 `defects` 只剩本轮处理的那条）⇒ 前提 ⑥ 的「`defect_codes` 是全部缺陷码元组」
@@ -265,7 +290,49 @@ ScenarioStrategy(
 →→场景条件仍引用 `selected_defect`（由 `algorithms/decide_direction.py` 的
 →→`build_scenario_context` **从 feedback 内部派生**后放入 `ScenarioContext.extra`
 →→—— 优先取 `defect_selection['selected']['keyword_name']`（选取的一手出口），
-→→回落 `defects[0]['keyword_name']`；**service 层不再注入**）。
+→→ 回落 `defects[0]['keyword_name']`；**service 层不再注入**）。
+
+⚠️ **现状更新（2026-11-24）** —— 场景条件的**载体统一到标准字段 `defect_codes`**：
+`ScenarioContext.defect_codes`（标准字段，在 `CONTEXT_FIELDS` 里）由
+`selected_defect` 派生 ⇒ **与选中的那一条恒等**（至多一个元素）⇒
+6 条场景条件的 `field` 改用 `defect_codes`、运算子由 `in_set` 改 `in_any`
+（集合字段专用）⇒ `ScenarioContext.extra` 只剩 `current_stage`（跨模块注入位）。
+⇒ **判定口径不变**：命中的仍是「本轮实际处理的缺陷」对应的场景
+—— `defect_codes` 恒为选中的那一条 ⇒ 不会因「含别的缺陷」而错配
+（多缺陷反馈下实测：短射+缩水 ⇒ 命中 `filling_first`，不命中 `shrinking_first`）。
+
+⚠️ **现状更新（2026-11-25 · 批次 15.2）** —— 上两段里的载体（`ScenarioContext` /
+`build_scenario_context` / `CONTEXT_FIELDS`）**已全部退役** ⇒ 现状是**事实表**
+（`decide_adjustment.py::collect_facts`，**映射结构**、无字段清单、无补丁通道）：
+`defect_codes` 由 `_derive_selected_defect(feedback)` 派生（只认 `defect_selection`
+这一手出口）；`current_stage` 由 `derive_stage_progress` 推导后一并放进事实表。
+⇒ **判定口径不变**（仍指「本轮实际处理的缺陷」），只是**载体从对象换成映射**。
+
+⚠️ **现状更新（2026-11-24 · 退阶）** —— 「**上轮试过没改善 ⇒ 本轮不再动它**」落地
+（批次 13.1）：
+
+- **两个字段各管一件事**（缺一不可）：
+  `last_tuning_result` = **触发器**（上轮效果：`ineffective` / `unchanged` ⇒ 换）、
+  `last_advised_params` = **定位器**（上轮**实际落地**了哪些参数 ⇒ 退哪几个）。
+  「只有落地的才试过，没落地的没被证伪」⇒ 落地判据取 `decision_status == 'adopted'`。
+- **事实从哪来**：service 预处理层查**父轮** `Recommendation`
+  （`parent_param.parent_param_id` = 上一次提交反馈的那一轮）⇒ 从 `recommendations`
+  JSON 里取已采纳项；上轮效果取 `feedback['tuning_result']`（`_to_algorithm_feedback`
+  **已透传** ⇒ 零取数成本）。
+- **判据分工**：**通用判据进代码**（`ineffective` / `unchanged` 都算没改善 ——
+  调机师傅对这两种情况的反应一样：换旋钮再试）、**业务顺序进配置**
+  （`allowed_params` 的顺序天然就是退阶路径 ⇒ **零配置改动**）。
+- **三层边界**（用户口径「每一个环节的代码要有边界」）：service 层只提供**事实**（查库）、
+  L2 `resolve_scheme` 只根据事实算**排除集**、`resolve_priority` 只执行**机制**（让位 + 留痕）。
+- **优雅退化**：没有上一轮 / 老记录无 `decision_status` ⇒ 排除集为空 ⇒
+  **行为与现状完全一致**（不臆造）；纯推理入口（`optimize_from_provided`）天然无上一轮。
+
+⚠️ **现状更新（2026-11-24 · 口径位）** —— 「**改成多少**」的交接面已按字段建模
+（批次 14.1，**零行为变化**）：`ScenarioStrategy.target_modes`（字段 → 口径名）、
+`AdjustmentScheme.target_modes`（**只带保留项**）、L3 按 `plan.target_modes` 取口径。
+⚠️ **只换形、不扩口径** —— 现有唯一口径仍是 `fill_ratio`（仍只作用于 `met_end_pos`）；
+非派生量旋钮的目标值**仍是 L1 原样透传** ⇒ 前提 ⑨ 只**部分闭环**。
+⇒ 详见 §12。
 
 ⚠️ ① 直接触及 `§6.2` 撤回策略表的理由②（「条件字段集写死在代码里 ⇒ 表达不了需要表达的东西」）
 ⇒ 扩字段时**不要再把字段名写死成枚举**，否则等于把撤回的理由又请回来。
@@ -302,7 +369,9 @@ ScenarioStrategy(
 | **F** | 阶段优先级表位置 | ✅ **`algorithms/` 下独立文件** —— `defect_selection` 与 `strategies` **共读**（前者**排**、后者**查**） | 新增一个文件 |
 | **G** | S3 本轮范围 | ✅ **先做 2–3 条验证形态** —— `FLASH` / `BURN` / `GASVEINS`（覆盖「减胶量」「先提示修模」「查背压」三种不同形态） | 决定本轮工作量 |
 | **H** | 多缺陷反馈的选取口径 | ✅ **已定**（2026-11-16，批次 12.7）—— 选取**只做一次**、在 **service 预处理层**（不在算法层或各层各挑一遍）；**当前生效规则 = 阶段序**（`stage_priority`）：多缺陷按调机阶段取（打足 → 补缩 → 外观），**不按列表第一项**（用户口径：「结合入参进行分析」，例：短射+缩水⇒先短射；缩水+飞边⇒先缩水）。⚠️ **2026-11-19 更新**：`first_valid` 口径与 `FIRST_VALID_STRATEGY` 常量**已删除**（早期为跑通流程设计的占位实现，核验阶段已无价值）；**策略接口（Protocol）与 `strategy` 形参也一并删除** —— 当前用不到切换机制，按「用不到就不写代码」原则不留空壳，将来真有第二个口径时再加回 | L1/L2 选取口径统一；⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条**（L1 推理对象 + L2 命中场景随之变） |
-| **I** | L2 场景条件的缺陷口径 | ✅ **已修**（2026-11-16）—— L2 场景条件引用 **`selected_defect`**（本轮实际处理的缺陷码，由 `build_scenario_context` 从 feedback 内部派生后放入 `ScenarioContext.extra`），**不再用** `defect_codes` | §8 ⑦ 闭环 |
+| **I** | L2 场景条件的缺陷口径 | ✅ **已修**（2026-11-16）—— 场景条件引用**本轮实际处理的缺陷码**；⚠️ **2026-11-24 载体统一**：字段名由 `selected_defect`（`ScenarioContext.extra`）改为标准字段 **`defect_codes`**（由 `selected_defect` 派生 ⇒ 与选中的那一条恒等），运算子 `in_set` → `in_any` | §8 ⑦ 闭环 |
+| **J** | L2 怎么应对「上轮调了没改善」 | ✅ **已定**（2026-11-24，批次 13.1）—— **退阶**：上轮效果 = **触发器**（`ineffective` / `unchanged` ⇒ 换），上轮落地参数 = **定位器**（退哪几个）；**通用判据进代码、业务顺序进配置** | L2 入口从「零历史」变成「带一笔上一轮」；⚠️ **只解决「换旋钮」，不解决「改多少」** —— 非派生量目标值仍原样透传 L1 |
+| **K** | 「改成多少」的口径怎么表达 | ✅ **已定**（2026-11-24，批次 14.1）—— **按字段声明口径名**（场景 → 字段 → 口径），算式落**第3层**；本批只换形（`target_mode` → `target_modes`），**不扩口径**；峰值压力类口径**挂起** | L2 从「只给绝对值」变成「能给口径」；⚠️ 尚未产生新口径 ⇒ 目标值行为**零变化** |
 
 ⚠️ 拍板 **E** 连带出一条**新增技术前提**（§8 前提 ⑤）：
 现有 `_compare` 的 `in` 语义是「**目标 ⊆ 字段值**」（`_contains(field_value, target)`），
@@ -311,11 +380,19 @@ ScenarioStrategy(
 
 ---
 
-## 11. 建议的落地批次（**12.1 / 12.2 / 12.3 / 12.4a / 12.5 / 12.6a / 12.6b / 12.6c 已执行**）
+## 11. 建议的落地批次（**12.1 / 12.2 / 12.3 / 12.4a / 12.5 / 12.6a / 12.6b / 12.6c / 12.7 / 13.0 / 13.1 / 14.1 / 15.1 已执行**）
 
 ⚠️ **编号说明**：`12.5` 是「阶段达成信号」那条线（2026-11-16，**只落观测**）；
 `12.6a/b/c` 是「缺陷选取单一入口」那条线（2026-11-16）；
-`12.7` 是「多缺陷选取接阶段序」那条线（2026-11-16）。
+`12.7` 是「多缺陷选取接阶段序」那条线（2026-11-16）；
+`13.0` 是「阶段准入首次生效」那条线；`14.1` 是「口径位换形」那条线（**等价整理**）；
+`15.1` 是「合格态调机策略」那条线（**复用现有分层，不新建引擎**）；
+`15.2` 是「第2层收成单入口 + 事实表取代上下文对象」那条线；
+`15.3` 是「实测输入归位到口径」那条线（**L3 自己从原料取**）；
+`15.4` 是「L2 两模块合并并改名」那条线。
+⚠️ **本文与 `docs/qualified-tuning-boundary.md` 共用同一条 `15.x` 序列**
+（**15.1 是同一件事**：合格态调机策略）⇒ **15.5 留给合格态专项线**
+（该文的排期从 **15.6** 起，⚠️ 2026-11-25 消歧 —— 此前两文在 15.2–15.5 上**重号**）。
 
 | 批次 | 内容 | 验收 |
 |---|---|---|
@@ -330,6 +407,12 @@ ScenarioStrategy(
 | **12.6c** | ✅ **已落地**（2026-11-16）—— **L2 接入同一份**：5 条场景条件的 `field` 由 `defect_codes` 改为 `selected_defect`（运算子统一 `in_set`）；`resolve_policies` 增 `selected_defect` 参数（经 `ScenarioContext.extra` 注入）；调用点由两个入口挪进 `_infer_kernel`（与 L1 同一层、同一份口径） | ✅ pytest **135 passed**；场景判定核对 4 项全过（多缺陷 ⇒ 命中本轮缺陷的场景 / 旧口径对照实证会错配 / 单缺陷零回归 / 无缺陷落兜底）⇒ **§8 ⑦ 闭环** |
 | **12.7** | ✅ **已落地**（2026-11-16）—— **多缺陷选取接阶段序**：`algorithms/defect_selection.py` 的 `DEFAULT_STRATEGY` 由 `FirstValidDefectStrategy` 改为 `StagePriorityDefectStrategy`（`FIRST_VALID_STRATEGY` 保留为历史口径/回退开关）；`services/parameter_optimize.py` 预处理层落一条 `[optimize] … 缺陷选取` 日志 | ✅ pytest **135 passed**；核对 **18 项全过**（缩水+短射⇒短射 / 飞边+缩水⇒缩水 / 同阶段保序 / 无效项 `skipped` 完整 / 未知码排末位 / `ensure_selected_defect` 幂等不重算 / 留痕 `strategy=stage_priority` / 多缺陷 ⇒ L2 命中被选中缺陷的场景 + 旧口径对照）；黄金快照差异数不变（仍为 6，历史遗留）；⚠️ **行为变化**：多缺陷反馈下选中项**可能不是列表第一条** ⇒ L1 推理对象 + L2 命中场景随之变 |
 | **13.0** | ✅ **已落地**（2026-11-16）—— **阶段准入首次生效**：策略清单新增 `filling_stage_first`（`priority=15`），条件 = `selected_defect in {SHORTSHOT}` + **`current_stage == 'filling'`** ⇒ **阶段进度从「只观测」升级为「参与场景匹配」**；白名单 = 胶量端 + 注射时间/压力 + 保压组 + 熔体侧 + 料筒温度组，优先集 = **胶量端 → 保压 → 背压 → 料筒温度**（用户拍板） | ✅ pytest **135 passed**；三离线脚本 e2=0 / algo=0 / nested=0；黄金快照差异数不变（仍为 6）；核对 **15 项全过**（短射+缺重量 ⇒ 命中本场景且落地 `met_end_pos`（`met_pos_1` 300→303）/ 料筒温度降为「名额已满」/ G3 让位与基线项理由仍可见 / **有重量数据时仍走 `filling_first`**（`fill_ratio` 不变）/ 缩水、飞边场景不受影响 / 短射规则库 13 个参数全部有归属 ⇒ 无「本场景无输出」风险）；⚠️ **`inj_t` 仍被 G3 彻底废掉**（让位对象 `inj_spd_1` 是基线项）⇒ 短射少一个强力旋钮，待用户另行拍板 |
+| **13.1** | ✅ **已落地**（2026-11-24）—— **退阶（上轮证伪 ⇒ 本轮不再动它）**：`ScenarioContext` 加 `last_tuning_result` / `last_advised_params` 两个标准字段；service 层查**父轮** `Recommendation`（取 `decision_status == 'adopted'` 的项）⇒ 得到上轮**实际落地**的参数；`resolve_priority` 加 `failed_params` 通道（让位理由「上轮试过无改善 ⇒ 本轮不再动它」） | ✅ pytest **236 passed**；核对 **8 项全过**（无历史 ⇒ 首选不变 / `ineffective` ⇒ 退到次选 / `unchanged` ⇒ 退到次选 / `effective` ⇒ 同方向继续 / 上轮落地的是次选 ⇒ 首选仍保留 / 无关参数 ⇒ 无影响 / 条件可引用 `last_tuning_result` / 上下文字段取值正确）；⚠️ **只解决「换旋钮」，不解决「改多少」** —— 非派生量目标值仍原样透传 L1，`target_mode` 仍只作用于 `MEL`；⚠️ **本轮未做**「L2 自产候选（补充旋钮）」与「规则匹配度进裁决」 ⇒ 另批排期 |
+| **14.1** | ✅ **已落地**（2026-11-24）—— **口径位换形**（等价整理）：`ScenarioStrategy.target_mode`（场景级单值）→ `target_modes`（**字段 → 口径名**）；`AdjustmentPlan.target_mode` → `target_modes`（**只带保留项**）；`build_plan` 带出保留项口径；L3 `apply_plan` 改为按字段取口径；口径名收进常量 `anchors.FILL_RATIO_MODE`（**唯一出处**）；删死代码 `ScenarioStrategy.uses_fill_ratio` | ✅ pytest **236 passed**；**零行为变化** —— `fill_ratio` 仍只作用于 `met_end_pos`，解算结果逐位等价；⚠️ **本批不扩口径** —— 非派生量目标值仍是 L1 原样透传；口径求解器注册表与 `peak_ratio` **挂起**（§12.5-① 方向歧义未解） |
+| **15.1** | ✅ **已落地**（2026-11-25）—— **合格态调机策略**（**不新建引擎、不新判据源**）：① `ScenarioStrategy` 扩一个能力 `candidate_params`（**场景自带候选** —— 算法零产出时仍能有调机对象）；② 场景清单新增 `qualified_efficiency`（条件 = `last_tuning_result == 'qualified'`，候选/白名单/优先项 = `inj_pres_1`，`max_items=1`，口径 = `step_down`）；③ L3 新增**第二个口径 `step_down`**（递减步进：目标 = 当前设定 × (1 − 步长)，步长初值 5%）—— **不依赖物理模型**；④ `apply_scheme` 从「只对 `met_end_pos` 走口径」**推广为逐字段按口径**；⑤ fail-fast 从「L1 零产出」**移到「L2 零候选」**（**对非合格态行为完全等价**）；⑥ 前端恢复合格态【获取优化工艺】入口 | ✅ pytest **242 passed**（236 基线 + 6 条新用例）；契约用例 `tests/test_qualified_strategy.py` 6 条全过；前端 `type-check` 通过；⚠️ **步长 5% 是初值不是结论**（待实测标定）；⚠️ **只降压力** —— 省周期（`cool_t`）、「降过头」回退机制、「合格但无可省项」的前端表现**仍为预留项**（见 `docs/qualified-tuning-boundary.md` §6 R3–R5） |
+| **15.2** | ✅ **已落地**（2026-11-25）—— **第2层收成单入口 + 事实表取代上下文对象**（**逻辑分层**：一个完整工作 = 多个依次完成的步骤，每步职责清晰）：① 新增 L2 单入口 `build_adjustment_scheme`（`optimize_chain/decide_adjustment.py`）—— 挑料（`collect_facts`）/ 派生（`fill_gap` / `current_stage`）/ 匹配（`select_strategy`）/ 裁决（`resolve_scheme`）/ 回填（`_apply_decision_status`）**全在它内部**；② `ScenarioContext` / `CONTEXT_FIELDS` / `build_scenario_context` **删除** ⇒ 条件求值改读**事实表**（映射）⇒ §10 拍板 E 真正落地（字段名不再写死在代码里）；③ service 层的「构建上下文」一步去掉 ⇒ 只**交原料**（`feedback` / `mold_info` / 上轮落地参数）拿**结论**（`AdjustmentScheme`）；④ L3 的实测输入由 `collect_weights` **直接从原料取**（不经 L2 转手） | ✅ pytest **302 passed**（全量；`tests/` 目录 247 条）；**行为零变化** —— 事实表只放取到的值，而条件求值「取不到 ⇒ 不命中」⇒ 与原「值为 `None` ⇒ 不命中」等价；⚠️ **回填时机前移**（进决策层内部 ⇒ 早于编排层的 fail-fast）⇒ 但 fail-fast 抛异常不返回 ⇒ **无外部可见差异**；⚠️ **阶段进度日志少了 `interface_tag`**（那条日志随阶段推导一起搬进了决策层） |
+| **15.3** | ✅ **已落地**（2026-11-25）—— **实测输入归位到口径**（service 不替 L3 挑）：① `anchors.py`（**底座**）新增 `read_weights(feedback, mold_info)` + 键名常量 `ACTUAL_WEIGHT_KEY` / `TARGET_WEIGHT_KEY`；`to_float` 从 `decide_adjustment` **移到底座**（L3 也要用）；② L3 `apply_scheme` 的 `fill_weights` 入参**删除** ⇒ 改为收 `feedback` / `mold_info`，**自己**取重量喂 `resolve_fill_target`；③ 编排层的 `collect_weights` 调用**删除** ⇒ 只递原料；④ 决策层的 `collect_weights` / 两个键名常量**删除** ⇒ L2 也从 `anchors.read_weights` 取（L2 派生 `fill_gap`、L3 解算行程目标**同源**） | ✅ pytest **302 passed**（与 15.2 基线一致）；**行为零变化** —— 取数时机由「编排层在 L2 之后」移到「L3 内部」，同一份原料、同一套取数逻辑 ⇒ 值完全相同；⚠️ **取数次数减少** —— L3 只在 `fill_ratio` 口径且有 MEL 目标时才取（原先每次都取）⇒ 无副作用；⚠️ **`apply_scheme` 对外签名变更** —— `fill_weights` 参数删除（影响 1 处生产调用 + 2 处测试） |
+| **15.4** | ✅ **已落地**（2026-11-25）—— **L2 两个模块合并为一个并改名**（**一个文件 = 一层**）：① `decide_direction.py`（**机制**：怎么裁决）+ `tuning_strategy.py`（**规则**：业务经验）→ 合并为 **`decide_adjustment.py`**（**机制 + 规则 + 入口同住一个文件**）；② `defect_selection.py` 仍只负责**缺陷选取**（只读 `sort_defects_by_stage`）⇒ 单一真相源不破；③ 缺陷码译文表另立公共底座 `algorithms/common/defect_codes.py`（**跨算法线公共**，零外部依赖） | ✅ pytest **302 passed**；**零行为变化** —— 纯文件合并 + 改名 + import 路径同步（调用点 3 处：`parameter_optimize.py` / `integrate_params.py` / `defect_selection.py`）；换算表见 `docs/algorithm-layering-plan.md`「路径变更公告」 |
 
 ⚠️ **现状更新（2026-11-19）** —— 缺陷选取的**载体**已改（**判定口径不变**）：
 
@@ -359,7 +442,8 @@ ScenarioStrategy(
 所在阶段（`current` 不受影响 ⇒ 场景判定零变化）。
 
 ⚠️ **每个批次结束跑一次现成 pytest**（不新写测试框架），
-基线 **80 passed**（2026-11-19 实测；此前记录为 135 passed —— 测试集规模已变）；
+基线 **302 passed**（2026-11-25 实测；全量 = `tests/` 目录 247 条 + fuzzy 包内 55 条；
+此前记录 80 / 135 / 236 / 242 passed —— 测试集规模已变）；
 行为变化要能用留痕/`to_trace()` 说明白。
 
 ⚠️ **批次 12.1 的一个副产品（已记录在代码里）**：阶段重排把无效项挪到末位，
@@ -367,3 +451,170 @@ ScenarioStrategy(
 ⇒ `StagePriorityDefectStrategy` 的 ``skipped`` 改为**记录全部无效项**（原始顺序），
 包括「排在有效项之后」的那几个（``skipped`` 的语义是"用户提交了但没被采用的项"，
 要完整审计）。
+
+---
+
+## 12. 「改成多少」：目标值求解口径（L2 → L3 的交接面）
+
+> **状态**：§12.2 / §12.3 / §12.5 三条已由用户拍板（2026-11-24）；
+> **批次 14.1 已落地**（口径位换形，零行为变化）。
+> **批次 15.1 已落地**（2026-11-25）—— **第二个口径 `step_down`**（递减步进）
+> 随合格态调机策略一同落地 ⇒ 口径位**从「一个口径」变成「两个口径」**。
+> **仍挂起**：§12.5-① 的方向歧义 ⇒ 峰值压力类口径（`peak_ratio`）**本批不落**。
+>
+> **下一轮接续点**：先读 §12.5 的三条拍板结论；要做 `peak_ratio` 时先解 §12.5-① 的
+> 方向歧义，再按 §12.4 定接口（求解器注册表 / 输入包届时定型）。**不要重做 §12.1**。
+> ⚠️ **2026-11-25 更新**：14.2「求解器注册表」**仍未建** —— 15.1 的第二个口径
+> `step_down` 走的是 `apply_scheme` 里的**直接分支**（与 `fill_ratio` 同款）⇒
+> **注册表 / 输入包**依然待定型（等 `peak_ratio` 或第二个非派生量口径）。
+
+### 12.1 现状体检（2026-11-24 核实）
+
+| 环节 | 现状 | 证据 |
+|---|---|---|
+| L2 出口 | `AdjustmentScheme.assignments` = (字段名, L1 的 `recommended_value`) ⇒ **原样透传** | `decide_adjustment.py` |
+| L2 口径位 | `ScenarioStrategy.target_mode: str`（**场景级单值**），且**只对 `met_end_pos` 生效**（`resolve_scheme` 只在 `G1_AUTO_FIELD` 保留时才记它） | `decide_adjustment.py` |
+| L3 求解 | `apply_scheme` 读 `plan.target_mode == 'fill_ratio'` ⇒ `resolve_fill_target`（重量比例 → 行程）；**其余字段无分支** ⇒ 直接写 L1 绝对值 | `integrate_params.py` |
+| 6 条场景 | 只有 `filling_first` 写 `target_mode='fill_ratio'`（作用于 `met_end_pos`）；其余 5 条走默认 `'delta'` | `decide_adjustment.py` |
+| 死代码 | `ScenarioStrategy.uses_fill_ratio` **零调用点** | `decide_adjustment.py` |
+
+⇒ **一句话**：现在只有「充填量 → 行程」一条口径通了；其余旋钮的目标值全是 L1 的
+「大概值」直接落地。
+
+⚠️ **术语澄清**：`G1_AUTO_FIELD = 'met_end_pos'`（**熔胶终止位置**，业务字段名），
+**不是** `'MEL'`。`MEL` 是算法名，译出来才是 `met_end_pos` ⇒
+`met_end_pos` 是「**标**」（不进 `assignments`，走 `mel_targets`），
+`resolve_fill_target` 解出的落点是 `met_pos_N`（末段计量位置）= **决策量**。
+
+⚠️ **现状更新（2026-11-24 · 批次 14.1）** —— 上表描述的是**批次前**形态；
+本批把口径位从「场景级单值 + 只认 `met_end_pos`」换成「**按字段声明**」：
+
+| 位置 | 批次前 | 批次后 |
+|---|---|---|
+| 场景策略 | `ScenarioStrategy.target_mode: str`（单值） | `ScenarioStrategy.target_modes: Mapping[str, str]`（字段 → 口径名） |
+| 调整计划 | `AdjustmentScheme.target_mode: Optional[str]` | `AdjustmentScheme.target_modes: Mapping[str, str]`（**只带保留项**） |
+| L3 读取 | `plan.target_mode == 'fill_ratio'` | `plan.target_modes.get(G1_AUTO_FIELD) == FILL_RATIO_MODE` |
+
+⇒ **效果完全等价**（`fill_ratio` 仍只作用于 `met_end_pos`）；
+口径名收进常量 `anchors.FILL_RATIO_MODE`（**唯一出处**，两侧不各写字面量）。
+⇒ 死代码 `ScenarioStrategy.uses_fill_ratio` 已删（零调用点）。
+
+### 12.2 三层职责（本批的边界）
+
+| 层 | 职责 | 本批改动 |
+|---|---|---|
+| **service** | 提供**实测事实** | 已有 `actual_weight`；本批**可选**接 `peak_pressure` |
+| **L2** | 「调哪个 / 次序 / 谁让位 / **每个字段用什么口径**」 | 场景清单加「字段 → 口径名」声明；`AdjustmentScheme` 带出口径映射 |
+| **L3** | 按口径名**求解目标值**（手上有现值 + 实测输入） | 加口径求解器注册表；`apply_scheme` 按字段取口径 |
+| **配置** | 「这个场景这个字段用什么口径」= **业务知识** | `decide_adjustment.py` 场景清单 |
+
+**红线不变**：L2 仍**不读参数集**（不知道现值 ⇒ 算不出目标值）；
+L3 不判断「该不该调」（那是 L2）；
+口径的**算式**落代码（**逻辑**，解释规则的方式固定），
+**哪个字段用什么口径**落配置（**业务**，可增长）。
+
+⚠️ **现状更新（2026-11-25 · 批次 15.2）** —— 上表是**批次 12.x 的边界**；现状收紧了一层：
+
+| 项 | 批次 12.x | 现状（15.3） |
+|---|---|---|
+| 第2层入口 | 散在编排层（`build_scenario_context` → `derive_stage_progress` → `select_strategy` → `build_plan` → `_apply_decision_status`） | **单入口** `build_adjustment_scheme`（`optimize_chain/decide_adjustment.py`）⇒ 上述五步全在它内部 |
+| 事实载体 | `ScenarioContext` 对象（6 个写死字段 + `extra` 补丁通道）+ `CONTEXT_FIELDS` 清单 | **事实表**（映射）⇒ **无字段清单**、无补丁通道；条件求值读**任意键**（§10 拍板 E 落地） |
+| service 层的活 | 拼上下文 + 派生 `fill_gap` + 推阶段 + 抽表 + 裁决 + 回填 | **只交原料、拿结论**（重量也不替 L3 挑 ⇒ L3 自己从原料取） |
+| 派生量的归属 | `fill_gap`（总重−实测重）/ `current_stage`（阶段进度）由 service 层造 | **决策层自己造**（它们只为「条件能引用」而存在 ⇒ 属决策层） |
+| 实测输入的归属 | L2 从 `ScenarioContext` 拿重量、L3 从编排层接 `fill_weights` | **底座统一**（`anchors.read_weights`）⇒ L2 派生 `fill_gap`、L3 解算行程目标**同源**；编排层**不出现重量** |
+
+⇒ **「逻辑分层」落到代码上**：一个完整工作 = 多个依次完成的步骤，每步职责清晰；
+**service 不边采购边处理**（不替决策层派生、不替它裁决）。
+
+### 12.3 建模选择（推荐 ①）
+
+| 方案 | 形态 | 评价 |
+|---|---|---|
+| **①** | **场景声明「字段 → 口径名」映射**（`ScenarioStrategy.target_modes: Mapping[str, str]`） | ✅ **推荐** —— 与 `allowed_params` / `preferred_params` / `blocked_params` **同构**（场景 → 字段集合/映射）⇒ 无新概念；口径**确实随场景变**（`fill_ratio` 只在充填场景成立） |
+| ② | 全局「字段 → 口径名」注册表（类似 `BASELINE_BLOCKED_PARAMS`） | ❌ 口径**不是字段的固有属性**（同一字段在不同场景口径不同） |
+| ③ | 场景级单值 + 字段级覆盖（两层） | ❌ 同一语义两处展开 ⇒ 违反「同一语义只在一处展开」 |
+
+⚠️ **「字段固有默认口径」这层先不做**（YAGNI）—— 将来若发现某字段在**所有**场景同口径，
+再加全局默认表（届时是自然扩展，不难）。
+
+⚠️ **破坏性**：`ScenarioStrategy.target_mode`（`str`）→ `target_modes`（`Mapping`）；
+`AdjustmentScheme.target_mode`（`Optional[str]`）→ `target_modes`（`Mapping[str, str]`）。
+影响面小（§12.6）。
+
+### 12.4 口径求解器（L3 · 代码）
+
+⚠️ **本批不建注册表** —— 按项目「**用不到就不写代码**」原则：
+现在只有 `fill_ratio` 一个口径 ⇒ 建注册表 = 空架子。
+⇒ **接口等第二个口径（`peak_ratio`）落地时再定型**（届时一并定「输入包」形态）。
+
+- 现有的 `resolve_fill_target`（`anchors.py`）**已经就是 `fill_ratio` 口径的求解器**
+  ⇒ 本批直接沿用，未重写。
+- 通用约定（**待定型**）：口径名 → 求解函数；求解函数返回 `Optional[目标值]`；
+  **解不出 ⇒ `None` ⇒ 回落 L1 绝对值**（保证不退化）。
+- ⚠️ **2026-11-25 更新（15.1）**：**第二个口径已来** —— `step_down`
+  （`anchors.resolve_step_down`，递减步进）仍走**直接分支**（`apply_scheme` 内按字段取
+  口径名 ⇒ 匹配则调对应求解器）⇒ **注册表依旧没建**（两个口径时仍是空架子）。
+  ⇒ 14.2 保持「等 `peak_ratio` 或第二个非派生量口径再定型」。
+
+### 12.4.1 两个口径的对照（2026-11-25 · 15.1 后）
+
+| 口径 | 常量 | 求解器 | 适用字段 | 物理含义 | 是否依赖物理模型 |
+|---|---|---|---|---|---|
+| `fill_ratio` | `FILL_RATIO_MODE` | `resolve_fill_target` | `met_end_pos`（熔胶终止位置） | 重量比例 → 注射行程 | ✅ 依赖（重量比） |
+| `step_down` | `STEP_DOWN_MODE` | `resolve_step_down` | 任意非派生量（首批只 `inj_pres_1`） | **当前设定 × (1 − 步长)** | ❌ **不依赖**（靠试模反馈逼近够用线） |
+
+⚠️ **两条口径的分工**：`fill_ratio` 是**算出来的**（有物理关系）；
+`step_down` 是**试探出来的**（「上一模合格」只说明当前设定够用，**不说明能降到哪**
+⇒ 只能小步试探）⇒ **步长必须实测标定**，初值 5% 只是「一次只走一小步」这个原则的表达。
+
+### 12.5 拍板结果（三条，2026-11-24）
+
+**① 峰值压力 80% ⇒ 先不落，等方向想清**
+
+- 用户拍板：**本批不落** `peak_ratio` ⇒ 下方那个方向歧义
+  （提高时成立、降低时相反）**未解** ⇒ 批次 14.3 挂起。
+- ⚠️ 挂起时**不要**按任一方向先实现 —— 算反了比不实现更糟。
+
+**② 与规则原料 `SS-05` 的 ×1.2 的关系 ⇒ 只留 SS-05**
+
+- 用户拍板：**只留 `SS-05` 的「× 1.2」**（需求侧冗余），
+  **不另立**「实测反推 + 安全裕度」口径 ⇒ 将来落 `peak` 类口径时用 ×1.2 这条。
+
+**③ `injection_time` / `cycle_time` ⇒ 先预留，已实现的不变更**
+
+- `CycleObservationSchema` 的 4 个键**本批零改动**；
+  `actual_product_weight` 的消费路径不变；
+  `peak_pressure` / `injection_time` / `cycle_time` 保持「契约有、实现无」。
+
+⚠️ **未解的方向歧义（挂起项）** —— 把上一模实测峰值压力当**目标值参照**时，
+物理含义是「上一模打到了 P MPa ⇒ 这轮注射压力设 0.8P」——
+这在**提高**注射压力时成立（设备能力参照）；在**降低**时方向相反
+（短射轮次本来就打不满峰值，照搬只会更缺料）⇒ 需明确适用面。
+
+> **后续（2026-11-24 · 已澄清适用面）** —— 上面三个键的**用途**已明确：
+> 它们服务于**合格态经济性调机**（产品已合格后再降能耗 / 降周期），
+> 边界见 `docs/qualified-tuning-boundary.md`，待定口径登记在 `docs/open-questions.md` Q12。
+> ⇒ **本节的方向歧义在该场景下不适用**：合格态是**降低**方向，
+> 而「上一模实测峰值当目标值参照」只在**提高**方向成立 ⇒ **两条路不重合**，
+> 14.3 是否还要做，取决于经济性调机最终选哪条目标值算法（Q12 R1）。
+
+### 12.6 影响面与批次落地
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| **14.1** | **口径位换形**：`target_modes` 替换 `target_mode`（场景 + 计划两处）+ `fill_ratio` 迁移 + 删死代码 `uses_fill_ratio` + 口径名收进常量 | ✅ **已落地**（2026-11-24）—— pytest **236 passed**；**零行为变化**（`fill_ratio` 仍只作用于 `met_end_pos`，效果逐位等价） |
+| **14.2** | 口径求解器注册表 + 通用输入包 + 按字段遍历求解 | ⏸ **本批不做** —— 只有一个口径时是空架子 ⇒ 等 14.3 一起做（届时接口一次定型） |
+| **14.3** | `peak_ratio` 口径 + `peak_pressure` 进上下文 | ⏸ **挂起** —— 等 §12.5-① 的方向歧义解开（另一条候选路径见 `docs/qualified-tuning-boundary.md`：合格态经济性调机；两者不重合，取决于 Q12 R1 的选择） |
+| **15.1** | **合格态调机策略**（跨 §12 与 `docs/qualified-tuning-boundary.md`）：场景自带候选（`candidate_params`）+ **第二个口径 `step_down`**（递减步进）+ `apply_scheme` 逐字段按口径 + fail-fast 移到「L2 零候选」 | ✅ **已落地**（2026-11-25）—— pytest **242 passed**；⚠️ **注册表仍未建**（两个口径走直接分支）；⚠️ **步长 5% 待标定** |
+
+**14.1 的实际改动面**（比 §12.1 预估的小）：
+
+| 文件 | 改动 |
+|---|---|
+| `anchors.py` | 新增口径名常量 `FILL_RATIO_MODE`（**唯一出处**） |
+| `decide_direction.py` | `ScenarioStrategy.target_mode` → `target_modes`；删死代码 `uses_fill_ratio`；`AdjustmentPlan.target_mode` → `target_modes`；`build_plan` 带出**保留项**的口径；`to_trace` 字段名 |
+| `tuning_strategy.py` | `filling_first` 改 `target_modes={'met_end_pos': FILL_RATIO_MODE}`；其余 5 条不动 |
+| `integrate_params.py` | `apply_plan` 改为按字段取口径（`plan.target_modes.get(G1_AUTO_FIELD)`） |
+| `tests/test_decide_direction_layer.py` | 2 处构造改新形态 + 1 处断言改新形态 |
+
+⇒ **service 层零改动**（口径从场景策略直接读，L2 不算目标值）。

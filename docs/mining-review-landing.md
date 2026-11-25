@@ -492,17 +492,19 @@ class RuleQueryContext:   # <- 无 company_id 字段
 | 批次 | 内容 | 主要落点 |
 |---|---|---|
 | **1（零行为变化）** | 算法层加租户维度，但**没有任何入口传 company_id** ⇒ 全部 `None` ⇒ 行为逐条不变 | `library/contracts.py`、`library/adapters.py`、`library/assembly.py`、`library/files/export.py`、`fuzzy/engine.py` |
-| **2（隔离生效）** | 两条算法入口供给 `company_id` | `services/parameter_optimize.py`、`services/condition.py` |
+| **2（隔离生效）** | 算法入口供给 `company_id` | `services/parameter_optimize.py` |
 | **3（公共库 + 晋升）** | 公共挖掘规则库 + 晋升 service + API + 前端入口 | `services/mining_landing.py`、`services/rule_promotion.py`（新建）、`views/rules.py`、`urls.py`、前端 3 个文件 |
 
-⚠️ **批次 2 两条入口都要传**，否则同一条规则在不同入口的可见性不一致
+⚠️ **传 `company_id` 的入口只有落库那条**，否则同一条规则在不同入口的可见性不一致
 —— 不报错，只是结果悄悄不同：
 
 | 入口 | `company_id` 来源 |
 |---|---|
 | `parameter_optimize.optimize_from_condition()` | `condition_orm.company_id` |
-| `condition._build_optimization_context()` | `condition.company_id` |
 | `parameter_optimize.optimize_from_provided()` | **None**（第三方集成 / 算法试算 / 烟测 ⇒ 无租户上下文 ⇒ 不过滤） |
+
+注：批次 2 当时还有一条入口 `condition._build_optimization_context()`（preview 链）——
+该链已下线（无路由、无调用者）⇒ 现只剩上表两条。
 
 ### 9.3 公共库与晋升
 

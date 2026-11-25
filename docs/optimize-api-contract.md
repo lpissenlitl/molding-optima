@@ -144,7 +144,7 @@ baseline = 库里基准轮的全量字段  ⊕  用户传入 parameter 的非 No
 }
 ```
 
-⚠️ `source_type` 取的是**引擎 subtype**（当前主链路为 `fuzzy`），**不是** `Recommendation.SOURCE_TYPE_CHOICES` 里的 `fuzzy_rule` ⇒ 落库值与 choices 不一致，见 `docs/open-questions.md` C2。
+✅ `source_type` 取的是**引擎 subtype**（当前主链路为 `fuzzy`），与 `Recommendation.SOURCE_TYPE_CHOICES` 已对齐（2026-11-24 扩 choices：`fuzzy_rule` → `fuzzy`，并补 `'empirical'`）。
 
 `parameter` 是**落库后的新轮次完整对象**（ORM 镜像）：
 
@@ -163,7 +163,11 @@ baseline = 库里基准轮的全量字段  ⊕  用户传入 parameter 的非 No
 
 service 层**不预判合格**：缺陷列表为空是被允许的（`allow_empty`），由算法空跑决定结果。
 
-⚠️ **已知边界**：合格态下缺陷列表为空 ⇒ 算法通常产不出推荐 ⇒ 命中 fail-fast 抛 `ERROR_OPERATION_FAILED`。该异常发生在落库事务**之前**，因此本轮合格标签**写不进** `TuningRecord`。这是否符合预期（合格态是否应「只落库、不推理」）待定 —— 见 `docs/open-questions.md` C1。
+⚠️ **已知边界**：合格态下缺陷列表为空 ⇒ **缺陷驱动**引擎（fuzzy / empirical）产不出推荐 ⇒ 命中 fail-fast 抛 `ERROR_OPERATION_FAILED`。该异常发生在落库事务**之前**，因此本轮**走本接口**时合格标签写不进 `TuningRecord`。
+
+> ⚠️ **该缺口的实际触发面很小**（2026-11-25 核实）：**前端合格态隐藏【获取优化工艺】按钮**（`OptimizationCreate.vue` L347-349 `isQualifiedResult`）⇒ 合格态实际走 **`tuning-feedback` 通道**（参数与评价同一事务落库，「我用了这组参数，试模结果是 X」）⇒ **合格标签照常落库、合格态的手改工艺变更也照常落库**。
+> ⇒ 真实剩余缺口 = **合格态没有「系统自动建议」入口**（降能耗 / 降周期）⇒ 属**骨架缺失**，见 `docs/open-questions.md` Q12（经济性引擎）与 `docs/qualified-tuning-boundary.md`。
+> ⇒ **不得**用「合格态短路 + 参数原样建轮」来消除 fail-fast —— 那样合格态就再也调不出变更，与业务意图相反。
 
 ---
 

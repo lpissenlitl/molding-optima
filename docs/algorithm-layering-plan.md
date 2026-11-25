@@ -1,9 +1,49 @@
 # 算法分层改造计划（`_infer_kernel` 编排层）
 
-> **状态：已实施完成（2026-11-24）。**
+> **状态：已实施完成（2026-11-24）；2026-11-25 续做一轮（L2 单入口 + 合格态调机 + 模块合并 + 文档收口）。**
 > 本文原为「待审阅的方案」，逐条拍板后已全部落地 —— 分层判定、目录归位、
 > 命名空间收口均已实施；**当前路径以下方「路径变更公告」的最终形态为准**。
-> 验收：`pytest tests` **290 passed**（含本轮新增护栏）。
+> 验收：`pytest backend` **302 passed**。
+
+---
+
+## 📌 本轮调整总结（2026-11-25 收口）
+
+### 一句话
+
+把第2层**收成「一个文件 = 一层」**（`decide_direction.py` + `tuning_strategy.py`
+→ **`decide_adjustment.py`**），并补上**合格态调机**这条缺失的调机逻辑
+⇒ L2 不再需要「策略装配中间层」与「上下文对象」两个中间形态。
+
+### 本轮做掉的事
+
+| # | 事项 | 落点 |
+|---|---|---|
+| 1 | **L2 收成单入口**（批次 15.2）：**事实表取代上下文对象** —— `ScenarioContext` / `build_scenario_context` 退役，改 `collect_facts` 事实表（映射结构、**无字段清单、无补丁通道**）；入口 `build_adjustment_scheme` 一步到位（挑料 → 派生 → 匹配 → 裁决 → 回填） | `services/optimize_chain/decide_adjustment.py` |
+| 2 | **L2 两个模块合并为一个并改名**（**一个文件 = 一层**）：机制（怎么裁决）+ 规则（业务经验）+ 入口（怎么跑）同住一个文件 | `decide_direction.py` + `tuning_strategy.py` → **`decide_adjustment.py`** |
+| 3 | **L2 备料中阶层退役**（连带删 321 行）：旧 `_build_optimization_context` / `_infer_direction` / `_recommendations_to_adjustments` / `preview_optimization` 全部下线 | `services/condition.py` |
+| 4 | **合格态调机**（批次 15.1）：**不新建引擎、不新判据源** —— L2 新增 `qualified_efficiency` 场景（**自带候选** `candidate_params`）+ L3 新增 `step_down` 口径（递减步进，步长 5%）；fail-fast 从「L1 零产出」**移到「L2 零候选」**（对非合格态行为等价） | `decide_adjustment.py::SCENARIO_STRATEGIES` + `anchors.py::resolve_step_down` |
+| 5 | **实测输入归位到口径**（批次 15.3）：重量不再由 service 分别取给 L2 / L3，**底座统一** | `anchors.py::read_weights` |
+| 6 | **零变化项过滤下沉到算法层**：判定只在一个地方 —— `AlgorithmRecommendation.is_unchanged()` + 模块级 `filter_unchanged()`（三个引擎出口各调一次） | `algorithms/base.py` |
+| 7 | **缺陷码公共底座**：17 类中文名 → 英文码的译文表归 `algorithms/common/`（零外部依赖） | `algorithms/common/defect_codes.py` |
+| 8 | **`source_type` 取值域对齐**（`fuzzy_rule` → `fuzzy`，容纳引擎 subtype） | `models/recommendation.py` + 迁移 `0020` / `0021` |
+| 9 | **文档与注释的失效引用收口**：改名 / 合并 / 退役留下的**旧路径与旧符号**（`decide_direction` / `tuning_strategy` / `decide_tuning` / `build_plan` / `apply_plan` / `AdjustmentPlan` / `ScenarioContext` / `build_scenario_context` / `CONTEXT_FIELDS`）在 **`docs/` 下 6 份** + **backend 内 5 个文件**（代码注释 / 术语表 / 测试索引）里逐处改成现行路径与符号（行号也对到现行代码） | `docs/*.md` + `backend/process/**`（注释） |
+| 10 | **批次编号重号消歧**：`docs/qualified-tuning-boundary.md` 的 15.2–15.5 与 L2 结构性批次（15.2 事实表 / 15.3 实测输入 / 15.4 模块合并）**重号** ⇒ 合格态专项线改从 **15.6** 起（15.1 本就是同一件事） | `docs/qualified-tuning-boundary.md` §7 + `docs/l2-stage-strategy-design.md` §11 编号说明 + `docs/open-questions.md` Q12 |
+
+### 验收
+
+- `pytest backend` **302 passed**（本轮新增 `test_qualified_strategy.py` 7 条 + `test_qualified_optimize_path.py` 4 条）；
+- **零算法层依赖不变量**：`services/optimize_chain/` 5 模块仍均不 import `process.algorithms.*`；
+- **路径 / 符号引用已全仓同步**（换算表见下方「路径变更公告」）；
+- **失效引用复查**：`git grep` 全仓（已跟踪文件）扫旧路径 / 旧符号 ⇒ **除两份换算表文档本身外零命中**；
+  docs 里反引号引用的仓库路径**逐条核对存在性** ⇒ 命中的全是换算表「旧路径」列与历史批次记录；
+- **import 冒烟**：`optimize_chain` 5 模块 + `algorithms.common.defect_codes` + `parameter_optimize`
+  + `param_naming` 全部导入通过；`decide_adjustment` 的 23 个公开符号**零缺失**；场景清单实测 **8 条**。
+
+### 遗留
+
+本轮产生的待拍板项**只登记在 `docs/open-questions.md`**（单一真相源，此处不重复以免两处漂移）：
+Q12 R2（步长 5% 待实测标定）/ R3（降过头的回退机制）/ R4（省周期口径）/ R5（合格态前端表现）。
 
 ---
 
@@ -28,7 +68,7 @@
 | `algorithms/common/` | `field_contract` 字段契约机制 + `material_physics` 材料物理常量 | **真跨算法线公共** | **零外部依赖**（不 import 任何算法包 / ORM） |
 | `algorithms/fuzzy/` | `field_names` 命名翻译 + `device_limits` 查表与跨命名空间翻译 | **算法命名空间只在 fuzzy 内成立** | 只依赖 `common` |
 | `services/shared/` | `param_limits` 限值域 + `param_naming` 命名域 + `spec_extract` 提取机制 | **多链路共用**（初始化 + 优化） | **零算法层依赖**（`param_limits` / `param_naming` 均不 import `process.algorithms.*`；只有 `spec_extract` 引 spec 契约） |
-| `services/optimize_chain/` | `anchors` / `decide_direction` / `integrate_params` / `check_params` / `tuning_strategy` / `defect_selection` | **层编排与领域计算**，不是 AI 推理算法 | **6 个模块全部零算法层依赖** |
+| `services/optimize_chain/` | `anchors` / `decide_adjustment` / `integrate_params` / `check_params` / `defect_selection` | **层编排与领域计算**，不是 AI 推理算法 | **5 个模块全部零算法层依赖** |
 
 ⇒ `algorithms/` 根目录只剩 `base.py` ⇒ **看文件落在哪，就知道它是不是算法**。
 
@@ -47,7 +87,7 @@
 
 | # | 事项 | 落点 |
 |---|---|---|
-| 1 | 调参链 4 层 + 底座 `anchors` + 两份配套，物理迁出 `algorithms/` | `services/optimize_chain/`（6 模块） |
+| 1 | 调参链 4 层 + 底座 `anchors` + 两份配套，物理迁出 `algorithms/` | `services/optimize_chain/`（两份配套已于 2026-11-25 并入 `decide_adjustment` ⇒ 现 5 模块） |
 | 2 | 设备上限事实从 `fuzzy/specs.py` 拆出（它曾 re-export ⇒ **已撤**，同一事实只留一个入口） | 契约件 → `algorithms/fuzzy/device_limits.py`；来源声明 + 取值 + 组装 + 识别 + 拦截 + 文案 → `services/shared/param_limits.py` |
 | 3 | `setting_limits.py` + `over_limit.py` + `over_limit_guard.py` **三件合并** | `services/shared/param_limits.py` **一个模块** |
 | 4 | 越限判据统一：8 个旧符号退役（`SETTING_FAMILY_LIMIT_FIELDS` / `POSITION_FAMILY_LIMIT_FIELDS` / `resolve_param_limits` / `resolve_stroke_limit` / `expand_position_limits` / `detect_blocking_over_limits` / `guard_setting_limit` / `guard_position_over_stroke`） | `find_over_limits` / `guard_parameter_limits` / `OverLimit` / `OverLimitItem` / `detect_over_limits` |
@@ -60,9 +100,9 @@
 
 ### 验收
 
-- `pytest tests` **290 passed**（含本轮新增护栏）；
+- `pytest backend` **302 passed**（含本轮新增护栏）；
 - **零算法层依赖不变量**：`services/shared/param_limits.py`、`param_naming.py` 与
-  `services/optimize_chain/` 6 模块均不 import `process.algorithms.*`
+  `services/optimize_chain/` 5 模块均不 import `process.algorithms.*`
   （`spec_extract.py` 只引 spec 契约）；`algorithms/common/` **零外部依赖**；
 - **数值回归**：推荐值 **0 变动**、越限口径收敛后判定一致
   （详见 `docs/limit-domain-unification-plan.md` §9.3）；
@@ -87,10 +127,10 @@ expert 设备极限组 3 个别名 key、对外初始化接口缺 `drive_system`
 | 旧路径 | 新路径（最终形态） |
 |---|---|
 | `algorithms/anchors.py` | `services/optimize_chain/anchors.py` |
-| `algorithms/decide_direction.py` | `services/optimize_chain/decide_direction.py` |
+| `algorithms/decide_direction.py` | `services/optimize_chain/decide_adjustment.py`（2026-11-25 改名 + 并入 `tuning_strategy`） |
 | `algorithms/integrate_params.py` | `services/optimize_chain/integrate_params.py` |
 | `algorithms/check_params.py` | `services/optimize_chain/check_params.py` |
-| `algorithms/tuning_strategy.py` | `services/optimize_chain/tuning_strategy.py` |
+| `algorithms/tuning_strategy.py` | `services/optimize_chain/decide_adjustment.py`（阶段表 + 场景清单已并入，2026-11-25） |
 | `algorithms/defect_selection.py` | `services/optimize_chain/defect_selection.py` |
 | `algorithms/field_names.py` | `algorithms/fuzzy/field_names.py`（算法命名空间只在 fuzzy 内成立） |
 | `algorithms/field_contract.py` | `algorithms/common/field_contract.py` |
@@ -100,7 +140,7 @@ expert 设备极限组 3 个别名 key、对外初始化接口缺 `drive_system`
 | `algorithms/over_limit.py` | `services/shared/param_limits.py`（识别 + 拦截 + 文案，与越限守卫合并成一个模块） |
 | `algorithms/common/over_limit.py` | **已并入** `services/shared/param_limits.py`（中途暂存于 common，最终归 service 层单模块） |
 | `services/over_limit_guard.py` | **已合并进** `services/shared/param_limits.py` |
-| `services/strategy_inputs.py` | `services/optimize_chain/tuning_strategy.py` |
+| `services/strategy_inputs.py` | `services/optimize_chain/decide_adjustment.py`（已并入） |
 | `services/spec_extract.py` | `services/shared/spec_extract.py` |
 | `services/optimize_common.py` | `services/shared/param_naming.py`（同时改名） |
 | `algorithms/common/field_names.py` | `algorithms/fuzzy/field_names.py`（中途暂存于 common，最终归 fuzzy） |
@@ -121,6 +161,11 @@ expert 设备极限组 3 个别名 key、对外初始化接口缺 `drive_system`
 | `PARAM_LIMIT_FIELDS` / `POSITION_LIMIT_FIELDS` / `STROKE_FIELD` | **已删**（`STROKE_FIELD` 退役见 §13） |
 | `DOMAIN_SOURCE_STROKE` | **已删** —— 与 `DOMAIN_SOURCE_DEVICE` 归一（`fuzzy/engine.py`） |
 | `engine._apply_device_bound` / `_apply_position_bound` | `engine._apply_declared_bound`（H1）/ `engine._apply_product_bound`（G7） |
+| `AdjustmentPlan` | `AdjustmentScheme`（`decide_adjustment.py`，2026-11-25） |
+| `build_plan` | `resolve_scheme`（`decide_adjustment.py`；**入口** = `build_adjustment_scheme`） |
+| `apply_plan` | `apply_scheme`（`integrate_params.py`） |
+| `ScenarioContext` / `build_scenario_context` | **已删**（2026-11-25，批次 15.2）⇒ 改**事实表**（`decide_adjustment.py::collect_facts`：映射结构，无字段清单、无补丁通道） |
+| `decide_tuning`（曾用名，**未落地**） | `decide_adjustment`（`services/optimize_chain/decide_adjustment.py`） |
 
 **测试与验证脚本**（正文里出现的旧文件名）：
 
@@ -129,11 +174,12 @@ expert 设备极限组 3 个别名 key、对外初始化接口缺 `drive_system`
 | `tests/test_fuzzy_position_domain.py` | `backend/tests/test_fuzzy_declared_domain.py`（声明域收口后改名） |
 | `tests/test_check_params_position_violations.py` | `backend/tests/test_check_params_over_limit_violations.py`（越限守卫统一后改名） |
 | `tests/test_fuzzy_machine_limits.py` | `backend/tests/test_fuzzy_engine_limits.py` |
+| `tests/test_decide_direction_layer.py` | `backend/tests/test_decide_adjustment_layer.py`（2026-11-25 随模块改名） |
 | `_dev_refs/_verify_range_limits.py` / `_dev_refs/_verify_interval_limits.py` | **已删**（一次性等价性验证脚本，用完即弃、不入库） |
 
 **为什么这样归**：
-1. **调参链的 4 层**（L2 裁决 / L3 整合 / L4 校验 + 底座 `anchors` + 两份配套
-   `tuning_strategy` / `defect_selection`）是**优化链路的编排与领域计算**，
+1. **调参链的 4 层**（L2 裁决 / L3 整合 / L4 校验 + 底座 `anchors` + 配套
+   `defect_selection`）是**优化链路的编排与领域计算**，
    不是 AI 推理算法 ⇒ 移到 service 层 `services/optimize_chain/`
    （用户 2026-11-23 拍板）。判据：**不被任何算法线引用**，只被 service 层调用。
 2. **跨算法线公共件**（字段名映射 / 越限判据 / 入参契约机制 / 材料物理常量）
@@ -604,27 +650,28 @@ service 层 ⇒ 组装落在两者之间）⇒ 不再抄第二张「同值四份
 
 | # | 段（用户编号） | 行号 | 调用 | 实际归属 |
 |---|---|---|---|---|
-| 1 | 整理入参，决定给算法的缺陷信息 | L1434-1439 | `select_defect`（`services/optimize_chain/defect_selection.py`） | 预处理层 |
-| — | （三维上下文契约校验） | L1432 | `_validate_optimize_inputs` → `OptimizeDataValidator.validate` | 预处理层（**已收进预处理层段**） |
-| 2 | 调算法前，确认当前参数是否超可设定上界 | L1440-1446 | `guard_setting_limit` → `detect_blocking_over_limits` + `resolve_param_limits` | 守卫 |
-| 3 | 组装算法入参并调用算法 | L1450-1458 | `_compose_algorithm_context` → `_call_algorithms` | L1 |
-| — | fail-fast（引擎无产出） | L1462-1471 | 抛 `ERROR_OPERATION_FAILED` | 守卫 |
-| 4 | 参数去噪 | L1473-1474 | `_normalize_recommendations` | **待调整**（见阶段 2） |
-| 5 | 实际调机过程和调机逻辑 | L1477-1490 | `build_scenario_context` → `derive_stage_progress` → `sorted_scenario_strategies` → `select_strategy`（**已摊平进主流程**） | L2 **备料** |
-| — | 阶段进度留痕 | L1485 | `stage_progress.to_trace()` | L2 |
-| 6 | 结合调机场景决定用哪个方案 | L1492-1498 | `_decide_plan_by_strategy` → `collect_candidates` + `build_plan` | L2 裁决 |
-| — | 裁决状态回填（就地） | L1499-1502 | `_apply_decision_status` | L2 |
-| 7 | 生成调整后参数 + 联动调整 | L1506-1511 | `apply_plan`（`algorithms.integrate_params`） | L3 |
+| 1 | 整理入参，决定给算法的缺陷信息 | L1397 | `select_defect`（`services/optimize_chain/defect_selection.py`） | 预处理层 |
+| — | （三维上下文契约校验） | L1394 | `_validate_optimize_inputs` → `OptimizeDataValidator.validate` | 预处理层（**已收进预处理层段**） |
+| 2 | 调算法前，确认当前参数是否超可设定上界 | L1403-1408 | `guard_parameter_limits` + `build_limits(machine_info)` | 守卫 |
+| 3 | 组装算法入参并调用算法 | L1412-1420 | `_compose_algorithm_context` → `_call_algorithms` | L1 |
+| — | fail-fast（引擎无产出） | L1425-1433 | 抛 `ERROR_OPERATION_FAILED` | 守卫 |
+| 4 | 参数去噪 | —（**已下沉到算法层**） | `algorithms/base.py::filter_unchanged`（各引擎出口调用） | **L1**（见阶段 2 实施记录） |
+| — | 建议补人可读表达（中文标签 + 中文文案） | L1435-1436 | `_annotate_recommendations` | service 层（**只做表达转换**） |
+| 5 | 实际调机过程和调机逻辑 | L1389-1395 | `build_adjustment_scheme`（`services/optimize_chain/decide_adjustment.py`）⇒ 内部：**挑料**（`collect_facts`）→ **派生**（`fill_gap` / `current_stage`）→ **匹配**（`select_strategy`） | L2 **单入口** |
+| — | 阶段进度留痕 | — | `stage_progress.to_trace()`（决策层内部） | L2 |
+| 6 | 结合调机场景决定用哪个方案 | — | `build_adjustment_scheme` → `collect_candidates` + `resolve_scheme` | L2 裁决 |
+| — | 裁决状态回填（就地） | — | `_apply_decision_status`（决策层内部） | L2 |
+| 7 | 生成调整后参数 + 联动调整 | L1410 | `apply_scheme`（`services.optimize_chain.integrate_params`） | L3 |
 | — | 位置类超行程 | ~~L1549-1554~~（**已删**） | ~~`guard_position_over_stroke`~~ ⇒ 改为 L4 `detect_position_violations` | 守卫 —— **阶段 1b：判定归 L4**（2026-11-23 已实施） |
-| — | 差值越限 | L1531-1536（`validate` 调用） | `RANGE_CHECKS` + `resolve_range_limits`（**已接参照系**，2026-11-23） | L4 校验（阶段 3a ✅） |
-| 8 | 零落地守卫 | L1516-1525 | **内联在主流程**（读 `integrated.landing_blocked` ⇒ 直接抛 `BizException`；判定在 `integrate_params.apply_plan` 内部） | **L3 自检**（阶段 0，2026-11-23 已实施） |
-| 9 | 校验：越界 | L1531-1538 | `validate` | L4 校验 |
-| — | 出口定稿：量化 | L1527-1529 | `_quantize_numeric_fields` | 出口（**量化必须在前** —— L4 判的是最终产出） |
-| — | 位置类超行程拒不拒 + 载荷组装 + 返回 | L1540-1558 | `format_position_over_stroke_message` + `_build_suggestion_payload` | 出口 |
+| — | 差值越限 | L1494-1498（`validate` 调用） | `RANGE_CHECKS` + `resolve_range_limits`（**已接参照系**，2026-11-23） | L4 校验（阶段 3a ✅） |
+| 8 | 零落地守卫 | L1478-1487 | **内联在主流程**（读 `integrated.landing_blocked` ⇒ 直接抛 `BizException`；判定在 `integrate_params.apply_plan` 内部） | **L3 自检**（阶段 0，2026-11-23 已实施） |
+| 9 | 校验：越界 | L1494-1500 | `validate` | L4 校验 |
+| — | 出口定稿：量化 | L1491 | `_quantize_numeric_fields` | 出口（**量化必须在前** —— L4 判的是最终产出） |
+| — | 越限拒不拒 + 载荷组装 + 返回 | L1504-1521 | `format_unfit_param_message` + `_build_suggestion_payload` | 出口 |
 
 ### 第 8 段详解：零落地守卫
 
-**代码**：`parameter_optimize.py` L1516-1525 → **内联在主流程**（`if integrated.landing_blocked:` ⇒ 直接抛 `BizException`）；判定在 `integrate_params.apply_plan` 内部（L3 自检）
+**代码**：`parameter_optimize.py` L1478-1487 → **内联在主流程**（`if integrated.landing_blocked:` ⇒ 直接抛 `BizException`）；判定在 `integrate_params.apply_plan` 内部（L3 自检）
 
 ⇒ ⚠️ **形态说明（2026-11-23）**：判定下沉前它叫 `_guard_zero_landing` —— 当时它**自己判**（读 `plan.selection.kept` + 比对数值）⇒ 叫「守卫」名副其实。判定下沉后它**什么都不判**，只「读 L3 结论 → 抛异常」⇒ 先改名 `_raise_if_landing_blocked`，**再直接内联成 `if`** ⇒ 主流程里一眼看到「一个值都没变 ⇒ 中止」，不再隔着一个黑盒函数。
 
@@ -715,8 +762,8 @@ raise BizException(ERROR_OPERATION_FAILED, '本轮调整无法落地（%s）' % 
 
 | 事实 | 位置 |
 |---|---|
-| `integrate_params` 有**两个**公开整合函数：`integrate(values, previous)`（参数集自洽）与 `apply_plan(baseline, plan, previous, fill_weights=)`（计划落地） | `integrate_params.py` L444 / L505 |
-| `apply_plan` **只被优化链路调用**；初始化链路走 `integrate(flat)` | `parameter_optimize.py` L1508 / `parameter_initialize.py` L680 |
+| `integrate_params` 有**两个**公开整合函数：`integrate(values, previous)`（参数集自洽）与 `apply_scheme(baseline, scheme, previous, feedback=, mold_info=)`（计划落地） | `integrate_params.py` L451 / L512 |
+| `apply_scheme` **只被优化链路调用**；初始化链路走 `integrate(flat)` | `parameter_optimize.py` L1410 / `parameter_initialize.py` |
 | `IntegratedParams` 携带 `values` / `direct_fields` / `derived_fields` / `superseded_fields` / `conflicts` / `unresolved` / `landed` / `fill_target` | `integrate_params.py` L337-359 |
 | ⚠️ `IntegratedParams.touched` 判的是「联动 / 让位 / 回退 / 检出冲突」，**不含 `direct_fields`** ⇒ 它为 True **不代表值变了** | `integrate_params.py` L361-368 |
 | `diff_numeric_fields(previous, current)` 在同文件，是「值有没有变」的判据 | `integrate_params.py` L411 |
@@ -724,7 +771,7 @@ raise BizException(ERROR_OPERATION_FAILED, '本轮调整无法落地（%s）' % 
 | `RANGE_CHECKS` / `WINDOW_CONSTRAINED_FIELDS` 已定义，但**生产代码 0 处传入参照系** ⇒ 这两类检查从未在生产链路启用 | `check_params.py` L82 / L171 |
 | 传入参照系的**只有测试**（手写字典） | `tests/test_check_params_layer.py` L139 / L160 |
 | `parameter_initialize.py` **没有**零落地守卫 | 已 grep 确认（无 `landing_blocked` / `零落地` / `diff_numeric_fields`） |
-| `tuning_strategy.py` 承载「调机过程与调机逻辑」：`STAGE_ORDER` / `SCENARIO_STRATEGIES` / `derive_stage_progress` / `sort_defects_by_stage` | `tuning_strategy.py` L87-152 / L403 |
+| `decide_adjustment.py` 承载「调机过程与调机逻辑」：`STAGE_ORDER` / `SCENARIO_STRATEGIES` / `derive_stage_progress` / `sort_defects_by_stage` | `decide_adjustment.py`（原 `decide_direction.py` + `tuning_strategy.py` 合并，2026-11-25） |
 | 两处 `to_algo_params` 转换位置不对称：`guard_setting_limit` 由**调用方**转（`parameter_optimize.py` L1442），`guard_position_over_stroke` 由**被调方内部**转（`services/shared/over_limit.py`） | 已确认 |
 
 ---
@@ -773,15 +820,15 @@ L4 校验   参数合法性 —— **产出超限的判定在此**（差值越�
 | 「让位对象当前有没有值」 | **不在 L2 判** | L2 不预判「改了会不会白改」 |
 | 「改成多少」（`MEL` 标 → 计量位置的物理换算） | **L3** | L2 只带出「MEL 目标值 + 口径」 |
 
-**L2 备料（策略数据怎么来）** —— **已摊平进主流程**（2026-11-23；`services/strategy_inputs.py` 已删除，service 层不再有「策略装配」中间层）：
+**L2 备料（策略数据怎么来）** —— **收进决策层入口**（2026-11-25；`services/optimize_chain/decide_adjustment.py` 的 `collect_facts` 承担，service 层不再有「策略装配」中间层，也不再有「构建上下文」这一步）：
 
 | 步骤 | 产出 | 说明 |
 |---|---|---|
-| `build_scenario_context` | `ScenarioContext` | 实际情况：缺陷码 / 实测重量 / 制品总重 / 充填缺口，外加本轮处理的是哪条缺陷 |
-| `derive_stage_progress` | `StageProgress` | 阶段进度：哪些阶段还有缺陷、当前该推进哪一步（**只推导，不裁决**） |
-| `sorted_scenario_strategies` → `select_strategy` | `ScenarioStrategy`（可能为 `None`） | 读调机策略清单并按当前情况匹配；**匹配不上就不裁决**（与「不接第2层」行为一致） |
+| `collect_facts` | **事实表**（映射） | 挑料 + 派生：缺陷码（= 本轮处理的那条）/ 实测重量 / 制品总重 / 充填缺口 / 阶段进度；**只放取到的值**（取不到 ⇒ 键不存在 ⇒ 条件不命中） |
+| `sorted_scenario_strategies` → `select_strategy` | `ScenarioStrategy`（可能为 `None`） | 读调机策略清单并按事实表匹配；**匹配不上就不裁决**（与「不接第2层」行为一致） |
 
-⇒ 三步都在算法层（`algorithms/decide_direction.py` + `algorithms/tuning_strategy.py`）；主流程里逐步摊平成独立变量，不再用结构体包一层。
+⇒ 两步都在决策层（`optimize_chain/decide_adjustment.py`）；
+**service 层只交原料、拿结论**（不再用结构体包一层 ⇒ 条件可引用的字段名**不写死在代码里**）。
 
 **MEL 的翻译顺序**（歧义消解归 L2）：
 
@@ -858,7 +905,7 @@ L4 校验   参数合法性 —— **产出超限的判定在此**（差值越�
 
 ⚠️ **残留一处（非判定）**：`_infer_kernel` 里还有 `_apply_decision_status(algorithm_recommendations, plan.selection)` —— 它是「把 L2 的裁决状态标注回建议列表」（L2 产出 → 建议载荷的搬运），**不是判定** ⇒ 保留现状，属另一个议题。
 
-⚠️ **但要诚实标注一点**：`StrategyDecision`（`decide_direction.py` L426-443）的留痕字段是 `kept` / `kept_reasons` / `yielded` / `deferred` / `order` / `scenario_code` —— **没有「一条都没保留」这种状态的显式留痕**（`unresolved` 是 L3 `IntegratedParams` 的字段，不是 L2 的）。
+⚠️ **但要诚实标注一点**：`StrategyDecision`（`decide_adjustment.py`）的留痕字段是 `kept` / `kept_reasons` / `yielded` / `deferred` / `order` / `scenario_code` —— **没有「一条都没保留」这种状态的显式留痕**（`unresolved` 是 L3 `IntegratedParams` 的字段，不是 L2 的）。
 ⇒ 也就是说：「L2 什么都没保留」这个状态目前**只有 `kept` 为空这一个事实**，没有配套的「为什么」留痕。
 ⇒ 是否要把这个状态也显式化，见 §七 **Q7**。
 
@@ -1076,35 +1123,107 @@ L4 校验（**所有参数的合法性都归这里**）
 
 ---
 
-### 阶段 2：去噪下沉到算法引擎（落实用户第 4 点的判断）
+### 阶段 2：去噪下沉到算法引擎（落实用户第 4 点的判断）　✅ **已实施（2026-11-24）**
 
 **目标**：把「算法知识」还给算法，把「面向用户的表达」留在 service 层。
 
-**现状**：`_normalize_recommendations`（`parameter_optimize.py` L894-927）干了两类事：
+**现状（改造前）**：`_normalize_recommendations`（`parameter_optimize.py`）干了两类事：
 
 | 做什么 | 依据 | 目标归属 |
 |---|---|---|
 | 丢弃**零变化项**（推荐值 == 当前值） | 「来自激活度 ~0 的规则，是数值噪声」⇒ **算法知识** | **下沉到引擎** |
-| `param` 译回业务字段名 | 命名契约（`field_names`） | 留在 service 层 |
+| `param` 译回业务字段名 | 命名契约（`field_names`） | ~~留在 service 层~~ ⇒ **已在算法层出口**（`fuzzy/engine.py::recommend`），service 层只补**中文标签** |
 | `reason` 重写为中文文案（"降低一段注射压力：70 → 60"） | 面向用户的表达 | 留在 service 层 |
-
-**改动清单**（形态待定，见 §七 Q3）：
-
-| 文件 | 改动 |
-|---|---|
-| `backend/process/algorithms/fuzzy/engine.py` | 引擎侧过滤零变化项（激活度 ~0 的规则本就不该产出建议） |
-| `backend/process/services/parameter_optimize.py` | `_normalize_recommendations` 去掉去噪职责，只留翻译 + 文案；函数名可能需要改 |
 
 **行为变化**：**有**（引擎输出变少）。需重点验证。
 
-**验收**：
-
-- `pytest backend/tests/test_fuzzy_recommendations.py backend/tests/test_optimize_smoke.py`
-- 案例回归：按记忆口径用**单变量对照归因法**（FAIL 可能是数据陈旧而非代码退化，先确认是否本来就有零变化项被过滤）
-
 **风险**：**中高**。涉及引擎输出 ⇒ 需跑一轮完整回归。
 
-**⚠️ 前置**：需确认引擎侧过滤点选在哪一层（引擎内 vs 规则加载后），以及 `empirical` / `llm` 引擎是否也要同口径处理（它们不给数值，本就不产生零变化项）。
+#### 阶段 2 实施记录（2026-11-24）
+
+**拍板结论（用户 2026-11-24）**：
+
+| # | 问题 | 结论 |
+|---|---|---|
+| 落点 | 「丢掉零变化项」写在哪一层？ | **`algorithms/base.py` 共用** —— 判定与过滤都放公共基类，三个引擎出口各调一次 |
+| 文案分支 | `_build_description` 的「维持X不变」分支（去噪后不可达）？ | **删掉** |
+| 黄金快照 | `_golden_M1.json` 要不要刷新？ | **确认后重刷**（已刷） |
+
+**为什么落 `base.py` 而不是 `fuzzy/engine.py`**：三个引擎（fuzzy / empirical / llm）共用同一套「值没变」判据 ⇒ 判定写在 `AlgorithmRecommendation.is_unchanged()`、过滤写在模块级 `filter_unchanged()` ⇒ **同一判据只在一个地方**（§二「同一判据只能有一个判定点」），引擎只负责在出口调一次。
+
+**⚠️ 判据逐字未变**：「推荐值与当前值实质相同（差 < 1e-9），且两个值都在」⇒ 去噪下沉是**零判据变化**的迁移，不是重写规则。
+
+**改动清单**：
+
+| 文件 | 改动 |
+|---|---|
+| `backend/process/algorithms/base.py` | 新增 `AlgorithmRecommendation.is_unchanged()` + 模块级 `filter_unchanged()` —— **唯一判据源** |
+| `backend/process/algorithms/fuzzy/engine.py` | `recommend()` 出口（**裁剪之后**）过滤 ⇒ 裁剪把推荐值压回当前值的情形同样被丢 |
+| `backend/process/algorithms/empirical/empirical_algorithm.py` | `recommend()` 出口过滤（`recommended_value=None` ⇒ 实际不丢，口径统一） |
+| `backend/process/algorithms/llm/llm_algorithm.py` | `recommend()` 出口过滤（占位实现，当前返回空列表） |
+| `backend/process/services/parameter_optimize.py` | `_normalize_recommendations` → **`_annotate_recommendations`**（只留「补中文标签 + 写文案」）；删去噪块与 `rec["param"] = param` 空操作；`_build_description` 删掉「维持X不变」分支 |
+| `backend/tests/test_empirical_current_value.py` | 跟着改名（import + 用例名） |
+
+**验收（2026-11-24）**：
+
+- ✅ `pytest backend` ⇒ **290 passed**
+- ✅ 案例回归 `run_demo.py --check` ⇒ **PASS，exit 0**（5 条建议齐全 ⇒ 该案例本就无零变化项，基线未变）
+- ✅ 黄金快照逐条比对（改前 vs 改后）⇒ **逐条差异数 = 1**，唯一差异 = `infer.advisory_level|ctx_high.recs` 由 1 条变 0 条（消失的正是 `current_value == recommended_value == 90.0` 的 hold 建议）⇒ **其余 29 个场景 + 全部数值面（gauss / tri / defuzz）逐位相同**
+- ✅ 重刷后的黄金快照自比对 ⇒ **逐条差异数 = 0，PASS**
+
+**风险**：**低** —— 判据逐字未变，且差异面已逐条锁定为 1 处。
+
+---
+
+### 阶段 2b：condition preview 死链下线 + 缺陷码词表归位　✅ **已实施（2026-11-24）**
+
+**目标**：消除「同一判据两个判定点」的**载体** —— `condition.py` 里那条从未接线的 preview 链。
+
+**起因**：命名统一时发现 `condition.py::_infer_direction` 与 `parameter_optimize.py::_derive_direction` 是**同一件事的两份口径**（`'adjust'` vs `'hold'`）⇒ 追下去发现**其中一份整条链是死的**。
+
+**排查结论**：
+
+| 事实 | 证据 |
+|---|---|
+| `preview_optimization` **零调用者** | `urls.py` 的 algorithms 段无该路由；无 view / 无测试引用；前端只调 `/api/processes/algorithms/optimize/` |
+| 死链是**封闭自引用簇**（8 函数） | `preview_optimization` → `_build_optimization_context` / `_run_optimization_chain` → `_recommendations_to_adjustments` → `_adjustment_direction` → `_infer_direction` |
+| 连带两个**死常量** | `DEFECT_NAME_MAP`（17 类中文名↔缺陷码译文表）、`PROCESS_PARAM_FIELDS`（手写参数字段白名单）—— 全仓（backend / frontend / docs）零外部引用 |
+| 死链是 `iteration_trend` 的**唯一传参方** | `fuzzy/engine.py::is_available` 里「终态 ⇒ fuzzy 不参与 chain」的分支，**在唯一活着的 optimize 链里本来就恒不触发**（编排层不传）⇒ 删死链不丢任何活行为 |
+| 活链路另有等价能力 | 参数快照走 `baseline`（ORM 反查 + `ProcessParameterSchema` 对齐）；缺陷码走 `select_defect`（前端传 `keyword_name`）⇒ 不需要那两个常量 |
+
+**拍板结论（用户 2026-11-24）**：
+
+| # | 问题 | 结论 |
+|---|---|---|
+| 死链处置 | 整条删掉，还是统一两份方向判据？ | **删掉死链** —— 「统一判据」的正解不是合并，是让判据只剩一份 |
+| 中文缺陷名译文表 | 删掉就丢了，怎么处理？ | **移到算法层公共底座**（`algorithms/common/defect_codes.py`）做补充 |
+| `engine.py` 的 `iteration_trend` 注释 | 删了死链后它引用了不存在的链 | **一并改掉**（注释不承载会漂移的事实 ⇒ 不引用已下线的东西） |
+
+**⚠️ 词表的接线落点：service 预处理层的转换头，不是算法层**：初版接在 `fuzzy/engine.py::_extract_defect_context`，但那样**同一个输入在两层得到不同口径** —— 算法层看 `SHORTSHOT`、service 层阶段推导（`DEFECT_STAGE_MAP`）看中文 ⇒ 阶段 / 场景裁决按「未知缺陷码」走。⇒ 改接 **`parameter_optimize._to_algorithm_feedback`（转换头）**：中文名在那里**译一次**，之后 L1（引擎查规则）与 L2（阶段推导 / 场景裁决）**共用同一份英文码**（与既有口径「缺陷整理在 service 预处理层做一次」一致）。
+
+**改动清单**：
+
+| 文件 | 改动 |
+|---|---|
+| `backend/process/algorithms/common/defect_codes.py` | **新建** —— `DEFECT_CODE_ALIAS`（17 类中文名 → 英文码）+ `to_defect_code()`；零外部依赖（符合 common 的入件判据与导入约定） |
+| `backend/process/algorithms/common/__init__.py` | 按目录约定 re-export `defect_codes` |
+| `backend/process/services/parameter_optimize.py` | 转换头 `_to_algorithm_feedback` 规范化 `keyword_name`（中文名 → 英文码） |
+| `backend/process/services/condition.py` | **删死链**：8 函数 + `DEFECT_NAME_MAP` + `PROCESS_PARAM_FIELDS` + docstring 的 preview 段 + 4 个失效 import（`ERROR_OPERATION_FAILED` / `RuleMethod` / `TuningService` / `Any`）⇒ 1411 → **1097** 行 |
+| `backend/process/algorithms/fuzzy/engine.py` | `is_available` 的 `iteration_trend` 注释改写（不引用已下线的链） |
+| `backend/tests/test_optimize_smoke.py` | 断言键名对齐真实契约（`new_parameter` → `parameter`）；fail-fast 分支接受「零落地」；新增「中文缺陷名走通成功路径」用例 |
+| `docs/mining-review-landing.md` | 批次 2 的入口表删掉已下线的 preview 链 |
+
+**验收（2026-11-24）**：
+
+- ✅ `pytest backend` ⇒ **291 passed**
+- ✅ 案例回归 `run_demo.py --check` ⇒ **PASS，exit 0**
+- ✅ 黄金快照逐条比对（改前 vs 改后）⇒ **逐条差异数 = 0，PASS**（本轮不动模糊内核数值面）
+- ✅ 死链残留检查（backend / frontend / docs）⇒ **0 处**
+- ✅ 探针实证：中文名与英文码**逐位等价**（`短射` ≡ `SHORTSHOT`、`缩水` ≡ `SHRINKAGE`）⇒ 规范化后单一口径
+
+**顺带暴露并修掉的既有缺陷**：`test_optimize_from_provided_full_path_runs` 的成功路径断言写的是 `new_parameter`，而服务层契约是 `parameter` ⇒ 该断言一直被 fail-fast 分支掩盖、从本轮起才真正执行 ⇒ 规范化让链路走到成功路径后暴露。
+
+**风险**：**低** —— 删的是零调用者的死代码；唯一行为变化是「中文缺陷名现在能命中规则库」，生产路径（前端只传英文码）**逐位不变**。
 
 ---
 
@@ -1216,7 +1335,7 @@ return new_parameter_dict, suggestion_payload, algorithm_recommendations  # L157
 |---|---|---|
 | **Q1** | 阶段 0 下沉后的**落地形态**（背景见 §二「谁的问题谁判」+ §五 阶段 0 的「新查到的事实」）：算法层 `integrate_params.py` 与 `decide_direction.py` 目前**均 0 个 raise** ⇒ 既有风格是「纯计算 + 留痕，不抛异常」。四个选项：① **L3 置自检结论字段（`IntegratedParams.landing_blocked`），service 层读字段转 `BizException`**（与 `OptimizeDataValidator` → ValueError → BizException 同构）；② L3 抛算法层自定义异常，service 层 catch 后转译；③ L3 直接抛 `BizException`（破例）；④ 只做位置归并（挪进 L3 段），判定仍留在 service 层 | **选 ①** —— ① 是唯一同时满足四条约束的（判定 100% 在 L3 + 算法层不抛异常 + service 只做呈现 + 与算法层既有「留痕不抛异常」风格同构）；④ 违背「谁的问题谁判」；② 与既有风格不一致；③ 破例 |
 | **Q2** | 阶段 1 的出口段：**抽成独立私有函数**还是**只加区块注释**把三件事分开？ | 抽成独立函数（`_build_response_payload` 之类）—— 但这会动函数结构，需要你确认是否接受 |
-| **Q3** | 阶段 2 的过滤点选在哪：引擎内产出时就不给零变化项，还是引擎产出后统一过滤？ | 引擎内过滤（更符合「算法自己知道激活度」），但需确认 `empirical` / `llm` 是否同口径 |
+| **Q3** | 阶段 2 的过滤点选在哪：引擎内产出时就不给零变化项，还是引擎产出后统一过滤？ | ✅ **已拍板（2026-11-24）**：**引擎出口统一过滤**（`recommend()` 返回前、裁剪之后），判据放 `base.py` 共用 ⇒ 三个引擎同口径。已实施，见阶段 2 实施记录 |
 | **Q4** | 阶段顺序：现为 **0 → 1 → 1b → 2 → 3**。其中 **1b / 2 都有行为变化**（风险高），阶段 0 / 1 零行为变化。是否**先只做 0 + 1**（零行为变化），把 1b 与 2 各自单独走一轮？ | 先只做 0 + 1 |
 | **Q5** | 阶段 0 是否需要**保留 service 层的一份兜底**（双保险）？还是完全下沉、service 层不再判？ | 完全下沉，避免两处判据漂移 |
 | **Q6** | L4 的校验结论目前**只进日志、不进响应也不进返回值**（§五 阶段 3 附）⇒ 按「呈现在出口」，出口缺了一段。是否补一个阶段，把 `ParamCheckReport` 带进响应体？ | **建议补，且优先级升高** —— 超限判定归 L4 后（口径 #2），用户看到的「超没超」**只能从 L4 的结论来** ⇒ 若结论出不去，校验就等于白做（**位置类超行程会直接抛错、用户看得到；差值越限只进日志、用户看不到** —— 阶段 3a 后这个缺口多了一类）（但**响应体加字段属接口契约变更**，需确认前端是否愿意接、以及是放在顶层还是挂在 `suggestion` 下） |
@@ -1239,10 +1358,11 @@ return new_parameter_dict, suggestion_payload, algorithm_recommendations  # L157
 **先读什么**：
 
 1. 本文的 §七（待拍板问题）—— **需要你逐条回复**
-2. `backend/process/services/parameter_optimize.py` L1401-1559（`_infer_kernel` 全文）
+2. `backend/process/services/parameter_optimize.py` L1363-1521（`_infer_kernel` 全文）
 3. `backend/process/algorithms/integrate_params.py` L337-368（`IntegratedParams`）与 L505-578（`apply_plan`）
 
-**等用户拍哪几条**：**Q10**（严格度策略 —— 差值越限拒不拒、位置类超行程拒不拒）与 **Q6**（L4 结论要不要进响应体）⇒ 两者都卡在「出口怎么处置 L4 的结论」；其次 **Q2**（出口段要不要抽独立函数）、**Q3**（阶段 2 的过滤点）、**Q9**（位置类物理下限 10 vs 档位下界 30）。
+**等用户拍哪几条**：**Q10**（严格度策略 —— 差值越限拒不拒、位置类超行程拒不拒）与 **Q6**（L4 结论要不要进响应体）⇒ 两者都卡在「出口怎么处置 L4 的结论」；其次 **Q2**（出口段要不要抽独立函数）、**Q9**（位置类物理下限 10 vs 档位下界 30）。
+（**Q3 已于 2026-11-24 拍板并实施** ⇒ 见阶段 2 实施记录。）
 
 **不要重做的**：
 
@@ -1262,4 +1382,4 @@ return new_parameter_dict, suggestion_payload, algorithm_recommendations  # L157
 | 用户的说法 | 实际口径 |
 |---|---|
 | 「第 8 点应该放在第 4 层（参数校验）」 | 不是参数校验 —— 参照系是「L2 说要调 vs L3 实际调成」；第 4 层的参照系是参数自身的物理/工艺约束。两者不可合并 |
-| 「参数去噪应该属于算法部分」 | 对了一半 —— 去噪的**依据**是算法知识（该下沉），但**表达**（业务名 + 中文文案）留在 service 层 |
+| 「参数去噪应该属于算法部分」 | 对了一半 —— 去噪的**依据**是算法知识（该下沉），但**表达**（中文标签 + 中文文案）留在 service 层；**业务字段名的翻译本来就在算法层出口**（`fuzzy/engine.py::recommend`），不在 service 层（2026-11-24 修正） |

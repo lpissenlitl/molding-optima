@@ -20,14 +20,15 @@
 
 ---
 
-## 一、pytest 用例（`test_*.py`，22 个文件 / 226 个用例）
+## 一、pytest 用例（`test_*.py`，25 个文件 / 247 个用例）
 
 | 文件 | 用例 | 钉的是什么 |
 |---|---|---|
 | `test_check_params_layer.py` | 9 | 第4层（校验参数合理性）三类检查：差值越限 / 工艺窗口 / 锚点失配 |
 | `test_check_params_over_limit_violations.py` | 9 | 超机台可设定上限的识别（**所有参数一视同仁**：位置类与压力 / 速度类同判） |
 | `test_check_params_range_limits.py` | 12 | 区间限值口径 |
-| `test_decide_direction_layer.py` | 26 | L2 策略层（场景 / 名额）方向裁决 |
+| `test_decide_adjustment_layer.py` | 26 | L2 策略层（场景 / 名额）方向裁决 |
+| `test_empirical_current_value.py` | 9 | 经验推理 `current_value` 的「参数不存在 ≠ 当前值 0」语义 |
 | `test_fuzzy_algo_offline.py` | 16 | 模糊推理 L1 离线自检（数学口径手算的精确断言）+ 零依赖不变量（子进程验证） |
 | `test_fuzzy_engine_limits.py` | 8 | 设备上限 → 族表翻译 → 查表 → 越限封顶与方向重算 |
 | `test_fuzzy_field_report.py` | 5 | 字段级留痕 |
@@ -39,9 +40,11 @@
 | `test_initialize_over_limit_guard.py` | 10 | 初始化链路的越限守卫 |
 | `test_integrate_params_layer.py` | 17 | 参数整合层 |
 | `test_meter_pres_power_branch.py` | 4 | 熔胶压力的动力源分支（液压 / 电动） |
-| `test_optimize_smoke.py` | 28 | 调优调用链冒烟：schema 校验 / service 入口 / URL 路由 / 算法层契约 |
+| `test_optimize_smoke.py` | 29 | 调优调用链冒烟：schema 校验 / service 入口 / URL 路由 / 算法层契约 |
 | `test_provided_smoke.py` | 7 | `optimize_from_provided` 成功路径的载荷结构 + 缺行程必拒 |
 | `test_qualified_flow.py` | 9 | 合格态（qualified）语义：丢弃缺陷、允许空缺陷 |
+| `test_qualified_optimize_path.py` | 4 | 合格态走 optimize 接口：**不短路**（§5.2 契约）+ 引擎零产出仍产出变更；对照非合格态仍被拒 |
+| `test_qualified_strategy.py` | 7 | 合格态调机**策略层**：场景命中 / 自带候选 / `step_down` 口径 / **合格只认 feedback** |
 | `test_spec_contract_alignment.py` | 7 | spec 与字段契约对齐 |
 | `test_spec_extract.py` | 16 | spec 抽取 |
 | `test_tuning_result_map.py` | 5 | `tuning_result` → 落库 `result` 的映射链路 |
@@ -91,7 +94,7 @@ cd backend
 set PYTHONPATH=.
 set DJANGO_SETTINGS_MODULE=_moldx.settings
 
-# 全部 pytest 用例（226 个）
+# 全部 pytest 用例（247 个）
 ..\.venv\Scripts\python.exe -m pytest tests -q
 
 # 单个文件
